@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -34,8 +35,10 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * entity (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a
  * to-one relation (rendered against a related entity the listener loads once by FK id - the same
  * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
- * paths are not supported. The {@code when} guard supports a single {@code field ==|!= literal}
- * comparison on a direct field.
+ * paths are not supported. The {@code when} guard is one {@code <Property> ==|!= <literal>}
+ * comparison over the record's own properties - or the list form meaning their AND - rendered
+ * against the property's declared type by {@link CheckSupport#condition} where the entity is known;
+ * see {@link #guard(Object, EntityIntent, Map)}.
  *
  * <p>
  * Inside a <b>fan-out</b> the entity every bare path resolves against is the ROW; a placeholder
@@ -84,7 +87,7 @@ public final class NotificationSupport {
      * message is about. The anchor record is reachable for VALUES through {@code {record.<field>}}, but
      * not as a link - a fan-out that wants to point at its anchor should say so with {@code {appUrl}}.
      */
-    static final String RECORD_URL_TOKEN = "recordUrl";
+    public static final String RECORD_URL_TOKEN = "recordUrl";
 
     /**
      * The reserved {@code {inboxUrl}} placeholder name - the deep link to the recipient's process
@@ -92,6 +95,32 @@ public final class NotificationSupport {
      * the events template exactly like {@link #RECORD_URL_TOKEN}, and needing no model facts at all.
      */
     static final String INBOX_URL_TOKEN = "inboxUrl";
+
+    /**
+     * The {@code escalation.<field>} scope - the level a schedule's days-past-due ladder placed the row
+     * at (issue #7276), reachable from the message text so the wording can differ per level ("a
+     * friendly reminder" at the first, "final notice before collection" at the last). It is also the
+     * NAME of the local the generated job holds that level in, which is what keeps the rendered access
+     * and the declaration in step.
+     *
+     * <p>
+     * Placeholders only, exactly like {@link NotifySupport#RECORD_SCOPE}: a recipient is a person, and
+     * a ladder of settings has no mailbox. One field of the level, never a walk on - a second hop would
+     * be a load per message, and the composed value belongs on the level itself.
+     */
+    public static final String ESCALATION_LOCAL = "escalation";
+
+    /**
+     * The {@code @config:KEY} prefix a recipient may carry instead of an address (issue #7385) - the
+     * same authoring sugar an integration's {@code url:} and a declared payload value already take. The
+     * mailbox an operations notice goes to differs per environment, so the model names the
+     * configuration KEY and the address is read at send time; without it the address had to be
+     * hard-coded and the model became environment-specific.
+     */
+    public static final String CONFIG_PREFIX = "@config:";
+
+    /** The Java expression a {@link #CONFIG_PREFIX} recipient resolves to, less the quoted key. */
+    private static final String CONFIG_EXPRESSION = "org.eclipse.dirigible.sdk.core.Configurations.get(";
 
     private NotificationSupport() {}
 
@@ -226,10 +255,39 @@ public final class NotificationSupport {
      */
     public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        return plan(notification, eventEntity, null, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * The same translation with an escalation LADDER in scope: the message text may read one field of
+     * the level a schedule's {@code escalate:} placed the row at, through {@code {escalation.<field>}}
+     * (issue #7276). Pass {@code null} for the ladder everywhere an escalation cannot apply - a
+     * placeholder then stays unresolvable and degrades to its own literal text, as every unknown
+     * placeholder does.
+     *
+     * @param notification the notification
+     * @param eventEntity the entity whose event fires it
+     * @param escalation the escalation ladder entity, or {@code null}
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the {@code to} recipient cannot be resolved
+     */
+    public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, EntityIntent escalation,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
         Object when = notification.getEvent()
                                   .get("when");
-        return plan(notification.getTo(), notification.getSubject(), notification.getBody(), when == null ? null : when.toString(),
-                eventEntity, byName, compositionParents, crossModel);
+        Resolver resolver = new Resolver(eventEntity, null, escalation, byName, compositionParents, crossModel);
+        String recipient = resolver.value(notification.getTo());
+        if (recipient == null) {
+            return null; // an unresolvable recipient relation.field - skip rather than email garbage
+        }
+        // Rendered BEFORE the loads are read: a placeholder is what registers most one-hop loads, and an
+        // argument list evaluated left to right would snapshot the loads before the text added any.
+        String subjectExpression = resolver.text(notification.getSubject());
+        String bodyExpression = resolver.text(notification.getBody());
+        return new Plan(resolver.loads(), guard(when, eventEntity, byName), recipient, subjectExpression, bodyExpression,
+                resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
@@ -238,17 +296,18 @@ public final class NotificationSupport {
      * {@code transitions[].notify}, a {@code serviceTask}'s {@code args.notify} - where there is no
      * event map because the call site itself IS the event.
      *
-     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param to the recipient: an {@code @config:KEY} reference, a literal address, a direct field, or
+     *        a one-hop {@code relation.field}
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} placeholders
      * @param body the body, with the same placeholders
-     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
      * @param entity the entity the message is about (its fields back the paths)
      * @param byName all LOCAL entities by name (to resolve same-model relation targets)
      * @param compositionParents composition-parent map (to resolve a target's perspective)
      * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
      * @return the plan, or {@code null} if the recipient cannot be resolved
      */
-    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, Map<String, EntityIntent> byName,
+    public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
         return plan(to, subject, body, when, entity, null, byName, compositionParents, crossModel);
     }
@@ -260,11 +319,12 @@ public final class NotificationSupport {
      * recipient may not be record-scoped - a fan-out sends to its rows - so a record-scoped {@code to}
      * stays unresolvable and the caller drops the block instead of mailing one address N times.
      *
-     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param to the recipient: an {@code @config:KEY} reference, a literal address, a direct field, or
+     *        a one-hop {@code relation.field}
      * @param subject the subject, with {@code {field}} / {@code {relation.field}} /
      *        {@code {record.field}} placeholders
      * @param body the body, with the same placeholders
-     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
      * @param entity the entity the message is about (a fan-out's row)
      * @param anchor the fan-out's anchor record, or {@code null} outside a fan-out
      * @param byName all LOCAL entities by name (to resolve same-model relation targets)
@@ -272,17 +332,17 @@ public final class NotificationSupport {
      * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
      * @return the plan, or {@code null} if the recipient cannot be resolved
      */
-    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, EntityIntent anchor,
+    public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, EntityIntent anchor,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
-        Resolver resolver = new Resolver(entity, anchor, byName, compositionParents, crossModel);
+        Resolver resolver = new Resolver(entity, anchor, null, byName, compositionParents, crossModel);
         String recipient = resolver.value(to);
         if (recipient == null) {
             return null; // an unresolvable recipient relation.field - skip rather than email garbage
         }
         String subjectExpression = resolver.text(subject);
         String bodyExpression = resolver.text(body);
-        return new Plan(resolver.loads(), guard(when), recipient, subjectExpression, bodyExpression, resolver.usesRecordUrl(),
-                resolver.usesInboxUrl());
+        return new Plan(resolver.loads(), guard(when, entity, byName), recipient, subjectExpression, bodyExpression,
+                resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
@@ -308,6 +368,58 @@ public final class NotificationSupport {
         return "==".equals(matcher.group(2)) ? equals : "!" + equals;
     }
 
+    /**
+     * A {@code when} guard that may be the scalar comparison or a LIST of them - an implicit AND
+     * (dirigible #6957). Each element renders through {@link #guard(String)}; an element that does not
+     * parse contributes nothing ({@code true}), exactly as the scalar always degraded, so a list is
+     * never stricter than what its author could say with scalars.
+     *
+     * @param when the guard - a comparison string, a list of them, or {@code null}
+     * @return a Java boolean expression
+     */
+    public static String guard(Object when) {
+        if (!(when instanceof List<?> terms)) {
+            return guard(when == null ? null : String.valueOf(when));
+        }
+        List<String> conditions = new java.util.ArrayList<>();
+        for (Object term : terms) {
+            String condition = guard(term == null ? null : String.valueOf(term));
+            if (!"true".equals(condition)) {
+                conditions.add(condition);
+            }
+        }
+        return conditions.isEmpty() ? "true" : String.join(" && ", conditions);
+    }
+
+    /**
+     * A {@code when} guard rendered against the guarded property's DECLARED type - the form every guard
+     * of the declarative glue event axis takes (issue #7289), where the parser holds the guard to the
+     * same closed grammar a {@code requiredWhen} condition is held to.
+     *
+     * <p>
+     * The typed rendering is the point. An untyped {@code Objects.equals} quotes whatever it cannot
+     * recognise, so {@code Status == ISSUED} - the natural authoring of a status guard, with the name
+     * resolved to its seed id before the typed mapping - used to compare the integer status FK with a
+     * string and never hold: the mail never went out, the departure never left, and parse, generation,
+     * compile and publish were all green. A to-one's key is compared numerically because its width is
+     * not knowable here; see {@link CheckSupport#condition}.
+     *
+     * <p>
+     * When the condition does not compile - which for a glue guard the parser has already refused, and
+     * for a call site with no entity to read the types off (a cross-model schedule row) it cannot know
+     * - the untyped {@link #guard(Object)} answers instead, so nothing that renders today stops
+     * rendering.
+     *
+     * @param when the guard - a comparison string, a list of them, or {@code null}
+     * @param entity the entity the guard is read off, or {@code null} when it is not resolvable
+     * @param byName the local entities by name (a to-one's key type comes from its target)
+     * @return a Java boolean expression
+     */
+    public static String guard(Object when, EntityIntent entity, Map<String, EntityIntent> byName) {
+        String typed = CheckSupport.condition(entity, byName, when);
+        return typed == null ? guard(when) : typed;
+    }
+
     private static String literalToJava(String rhs) {
         if (rhs.length() >= 2 && (rhs.startsWith("'") && rhs.endsWith("'") || rhs.startsWith("\"") && rhs.endsWith("\""))) {
             return quote(rhs.substring(1, rhs.length() - 1));
@@ -319,11 +431,7 @@ public final class NotificationSupport {
     }
 
     static String quote(String value) {
-        return "\"" + value.replace("\\", "\\\\")
-                           .replace("\"", "\\\"")
-                           .replace("\n", "\\n")
-                           .replace("\r", "")
-                + "\"";
+        return "\"" + JavaLiterals.escape(value) + "\"";
     }
 
     /**
@@ -340,7 +448,7 @@ public final class NotificationSupport {
      */
     static Resolver resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
             CrossModelLookup crossModel) {
-        return new Resolver(entity, null, byName, compositionParents, crossModel);
+        return new Resolver(entity, null, null, byName, compositionParents, crossModel);
     }
 
     /** Resolves values/text against the event entity, accumulating the relation loads they require. */
@@ -348,6 +456,7 @@ public final class NotificationSupport {
 
         private final EntityIntent entity;
         private final EntityIntent anchor;
+        private final EntityIntent escalation;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
         private final Set<String> settingEntities;
@@ -356,10 +465,11 @@ public final class NotificationSupport {
         private boolean usesRecordUrl;
         private boolean usesInboxUrl;
 
-        Resolver(EntityIntent entity, EntityIntent anchor, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
-                CrossModelLookup crossModel) {
+        Resolver(EntityIntent entity, EntityIntent anchor, EntityIntent escalation, Map<String, EntityIntent> byName,
+                Map<String, String> compositionParents, CrossModelLookup crossModel) {
             this.entity = entity;
             this.anchor = anchor;
+            this.escalation = escalation;
             this.byName = byName;
             this.compositionParents = compositionParents;
             this.settingEntities = IntentEntities.settingEntities(byName.values());
@@ -378,12 +488,23 @@ public final class NotificationSupport {
             return usesInboxUrl;
         }
 
-        /** A single value (the {@code to} recipient): literal, direct field, or relation.field. */
+        /**
+         * A single value (the {@code to} recipient): an {@code @config:KEY} reference, a literal, a direct
+         * field, or a relation.field.
+         */
         String value(String raw) {
             if (raw == null || raw.isBlank()) {
                 return "null";
             }
             String trimmed = raw.trim();
+            if (trimmed.startsWith(CONFIG_PREFIX)) {
+                // Read at send time, inside the sending tenant's configuration scope, exactly as
+                // {appUrl} is. Fully qualified because the expression lands in four different events
+                // templates and not all of them import the facade.
+                return CONFIG_EXPRESSION + quote(trimmed.substring(CONFIG_PREFIX.length())
+                                                        .trim())
+                        + ")";
+            }
             if (trimmed.contains("@") || !PATH.matcher(trimmed)
                                               .matches()) {
                 return quote(trimmed);
@@ -448,6 +569,15 @@ public final class NotificationSupport {
             if (INBOX_URL_TOKEN.equals(path)) {
                 usesInboxUrl = true;
                 return INBOX_URL_TOKEN;
+            }
+            if (recordScope && escalation != null && path.startsWith(ESCALATION_LOCAL + ".")) {
+                // The escalation level this row was placed at, already loaded by the generated job: one
+                // field of it, never a walk on - the same rule the anchor scope below states.
+                String field = path.substring(ESCALATION_LOCAL.length() + 1);
+                if (field.isEmpty() || field.indexOf('.') >= 0 || fieldOf(escalation, field) == null) {
+                    return null;
+                }
+                return ESCALATION_LOCAL + "." + IntentNaming.pascalCase(field);
             }
             if (recordScope && anchor != null && path.startsWith(NotifySupport.RECORD_SCOPE + ".")) {
                 // The anchor record of a fan-out, already loaded by the generated code: one field of it,

@@ -118,7 +118,7 @@ class AbortOnIntentTest {
     void aThenServiceTaskThatSetsNothingIsRejected() {
         String yaml = YAML.replace("{ name: markVoid, kind: serviceTask, args: { setRelationField: Status, value: 3 } }",
                 "{ name: markVoid, kind: serviceTask, args: { call: custom/x.ts } }");
-        assertIssue(yaml, "must set a field/relation");
+        assertIssue(yaml, "must set or clear a field/relation");
     }
 
     @Test

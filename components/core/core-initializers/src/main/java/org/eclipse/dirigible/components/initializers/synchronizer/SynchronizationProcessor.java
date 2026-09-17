@@ -44,7 +44,9 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
@@ -90,6 +92,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
     /** The processing. */
     private final AtomicBoolean processing;
+
+    /**
+     * When the FAILED artefacts left by the last pass are due one more START attempt (#7248), or -1
+     * when the last pass left none. JVM-local on purpose: the boot pass processes everything anyway.
+     */
+    private final AtomicLong failedRetryDueAt = new AtomicLong(-1);
 
     /**
      * Instantiates a new synchronization processor.
@@ -196,7 +204,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      */
     public void processSynchronizers() {
 
-        if (!isSynchronizationNeeded()) {
+        if (!isSynchronizationNeeded() && !isFailedRetryDue()) {
             logger.debug("Skipping synchronization since it is not needed...");
             return;
         }
@@ -236,6 +244,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
             int countNew = 0;
             int countModified = 0;
+            int countFailed = 0;
             for (Artefact artefact : artefacts.values()) {
                 if (ArtefactLifecycle.NEW.equals(artefact.getLifecycle())) {
                     logger.debug("Processing a new artefact: {}", artefact.getKey());
@@ -244,6 +253,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                 if (ArtefactLifecycle.MODIFIED.equals(artefact.getLifecycle())) {
                     logger.debug("Processing a modified artefact: {}", artefact.getKey());
                     countModified++;
+                }
+                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle())) {
+                    countFailed++;
                 }
             }
 
@@ -394,6 +406,8 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
                 logger.trace("Processing of artefacts done.");
 
+            } else if (countFailed > 0) {
+                retryFailed();
             }
 
             logger.trace("Cleaning up removed artefacts...");
@@ -447,25 +461,23 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             logger.info("Processing synchronizers completed!");
 
         } finally {
-            if (logger.isDebugEnabled()) {
-                int countCreated = 0;
-                int countUpdated = 0;
-                int countFailed = 0;
-                int countFatal = 0;
-                for (Artefact artefact : artefacts.values()) {
-                    if (ArtefactLifecycle.CREATED.equals(artefact.getLifecycle()))
-                        countCreated++;
-                    if (ArtefactLifecycle.UPDATED.equals(artefact.getLifecycle()))
-                        countUpdated++;
-                    if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle()))
-                        countFailed++;
-                    if (ArtefactLifecycle.FATAL.equals(artefact.getLifecycle()))
-                        countFatal++;
-                }
-                logger.debug(
-                        "Processing synchronizers done. {} artefacts processed in total. {} ({}/{}) successful, {} failed and {} fatal.",
-                        artefacts.size(), countCreated + countUpdated, countCreated, countUpdated, countFailed, countFatal);
+            int countCreated = 0;
+            int countUpdated = 0;
+            int countFailed = 0;
+            int countFatal = 0;
+            for (Artefact artefact : artefacts.values()) {
+                if (ArtefactLifecycle.CREATED.equals(artefact.getLifecycle()))
+                    countCreated++;
+                if (ArtefactLifecycle.UPDATED.equals(artefact.getLifecycle()))
+                    countUpdated++;
+                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle()))
+                    countFailed++;
+                if (ArtefactLifecycle.FATAL.equals(artefact.getLifecycle()))
+                    countFatal++;
             }
+            logger.debug("Processing synchronizers done. {} artefacts processed in total. {} ({}/{}) successful, {} failed and {} fatal.",
+                    artefacts.size(), countCreated + countUpdated, countCreated, countUpdated, countFailed, countFatal);
+            scheduleFailedRetry(countFailed);
             // clear maps
             definitions.clear();
             artefacts.clear();
@@ -500,6 +512,70 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         }
 
         return true;
+    }
+
+    /**
+     * Whether the FAILED artefacts the last pass left are due one more START attempt (#7248). Kept out
+     * of {@link #isSynchronizationNeeded()} on purpose: that answer means "the registry changed", and
+     * the test framework waits on it for a quiet period.
+     *
+     * @return true when a retry pass should run now
+     */
+    private boolean isFailedRetryDue() {
+        long dueAt = failedRetryDueAt.get();
+        return dueAt >= 0 && System.currentTimeMillis() >= dueAt && initialized.get() && prepared.get() && !processing.get();
+    }
+
+    /**
+     * Arms the next FAILED retry after a pass, or disarms it when the pass left nothing FAILED.
+     *
+     * @param countFailed the artefacts the pass left FAILED
+     */
+    private void scheduleFailedRetry(int countFailed) {
+        if (countFailed == 0) {
+            failedRetryDueAt.set(-1);
+            return;
+        }
+        long intervalMillis = TimeUnit.SECONDS.toMillis(DirigibleConfig.SYNCHRONIZER_FAILED_RETRY_INTERVAL_SECONDS.getIntValue());
+        failedRetryDueAt.set(System.currentTimeMillis() + intervalMillis);
+    }
+
+    /**
+     * A pass with nothing new or modified gives every FAILED artefact one START attempt (#7248). A
+     * start refused by a collaborator that was not ready yet - the embedded broker still taking its
+     * store lease, the scheduler's store, a handler published later - heals only by being attempted
+     * again, and the phases otherwise run only on a pass carrying a change, so an idle instance never
+     * retried it. One attempt per artefact per pass and no cross-retry loop: a permanently failing
+     * artefact costs one refused call per pass, not the loop. The synchronizer records the outcome
+     * itself, so the error stays the cause rather than the undepleted rewrite, which is what lets a
+     * repeat log quietly.
+     */
+    private void retryFailed() {
+        TopologicalDepleter<TopologyWrapper<? extends Artefact>> depleter = new TopologicalDepleter<>();
+        List<Artefact> failed = artefacts.values()
+                                         .stream()
+                                         .filter(a -> ArtefactLifecycle.FAILED.equals(a.getLifecycle()))
+                                         .collect(Collectors.toList());
+        List<TopologyWrapper<? extends Artefact>> wrappers = TopologyFactory.wrap(failed, synchronizers);
+        logger.info("Retrying [{}] FAILED artefacts: [{}]", wrappers.size(), wrappers);
+        for (Synchronizer<? extends Artefact, ?> synchronizer : synchronizers) {
+            Set<TopologyWrapper<? extends Artefact>> own = wrappers.stream()
+                                                                   .filter(w -> w.getSynchronizer()
+                                                                                 .equals(synchronizer))
+                                                                   .collect(Collectors.toSet());
+            if (own.isEmpty()) {
+                continue;
+            }
+            try {
+                Set<TopologyWrapper<? extends Artefact>> left = depleter.deplete(own, ArtefactPhase.START);
+                if (!left.isEmpty()) {
+                    logger.warn("[{}] artefacts are still FAILED after the retry: [{}]", left.size(), left);
+                }
+            } catch (Exception e) {
+                logger.error("Error occurred while retrying FAILED artefacts of [{}]", synchronizer, e);
+                addError(e.getMessage());
+            }
+        }
     }
 
     public boolean isSynchronizationRunning() {
@@ -953,6 +1029,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
             case FAILED:
             case FATAL:
+                if (message != null && message.equals(artefact.getError())) {
+                    // The same failure again - a FAILED artefact is retried every pass (#7248), and a
+                    // permanently refused one must not stack-trace at ERROR on each of them.
+                    logger.debug("Processing of artefact with key [{}], location [{}] for lifecycle [{}] failed again with [{}]",
+                            artefact.getKey(), artefact.getLocation(), lifecycle, message, cause);
+                    break;
+                }
                 logger.error(
                         "Processing of artefact with key [{}], location [{}] for lifecycle [{}] has failed, synchronizer [{}], error [{}], message [{}]",
                         artefact.getKey(), artefact.getLocation(), lifecycle, synchronizer, artefact.getError(), message, cause);

@@ -26,10 +26,17 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * Maintains the resolved-modules directory - the stable directory the launch classpath includes
- * (see the loader.path entry in the application's Dockerfile). At runtime the resolved jars are
- * served by the swappable modules classloader; this directory is the seed that keeps them on the
- * classpath from the first moment of the next launch.
+ * Maintains the resolved-modules directory - the stable, operator-visible inventory of what the
+ * declarations currently resolve to, one link per activated artifact.
+ *
+ * <p>
+ * It is deliberately <b>not</b> a launch-classpath entry. The resolved jars are served by the
+ * swappable modules classloader, which the boot-time resolution installs; putting this directory on
+ * {@code loader.path} would also define those classes on the application classloader, and since the
+ * modules classloader is parent-first, every later upgrade and removal would resolve to that first,
+ * stale copy - the swap would report a new generation while nothing about the served classes
+ * changed. An instance that must come up without a remote repository uses frozen mode over the
+ * local maven repository instead.
  */
 @Component
 class ResolvedModulesLinker {

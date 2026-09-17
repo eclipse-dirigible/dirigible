@@ -341,6 +341,14 @@ public final class ArrivalSupport {
             issues.add(where + " matches on the [" + field.getType() + "] field [" + by
                     + "] - a business key is a string or an integer field");
         }
+        // A business key that is also translated is a key on a moving target: the read overlay hands the
+        // UI the translated value, saving the row writes it back into the base column, and from then on
+        // the sender's key resolves nothing - the arrival is REJECTED rather than storing a null FK, so
+        // the symptom is a queue of refused messages far from the model that caused it (#6545).
+        if (looked.isMultilingual() && field.hasLanguageColumn()) {
+            issues.add(where + " matches on [" + by + "], a translated property of the multilingual entity [" + looked.getName()
+                    + "] - a business key must not be translated; declare `translatable: false` on it");
+        }
     }
 
     private static MapField field(String name, Object value, EntityIntent entity, Map<String, EntityIntent> byName) {

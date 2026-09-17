@@ -82,7 +82,7 @@ public class ${className}Publisher implements MessageHandler {
         String body = message;
 #end
         try {
-            Producer.${producerMethod}("${destination}", body);
+            Producer.${producerMethod}("${destinationJavaLiteral}", body);
         } catch (Exception ex) {
             LOG.error("Outbound ${name}: publishing to [${destination}] failed - the ${entity} write stands", ex);
         }

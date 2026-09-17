@@ -38,8 +38,9 @@ package-lock.json
 **/version.txt
 # Ignore local Claude Code state (settings.local.json, run/, worktrees/) but
 # keep the shared dev-loop slash commands, their cross-platform driver script,
-# and the team-wide settings.json.
+# the team-wide settings.json, and the CLAUDE.md topic files it imports.
 .claude/*
 !.claude/commands/
+!.claude/docs/
 !.claude/scripts/
 !.claude/settings.json

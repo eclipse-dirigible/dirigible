@@ -126,7 +126,7 @@ class OutboundIntentTest {
                   - name: publishOrder
                     event: { onCreate: Order, onUpdate: Order }
                     to: { queue: "codbex.orders" }
-                """, "exactly one of onCreate/onUpdate/onDelete/onTransition/onStepReached/onStepCompleted");
+                """, "exactly one of onCreate/onUpdate/onDelete/onTransition/onPhase/onStepReached/onStepCompleted");
     }
 
     @Test

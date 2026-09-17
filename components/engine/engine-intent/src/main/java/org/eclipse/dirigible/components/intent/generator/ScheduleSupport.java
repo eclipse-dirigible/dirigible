@@ -12,6 +12,9 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.time.Duration;
 import java.time.Period;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,9 +23,16 @@ import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 
 /**
- * Translates a {@link ScheduleIntent}'s {@code where} filter into the typed {@code Criteria}
- * builder call the generated {@code @Scheduled} job runs against the entity repository. Pure (no
- * Spring/IO) so the operator mapping and date-token handling are unit-tested directly.
+ * Reads a {@link ScheduleIntent}'s {@code where} filter as the typed clauses the generated
+ * {@code @Scheduled} job queries the entity repository by. Pure (no Spring/IO) so the operator
+ * mapping and date-token handling are unit-tested directly.
+ *
+ * <p>
+ * What this class produces is DATA, not code (issue #7406): the glue carries the clauses, and the
+ * {@code Criteria} builder chain is rendered from them a layer out, by {@code JavaLiterals} - the
+ * split {@code checks} took in #7405, for the same reason. A {@code Criteria.create().lt("Due",
+ * java.time.LocalDate.now())} in a {@code .glue} writes a runtime package and a Java date API into
+ * the process description every template reads, Java and JavaScript alike.
  */
 public final class ScheduleSupport {
 
@@ -32,6 +42,14 @@ public final class ScheduleSupport {
 
     /** The field types a moment value may be compared against. */
     static final Map<String, Moment.Shape> TEMPORAL_TYPES = Map.of("date", Moment.Shape.DATE, "timestamp", Moment.Shape.TIMESTAMP);
+
+    /**
+     * The same two shapes, keyed by the JDBC type a {@code .model} carries - the only spelling a
+     * CROSS-MODEL source's properties are ever known by (the owner's intent types are not readable from
+     * here, only what its generation emitted).
+     */
+    private static final Map<String, Moment.Shape> TEMPORAL_COLUMN_TYPES =
+            Map.of("DATE", Moment.Shape.DATE, "TIMESTAMP", Moment.Shape.TIMESTAMP);
 
     /**
      * A moment value: one of the now-tokens, optionally followed by a single signed ISO-8601 duration.
@@ -61,7 +79,7 @@ public final class ScheduleSupport {
         public enum Shape {
             /** A calendar day - {@code java.time.LocalDate}. */
             DATE,
-            /** A date and a time - {@code java.time.LocalDateTime}. */
+            /** A date and a time - {@code java.time.Instant}, the shape a timestamp column carries. */
             TIMESTAMP
         }
 
@@ -90,6 +108,14 @@ public final class ScheduleSupport {
         }
 
         /**
+         * @return whether the offset moves FORWARD from the token ({@code CURRENT_DATE+P7D}), as opposed to
+         *         back from it
+         */
+        public boolean forward() {
+            return forward;
+        }
+
+        /**
          * @return whether the offset is an ISO-8601 amount this shape can carry (always {@code true} for a
          *         bare token)
          */
@@ -107,18 +133,6 @@ public final class ScheduleSupport {
             } catch (DateTimeParseException ex) {
                 return false;
             }
-        }
-
-        /**
-         * @return the Java expression the generated job evaluates at each firing
-         */
-        public String javaExpression() {
-            String now = shape == Shape.DATE ? "java.time.LocalDate.now()" : "java.time.LocalDateTime.now()";
-            if (duration == null) {
-                return now;
-            }
-            String amount = (timeBased() ? "java.time.Duration.parse(\"" : "java.time.Period.parse(\"") + duration + "\")";
-            return now + (forward ? ".plus(" : ".minus(") + amount + ")";
         }
 
         /**
@@ -158,6 +172,19 @@ public final class ScheduleSupport {
     }
 
     /**
+     * The shape a column of the given JDBC type is compared in - the cross-model counterpart of
+     * {@link #shapeOf(String)}, which reads an authored intent type. Both answer the same question, and
+     * a cross-model {@code where} must be held to the same rule as a same-model one (issue #7393): a
+     * moment of the other shape fails the query's bind on every tick.
+     *
+     * @param columnType the owner {@code .model}'s {@code dataType}, may be {@code null}
+     * @return the shape, or {@code null} when the column is not temporal
+     */
+    public static Moment.Shape shapeOfColumn(String columnType) {
+        return columnType == null ? null : TEMPORAL_COLUMN_TYPES.get(columnType.toUpperCase(java.util.Locale.ROOT));
+    }
+
+    /**
      * @param op the author-facing operator token
      * @return whether it maps to a supported {@code Criteria} comparison
      */
@@ -166,47 +193,89 @@ public final class ScheduleSupport {
     }
 
     /**
-     * Build the Java {@code Criteria} expression for a schedule's {@code where} (field names are the
-     * PascalCase entity property names; values are bound, with a {@link Moment} - a now-token and its
-     * optional offset - evaluated against the clock of the run that fires).
+     * A schedule's {@code where} as the NEUTRAL clause list the glue carries (issue #7406) - one entry
+     * per condition, in declared order, each an operator, the PascalCase entity property it reads and
+     * the reading of its value. The {@code Criteria} chain is rendered from these a layer out, by
+     * {@code JavaLiterals}, the same split {@code checks} took in #7405.
      *
      * @param schedule the schedule
-     * @return e.g.
-     *         {@code Criteria.create().lt("DueOn", java.time.LocalDate.now()).eq("Status", "ACTIVE")}
+     * @return the clauses, empty when the schedule filters on nothing
      */
-    public static String criteriaExpression(ScheduleIntent schedule) {
-        StringBuilder expr = new StringBuilder("Criteria.create()");
-        for (ScheduleConditionIntent condition : schedule.getWhere()) {
+    public static List<Map<String, Object>> criteria(ScheduleIntent schedule) {
+        return conditions(schedule.getWhere());
+    }
+
+    /**
+     * The same reading for a caller that holds the conditions itself - a create-from's source-row rule
+     * ({@code items: where:}, issue #7091), which narrows the very query that selects the source
+     * document's item rows by their master foreign key.
+     *
+     * <p>
+     * A clause whose operator is not one this vocabulary has is skipped rather than approximated; the
+     * parser has already reported it, and a generation reached by another route narrows the query by
+     * the clauses it does understand rather than by a guessed comparison.
+     *
+     * @param conditions the authored conditions, may be {@code null}
+     * @return the clauses, empty for no conditions
+     */
+    public static List<Map<String, Object>> conditions(List<ScheduleConditionIntent> conditions) {
+        List<Map<String, Object>> clauses = new ArrayList<>();
+        if (conditions == null) {
+            return clauses;
+        }
+        for (ScheduleConditionIntent condition : conditions) {
             String method = OPERATORS.get(condition.getOp());
             if (method == null) {
                 continue; // validated at parse time; defensively skip an unknown operator
             }
-            expr.append('.')
-                .append(method)
-                .append("(\"")
-                .append(IntentNaming.pascalCase(condition.getField()))
-                .append("\", ")
-                .append(valueToJava(condition.getValue()))
-                .append(')');
+            // Written in this order deliberately: the glue is a serialized artefact a regen rewrites in
+            // place, so a clause's byte order has to be a property of the intent and nothing else (issue
+            // #7130).
+            Map<String, Object> clause = new LinkedHashMap<>();
+            clause.put("op", method);
+            clause.put("property", IntentNaming.pascalCase(condition.getField()));
+            clause.put("value", valueReading(condition.getValue()));
+            clauses.add(clause);
         }
-        return expr.toString();
+        return clauses;
     }
 
-    /** A condition value as a Java expression: a moment, a number/boolean, or a quoted string. */
-    private static String valueToJava(Object value) {
+    /**
+     * A condition value as the reading the glue carries: a moment - a now-token and its optional
+     * offset, resolved against the clock of the run that fires - a number, a boolean, or a string.
+     *
+     * <p>
+     * A number and a boolean keep their TEXT rather than their parsed value, as every other neutral
+     * reading in this generation does: the glue is JSON, and a value that round-trips through a JSON
+     * number loses the spelling the author wrote and gains a float's rendering of it.
+     *
+     * @param value the authored value
+     * @return the reading
+     */
+    private static Map<String, Object> valueReading(Object value) {
+        Map<String, Object> reading = new LinkedHashMap<>();
         if (value == null) {
-            return "null";
+            reading.put("kind", "null");
+            return reading;
         }
         if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
+            reading.put("kind", value instanceof Boolean ? "boolean" : "number");
+            reading.put("text", value.toString());
+            return reading;
         }
         Moment moment = moment(value);
         if (moment != null && moment.offsetValid()) {
-            return moment.javaExpression();
+            reading.put("kind", "moment");
+            reading.put("shape", moment.shape() == Moment.Shape.DATE ? "date" : "timestamp");
+            if (moment.duration() != null) {
+                reading.put("offset", moment.duration());
+                reading.put("forward", moment.forward());
+            }
+            return reading;
         }
-        String text = value.toString();
-        return "\"" + text.replace("\\", "\\\\")
-                          .replace("\"", "\\\"")
-                + "\"";
+        reading.put("kind", "string");
+        reading.put("text", value.toString());
+        return reading;
     }
+
 }

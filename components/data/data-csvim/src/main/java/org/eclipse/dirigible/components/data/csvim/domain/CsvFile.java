@@ -115,10 +115,18 @@ public class CsvFile extends Artefact {
     @Column(name = "CSV_FILE_DISTINGUISH_EMPTY_FROM_NULL", columnDefinition = "BOOLEAN")
     @Expose
     private Boolean distinguishEmptyFromNull;
-    /** The upsert. */
+    /**
+     * Whether a re-import may UPDATE rows that already exist. Absent from the .csvim this is FALSE: a
+     * seed's default job is starter content - INSERT what is missing, never touch a row the user may
+     * have edited since. A re-import fires on any artefact hash change (a regenerated .csvim, a new CSV
+     * column), and with upsert on it rewrites every seeded PK row with the seed's values, binding NULL
+     * for the columns the CSV does not carry - which silently destroyed a production row edited long
+     * after its seeding (#6980). Release-maintained reference data (nomenclatures, translations) opts
+     * in explicitly with {@code "upsert": true}.
+     */
     @Column(name = "CSV_FILE_UPSERT", columnDefinition = "boolean", nullable = false)
     @Expose
-    private Boolean upsert = true; // default true
+    private Boolean upsert = false;
     /**
      * The csvim.
      */

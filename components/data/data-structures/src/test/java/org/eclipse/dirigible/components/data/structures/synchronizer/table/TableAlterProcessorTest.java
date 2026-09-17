@@ -15,6 +15,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraints;
+import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
+import java.util.Map;
+import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -74,6 +80,99 @@ class TableAlterProcessorTest {
                                 .contains("Incompatible change of table"),
                     exception.getMessage());
         }
+    }
+
+    /**
+     * #7019: a model that moves a key from one column to a composite gets exactly that on an existing
+     * table.
+     */
+    @Test
+    void aWithdrawnColumnUniqueIsDroppedAndTheDeclaredCompositeKeyIsAdded() throws SQLException {
+        try (Connection connection = connect("alter_unique_move")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100) UNIQUE");
+            Table tableModel = modelWithCompositeKey();
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            Map<String, List<String>> uniques = uniqueConstraints(connection);
+            assertEquals(1, uniques.size(), "the single-column UNIQUE is gone and the composite key is there: " + uniques);
+            assertEquals(List.of("COMPANY", "NUMBER"), uniques.get("Notes_Company_Number"),
+                    "the declared name and column order: " + uniques);
+        }
+    }
+
+    @Test
+    void aDeclaredColumnUniqueIsAddedToAnExistingTable() throws SQLException {
+        try (Connection connection = connect("alter_unique_add")) {
+            createTable(connection, "\"CODE\" VARCHAR(20)");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("CODE", "VARCHAR", "20", true, false, null, null, null, true, false, tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            Map<String, List<String>> uniques = uniqueConstraints(connection);
+            assertEquals(List.of(List.of("CODE")), new ArrayList<>(uniques.values()), "the model's unique column is enforced: " + uniques);
+        }
+    }
+
+    @Test
+    void aMatchingKeyIsKeptWhateverItsNameAndASecondRunChangesNothing() throws SQLException {
+        try (Connection connection = connect("alter_unique_idempotent")) {
+            createTable(connection,
+                    "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100), CONSTRAINT \"HAND_MADE\" UNIQUE (\"COMPANY\", \"NUMBER\")");
+            Table tableModel = modelWithCompositeKey();
+
+            TableAlterProcessor.execute(connection, tableModel);
+            TableAlterProcessor.execute(connection, tableModel);
+
+            Map<String, List<String>> uniques = uniqueConstraints(connection);
+            assertEquals(Map.of("HAND_MADE", List.of("COMPANY", "NUMBER")), uniques,
+                    "an equal key under another name is not churned, and the primary key is untouched");
+        }
+    }
+
+    @Test
+    void aRefusedConstraintChangeDoesNotFailTheAlter() throws SQLException {
+        try (Connection connection = connect("alter_unique_refused")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100)");
+            try (Statement statement = connection.createStatement()) {
+                statement.execute("INSERT INTO \"T_NOTES\" VALUES (1, 1, 'SI1'), (2, 1, 'SI1')");
+            }
+            Table tableModel = modelWithCompositeKey();
+
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel),
+                    "duplicate rows make the ADD fail - logged, not thrown");
+            assertTrue(uniqueConstraints(connection).isEmpty());
+        }
+    }
+
+    private static Table modelWithCompositeKey() {
+        Table tableModel = new Table("T_NOTES");
+        new TableColumn("ID", "INTEGER", null, tableModel);
+        new TableColumn("COMPANY", "INTEGER", null, tableModel);
+        new TableColumn("NUMBER", "VARCHAR", "100", tableModel);
+        TableConstraints constraints = new TableConstraints(tableModel);
+        tableModel.setConstraints(constraints);
+        constraints.getUniqueIndexes()
+                   .add(new TableConstraintUnique("Notes_Company_Number", null, new String[] {"COMPANY", "NUMBER"}, constraints, null,
+                           null));
+        return tableModel;
+    }
+
+    private static Map<String, List<String>> uniqueConstraints(Connection connection) throws SQLException {
+        Map<String, List<String>> uniques = new LinkedHashMap<>();
+        try (Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery("SELECT tc.CONSTRAINT_NAME, kcu.COLUMN_NAME FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc"
+                                + " JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu ON kcu.CONSTRAINT_NAME = tc.CONSTRAINT_NAME"
+                                + " WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND tc.TABLE_NAME = 'T_NOTES' ORDER BY tc.CONSTRAINT_NAME, kcu.ORDINAL_POSITION")) {
+            while (rs.next()) {
+                uniques.computeIfAbsent(rs.getString(1), name -> new ArrayList<>())
+                       .add(rs.getString(2));
+            }
+        }
+        return uniques;
     }
 
     private static Connection connect(String database) throws SQLException {

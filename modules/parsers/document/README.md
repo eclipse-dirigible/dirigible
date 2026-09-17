@@ -214,6 +214,26 @@ column carries a `label`; fields render as **Label:** value; `text` styles map `
 once in-flow, `repeatHeader`/`pageBreak` are ignored, 1 px = 1 pt, and a table with no data rows
 is skipped (FOP rejects an empty table body).
 
+## Images (`renderer.ImageResolver`)
+
+`<image src="..." width="120" height="60"/>` renders an `fo:external-graphic`; `width` and
+`height` are resize hints, each emitted only when it is an absolute measurement, so a single
+one scales proportionally.
+
+The library reads no storage, so it cannot fetch a source itself — and it must not, because
+the rendered stylesheet is self-contained and carries no session, credentials or tenant scope
+to fetch anything later. The host therefore supplies an `ImageResolver`
+(`new XslFoRenderer(resolver)`), which turns a bound `src` into the source to emit — in
+practice a `data:` URI carrying the bytes inline. The default, `ImageResolver.PASS_THROUGH`,
+emits every source as authored.
+
+A resolver returning `null` renders **nothing at all** — no block, no placeholder: a printed
+business document whose logo is missing is correct output, a broken-image box is not. An
+absent or blank `src` never reaches the resolver.
+
+FOP reads a `data:` URI natively (`InternalResourceResolver`), so an inlined image needs no
+configuration; `PDFFacadeTest.generatePdfWithInlineImageTest` pins that contract.
+
 ## Example templates
 
 One per supported document type under

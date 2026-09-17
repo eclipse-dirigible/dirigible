@@ -184,7 +184,8 @@ public class JavaLoader {
         currentBytecode.putAll(effectiveBytecode);
 
         RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors(),
+                componentContainer.wiringWarnings());
 
         // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
         // (failed-to-recompile) classes keep their existing .class files untouched.
@@ -236,7 +237,7 @@ public class JavaLoader {
 
         // Build the client bean container for the new generation BEFORE the load pass: every
         // @Component (and the meta-annotated @Controller / @Repository / @Scheduled / @Listener /
-        // @Websocket / @Extension) is instantiated here with constructor + field injection, so the
+        // @Websocket) is instantiated here with constructor + field injection, so the
         // behaviour consumers below just fetch ready instances via ComponentContainer#instanceOf.
         componentContainer.rebuild(nextGeneration.values());
 
@@ -259,12 +260,7 @@ public class JavaLoader {
      *         since the previous compiled install; never registry-source classes)
      */
     public synchronized Set<String> installCompiledModules(List<LoadedClass> classes) {
-        compiledGeneration.clear();
-        for (LoadedClass info : classes) {
-            if (info != null) {
-                compiledGeneration.put(info.fqn(), info);
-            }
-        }
+        recordCompiledModules(classes);
         // No runtime-compiled client code yet → give the holder an empty ClientClassLoader whose parent
         // chain (modules loader → platform classloader) already resolves the compiled-module classes.
         ClientClassLoader loader = loaderHolder.current();
@@ -272,6 +268,25 @@ public class JavaLoader {
             loader = new ClientClassLoader(modulesLoaderHolder.current(), Map.of());
         }
         return applyGeneration(mergedGeneration(), loader);
+    }
+
+    /**
+     * Records the compiled sub-generation <b>without</b> dispatching it - the half of
+     * {@link #installCompiledModules(List)} that a caller uses when a {@link #rebuild(List)} is about
+     * to follow: the rebuild's own {@code applyGeneration} then dispatches the union once, over a
+     * {@code ClientClassLoader} parented on the new modules generation. Dispatching here as well would
+     * re-instantiate every client bean and re-register every job, listener, controller mapping and
+     * websocket twice per swap, the first time against the retired dependency jars.
+     *
+     * @param classes the compiled modules' top-level classes
+     */
+    public synchronized void recordCompiledModules(List<LoadedClass> classes) {
+        compiledGeneration.clear();
+        for (LoadedClass info : classes) {
+            if (info != null) {
+                compiledGeneration.put(info.fqn(), info);
+            }
+        }
     }
 
     /**
@@ -378,9 +393,12 @@ public class JavaLoader {
      * @param wiringErrors per FQN → a bean-container wiring error (unsatisfied/ambiguous dependency,
      *        construction cycle, duplicate bean name, throwing constructor) for classes that compiled
      *        but could not be wired
+     * @param wiringWarnings per FQN → a bean-container wiring warning for classes that compiled and
+     *        wired fine but break a rule (today: a bean that is also a Flowable {@code JavaDelegate}).
+     *        Surfaced on the Problems view like an error, but it does not fail the artefact
      */
     public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns,
-            Map<String, List<CompileDiagnostic>> diagnostics, Map<String, String> wiringErrors) {
+            Map<String, List<CompileDiagnostic>> diagnostics, Map<String, String> wiringErrors, Map<String, String> wiringWarnings) {
     }
 
 }

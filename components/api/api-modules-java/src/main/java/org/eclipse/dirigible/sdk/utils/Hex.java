@@ -9,12 +9,16 @@
  */
 package org.eclipse.dirigible.sdk.utils;
 
+import java.nio.charset.StandardCharsets;
 import org.apache.commons.codec.DecoderException;
 import org.eclipse.dirigible.components.api.utils.HexFacade;
 
 /**
  * Hex (base-16) encoding helpers. Lower-case alphabet, no separators — useful for rendering
  * digests, fingerprints, and binary identifiers as printable strings.
+ * <p>
+ * A {@link String} argument is always text: {@link #encode(String)} encodes its UTF-8 bytes and
+ * {@link #decode(String)} reads hex text, so {@code decode(encode(text))} round-trips.
  * <p>
  * {@link #decode(String)} throws {@link DecoderException} for invalid input (odd length, non-hex
  * character); reach for it when input is user-supplied and you want to surface a client-friendly
@@ -24,8 +28,14 @@ public final class Hex {
 
     private Hex() {}
 
+    /**
+     * Hex-encodes the UTF-8 bytes of the given text.
+     *
+     * @param input the text to encode
+     * @return the hexadecimal representation
+     */
     public static String encode(String input) {
-        return HexFacade.encode(input);
+        return HexFacade.encode(input.getBytes(StandardCharsets.UTF_8));
     }
 
     public static String encode(byte[] input) {

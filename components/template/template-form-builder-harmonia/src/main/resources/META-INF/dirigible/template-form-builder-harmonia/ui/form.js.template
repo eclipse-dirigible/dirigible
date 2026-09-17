@@ -50,6 +50,9 @@ const harmoniaHttp = {
       try { const j = JSON.parse(text); message = j.errorMessage || j.message || text; } catch (_) { /* non-JSON */ }
       const err = new Error(message || (r.status + ' ' + r.statusText));
       err.httpStatus = r.status;
+      // The shape App.services.apiErrors reads: the page shows the server's text only through its
+      // 400/409 refusal gate (#7151, #7263); err.message stays for the AngularJS http shim below.
+      err.errorMessage = message;
       throw err;
     }
     // A success can carry an empty body (204, or a 200 from an action endpoint such as task
@@ -79,8 +82,21 @@ function formController(ctx) {
   // AngularJS resolves $http with { data, status, statusText, ... } and legacy .form code branches
   // on the status (`if (response.status != 202)`), so the success path must carry it too - not just
   // the rejection path. ctx.http resolves the body alone, hence the exchange() call here.
+  //
+  // The rejection carries the ApiError shape App.services.apiErrors reads (httpStatus/errorMessage)
+  // on the thrown object ITSELF, so a .form's own .catch can hand it straight to
+  // refusalMessageFor(error, '<its own fallback>') - never read .data.message, the raw
+  // developer-facing sentence a 500 carries (#7296). The legacy .data.message field stays too, for
+  // .form code authored against the old AngularJS $http shim before this fix existed.
   const wrap = (p) => p.then((r) => ({ data: r.data, status: r.status }))
-                       .catch((e) => { throw { data: { message: e && e.message }, status: e && e.httpStatus }; });
+                       .catch((e) => {
+                         throw {
+                           data: { message: e && e.message },
+                           status: e && e.httpStatus,
+                           httpStatus: e && e.httpStatus,
+                           errorMessage: e && e.errorMessage,
+                         };
+                       });
   const $http = {
     get:    (url)       => wrap(harmoniaHttp.exchange('GET', url, undefined)),
     post:   (url, data) => wrap(harmoniaHttp.exchange('POST', url, data)),
@@ -91,7 +107,10 @@ function formController(ctx) {
     return { show: (o) => ctx.notify(((o && o.title) ? o.title + ': ' : '') + ((o && o.description) || '')) };
   }
   function DialogHub() {
-    return { closeWindow: () => ctx.close(), close: () => ctx.close() };
+    // cancelWindow() is the "the user backed out" close: the host announces every outcome an action
+    // page reports, so a plain closeWindow() from a Cancel button read as a completion and toasted
+    // "<label> completed" for work that never happened (issue #7149).
+    return { closeWindow: () => ctx.close(), close: () => ctx.close(), cancelWindow: () => ctx.cancel() };
   }
 ]]#
 ${code}
@@ -122,13 +141,12 @@ document.addEventListener('alpine:init', () => {
           },
         },
         notify(message) { self.message = message; },
-        close() {
-          try {
-            if (window.parent && window.parent !== window) {
-              window.parent.postMessage({ type: 'harmonia.form.close' }, '*');
-            }
-          } catch (e) { /* standalone: nothing to close */ }
-        },
+        // The host ANNOUNCES the outcome a closing action page reports (issue #7073). `close()` says
+        // nothing about it, so the host applies its default "<label> completed"; `close(outcome)` may
+        // say so itself with { status: 'ok' | 'error', message }; and `cancel()` says the work was
+        // ABANDONED, on which the host stays quiet (issue #7149).
+        close(outcome) { self.postClose(outcome); },
+        cancel() { self.postClose({ status: 'cancelled' }); },
       };
       try {
         if (typeof formController === 'function') formController(this._ctx);
@@ -193,7 +211,7 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         const failed = window.T ? T('$projectName:${tprefix}.dialogs.errorTitle', 'Submit failed.') : 'Submit failed.';
         this.state = 'error';
-        this.message = (e && e.message) || failed;
+        this.message = App.services.apiErrors.refusalMessageFor(e, failed);
       }
     },
 
@@ -304,6 +322,18 @@ document.addEventListener('alpine:init', () => {
         out[c.model] = this.toInstant(v);
       });
       return out;
+    },
+
+    // Tell the host (the app-wide action dialog, the Inbox's iframe) that this page is done with
+    // itself. The optional outcome rides along on the SAME message, because it is the outcome the host
+    // announces: `status: 'error'` a refusal, `status: 'cancelled'` an abandoned action the host must
+    // NOT announce, nothing at all the host's default completion.
+    postClose(outcome) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(Object.assign({ type: 'harmonia.form.close' }, outcome || {}), '*');
+        }
+      } catch (e) { /* standalone: nothing to close */ }
     },
 
     // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).

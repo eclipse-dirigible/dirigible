@@ -253,8 +253,10 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
                .append(SPACE)
                .append(KEYWORD_CONSTRAINT)
                .append(SPACE);
+            // Quoted like the ADD side names it: a unique key is created encapsulated (mixed case survives on
+            // PostgreSQL), so the drop must spell it the same way or it looks for a lower-cased stranger.
             this.getUniqueIndices()
-                .forEach(ui -> sql.append(ui.getName() + ", "));
+                .forEach(ui -> sql.append(encapsulate(ui.getName()) + ", "));
             sql.delete(sql.length() - 2, sql.length());
         }
     }
@@ -299,9 +301,11 @@ public class AlterTableBuilder extends AbstractTableBuilder<AlterTableBuilder> {
      * @param sql the sql
      */
     protected void generateUniqueIndices(StringBuilder sql) {
+        // ADD CONSTRAINT ... UNIQUE (...) - one clause per key, space-separated from the ADD and from each
+        // other, no trailing comma (the CREATE TABLE form's separator has no place in an ALTER).
         for (CreateTableUniqueIndexBuilder uniqueIndex : this.uniqueIndices) {
+            sql.append(SPACE);
             generateUniqueIndex(sql, uniqueIndex);
-            sql.append(COMMA);
         }
     }
 

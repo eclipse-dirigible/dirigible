@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.registry.watcher;
 
+import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -27,17 +29,60 @@ import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.nio.file.StandardWatchEventKinds.*;
 
+/**
+ * Mirrors an external folder into a target folder - the registry - and keeps mirroring it as the
+ * source changes.
+ *
+ * <p>
+ * The copy writes onto the registry's own file system path, behind {@code IRepository} and behind
+ * the publisher pipeline, so the platform learns nothing about it on its own: the registry watcher
+ * that schedules synchronization passes registers only the registry root and never sees a file
+ * written several folders deep. This class therefore reports its writes the way a publish does - it
+ * brackets them with {@link RegistryMutationTracker} so a pass overlapping the copy defers its
+ * cleanup instead of reaping artefacts whose sources have not arrived yet, and it marks the
+ * registry modified once a batch of writes is applied so the next pass actually runs. Without the
+ * latter, a pass that caught the initial copy half-way was the last one to ever run and whatever it
+ * happened to see stayed the installed state for the life of the process.
+ */
 public class RecursiveFolderWatcher implements DisposableBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(RecursiveFolderWatcher.class);
 
+    /** How long {@link #destroy()} waits for the watch service's own close before walking away. */
+    private static final long CLOSE_TIMEOUT_SECONDS = 2;
+
     private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
+
+    /** Marks the windows in which this watcher is writing to the registry. */
+    private final RegistryMutationTracker mutationTracker;
+
+    /** Told that the registry changed, so a synchronization pass is scheduled. */
+    private final SynchronizationWatcher synchronizationWatcher;
+
     private Set<String> ignoredFolders = Collections.emptySet();
     private Path sourceDir;
     private Path targetDir;
     private WatchService watchService;
     private ExecutorService executorService;
+
+    /**
+     * Whether the watch loop is up, i.e. a change made to the source folder from now on is seen. The
+     * initial copy runs before the directories are registered, so this is the point from which the
+     * mirroring is live - and the point a test has to wait for before changing the source.
+     */
+    private volatile boolean watching;
+
+    /**
+     * Instantiates a new recursive folder watcher.
+     *
+     * @param mutationTracker the registry mutation tracker
+     * @param synchronizationWatcher the synchronization watcher
+     */
+    protected RecursiveFolderWatcher(RegistryMutationTracker mutationTracker, SynchronizationWatcher synchronizationWatcher) {
+        this.mutationTracker = mutationTracker;
+        this.synchronizationWatcher = synchronizationWatcher;
+    }
 
     /**
      * Initialize.
@@ -93,9 +138,28 @@ public class RecursiveFolderWatcher implements DisposableBean {
         logger.debug("Done initializing the External Registry file watcher.");
     }
 
-    /** Perform initial sync of all files and folders */
+    /**
+     * Perform initial sync of all files and folders.
+     *
+     * <p>
+     * The whole walk is one mutation window: it copies the tree file by file, and a synchronization
+     * pass looking into it must not take the files that have not been copied yet for deleted sources.
+     * The registry is marked modified once, when the tree is complete - the point at which a pass is
+     * worth running.
+     */
     private void initialSync() throws IOException {
         logger.info("Performing initial sync...");
+        mutationTracker.enter();
+        try {
+            walkAndSync();
+        } finally {
+            mutationTracker.exit();
+        }
+        logger.info("Initial sync complete.");
+        registryChanged();
+    }
+
+    private void walkAndSync() throws IOException {
         Files.walkFileTree(sourceDir, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -117,14 +181,23 @@ public class RecursiveFolderWatcher implements DisposableBean {
                 return FileVisitResult.CONTINUE;
             }
         });
-        logger.info("Initial sync complete.");
+    }
+
+    /**
+     * Tell the platform the registry changed, so the next scheduled synchronization pass actually runs.
+     * Called once per applied batch of writes, not per file.
+     */
+    private void registryChanged() {
+        logger.debug("The external registry folder changed - scheduling a synchronization pass");
+        synchronizationWatcher.force();
     }
 
     private void syncFile(Path sourceFile) {
+        if (Files.isDirectory(sourceFile) || isIgnored(sourceFile)) {
+            return;
+        }
+        mutationTracker.enter();
         try {
-            if (Files.isDirectory(sourceFile) || isIgnored(sourceFile)) {
-                return;
-            }
             Path relative = sourceDir.relativize(sourceFile);
             Path targetFile = targetDir.resolve(relative);
             Files.createDirectories(targetFile.getParent());
@@ -132,6 +205,8 @@ public class RecursiveFolderWatcher implements DisposableBean {
             logger.info("Synced: " + sourceFile + " → " + targetFile);
         } catch (IOException e) {
             logger.error("Failed to sync: " + sourceFile, e);
+        } finally {
+            mutationTracker.exit();
         }
     }
 
@@ -179,6 +254,7 @@ public class RecursiveFolderWatcher implements DisposableBean {
 
     public void startWatching() throws IOException, InterruptedException {
         logger.info("Recursively watching: " + sourceDir);
+        watching = true;
 
         while (true) {
             WatchKey key = watchService.take();
@@ -188,6 +264,7 @@ public class RecursiveFolderWatcher implements DisposableBean {
                 continue;
             }
 
+            boolean changed = false;
             for (WatchEvent<?> event : key.pollEvents()) {
                 WatchEvent.Kind<?> kind = event.kind();
 
@@ -196,6 +273,7 @@ public class RecursiveFolderWatcher implements DisposableBean {
 
                 Path name = (Path) event.context();
                 Path sourcePath = dir.resolve(name);
+                changed = true;
 
                 if (kind == ENTRY_CREATE) {
                     if (Files.isDirectory(sourcePath)) {
@@ -231,6 +309,10 @@ public class RecursiveFolderWatcher implements DisposableBean {
                 }
             }
 
+            if (changed) {
+                registryChanged();
+            }
+
             boolean valid = key.reset();
             if (!valid) {
                 keyToPathMap.remove(key);
@@ -241,7 +323,17 @@ public class RecursiveFolderWatcher implements DisposableBean {
         }
     }
 
+    /**
+     * Whether the watch loop is up - see {@link #watching}.
+     *
+     * @return true once changes to the source folder are being mirrored
+     */
+    boolean isWatching() {
+        return watching;
+    }
+
     private void deleteFile(Path sourceFile) {
+        mutationTracker.enter();
         try {
             Path relative = sourceDir.relativize(sourceFile);
             Path targetFile = targetDir.resolve(relative);
@@ -268,20 +360,35 @@ public class RecursiveFolderWatcher implements DisposableBean {
             }
         } catch (IOException e) {
             logger.error("Failed to delete: " + sourceFile, e);
+        } finally {
+            mutationTracker.exit();
         }
     }
 
+    /**
+     * Destroy.
+     *
+     * <p>
+     * The watch service is closed <b>off the caller's thread</b> for the reason documented on
+     * {@link LocalRegistryWatcher#closeOffThread}: on a platform with no native file-event source the
+     * JDK's polling watch service can deadlock against its own poller, and a teardown that waits for
+     * that close never returns. Walking away costs nothing - the poller it leaves behind is a daemon
+     * thread.
+     */
     @Override
-    public void destroy() throws IOException {
+    public void destroy() {
         logger.info("Destroying Recursive Folder Watcher");
 
-        if (null != watchService) {
-            watchService.close();
-            watchService = null;
+        watching = false;
+
+        WatchService service = this.watchService;
+        this.watchService = null;
+        if (null != service && !LocalRegistryWatcher.closeOffThread(service, CLOSE_TIMEOUT_SECONDS)) {
+            logger.warn("The External Registry watch service did not close within [{}]s - leaving it to the JVM", CLOSE_TIMEOUT_SECONDS);
         }
 
         if (null != executorService) {
-            executorService.shutdown();
+            executorService.shutdownNow();
             executorService = null;
         }
     }

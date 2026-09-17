@@ -12,12 +12,17 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Per-generation call context handed to every {@link IntentTargetGenerator}. Carries the parsed
@@ -36,8 +41,18 @@ import org.eclipse.dirigible.repository.api.IResource;
  * All writes go through {@link #writeModelFile(String, String)}, which records the emitted file
  * names so {@link IntentGenerationService} can scrub files that a previous generation wrote but the
  * current one no longer produces.
+ *
+ * <p>
+ * Every write also journals the state it replaced, so a pass that is REFUSED - a generator raising
+ * {@link org.eclipse.dirigible.components.intent.parser.IntentValidationException} - can be undone
+ * whole by {@link #rollbackWrittenFiles()} (dirigible #7227). Generation runs the generators in
+ * {@code @Order}, so a check placed in a late generator would otherwise leave the earlier ones'
+ * output in the workspace next to the 422: an authoring mistake refused at generation must cost the
+ * developer nothing, exactly as one refused at parse does.
  */
 public final class IntentGenerationContext {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(IntentGenerationContext.class);
 
     /** Repository path of the target project root, e.g. {@code /users/admin/workspace/my-library}. */
     private final String projectRoot;
@@ -58,11 +73,38 @@ public final class IntentGenerationContext {
     private final IntentModel model;
     private final IRepository repository;
 
+    /**
+     * A validation-only pass: generators run and report exactly as they would for a real Generate, but
+     * nothing is written and nothing is scrubbed (dirigible #6956). Reads stay live - what already
+     * exists still decides what a generator would do - so the issues collected are the ones a real pass
+     * would raise.
+     */
+    private final boolean dryRun;
+
+    /**
+     * A BOOTSTRAP pass: a cross-model {@code generates} target whose owner model does not exist yet is
+     * skipped (with a reported warning) instead of failing the whole Generate (dirigible #6539). It is
+     * the declared escape from a MUTUAL cross-model cycle - model A mints a document into model B while
+     * B holds a foreign key back to A - where neither project can be generated first. Nothing else is
+     * relaxed: an owner model that IS there but declares no such entity still fails loudly, and a
+     * cross-model RELATION never falls back to a guess (its table / key column / FK type cannot be
+     * invented without emitting a broken schema).
+     */
+    private final boolean bootstrap;
+
     /** The project's {@code .settings} (loaded or scaffolded by the service before generators run). */
     private IntentSettings settings;
 
     /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
+
+    /**
+     * What this pass actually CHANGED, keyed by bare file name: the content the file held before the
+     * pass touched it, or {@code null} when the pass created it. Recorded on the first change of each
+     * file only, and never for a write that turned out to be byte-identical (there is nothing to undo)
+     * - so it is exactly the set {@link #rollbackWrittenFiles()} has to put back.
+     */
+    private final Map<String, byte[]> replacedContent = new LinkedHashMap<>();
 
     /**
      * Non-fatal generation issues (e.g. a piece of glue that could not be emitted because a reference
@@ -71,14 +113,35 @@ public final class IntentGenerationContext {
      */
     private final java.util.List<String> issues = new java.util.ArrayList<>();
 
+    /**
+     * Non-fatal observations that no change to THIS document can address (e.g. a cross-model capacity
+     * guard that belongs to the child's own model). Kept apart from {@link #issues} so the assistant's
+     * repair loop is never asked to "fix" something that is not fixable here - a round spent on an
+     * unfixable advisory is a round not spent on a real defect - while the generate response still
+     * surfaces them to the developer.
+     */
+    private final java.util.List<String> advisories = new java.util.ArrayList<>();
+
     IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
             IRepository repository) {
+        this(model, projectRoot, projectName, workspaceName, fallbackName, repository, false);
+    }
+
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            IRepository repository, boolean dryRun) {
+        this(model, projectRoot, projectName, workspaceName, fallbackName, repository, dryRun, false);
+    }
+
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            IRepository repository, boolean dryRun, boolean bootstrap) {
+        this.bootstrap = bootstrap;
         this.model = model;
         this.projectRoot = projectRoot;
         this.projectName = projectName;
         this.workspaceName = workspaceName;
         this.fallbackName = fallbackName;
         this.repository = repository;
+        this.dryRun = dryRun;
     }
 
     /**
@@ -90,14 +153,23 @@ public final class IntentGenerationContext {
      * @param content the full file content
      */
     public void writeModelFile(String fileName, String content) {
+        if (dryRun) {
+            // The name is still recorded - a dry run must report the same output set a real pass
+            // would produce - but the repository is never touched.
+            writtenFileNames.add(fileName);
+            return;
+        }
         String path = projectRoot + "/" + fileName;
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
-            if (!Arrays.equals(existing.getContent(), bytes)) {
+            byte[] previous = existing.getContent();
+            if (!Arrays.equals(previous, bytes)) {
+                journal(fileName, previous);
                 existing.setContent(bytes);
             }
         } else {
+            journal(fileName, null);
             repository.createResource(path, bytes);
         }
         writtenFileNames.add(fileName);
@@ -115,12 +187,60 @@ public final class IntentGenerationContext {
      * @param content the full file content to create when absent
      */
     public void writeModelFileIfAbsent(String fileName, String content) {
+        if (dryRun) {
+            writtenFileNames.add(fileName);
+            return;
+        }
         String path = projectRoot + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (!existing.exists()) {
+            journal(fileName, null);
             repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
         }
         writtenFileNames.add(fileName);
+    }
+
+    /**
+     * Record the state a file held before this pass first changed it - {@code null} meaning it did not
+     * exist. Only the FIRST change of a file is journaled: the rollback has to restore the state the
+     * pass started from, not the one an earlier generator of the same pass left behind.
+     */
+    private void journal(String fileName, byte[] previous) {
+        if (!replacedContent.containsKey(fileName)) {
+            replacedContent.put(fileName, previous);
+        }
+    }
+
+    /**
+     * Undo every change this pass made at the project root: a file it created is removed, a file it
+     * overwrote gets its previous content back. Used when the pass is refused as a whole - a generator
+     * raising {@link org.eclipse.dirigible.components.intent.parser.IntentValidationException} - so the
+     * 422 leaves the workspace exactly as the developer had it (dirigible #7227), rather than the
+     * partial model set the generators before the failing one had already written.
+     *
+     * <p>
+     * A restore that itself fails is logged and the rest still run: the caller is on its way to
+     * reporting the authoring error, and one file that could not be put back must not hide it.
+     */
+    void rollbackWrittenFiles() {
+        if (dryRun || repository == null || projectRoot == null) {
+            return;
+        }
+        for (Map.Entry<String, byte[]> entry : replacedContent.entrySet()) {
+            String path = projectRoot + "/" + entry.getKey();
+            try {
+                if (entry.getValue() == null) {
+                    repository.removeResource(path);
+                } else {
+                    repository.getResource(path)
+                              .setContent(entry.getValue());
+                }
+            } catch (RuntimeException e) {
+                LOGGER.error("Failed to roll back intent output [{}]", LoggedValue.of(path), e);
+            }
+        }
+        replacedContent.clear();
+        writtenFileNames.clear();
     }
 
     /**
@@ -134,8 +254,11 @@ public final class IntentGenerationContext {
      *         absent and the generator should produce it
      */
     public boolean keepExistingModelFile(String fileName) {
-        if (!repository.getResource(projectRoot + "/" + fileName)
-                       .exists()) {
+        // No repository or no project to look into (a dry run over a proposal that belongs to no
+        // project yet): nothing can exist, so the generator should produce - which a dry run then
+        // discards, having exercised the build path.
+        if (repository == null || projectRoot == null || !repository.getResource(projectRoot + "/" + fileName)
+                                                                    .exists()) {
             return false;
         }
         writtenFileNames.add(fileName);
@@ -167,6 +290,44 @@ public final class IntentGenerationContext {
      */
     public java.util.List<String> getIssues() {
         return Collections.unmodifiableList(issues);
+    }
+
+    /**
+     * Record an observation no change to this document can address - surfaced to the developer, but
+     * never handed to the assistant's repair loop as something to fix.
+     *
+     * @param advisory a human-readable observation
+     */
+    public void addAdvisory(String advisory) {
+        advisories.add(advisory);
+    }
+
+    /**
+     * The advisories collected during this pass.
+     *
+     * @return an unmodifiable view of the advisories
+     */
+    public java.util.List<String> getAdvisories() {
+        return Collections.unmodifiableList(advisories);
+    }
+
+    /**
+     * Whether this pass is validation-only (nothing is written or scrubbed).
+     *
+     * @return {@code true} for a dry run
+     */
+    public boolean isDryRun() {
+        return dryRun;
+    }
+
+    /**
+     * Whether this pass may skip a cross-model {@code generates} whose owner model does not exist yet
+     * (dirigible #6539) - the declared bootstrap of a mutual cross-model cycle.
+     *
+     * @return {@code true} for a bootstrap pass
+     */
+    public boolean isBootstrap() {
+        return bootstrap;
     }
 
     public String getProjectName() {

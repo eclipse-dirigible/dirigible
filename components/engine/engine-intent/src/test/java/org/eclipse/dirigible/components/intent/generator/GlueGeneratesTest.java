@@ -307,6 +307,109 @@ class GlueGeneratesTest {
         assertEquals("Status", g.get("sourceStatusProperty"));
         assertEquals("3", g.get("sourceStatusValue"));
         assertEquals("Proforma", g.get("fromPerspective"));
+
+        // ...and the completion hook IMPLIES the from-status guard (issue #7068): a proforma already
+        // standing at the status the hook writes has been invoiced, so the endpoint refuses the run.
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("Status", g.get("guardStatusProperty"));
+        assertEquals("currentStatus != 3", g.get("guardStatusExpr"));
+        assertEquals("3", g.get("guardStatuses"));
+    }
+
+    @Test
+    void authoredFromStatusBecomesTheAllowList() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: ProformaStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    fromStatus: [CONFIRMED]
+                    sourceStatus: INVOICED
+                seeds:
+                  - name: proforma-statuses
+                    entity: ProformaStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: CONFIRMED }
+                      - { id: 3, name: INVOICED }
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        // The authored list wins over the implied deny-list, and the names are seed ids by now.
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("currentStatus == 2", g.get("guardStatusExpr"));
+        assertEquals("2", g.get("guardStatuses"));
+        assertTrue(String.valueOf(g.get("guardStatusText"))
+                         .contains("allowed only from status [2]"));
+    }
+
+    @Test
+    void anAuthoredFromStatusResolvesTheStatusPropertyWithNoCompletionHook() {
+        // The guard-only path: no `sourceStatus:`, so nothing pre-resolved the source's status FK and
+        // GeneratesGuardSupport has to find it itself. It reads THE status the same way every other
+        // reader does - LifecycleStages.statusRelation, the first (and, per the parser, only)
+        // `function: EntityStatus` relation - so the button's guard and the controller's 409 are read
+        // off one column (issue #7150).
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: ProformaStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Stage, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    fromStatus: [2]
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals("", g.get("sourceStatusProperty"));
+        assertEquals(true, g.get("hasStatusGuard"));
+        assertEquals("Stage", g.get("guardStatusProperty"));
+        assertEquals("currentStatus == 2", g.get("guardStatusExpr"));
+    }
+
+    @Test
+    void aCreateFromWithNoStatusAtAllKeepsNoGuard() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                                   .get(0);
+
+        assertEquals(false, g.get("hasStatusGuard"));
+        assertEquals("", g.get("guardStatusExpr"));
     }
 
     @SuppressWarnings("unchecked")
@@ -399,6 +502,64 @@ class GlueGeneratesTest {
         assertFalse(((Boolean) g.get("crossModelSource")).booleanValue());
         assertEquals("", g.get("fromModel"));
         assertEquals("", g.get("fromProject"));
+    }
+
+    /**
+     * Issue #7392: {@code now} renders in the TARGET field's own shape for every temporal kind, not
+     * only the two that happen to be Strings. A {@code timestamp} property is a
+     * {@code java.time.Instant} on the generated entity, so the untyped {@code LocalDate.now()} the
+     * fall-through emitted did not compile - and the client-Java batch compiles as one unit, so the
+     * whole module failed to publish. The items child is the sibling site of the same rule.
+     */
+    @Test
+    void nowOnATimestampFieldRendersAnInstant() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: QuoteItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Quote, kind: manyToOne, to: Quote, composition: true, required: true }
+                  - name: Approval
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: approvedAt, type: timestamp }
+                      - { name: approvedOn, type: date }
+                  - name: ApprovalLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: seenAt, type: timestamp }
+                    relations:
+                      - { name: Approval, kind: manyToOne, to: Approval, composition: true, required: true }
+                generates:
+                  - name: approval-from-quote
+                    from: Quote
+                    to: Approval
+                    defaults:
+                      ApprovedAt: now
+                      ApprovedOn: now
+                    items:
+                      from: QuoteItem
+                      to: ApprovalLine
+                      defaults:
+                        SeenAt: now
+                """;
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
+        assertTrue(fields.contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
+                "a timestamp field's now must be the Instant of the moment: " + fields);
+        assertTrue(fields.contains(Map.of("targetProp", "ApprovedOn", "expr", "java.time.LocalDate.now()")),
+                "a date field keeps today's LocalDate: " + fields);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
+        assertTrue(itemFields.contains(Map.of("targetProp", "SeenAt", "expr", "java.time.Instant.now()")),
+                "an items child's timestamp cell follows the same rule: " + itemFields);
     }
 
     @Test
@@ -739,6 +900,7 @@ class GlueGeneratesTest {
                   - name: Declaration
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
                     relations:
                       - { name: Fine, kind: manyToOne, to: Fine, model: fines }
                 generates:

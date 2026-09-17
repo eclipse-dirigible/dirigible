@@ -171,14 +171,21 @@ public class ViewsSynchronizer extends MultitenantBaseSynchronizer<View, Long> {
 
             switch (flow) {
                 case CREATE:
-                    if (ArtefactLifecycle.NEW.equals(view.getLifecycle())) {
+                    // A FAILED view is retried: its CREATE VIEW may have failed for a reason that heals
+                    // later - typically the tables it selects from belong to a module published on a
+                    // later pass (#6942). Recording the failure as CREATED-with-error parked the view
+                    // for good, since neither the CREATE nor the UPDATE gate matched it again.
+                    if (ArtefactLifecycle.NEW.equals(view.getLifecycle()) || ArtefactLifecycle.FAILED.equals(view.getLifecycle())) {
                         if (!SqlFactory.getNative(connection)
                                        .existsTable(connection, view.getName())) {
                             try {
                                 executeViewCreate(connection, view);
-                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                             } catch (Exception e) {
-                                callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e);
+                                // FAILED keeps the view eligible for the next pass; returning false hands
+                                // it to the in-pass topological retry, exactly as the outer catch does.
+                                callback.addError(e.getMessage());
+                                callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                                return false;
                             }
                         } else {
                             if (logger.isWarnEnabled()) {

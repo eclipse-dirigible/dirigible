@@ -17,6 +17,8 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
@@ -24,6 +26,7 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport.WriteFiel
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.EscalateIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -43,6 +46,7 @@ import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.UniqueKeyIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
@@ -80,6 +84,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlueIntentGenerator.class);
 
+    /** A {@code {path}} placeholder of a notify subject / body - a field or a one-hop path. */
+    private static final java.util.regex.Pattern NOTIFY_PLACEHOLDER =
+            java.util.regex.Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
+
+    /** The reserved link tokens a notify path may be instead of a property of the record. */
+    private static final java.util.Set<String> RESERVED_NOTIFY_TOKENS =
+            java.util.Set.of(NotificationSupport.APP_URL_TOKEN, NotificationSupport.RECORD_URL_TOKEN, NotificationSupport.INBOX_URL_TOKEN);
+
     @Override
     public String name() {
         return "glue";
@@ -93,12 +105,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
         IntentSettings settings = context.getSettings();
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> resolvers = buildResolvers(model, settings);
+        List<Map<String, Object>> resolvers = buildResolvers(model, settings, context);
         List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
         List<Map<String, Object>> assignees = buildAssignees(model, settings, context);
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
         List<Map<String, Object>> waits = buildWaits(model, settings);
         List<Map<String, Object>> aborts = buildAborts(model, settings);
+        List<Map<String, Object>> deleteAborts = buildDeleteAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
@@ -115,24 +128,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansionCleanups = expansionHandlers.cleanups();
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> settlementListeners = buildSettlementListeners(settlements);
+        List<Map<String, Object>> settlementCleanups = buildSettlementCleanups(settlements);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
-        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings);
+        List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots =
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && assignees.isEmpty() && timerLoaders.isEmpty()
-                && waits.isEmpty() && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
-                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && inboundMessages.isEmpty() && inboundFiles.isEmpty()
-                && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
-                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty() && resolves.isEmpty()) {
+                && waits.isEmpty() && aborts.isEmpty() && deleteAborts.isEmpty() && writers.isEmpty() && setters.isEmpty()
+                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty()
+                && inboundMessages.isEmpty() && inboundFiles.isEmpty() && outbound.isEmpty() && stepEvents.isEmpty() && rollups.isEmpty()
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
+                && postings.isEmpty() && snapshots.isEmpty() && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()
+                && sends.isEmpty() && resolves.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -145,6 +160,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("timerLoaders", timerLoaders);
         glue.put("waits", waits);
         glue.put("aborts", aborts);
+        glue.put("deleteAborts", deleteAborts);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -163,6 +179,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansionCleanups", expansionCleanups);
         glue.put("settlements", settlements);
         glue.put("settlementListeners", settlementListeners);
+        glue.put("settlementCleanups", settlementCleanups);
         glue.put("generates", generates);
         // The event-driven subset (issue #6711) - the SAME descriptors, filtered, so the listener and
         // the create-from it calls can never be built from divergent data. A create-from with no event
@@ -208,7 +225,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("triggers", process.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for trigger [{}] (not generated)", process.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for trigger [{}] (not generated)",
+                        LoggedValue.of(process.getName()));
                 continue;
             }
             Map<String, Object> trigger = new LinkedHashMap<>();
@@ -232,6 +250,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
+            // What a task of this process is ABOUT, wherever it is listed away from its own
+            // application: the property names the reader resolves live against the record (#7077).
+            trigger.put("subjectFields", TaskSubjectSupport.subjectFields(byName.get(entity)));
             putPersonalAssignee(trigger, byName.get(entity), model, byName, compositionParents, context);
             triggers.add(trigger);
         }
@@ -443,7 +464,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("notifications", notification.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)", notification.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)",
+                        LoggedValue.of(notification.getName()));
                 continue;
             }
             NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents, lookup);
@@ -457,6 +479,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (attachment == null && NotifySupport.attachesPrint(notification)) {
                 continue; // asked for the document but it cannot be rendered - reported above
             }
+            NotifySupport.ReportAttachment reportAttachment = reportAttachment(notification, byName.get(entity), model, byName,
+                    compositionParents, context, "Notification [" + notification.getName() + "]");
+            if (reportAttachment == null && NotifySupport.attachesReport(notification)) {
+                continue; // asked for the report but it cannot be scoped - reported above
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
@@ -467,13 +494,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
-            entry.put("relationLoads", relationLoads(plan, attachment));
+            entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
-            entry.putAll(NotifySupport.attachmentFields(attachment));
+            entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
+            entry.putAll(NotifySupport.outcomeFields(notification, byName.get(entity), compositionParents,
+                    IntentEntities.settingEntities(byName.values())));
             notifications.add(entry);
         }
         return notifications;
@@ -487,7 +516,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                   .isBlank()) {
                 continue;
             }
-            EntityIntent child = byName.get(rollup.getEntity());
+            // A CROSS-MODEL CHILD: the counted rows are owned by another model, the total lands on a
+            // LOCAL parent this roll-up names outright (a foreign child's relations are not in this
+            // document, so `via` alone cannot point at one). The handler binds the OWNER project's topic
+            // and reads the rows back through the owner's generated repository - the shape an n:m
+            // allocation needs, whose link rows live with one side of the pairing while the other side's
+            // total belongs here.
+            boolean crossModelChild = rollup.isCrossModelChild();
+            EntityIntent child = crossModelChild ? null : byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
             EntityIntent parent = via == null ? null : byName.get(via.getTo());
             // A CROSS-MODEL parent: the child is local (it owns the event this handler binds to), the
@@ -497,7 +533,53 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean crossModelParent = via != null && via.getModel() != null && !via.getModel()
                                                                                     .isBlank();
             CrossModelSupport.TargetInfo parentTarget = null;
-            if (crossModelParent) {
+            String childPerspective = null;
+            String childProject = "";
+            String parentEntity = null;
+            String parentPerspective = null;
+            if (crossModelChild) {
+                UsesIntent uses = findUses(model, rollup.getModel());
+                EntityIntent localParent = rollup.getParent() == null ? null : byName.get(rollup.getParent());
+                if (uses == null || localParent == null) {
+                    continue; // parser already reported the undeclared alias / non-local parent
+                }
+                CrossModelSupport.TargetInfo childTarget;
+                try {
+                    childTarget = CrossModelSupport.resolve(context, uses, rollup.getEntity());
+                } catch (IntentValidationException ex) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] child entity [" + rollup.getEntity() + "] in model ["
+                            + rollup.getModel() + "] cannot be resolved: " + ex.getMessage() + " - not generated");
+                    continue;
+                }
+                // The owner model WAS read: every property this roll-up reads off the foreign child must
+                // be one of its own. The parser cannot check them (the entity is not local), so a miss is
+                // reported here rather than emitted as a handler that fails the client-Java batch.
+                String missing = firstUnresolvableChildProperty(rollup, childTarget);
+                if (missing != null) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] " + missing + " is not a property of cross-model child ["
+                            + rollup.getModel() + ":" + rollup.getEntity() + "] - not generated");
+                    continue;
+                }
+                // And `via` must reference THIS roll-up's parent. A property that exists but points at
+                // something else would key the aggregate on foreign ids and look up parents by them -
+                // wrong totals with nothing anywhere saying so, which is worse than not generating.
+                String references = childTarget.propertyRelations() == null ? null
+                        : childTarget.propertyRelations()
+                                     .get(IntentNaming.pascalCase(rollup.getVia()));
+                if (childTarget.resolved() && childTarget.propertyRelations() != null && !localParent.getName()
+                                                                                                     .equals(references)) {
+                    reportDroppedGlue(context,
+                            "Roll-up [" + rollup.getName() + "] via [" + rollup.getVia() + "] of cross-model child [" + rollup.getModel()
+                                    + ":" + rollup.getEntity() + "] references ["
+                                    + (references == null ? "nothing - it is not a relation" : references) + "], not the parent ["
+                                    + localParent.getName() + "] - not generated");
+                    continue;
+                }
+                childPerspective = childTarget.perspectiveName();
+                childProject = uses.resolveProject();
+                parentEntity = localParent.getName();
+                parentPerspective = IntentEntities.resolvePerspective(parentEntity, compositionParents, model);
+            } else if (crossModelParent) {
                 UsesIntent uses = findUses(model, via.getModel());
                 if (uses == null) {
                     reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] reaches its parent through model [" + via.getModel()
@@ -505,21 +587,22 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 parentTarget = CrossModelSupport.resolve(context, uses, via.getTo());
-                String counter = IntentNaming.pascalCase(rollup.getField());
-                if (parentTarget.resolved() && parentTarget.propertyNames() != null && !parentTarget.propertyNames()
-                                                                                                    .contains(counter)) {
-                    // The owner model WAS read and carries no such property. The parser cannot catch this
-                    // (the entity is not local), so surface it here rather than emit a handler that would
-                    // fail the client-Java batch.
-                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] field [" + rollup.getField()
-                            + "] is not a property of cross-model parent [" + via.getModel() + ":" + via.getTo() + "] - not generated");
+                // Every parent column this roll-up writes or reads - the counter, and (since #7410) the
+                // capacity it measures against and the balance it keeps. The owner model WAS read and
+                // carries no such property: the parser cannot catch this (the entity is not local), so
+                // surface it here rather than emit a handler that would fail the client-Java batch.
+                String missingParentProperty = firstUnresolvableParentProperty(rollup, parentTarget);
+                if (missingParentProperty != null) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] " + missingParentProperty
+                            + " is not a property of cross-model parent [" + via.getModel() + ":" + via.getTo() + "] - not generated");
                     continue;
                 }
             } else if (parent == null) {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("rollups", rollup.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)", rollup.getName());
+                LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)",
+                        LoggedValue.of(rollup.getName()));
                 continue;
             }
             String op = rollup.getOp() == null || rollup.getOp()
@@ -528,31 +611,38 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean latest = "latest".equals(op);
             if (sum && (rollup.getOf() == null || rollup.getOf()
                                                         .isBlank())) {
-                LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", rollup.getName());
+                LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", LoggedValue.of(rollup.getName()));
                 continue;
             }
             if (latest && (rollup.getOf() == null || rollup.getOf()
                                                            .isBlank()
                     || rollup.getBy() == null || rollup.getBy()
                                                        .isBlank())) {
-                LOGGER.warn("Latest roll-up [{}] needs both 'of' and 'by' - skipping", rollup.getName());
+                LOGGER.warn("Latest roll-up [{}] needs both 'of' and 'by' - skipping", LoggedValue.of(rollup.getName()));
                 continue;
             }
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("childEntity", rollup.getEntity());
+            // Empty for a local child - the pipeline then uses this project's gen folder and name, so a
+            // local roll-up renders exactly as before.
+            base.put("childCrossModel", crossModelChild);
+            base.put("childModel", crossModelChild ? rollup.getModel() : "");
+            base.put("childProject", childProject);
             // A setting entity's generated code lives under the shared "Settings" perspective, not its
             // own name - so a roll-up whose child/parent is `kind: setting` must resolve there, like
             // the relation-link / personal-assignee builders do. Without this the generated handler
             // imports gen.<mod>.data.<entityname> (which does not exist) instead of ...data.settings
             // and the whole client-Java batch fails to compile (a setting-entity roll-up, e.g.
             // Currency <- CurrencyRate, is the case that exposed it).
-            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
-            base.put("parentEntity", via.getTo());
+            // A cross-model child's perspective comes from ITS owner's model (resolved above).
+            base.put("childPerspective",
+                    crossModelChild ? childPerspective : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
+            base.put("parentEntity", crossModelChild ? parentEntity : via.getTo());
             // A cross-model parent's perspective comes from the owner's model (resolved above); a local
             // one from this model's own composition/setting layout.
             base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
-                    : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
+                    : crossModelChild ? parentPerspective : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
             // Empty for a local parent - the generation pipeline then falls back to this project's gen folder.
             base.put("parentModel", crossModelParent ? via.getModel() : "");
             base.put("parentCrossModel", crossModelParent);
@@ -567,6 +657,22 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // `status` relation to whenFull/whenPartial at the thresholds. Empty string / -1 = not set.
             boolean withCapacity = sum && rollup.getCapacity() != null && !rollup.getCapacity()
                                                                                  .isBlank();
+            if (withCapacity && crossModelChild) {
+                // The balance and the status ARE maintained (both are writes on the local parent), but the
+                // capacity GUARD - the check that refuses a child row overdrawing the parent - is emitted
+                // into the child's own DAO, which the owner model generates. Said out loud, because a
+                // capacity that enforces nothing is exactly what must not pass for a limit.
+                String warning = "Roll-up [" + rollup.getName() + "] measures the cross-model child [" + rollup.getModel() + ":"
+                        + rollup.getEntity() + "] against capacity [" + rollup.getCapacity()
+                        + "]: the balance and status are maintained, but the overdraw GUARD is not installed - it belongs to the child's"
+                        + " own repository, which the [" + rollup.getModel() + "] model generates.";
+                LOGGER.warn(LoggedValue.of(warning));
+                if (context != null) {
+                    // An ADVISORY, not an issue: no change to THIS document installs that guard, so the
+                    // assistant's repair loop must never be asked to fix it (dirigible #6956).
+                    context.addAdvisory(warning);
+                }
+            }
             base.put("capacityField", withCapacity ? IntentNaming.pascalCase(rollup.getCapacity()) : "");
             base.put("balanceField", withCapacity && rollup.getBalance() != null && !rollup.getBalance()
                                                                                            .isBlank()
@@ -582,14 +688,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("statusWhenPartial", withStatus && rollup.getStatusWhenPartial() != null ? rollup.getStatusWhenPartial()
                                                                                                       .toString()
                     : "");
-            // Recompute the value for the affected parent from the store on each child event.
-            base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
+            // The parent column remembering the status the roll-up DISPLACED when it first moved the parent
+            // into whenFull / whenPartial, so a sum that returns to zero can put it back (#7016). Emitted
+            // on the parent by the EDM generator (EdmIntentGenerator.displacedStatusProperty) under the
+            // same name.
+            base.put("statusDisplacedField", withStatus ? IntentNaming.displacedStatusProperty(rollup.getStatus()) : "");
+            // Recompute the value for the affected parent from the store on each child event. The query
+            // is the foreign key alone, which the descriptor already carries - the template layer builds
+            // the `Criteria` from it rather than the glue carrying the builder call (issue #7406).
             // Handler name derives from the coalescing key (childEntity + parent-fk), NOT the roll-up name:
             // The generation pipeline groups every roll-up sharing (childEntity, fkProperty, event) into one
             // handler, so
             // the name must be shared across the group. Two roll-ups on the same child+fk+event collapse into
             // this one class.
-            String className = rollup.getEntity() + fkProperty;
+            // A foreign child is qualified by its model: a local and a foreign child of the SAME name
+            // rolling up through the same relation are two different handlers, and one class name for
+            // both would have the pipeline write one over the other.
+            String className = (crossModelChild ? IntentNaming.pascalIdentifier(rollup.getModel()) : "") + rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
             // EVERY op recomputes on update, not just sum / latest: a line edit changes the sum (or which
             // row is latest, or its value), and an edit that RE-PARENTS a child - the ordinary way a child
@@ -608,6 +723,68 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             rollups.add(rollupEntry(base, className + "RollupOnRekey", "-rekeyed"));
         }
         return rollups;
+    }
+
+    /**
+     * The first property this roll-up writes or reads on a cross-model PARENT that the owner's model
+     * does not declare - its {@code field:} counter, and the {@code capacity:} / {@code balance:} of a
+     * capacity-bearing sum. Returns null when everything resolves, and also when the owner's model
+     * could not be read (the convention fallback), which is the same rule the child side uses: never
+     * fail a generation on a model that was not there to check against.
+     *
+     * @param rollup the roll-up
+     * @param parent the resolved cross-model parent
+     * @return a description of the first unresolvable property, or null
+     */
+    private static String firstUnresolvableParentProperty(RollupIntent rollup, CrossModelSupport.TargetInfo parent) {
+        if (!parent.resolved() || parent.propertyNames() == null) {
+            return null;
+        }
+        java.util.Map<String, String> written = new LinkedHashMap<>();
+        written.put("field", rollup.getField());
+        written.put("capacity", rollup.getCapacity());
+        written.put("balance", rollup.getBalance());
+        for (Map.Entry<String, String> entry : written.entrySet()) {
+            String property = entry.getValue();
+            if (property != null && !property.isBlank() && !parent.propertyNames()
+                                                                  .contains(IntentNaming.pascalCase(property))) {
+                return entry.getKey() + " [" + property + "]";
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The first property this roll-up reads off a cross-model child that the owner's model does not
+     * declare - its {@code via} FK, and the {@code of} / {@code by} fields the aggregation reads.
+     * Returns null when everything resolves, and also when the owner's model could not be read (the
+     * convention fallback), which is the same rule {@code dependsOn} and the schedules use: never fail
+     * a generation on a model that was not there to check against.
+     *
+     * @param rollup the roll-up
+     * @param child the resolved cross-model child
+     * @return a description of the first unresolvable property, or null
+     */
+    private static String firstUnresolvableChildProperty(RollupIntent rollup, CrossModelSupport.TargetInfo child) {
+        if (!child.resolved() || child.propertyNames() == null) {
+            return null;
+        }
+        java.util.Map<String, String> read = new LinkedHashMap<>();
+        read.put("via", rollup.getVia());
+        if ("sum".equals(rollup.getOp()) || "latest".equals(rollup.getOp())) {
+            read.put("of", rollup.getOf());
+        }
+        if ("latest".equals(rollup.getOp())) {
+            read.put("by", rollup.getBy());
+        }
+        for (Map.Entry<String, String> entry : read.entrySet()) {
+            String property = entry.getValue();
+            if (property != null && !property.isBlank() && !child.propertyNames()
+                                                                 .contains(IntentNaming.pascalCase(property))) {
+                return entry.getKey() + " [" + property + "]";
+            }
+        }
+        return null;
     }
 
     /**
@@ -631,7 +808,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("settlements", s.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing settlement [{}] (not generated)", s.getName());
+                LOGGER.info("Settings opt-out: keeping existing settlement [{}] (not generated)", LoggedValue.of(s.getName()));
                 continue;
             }
             RelationIntent fkInvoice = relationTo(junction, s.getInvoice());
@@ -710,6 +887,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * One cleanup listener per settlement, bound to the payment's <b>delete</b> moment (issue #7061):
+     * it gives the whole allocation back by removing the payment's junction rows, so the invoice's paid
+     * roll-up recomputes and the parent relinquishes PAID / PARTIAL through the ordinary
+     * allocation-delete path.
+     *
+     * <p>
+     * Nothing else does it: the junction FK to the payment never becomes a database constraint on this
+     * platform, so there is no cascade, and when the payment is cross-model its owner knows nothing of
+     * this settlement and cannot delete rows it does not own. Left unbound, the allocation rows
+     * outlived the payment as orphans pointing at an id that no longer existed and kept the invoice
+     * settled forever. Unlike the re-key handler this one needs no payment repository - only the
+     * payment's key, off the delete payload - so it is emitted for a cross-model payment too.
+     *
+     * @param settlements the settlement descriptors
+     * @return one entry per settlement
+     */
+    private static List<Map<String, Object>> buildSettlementCleanups(List<Map<String, Object>> settlements) {
+        List<Map<String, Object>> cleanups = new ArrayList<>();
+        for (Map<String, Object> settlement : settlements) {
+            cleanups.add(rollupEntry(settlement, String.valueOf(settlement.get("name")) + "OnPaymentDeleted", "-deleted"));
+        }
+        return cleanups;
+    }
+
+    /**
      * One glue entry per {@link GeneratesIntent}: resolves the source entity's perspective/genFolder
      * (in this project) and the target's - possibly cross-model, via {@link CrossModelSupport} - plus
      * the pre-rendered field assignment expressions (source-copy, {@code now}, or literal) for the
@@ -732,6 +934,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         for (GeneratesIntent g : model.getGenerates()) {
             if (g.getName() == null || g.getName()
                                         .isBlank()) {
+                continue;
+            }
+            // A MUTUAL cross-model cycle has no first project (#6539): this create-from needs the
+            // target model's .model, which holds a foreign key back here and so needs ours. Asked
+            // before any resolution, because the answer decides whether this entry is emitted at all.
+            GeneratesBootstrap.AbsentOwner absent = GeneratesBootstrap.absentOwner(g, model, context);
+            if (absent != null) {
+                if (context == null || !context.isBootstrap()) {
+                    throw GeneratesBootstrap.required(g.getName(), absent);
+                }
+                reportDroppedGlue(context, GeneratesBootstrap.skipWarning(g.getName(), absent));
                 continue;
             }
             // The SOURCE is normally a local entity; with `fromUses:` it is owned by another model and
@@ -758,7 +971,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("generates", g.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)", g.getName());
+                LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)",
+                        LoggedValue.of(g.getName()));
                 continue;
             }
             boolean crossModel = g.getUses() != null && !g.getUses()
@@ -783,7 +997,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // !$eventOnly, so a .glue written before this key existed keeps rendering the endpoint it
             // always did (a regeneration from an older glue file must not silently drop the button).
             e.put("eventOnly", !g.hasButton());
-            putGeneratesEvent(g, e, fromPk);
+            putGeneratesEvent(g, e, fromPk, source, context);
             putSupersededTarget(g, e, model, crossModel ? null : byName.get(g.getTo()), context);
             // Cross-model source: the gen folder and the project that owns the source's topics/views.
             e.put("crossModelSource", crossModelSource);
@@ -835,13 +1049,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                     sourceStatusProperty = sourceInfo.statusProperty();
                 } else {
-                    for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
-                        if (relation.isEntityStatus()) {
-                            sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
-                        }
-                    }
+                    sourceStatusProperty = entityStatusProperty(source);
                 }
             }
+            // The from-status guard (issue #7068): the click is refused with 409 unless the source
+            // stands in a status the action accepts. Its property is the source's status FK, which the
+            // completion hook resolved above when it declared one - otherwise resolve it here, because
+            // an authored `fromStatus:` needs it with no hook in sight.
+            String guardStatusProperty =
+                    sourceStatusProperty.isEmpty() ? GeneratesGuardSupport.statusProperty(g, model, context) : sourceStatusProperty;
+            GeneratesGuardSupport.Guard guard = GeneratesGuardSupport.of(g, guardStatusProperty);
+            e.put("hasStatusGuard", guard != null);
+            e.put("guardStatusProperty", guard == null ? "" : guard.statusProperty());
+            e.put("guardStatusExpr", guard == null ? "" : guard.expression());
+            e.put("guardStatusText", guard == null ? "" : guard.text(g.getFrom()));
+            e.put("guardStatuses", guard == null ? "" : guard.statuses());
             e.put("sourceStatusProperty", sourceStatusProperty);
             e.put("sourceStatusValue",
                     g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));
@@ -877,9 +1099,36 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // document's perspective. (The TARGET item stays on toPerspective: a create-from
                 // always writes into the target document's own composition-item table.)
                 // A cross-model source's items are owned by the same foreign model as the source.
-                e.put("fromItemPerspective", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
-                                                                                 .perspectiveName()
+                CrossModelSupport.TargetInfo itemSource =
+                        crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom()) : null;
+                // The source-row rule's status condition on a cross-model item (#7225): the item's
+                // nomenclature is seeded in the owner model, so the parser's resolver left the rule
+                // alone - and which condition even names the status is known only here, off the owner
+                // .model's DOCUMENT_STATUS widget. A NAME left in it would render as a string compared
+                // against the integer status FK, a rule that matches nothing on every click. Refused
+                // the way every cross-model status site is: by seed id only.
+                ScheduleConditionIntent namedStatus = crossModelItemStatusName(items, itemSource);
+                if (namedStatus != null) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
+                            + "] items where-condition on the status relation [" + itemSource.statusProperty() + "] names the status ["
+                            + namedStatus.getValue() + "] of [" + items.getFrom() + "], which belongs to model [" + g.getFromUses()
+                            + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
+                }
+                // ... and its moments against the item's own columns (#7393), for the same reason the
+                // schedule's where is checked: the two sites share the rule vocabulary, so a rule the
+                // parser could not check here must be checked here.
+                String itemMomentMismatch =
+                        items.hasWhere() ? crossModelMomentMismatch(items.getWhere(), itemSource, items.getFrom(), g.getFromUses()) : null;
+                if (itemMomentMismatch != null) {
+                    throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                            List.of("generates [" + g.getName() + "] items " + itemMomentMismatch));
+                }
+                e.put("fromItemPerspective", itemSource != null ? itemSource.perspectiveName()
                         : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
+                // The source line's own key, so a line the target refuses is reported with the row it came
+                // from ("... from EmployeeTimesheet [7]") instead of the target property alone - which of a
+                // hundred lines is missing a value is the whole question the caller has (#7069).
+                e.put("fromItemPk", itemSource != null ? itemSource.keyField() : IntentEntities.keyFieldName(byName.get(items.getFrom())));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
@@ -896,6 +1145,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                 temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget),
                                 relationProperties(crossModel ? null : byName.get(items.getTo()), itemTarget)));
                 e.put("itemLines", new ArrayList<>());
+                // The source-row rule (issue #7091), as the clauses the template layer appends to the
+                // Criteria that already selects the source's item rows by their master foreign key - so
+                // the rows the rule excludes are never loaded, and a rule of no conditions appends
+                // nothing and therefore runs the query this always ran.
+                e.put("itemCriteria", ScheduleSupport.conditions(items.getWhere()));
+                e.put("itemRefuse", items.hasWhere() && items.hasRefuse() ? items.getRefuse() : "");
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
                 // resolved automatically (never named in the intent): same-model from this model,
@@ -916,7 +1171,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     itemEntityName = child.childEntity();
                     itemMetas = crossModelCellMetas(child);
                 } else {
-                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), byName);
+                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), model);
                     if (itemEntity == null) {
                         throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
                                 List.of("generates [" + g.getName() + "] declares computed item lines but the target [" + g.getTo()
@@ -928,9 +1183,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", itemEntityName);
                 e.put("fromItemPerspective", "");
+                e.put("fromItemPk", "");
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 e.put("itemFieldAssignments", new ArrayList<>());
+                e.put("itemWhere", "");
+                e.put("itemRefuse", "");
                 // Cell expressions are written over the SOURCE record, so the known-property set comes
                 // from wherever the source is defined - locally, or the owner .model for a cross-model
                 // source (an unresolved owner yields an empty set, i.e. no local name check).
@@ -942,10 +1200,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
                 e.put("fromItemPerspective", "");
+                e.put("fromItemPk", "");
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
                 e.put("itemLines", new ArrayList<>());
+                e.put("itemWhere", "");
+                e.put("itemRefuse", "");
             }
             e.put("hasPrompt", g.hasPrompt());
             e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo())));
@@ -957,9 +1218,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The event half of a create-from (issues #6711, #6800), pre-rendered onto its glue entry: the
      * topic suffix the listener binds to (an {@code onCreate} the source's bare create topic, an
-     * {@code onTransition} its {@code -transitioned} topic, a step binding the step-scoped topic the
-     * generated emitter publishes to), the optional status guard as a property/value pair evaluated
-     * against the RE-LOADED source, the cardinality, and the back-reference.
+     * {@code onTransition} its {@code -transitioned} topic, an {@code onPhase} the declared phase's
+     * topic, a step binding the step-scoped topic the generated emitter publishes to), the optional
+     * status guard as a property/value pair evaluated against the RE-LOADED source, the cardinality,
+     * and the back-reference.
      *
      * <p>
      * The back-reference is DERIVED from the {@code map} entry that copies the source's primary key
@@ -974,7 +1236,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param e the glue entry being built
      * @param fromPk the source's primary-key property name
      */
-    private static void putGeneratesEvent(GeneratesIntent g, Map<String, Object> e, String fromPk) {
+    private static void putGeneratesEvent(GeneratesIntent g, Map<String, Object> e, String fromPk, EntityIntent source,
+            IntentGenerationContext context) {
         e.put("hasEvent", g.isEventDriven());
         if (!g.isEventDriven()) {
             e.put("isCreate", false);
@@ -983,6 +1246,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("appendMode", false);
             e.put("guardProperty", "");
             e.put("guardValue", "");
+            e.put("guardCondition", "");
             e.put("backRefProperty", "");
             return;
         }
@@ -993,25 +1257,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("isStep", step != null);
         e.put("stepProcess", step == null ? "" : step.process());
         e.put("stepName", step == null ? "" : step.step());
-        e.put("topicSuffix",
-                step != null ? StepEventSupport.topicSuffix(step.process(), step.step(), step.kind()) : isCreate ? "" : "-transitioned");
+        // One resolution for every axis the create-from can bind - the step suffix, a declared phase
+        // (#6929), the bare create topic or "-transitioned" - so the listener and the moment's
+        // publisher cannot disagree about the channel.
+        e.put("topicSuffix", StepEventSupport.topicSuffix(g.getEvent()));
         // The cardinality (#6800): `append` drops the existing-target lookup in the create-from, so
         // every delivery of the event creates a row. It is the absence of a guard, not another guard.
         e.put("appendMode", g.isAppendMode());
-        String guardProperty = "";
-        String guardValue = "";
-        Object whenValue = g.getEvent()
-                            .get("when");
-        if (whenValue != null) {
-            java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
-                                                                  .matcher(String.valueOf(whenValue));
-            if (when.matches()) {
-                guardProperty = IntentNaming.pascalCase(when.group(1));
-                guardValue = when.group(2);
-            }
-        }
-        e.put("guardProperty", guardProperty);
-        e.put("guardValue", guardValue);
+        putGeneratesGuard(g, e, source, context);
         String backReference = "";
         for (Map.Entry<String, String> mapping : g.getMap()
                                                   .entrySet()) {
@@ -1026,6 +1279,79 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] as its value) - it is the at-most-once guard against an event redelivery"));
         }
         e.put("backRefProperty", backReference);
+    }
+
+    /** One entry of a `when` guard: the numeric status comparison, or a string-field comparison. */
+    private static final java.util.regex.Pattern WHEN_STATUS_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+    private static final java.util.regex.Pattern WHEN_STRING_TERM =
+            java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(?:'([^']*)'|\"([^\"]*)\"|([A-Za-z_][A-Za-z0-9_\\-]*))\\s*");
+
+    /**
+     * The event guard, rendered for the listener template (dirigible #6957). A scalar {@code when} is
+     * the status comparison it always was; a LIST is an implicit AND of one status comparison plus
+     * comparisons against the source's own string fields - which is how a consumer binds to one of two
+     * paths that converge on a single status (the automatic route stamped by a lookup's {@code
+     * outcome:} trace field versus the manual one).
+     *
+     * <p>
+     * Emits {@code guardCondition} - the complete Java condition over the RE-LOADED {@code source} -
+     * and keeps {@code guardProperty}/{@code guardValue} (the status term) for the javadoc line and
+     * older templates. A string term against a field the developer can edit gets an actionable warning
+     * (never a refusal): a guard on an editable field means a UI edit silently changes which
+     * automations fire, and the fix - {@code readOnly: true} on the trace field - is one line.
+     */
+    private static void putGeneratesGuard(GeneratesIntent g, Map<String, Object> e, EntityIntent source, IntentGenerationContext context) {
+        String guardProperty = "";
+        String guardValue = "";
+        List<String> conditions = new ArrayList<>();
+        Object whenValue = g.getEvent()
+                            .get("when");
+        List<?> terms = whenValue instanceof List<?> list ? list : whenValue == null ? List.of() : List.of(whenValue);
+        for (Object term : terms) {
+            java.util.regex.Matcher status = WHEN_STATUS_TERM.matcher(String.valueOf(term));
+            if (status.matches()) {
+                String property = IntentNaming.pascalCase(status.group(1));
+                if (guardProperty.isEmpty()) {
+                    guardProperty = property;
+                    guardValue = status.group(2);
+                }
+                conditions.add("source." + property + " != null && source." + property + " == " + status.group(2));
+                continue;
+            }
+            java.util.regex.Matcher text = WHEN_STRING_TERM.matcher(String.valueOf(term));
+            if (!text.matches()) {
+                continue; // parser already reported it
+            }
+            String property = IntentNaming.pascalCase(text.group(1));
+            String literal = text.group(3) != null ? text.group(3) : text.group(4) != null ? text.group(4) : text.group(5);
+            String equals = "java.util.Objects.equals(source." + property + ", " + NotificationSupport.quote(literal) + ")";
+            conditions.add("==".equals(text.group(2)) ? equals : "!" + equals);
+            warnIfGuardFieldIsEditable(g, text.group(1), source, context);
+        }
+        e.put("guardProperty", guardProperty);
+        e.put("guardValue", guardValue);
+        e.put("guardCondition", String.join(" && ", conditions));
+    }
+
+    /**
+     * A string guard reads a trace the PLATFORM wrote (a lookup's {@code outcome:}); one the user can
+     * edit turns "how did this record get here" into "what does the field say today". Actionable, not
+     * fatal: {@code readOnly: true} on the field is the one-line fix.
+     */
+    private static void warnIfGuardFieldIsEditable(GeneratesIntent g, String fieldName, EntityIntent source,
+            IntentGenerationContext context) {
+        if (source == null || context == null) {
+            return;
+        }
+        for (FieldIntent field : source.getFields()) {
+            if (fieldName.equalsIgnoreCase(field.getName()) && !field.isReadOnly()) {
+                String warning = "generates [" + g.getName() + "] event when guards [" + field.getName() + "] of [" + source.getName()
+                        + "], which is not readOnly - a user edit of that field silently changes whether this rule fires;"
+                        + " mark it `readOnly: true` so only the platform (a lookup's outcome:) writes it";
+                LOGGER.warn(LoggedValue.of(warning));
+                context.addIssue(warning);
+            }
+        }
     }
 
     /**
@@ -1096,7 +1422,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     + "] is classified with `stage:` - the at-most-once guard can only ask whether a [" + g.getTo()
                     + "] exists, so a cancelled or voided one blocks its replacement forever. Classify the seed rows of [" + status.getTo()
                     + "] with `stage:` (draft/live/cancelled/void) so a retired target can be superseded.";
-            LOGGER.warn(warning);
+            LOGGER.warn(LoggedValue.of(warning));
             if (context != null) {
                 context.addIssue(warning);
             }
@@ -1211,15 +1537,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("transitions", t.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)", t.getName());
+                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)",
+                        LoggedValue.of(t.getName()));
                 continue;
             }
-            String statusProperty = "";
-            for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : entity.getRelations()) {
-                if (relation.isEntityStatus()) {
-                    statusProperty = IntentNaming.pascalCase(relation.getName());
-                }
-            }
+            String statusProperty = entityStatusProperty(entity);
             if (statusProperty.isEmpty()) {
                 continue; // parser already reported the missing EntityStatus relation
             }
@@ -1304,9 +1626,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         EntityIntent document = NotifySupport.attachesRecordPrint(notify) && fanOut != null ? entity : about;
         NotifySupport.PrintAttachment attachment =
                 plan == null ? null : printAttachment(notify, document, model, byName, compositionParents, context, subject);
-        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
+        // A report attachment is always scoped by the record the message is ABOUT (the ROW inside a
+        // fan-out): its bindings are what make the report this recipient's, so there is no anchor-scoped
+        // counterpart the way `recordPrint` is one for a document.
+        NotifySupport.ReportAttachment reportAttachment =
+                plan == null ? null : reportAttachment(notify, about, model, byName, compositionParents, context, subject);
+        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify))
+                && (reportAttachment != null || !NotifySupport.attachesReport(notify));
         fields.put("notify", String.valueOf(send));
-        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment) : new ArrayList<>());
+        fields.put("notifyRelationLoads", send ? relationLoads(plan, attachment, reportAttachment) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
@@ -1314,12 +1642,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // loaded record to their send method, and only then (an argument nothing reads is noise).
         fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
         fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
-        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
+        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null, send ? reportAttachment : null));
         // The key the print feeder is fed with: the ROW's for `attach: print` (the loop variable is
         // named `entity` in the templates for exactly this reason, so one expression set serves both
         // shapes), the ANCHOR record's for `attach: recordPrint`.
         fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(document) : "");
         fields.putAll(NotifySupport.deepLinkFields(send ? plan : null, about));
+        // Where this delivery attempt is recorded - on the record the message is about, so a fan-out
+        // stamps each ROW rather than the record they hang off.
+        fields.putAll(NotifySupport.outcomeFields(send ? notify : null, about, compositionParents,
+                IntentEntities.settingEntities(byName.values())));
         return fields;
     }
 
@@ -1334,7 +1666,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> aborts = new ArrayList<>();
         for (ProcessAbortSupport.Abort abort : ProcessAbortSupport.aborts(model)) {
             if (!settings.shouldGenerate("aborts", abort.process())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for abort [{}] (not generated)", abort.process());
+                LOGGER.info("Settings opt-out: keeping existing handler for abort [{}] (not generated)", LoggedValue.of(abort.process()));
                 continue;
             }
             List<String> terms = new ArrayList<>();
@@ -1347,6 +1679,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("perspective", abort.perspective());
             entry.put("messageName", abort.messageName());
             entry.put("statusMatchExpression", String.join(" || ", terms));
+            aborts.add(entry);
+        }
+        return aborts;
+    }
+
+    /**
+     * One delete-abort listener per entity-triggered process: a {@code MessageHandler} on the trigger
+     * entity's {@code -deleted} topic that cancels this process's own in-flight instance (read from the
+     * deleted row's {@code ProcessIds} stamp) so no Inbox task points at a row that is gone (dirigible
+     * #7074). Fail-soft: no stamp or an instance already ended is a no-op.
+     */
+    private static List<Map<String, Object>> buildDeleteAborts(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> aborts = new ArrayList<>();
+        for (ProcessAbortSupport.DeleteAbort abort : ProcessAbortSupport.deleteAborts(model)) {
+            if (!settings.shouldGenerate("deleteAborts", abort.process())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for delete abort [{}] (not generated)",
+                        LoggedValue.of(abort.process()));
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", abort.process());
+            entry.put("entity", abort.entity());
+            entry.put("perspective", abort.perspective());
             aborts.add(entry);
         }
         return aborts;
@@ -1365,6 +1720,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return buildAborts(model, IntentSettings.parse("{}"));
     }
 
+    /** Test hook: build the {@code deleteAborts} glue collection without a repository. */
+    static List<Map<String, Object>> buildDeleteAbortsForTest(IntentModel model) {
+        return buildDeleteAborts(model, IntentSettings.parse("{}"));
+    }
+
     /** Test hook: build the {@code setters} glue collection without a repository. */
     static List<Map<String, Object>> buildSettersForTest(IntentModel model) {
         return buildSetters(model, IntentSettings.parse("{}"));
@@ -1378,8 +1738,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code rollups} glue collection without a repository. */
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
+        return buildRollupsForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code rollups} glue collection against a context, so a cross-model child
+     * can be resolved against a REAL owner model rather than the naming-convention fallback.
+     *
+     * @param model the parsed model
+     * @param context the generation context (may be null)
+     * @return the glue entries
+     */
+    static List<Map<String, Object>> buildRollupsForTest(IntentModel model, IntentGenerationContext context) {
         return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
+    }
+
+    /**
+     * Test hook: build the {@code resolvers} glue collection, optionally against a context so a
+     * cross-model {@code relation.field} resolves against a REAL owner model rather than the
+     * naming-convention fallback.
+     *
+     * @param model the parsed model
+     * @param context the generation context (may be null)
+     * @return the glue entries
+     */
+    static List<Map<String, Object>> buildResolversForTest(IntentModel model, IntentGenerationContext context) {
+        return buildResolvers(model, IntentSettings.parse("{}"), context);
     }
 
     /** Test hook: build the {@code settlementListeners} glue collection without a repository. */
@@ -1387,6 +1772,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         IntentGenerationContext context =
                 new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
         return buildSettlementListeners(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
+                IntentSettings.parse("{}"), context));
+    }
+
+    /** Test hook: build the {@code settlementCleanups} glue collection without a repository. */
+    static List<Map<String, Object>> buildSettlementCleanupsForTest(IntentModel model) {
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, "/" + model.getName(), model.getName(), "workspace", model.getName(), null);
+        return buildSettlementCleanups(buildSettlements(model, IntentEntities.byName(model), IntentEntities.compositionParents(model),
                 IntentSettings.parse("{}"), context));
     }
 
@@ -1423,7 +1816,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> out = new ArrayList<>();
         for (NotifySupport.Sender sender : NotifySupport.senders(model)) {
             if (!settings.shouldGenerate("sends", sender.className())) {
-                LOGGER.info("Settings opt-out: keeping existing delegate for send [{}] (not generated)", sender.className());
+                LOGGER.info("Settings opt-out: keeping existing delegate for send [{}] (not generated)",
+                        LoggedValue.of(sender.className()));
                 continue;
             }
             EntityIntent entity = byName.get(sender.entity());
@@ -1525,18 +1919,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     statusValue = Integer.valueOf(p.getEvent()
                                                    .trim());
                 } catch (NumberFormatException nfe) {
-                    LOGGER.warn("posts [{}]: event must be `create` or a numeric status seed id, was [{}] - skipped", p.getName(),
-                            p.getEvent());
+                    LOGGER.warn("posts [{}]: event must be `create` or a numeric status seed id, was [{}] - skipped",
+                            LoggedValue.of(p.getName()), LoggedValue.of(p.getEvent()));
                     continue;
                 }
-                for (RelationIntent relation : source.getRelations()) {
-                    if (relation.isEntityStatus()) {
-                        statusProperty = IntentNaming.pascalCase(relation.getName());
-                    }
-                }
+                statusProperty = entityStatusProperty(source);
                 if (statusProperty.isEmpty()) {
                     LOGGER.warn("posts [{}]: source [{}] has no function: EntityStatus relation for a status-triggered post - skipped",
-                            p.getName(), p.getForEntity());
+                            LoggedValue.of(p.getName()), LoggedValue.of(p.getForEntity()));
                     continue;
                 }
             }
@@ -1563,7 +1953,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                 }
                 if (child == null) {
-                    LOGGER.warn("posts [{}]: forEach set but [{}] has no composition child - skipped", p.getName(), p.getForEntity());
+                    LOGGER.warn("posts [{}]: forEach set but [{}] has no composition child - skipped", LoggedValue.of(p.getName()),
+                            LoggedValue.of(p.getForEntity()));
                     continue;
                 }
                 itemsEntity = child.getName();
@@ -1596,7 +1987,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                 .entrySet()) {
                 Map<String, String> pair = new LinkedHashMap<>();
                 pair.put("field", IntentNaming.pascalCase(f.getKey()));
-                pair.put("expr", postSetExpr(f.getValue()));
+                pair.put("expr", postSetExpr(f.getValue(), PostSetSupport.targetType(target, byName, f.getKey())));
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
@@ -1607,39 +1998,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /**
      * Render a {@code posts:} {@code set:} value to a Java expression over the {@code source} entity
-     * and the per-item {@code item} entity. Supported forms (the inventory ledger's needs):
-     * {@code item.<Field>} (item copy), {@code -item.<Field>} (negated item copy, null-safe),
-     * {@code source.<Field>} (source copy), an integer literal (a constant FK/int), a quoted string,
-     * else pass-through (best effort). Fuller {@code Calc} expressions are a follow-up.
+     * and the per-item {@code item} entity. The vocabulary lives in {@link PostSetSupport}, shared with
+     * the parse-time refusal so the two cannot drift: a plain constant renders as an escaped string
+     * literal, and a value that reads as an expression this renderer cannot compile never reaches here
+     * - the parser refuses it.
+     *
+     * <p>
+     * A constant is rendered for the TYPE of the column it is assigned to, which the target entity
+     * carries: an intent {@code decimal} / {@code double} column is a {@code BigDecimal} in the
+     * generated entity and a {@code long} one a {@code Long}, so the bare number the renderer used to
+     * emit did not compile (dirigible #7287).
+     *
+     * @param raw the authored value
+     * @param type the target column's type
+     * @return the Java expression
      */
-    private static String postSetExpr(String raw) {
-        if (raw == null) {
-            return "null";
-        }
-        String v = raw.trim();
-        java.util.regex.Matcher neg = java.util.regex.Pattern.compile("^-\\s*item\\.(\\w+)$")
-                                                             .matcher(v);
-        if (neg.matches()) {
-            String f = "item." + IntentNaming.pascalCase(neg.group(1));
-            return f + " == null ? null : " + f + ".negate()";
-        }
-        java.util.regex.Matcher item = java.util.regex.Pattern.compile("^item\\.(\\w+)$")
-                                                              .matcher(v);
-        if (item.matches()) {
-            return "item." + IntentNaming.pascalCase(item.group(1));
-        }
-        java.util.regex.Matcher src = java.util.regex.Pattern.compile("^source\\.(\\w+)$")
-                                                             .matcher(v);
-        if (src.matches()) {
-            return "source." + IntentNaming.pascalCase(src.group(1));
-        }
-        if (v.matches("-?\\d+")) {
-            return v; // integer constant (e.g. a Direction FK id)
-        }
-        if (v.matches("\"[^\"]*\"")) {
-            return v; // already-quoted string literal
-        }
-        return v; // pass-through (best effort); fuller Calc rendering is a follow-up
+    private static String postSetExpr(String raw, PostSetSupport.TargetType type) {
+        return PostSetSupport.expression(raw, type);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -1688,7 +2063,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                          .anyMatch(r -> fk.equals(IntentNaming.pascalCase(r.getName())));
                 if (!onSource || !onTarget) {
                     LOGGER.warn("aggregate [{}]: key [{}] must be a to-one relation of both source [{}] and target [{}] - skipped",
-                            a.getName(), key, a.getOf(), a.getInto());
+                            LoggedValue.of(a.getName()), LoggedValue.of(key), LoggedValue.of(a.getOf()), LoggedValue.of(a.getInto()));
                     keysOk = false;
                     break;
                 }
@@ -1731,7 +2106,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * one.
      */
     private static List<Map<String, Object>> buildResolves(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.ResolveIntent resolve : model.getResolves()) {
             if (resolve.getName() == null || resolve.getName()
@@ -1739,7 +2114,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // malformed: the parser already reported it
             }
             if (!settings.shouldGenerate("resolves", resolve.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for resolve [{}] (not generated)", resolve.getName());
+                LOGGER.info("Settings opt-out: keeping existing handler for resolve [{}] (not generated)",
+                        LoggedValue.of(resolve.getName()));
                 continue;
             }
             String kind = EventBinding.kind(resolve.getEvent());
@@ -1749,19 +2125,51 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             RelationIntent filled = toOneRelation(record, resolve.getSet());
-            RelationIntent value = filled == null ? null : soleToOneTo(register, filled.getTo());
-            if (filled == null || value == null) {
+            if (filled == null) {
                 continue;
             }
+            // A record pointing at the REGISTER itself is resolved to the covering row's own key: the
+            // row carries the value (a price-list item's price), so the row IS what the record links
+            // to and there is no column to disambiguate.
+            boolean registerIsTheValue = register.getName()
+                                                 .equals(filled.getTo());
+            RelationIntent value = registerIsTheValue ? null : soleToOneTo(register, filled.getTo());
+            if (!registerIsTheValue && value == null) {
+                continue;
+            }
+            // The paths of one lookup share their prefixes, so a line's header is loaded once for the
+            // key AND the date it contributes. A bare property is NOT walked - it renders exactly as it
+            // always did, so an existing model generates byte-identically.
+            ResolvePathSupport.Walker walker =
+                    ResolvePathSupport.walker(record, byName, compositionParents, crossModelLookup(model, context));
             List<Map<String, String>> matches = new ArrayList<>();
+            boolean pathsResolved = true;
             for (Map.Entry<String, String> pair : resolve.getMatch()
                                                          .entrySet()) {
+                ResolvePathSupport.Path path = operand(pair.getValue(), walker);
+                if (path == null) {
+                    reportDroppedGlue(context, "resolve [" + resolve.getName() + "] match value [" + pair.getValue()
+                            + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
+                    pathsResolved = false;
+                    break;
+                }
                 Map<String, String> match = new LinkedHashMap<>();
                 match.put("registerProperty", IntentNaming.pascalCase(pair.getKey()));
-                match.put("recordProperty", IntentNaming.pascalCase(pair.getValue()));
+                match.put("recordProperty", path.label());
+                match.put("recordExpression", path.expression());
+                match.put("local", "key" + matches.size());
                 matches.add(match);
             }
-            if (matches.isEmpty()) {
+            if (!pathsResolved || matches.isEmpty()) {
+                continue;
+            }
+            ResolvePathSupport.Path period = operand(resolve.getBetween()
+                                                            .get("value"),
+                    walker);
+            if (period == null) {
+                reportDroppedGlue(context, "resolve [" + resolve.getName() + "] between.value [" + resolve.getBetween()
+                                                                                                          .get("value")
+                        + "] is not a resolvable path off [" + record.getName() + "] - the lookup was NOT generated");
                 continue;
             }
             Map<String, Object> e = new LinkedHashMap<>();
@@ -1775,7 +2183,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("setProperty", IntentNaming.pascalCase(filled.getName()));
             e.put("registerEntity", register.getName());
             e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
-            e.put("registerValueProperty", IntentNaming.pascalCase(value.getName()));
+            e.put("registerValueProperty",
+                    registerIsTheValue ? IntentEntities.keyFieldName(register) : IntentNaming.pascalCase(value.getName()));
             e.put("matches", matches);
             // The static register narrowing, pre-rendered as Java literals: the template only chains
             // them onto the Criteria, so nothing about a value's type has to be decided in Velocity.
@@ -1798,8 +2207,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                    .get("start")));
             e.put("endProperty", property(resolve.getBetween()
                                                  .get("end")));
-            e.put("valueProperty", property(resolve.getBetween()
-                                                   .get("value")));
+            e.put("valueProperty", period.label());
+            e.put("valueExpression", period.expression());
+            // The hops EVERY path of this lookup needs, accumulated once - registered while the longer
+            // path was still being walked, so a prefix always precedes what hangs off it.
+            e.put("pathLoads", pathLoads(walker.hops()));
+            List<Map<String, String>> copies = new ArrayList<>();
+            for (Map.Entry<String, String> pair : resolve.getCopy()
+                                                         .entrySet()) {
+                Map<String, String> copy = new LinkedHashMap<>();
+                copy.put("registerProperty", IntentNaming.pascalCase(pair.getKey()));
+                copy.put("recordProperty", IntentNaming.pascalCase(pair.getValue()));
+                copies.add(copy);
+            }
+            e.put("copies", copies);
+            e.put("hasCopies", String.valueOf(!copies.isEmpty()));
+            e.put("copySummary", copies.stream()
+                                       .map(copy -> copy.get("registerProperty") + " -> " + copy.get("recordProperty"))
+                                       .collect(java.util.stream.Collectors.joining(", ")));
             e.put("outcomeProperty", property(resolve.getOutcome()));
             String statusProperty = entityStatusProperty(record);
             String foundStatus = status(resolve.getFound());
@@ -1816,6 +2241,43 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One authored operand of a lookup - a {@code match} value or {@code between.value}. A bare
+     * property renders as the record's own column, exactly as before paths existed; a dotted one is
+     * walked, and {@code null} reports a walk the generator could not complete (a cross-model owner
+     * whose model is not resolvable here - the parser cannot see that far).
+     *
+     * @param authored the authored operand
+     * @param walker the lookup's path walker
+     * @return the resolved operand, or {@code null} when a path did not resolve
+     */
+    private static ResolvePathSupport.Path operand(String authored, ResolvePathSupport.Walker walker) {
+        if (!ResolvePathSupport.isPath(authored)) {
+            String pascal = IntentNaming.pascalCase(authored);
+            return new ResolvePathSupport.Path(ResolvePathSupport.RECORD_LOCAL + "." + pascal, pascal, null,
+                    ResolvePathSupport.RECORD_LOCAL, pascal, null);
+        }
+        ResolvePathSupport.Path path = walker.resolve(authored);
+        return path.resolved() ? path : null;
+    }
+
+    /** The glue projection of a lookup's path hops - the records the handler loads before it reads. */
+    private static List<Map<String, Object>> pathLoads(List<ResolvePathSupport.Hop> hops) {
+        List<Map<String, Object>> loads = new ArrayList<>();
+        for (ResolvePathSupport.Hop hop : hops) {
+            Map<String, Object> load = new LinkedHashMap<>();
+            load.put("local", hop.local());
+            load.put("sourceExpression", hop.sourceExpression());
+            load.put("entity", hop.entity());
+            load.put("perspective", hop.perspective());
+            load.put("crossModel", hop.crossModel());
+            load.put("targetModel", hop.targetModel());
+            load.put("targetProject", hop.targetProject());
+            loads.add(load);
+        }
+        return loads;
     }
 
     /**
@@ -1836,14 +2298,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return found;
     }
 
-    /** The {@code function: EntityStatus} relation's property of the entity, or {@code ""}. */
+    /**
+     * The {@code function: EntityStatus} relation's property of the entity, or {@code ""}. THE status
+     * of an entity declaring two is the FIRST - the one rule, shared through
+     * {@link LifecycleStages#statusRelation} with every other reader (the create-from guard, the abort
+     * support, the lifecycle stages), so a server-side check and the client guard mirroring it can
+     * never land on different columns (issue #7150).
+     */
     private static String entityStatusProperty(EntityIntent entity) {
-        for (RelationIntent relation : entity.getRelations() == null ? List.<RelationIntent>of() : entity.getRelations()) {
-            if (relation.isEntityStatus()) {
-                return IntentNaming.pascalCase(relation.getName());
-            }
-        }
-        return "";
+        RelationIntent status = LifecycleStages.statusRelation(entity);
+        return status == null ? "" : IntentNaming.pascalCase(status.getName());
     }
 
     /** An authored property name as the generated Java field, or {@code ""} when absent. */
@@ -1871,8 +2335,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @param event the {@code event:} binding map
      * @return the {@code guardExpression} / {@code hasGuard} keys
      */
-    private static Map<String, Object> guardFields(Map<String, Object> event) {
-        String guard = NotificationSupport.guard(stringArg(event, "when"));
+    private static Map<String, Object> guardFields(Map<String, Object> event, EntityIntent entity, Map<String, EntityIntent> byName) {
+        // The guard as authored - a comparison or the list form (an implicit AND, #6957) - rendered
+        // against the guarded property's declared type, so a status guard compares the integer FK with
+        // an integer (#7289). Passing the stringified map here instead is what left a list guard
+        // rendering as `true`: the whole list never matched the scalar pattern.
+        String guard = NotificationSupport.guard(event == null ? null : event.get("when"), entity, byName);
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("guardExpression", guard);
         fields.put("hasGuard", !"true".equals(guard));
@@ -1881,7 +2349,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code resolves} glue collection without a repository. */
     static List<Map<String, Object>> buildResolvesForTest(IntentModel model) {
-        return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildResolves(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /**
@@ -1949,24 +2418,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported it
             }
             if (!settings.shouldGenerate("postings", posting.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)", posting.getName());
+                LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)",
+                        LoggedValue.of(posting.getName()));
                 continue;
             }
             EntityIntent creates = byName.get(effective.getCreates());
-            EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, byName);
+            EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, model);
             if (creates == null || itemsEntity == null) {
                 continue; // parser already reported it
             }
             // The trigger: `onTransition` binds the -transitioned topic (status guard mandatory);
             // `onCreate` binds the source's CREATE topic (the bare entity topic - the platform
             // publishes creates unsuffixed) - the source with no status lifecycle (a booked
-            // payment) whose only event is its insert. The guard stays optional for onCreate.
-            Object onCreateSource = posting.getEvent()
-                                           .get("onCreate");
-            boolean isCreate = onCreateSource != null;
-            String sourceEntity = String.valueOf(isCreate ? onCreateSource
-                    : posting.getEvent()
-                             .get("onTransition"));
+            // payment) whose only event is its insert; `onPhase` binds a declared enrichment phase
+            // (#6929) - the moment the row is COMPLETE, which is the only one a posting reading an
+            // enriched amount may observe. The guard stays optional on both of the latter two: each
+            // names one moment already, where a transition is any status write.
+            String eventKind = EventBinding.kind(posting.getEvent());
+            boolean isCreate = "onCreate".equals(eventKind);
+            boolean isPhase = EventBinding.ON_PHASE.equals(eventKind);
+            String sourceEntity = String.valueOf(EventBinding.entity(posting.getEvent()));
             Object alias = posting.getEvent()
                                   .get("model");
             String sourceProject;
@@ -2007,13 +2478,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 guardProperty = IntentNaming.pascalCase(when.group(1));
                 guardValue = when.group(2);
-            } else if (!isCreate) {
+            } else if (!isCreate && !isPhase) {
                 continue; // parser already reported it (onTransition requires the status guard)
             }
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", posting.getName());
             e.put("className", IntentNaming.pascalIdentifier(posting.getName()));
             e.put("isCreate", isCreate);
+            // The channel and the sentence describing it, pre-rendered together so the template cannot
+            // say one thing while binding another (the expansions convention - the template stays
+            // shape-only).
+            e.put("topicSuffix", EventBinding.topicSuffix(posting.getEvent()));
+            e.put("moment", isPhase ? "reaches the " + EventBinding.phase(posting.getEvent()) + " phase"
+                    : isCreate ? "is created" : "transitions into status " + guardValue);
             e.put("crossModel", alias != null);
             e.put("sourceProject", sourceProject);
             e.put("sourceGenFolder", sourceGenFolder);
@@ -2025,6 +2502,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
+            // Amendment (#7071): a source that is rejected, edited and re-issued raises the SAME
+            // moment again, and the post it already carries no longer describes it. The handler
+            // therefore re-derives the content and rewrites the post - but only while nobody has
+            // acted on the created document, i.e. while its status is still the one the posting's
+            // own create wrote. A target with no status lifecycle at all is always rewritable; one
+            // that has moved on is reported and left alone (unwinding a posted entry is a
+            // correcting entry's job - `reverses:` - not a silent overwrite).
+            e.put("amendableGuard", amendableGuard(creates));
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
@@ -2058,12 +2543,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("ruleMatchProperty", IntentNaming.pascalCase(String.valueOf(selector.getKey())));
                 e.put("ruleMatchValueJava", javaLiteral(selector.getValue()));
             }
+            // The lines the generated repository resums the created document's `aggregate: true` header
+            // columns from on every write - resolved through the rule the document layout (and so the
+            // DAO's documentMaster) is emitted by, which is NARROWER than the items resolution above: a
+            // sole or first composition child the pipeline does not treat as a document leaves its
+            // master's aggregates merely preserved on update (#7234). Null for such a master, and for
+            // the lines themselves unless they are a document in their own right.
+            Map<String, String> documentMasters = IntentEntities.documentMasters(model.getEntities(), compositionParents);
+            EntityIntent headerLines = linesOf(creates, documentMasters, byName);
+            EntityIntent itemLines = linesOf(itemsEntity, documentMasters, byName);
             // Header assignments: copy / literal / {placeholder} template - pre-rendered Java.
             List<Map<String, Object>> headerAssignments = new ArrayList<>();
             if (effective.getMap() != null) {
                 for (Map.Entry<String, String> entry : effective.getMap()
                                                                 .entrySet()) {
-                    headerAssignments.add(postingAssignment(entry.getKey(), entry.getValue()));
+                    Map<String, Object> assignment = postingAssignment(entry.getKey(), entry.getValue());
+                    // The local the handler evaluates the expression INTO, so the amend comparison and
+                    // the assignment further down see one value rather than two evaluations of the same
+                    // expression (#7131). Numbered, so no authored name can collide with it.
+                    assignment.put("local", "header" + (headerAssignments.size() + 1));
+                    // ... and what a null one will still end up carrying once stored - the target
+                    // column's own default (see derivedDefaultValue), plus whatever save() - or, on a
+                    // rewrite, update() - itself fills into the column afterwards (see putSaveTimeFill).
+                    putDerivedDefault(assignment, creates, byName, entry.getKey());
+                    putSaveTimeFill(assignment, creates, headerLines, true, entry.getKey(), posting.getName(), context);
+                    headerAssignments.add(assignment);
                 }
             }
             e.put("headerAssignments", headerAssignments);
@@ -2090,6 +2594,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     }
                     Map<String, Object> assign = new LinkedHashMap<>();
                     assign.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
+                    // The cell's authored key, kept alongside: it is what locates the field (or the
+                    // to-one relation) whose `default:`/`init:` the comparison must apply (#7131).
+                    assign.put("sourceCell", cell.getKey());
                     java.util.Optional<PostingRuleSelector> ruleSelector = PostingRuleSelector.parse(value);
                     java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
                                                                              .matcher(value);
@@ -2127,11 +2634,307 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 itemRows.add(rendered);
             }
             e.put("itemRows", itemRows);
+            // The union of every property the rows assign - what a stored row is compared on to tell
+            // a plain redelivery (nothing changed) from an amendment. A property no row assigns is
+            // null on the derived side and says nothing about it, EXCEPT that saving the derived row
+            // does not store that null: the repository applies the column's authored default first
+            // (#7104/#7115), so each compared property carries the default its own derived side will
+            // end up with (#7131) - without it a defaulted column read back off the stored row is a
+            // difference no redelivery can ever clear. The defaults are not the only thing save() puts
+            // there either: a calculated, aggregate, uuid or numbered column is filled by the write
+            // itself, and a row assigning one of those is compared accordingly (#7177, #7234).
+            Map<String, Map<String, Object>> comparedProperties = new LinkedHashMap<>();
+            for (Map<String, Object> row : itemRows) {
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
+                for (Map<String, Object> assign : assigns) {
+                    String property = String.valueOf(assign.get("targetProp"));
+                    if (comparedProperties.containsKey(property)) {
+                        continue; // a column two rows assign is one comparison, and one report of it
+                    }
+                    String authoredCell = String.valueOf(assign.get("sourceCell"));
+                    Map<String, Object> compared = new LinkedHashMap<>();
+                    compared.put("name", property);
+                    putDerivedDefault(compared, itemsEntity, byName, authoredCell);
+                    // A line is never rewritten in place: a rewrite deletes the stored rows and saves the
+                    // derived ones, so only the CREATE-time fills apply to it.
+                    putSaveTimeFill(compared, itemsEntity, itemLines, false, authoredCell, posting.getName(), context);
+                    comparedProperties.put(property, compared);
+                }
+            }
+            e.put("itemComparedProps", new ArrayList<>(comparedProperties.values()));
+            // Which of the two default-aware comparison helpers the handler needs at all - neither is
+            // emitted into a generated file that has no use for it.
+            boolean comparesAgainstDefaults = false;
+            boolean comparesUnlessDerivedIsEmpty = false;
+            List<Map<String, Object>> defaulted = new ArrayList<>(comparedProperties.values());
+            defaulted.addAll(headerAssignments);
+            for (Map<String, Object> compared : defaulted) {
+                if (Boolean.TRUE.equals(compared.get("overwrittenOnSave"))) {
+                    continue; // not compared at all, so it asks for neither helper
+                }
+                // A reading is present for every compared column and EMPTY where the column carries no
+                // default - the glue's "nothing to compare against" (issue #7406).
+                comparesAgainstDefaults =
+                        comparesAgainstDefaults || compared.get("derivedDefaultValue") instanceof Map<?, ?> reading && !reading.isEmpty();
+                comparesUnlessDerivedIsEmpty = comparesUnlessDerivedIsEmpty || Boolean.TRUE.equals(compared.get("compareOnlyWhenDerived"));
+            }
+            e.put("comparesAgainstDefaults", comparesAgainstDefaults);
+            e.put("comparesUnlessDerivedIsEmpty", comparesUnlessDerivedIsEmpty);
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
             e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The Java condition under which an ALREADY posted document may be rewritten from an amended source
+     * (#7071), evaluated against the local {@code target}.
+     *
+     * <p>
+     * The posting created the document, so the state it created it in is the one nobody has acted on
+     * yet: its {@code function: EntityStatus} relation still holding the declared {@code init:} value,
+     * or still empty when none is declared. An entity with no status lifecycle has nothing to act on
+     * and is always rewritable - the empty guard, and so (reported) is one whose {@code init:} is not a
+     * seed id, which no guard can compare against.
+     *
+     * @param creates the created (target) entity
+     * @return the guard expression, or the empty string when the target is always rewritable
+     */
+    private static String amendableGuard(EntityIntent creates) {
+        RelationIntent status = IntentEntities.entityStatusRelation(creates);
+        if (status == null || status.getName() == null || status.getName()
+                                                                .isBlank()) {
+            return "";
+        }
+        String property = IntentNaming.pascalCase(status.getName());
+        String init = status.getInit();
+        if (init == null || init.isBlank()) {
+            return "target." + property + " == null"; // created with no status: an empty one is untouched
+        }
+        if (!init.trim()
+                 .matches("-?\\d+")) {
+            // Unreachable through the parser - StatusSymbolResolver rewrites a status named by its
+            // seeded name to that seed id on the raw tree, and refuses one that resolves to no seeded
+            // status - so this is the belt on that braces. It used to fall back to "the status is still
+            // empty", which is false for every document this posting creates (the create wrote the
+            // init), so every legitimate amendment was refused with a log saying someone had acted on a
+            // document nobody had touched. Refuse the GUARD instead - the target stays rewritable, as
+            // one with no lifecycle is - and say so where the model can still be corrected.
+            LOGGER.warn(
+                    "Posting target [{}]: the EntityStatus relation's init [{}] is not a seed id of [{}] - it cannot tell a document"
+                            + " this posting created from one someone acted on, so an amended source rewrites the post unguarded",
+                    LoggedValue.of(creates.getName()), LoggedValue.of(init), LoggedValue.of(status.getTo()));
+            return "";
+        }
+        return "target." + property + " != null && target." + property + " == " + init.trim();
+    }
+
+    /**
+     * What a DERIVED (not yet saved) posting row will end up carrying for one property when the rule
+     * that builds it assigns nothing there: the column's authored default, which the generated
+     * repository's {@code save()} applies BEFORE the insert (#7104/#7115). The stored row reads that
+     * default back while the derived one still holds {@code null}, so the amend comparison has to apply
+     * it too or a redelivery is misread as an amendment and the post is rewritten on every single event
+     * (#7131).
+     *
+     * <p>
+     * Two keys are written onto the assignment/comparison map:
+     * <ul>
+     * <li>{@code derivedDefaultValue} - the default READ against the column's kind, which the template
+     * layer renders the literal {@code same()} compares against from (issue #7406). {@code same()}
+     * compares numbers by VALUE, so a numeric default needs no knowledge of the column's own Java type
+     * ({@code BigDecimal} stands in for all of them, exactly as the stored side is read back at
+     * whatever scale the database chose). Empty when the column carries no default.</li>
+     * <li>{@code compareOnlyWhenDerived} - {@code true} for a default with no Java literal to stand in
+     * for it: a date/time or binary column, whose {@code DEFAULT} reaches the DDL verbatim as a SQL
+     * expression such as {@code CURRENT_DATE}, which is why the DAO template's {@code #applyDefaults()}
+     * excludes it as well. The DATABASE fills it, so what the stored row holds cannot be derived at all
+     * and the property says nothing for a row that does not assign it.</li>
+     * </ul>
+     *
+     * @param target the map to write the two keys onto
+     * @param entity the entity the property belongs to (the items entity, or the created document for a
+     *        header assignment)
+     * @param byName the model's entities by name, for the key type a relation's FK column carries
+     * @param authoredKey the cell/map key as authored - a field name or a to-one relation name
+     */
+    private static void putDerivedDefault(Map<String, Object> target, EntityIntent entity, Map<String, EntityIntent> byName,
+            String authoredKey) {
+        // The reading, not the Java (issue #7406): what the column would have held is a value of the
+        // column's own kind, and the `new java.math.BigDecimal(...)` the comparison applies it through
+        // is the template layer's rendering of it.
+        target.put("derivedDefaultValue", Map.of());
+        target.put("compareOnlyWhenDerived", false);
+        String type = null;
+        String defaultValue = null;
+        FieldIntent field = fieldOf(entity, authoredKey);
+        if (field != null) {
+            type = field.getType();
+            defaultValue = field.getDefaultValue();
+        } else {
+            RelationIntent relation = relationNamed(entity, authoredKey);
+            if (relation != null) {
+                // A relation's `init:` IS its FK column's default (that is how the EDM emits it), and
+                // the column carries the REFERENCED key - so it is that key's type, not the relation's,
+                // that says how the default compares. A target this model does not hold (a cross-model
+                // relation) leaves only the init's own shape to go on.
+                defaultValue = relation.getInit();
+                EntityIntent referenced = byName.get(relation.getTo());
+                FieldIntent key = referenced == null ? null : IntentEntities.primaryKeyOf(referenced);
+                type = key != null ? key.getType()
+                        : defaultValue != null && defaultValue.trim()
+                                                              .matches("-?\\d+") ? "long" : "string";
+            }
+        }
+        if (defaultValue == null || defaultValue.isBlank()) {
+            return;
+        }
+        // Branched on the SQL type the field's `type:` becomes, which is what decides the column's Java
+        // class - the same test the DAO template's #applyDefaults() makes on dataTypeJavaClass.
+        switch (IntentEntities.sqlType(type)) {
+            case "DATE":
+            case "TIMESTAMP":
+                target.put("compareOnlyWhenDerived", true);
+                return;
+            case "DECIMAL":
+            case "INTEGER":
+            case "BIGINT":
+                try {
+                    target.put("derivedDefaultValue", reading("number", new java.math.BigDecimal(defaultValue.trim()).toString()));
+                } catch (NumberFormatException ex) {
+                    // Not a number on a numeric column: the model is wrong and the repository's own
+                    // default assignment is what will say so, at the create. The comparison keeps out
+                    // of it rather than emitting a literal that throws inside the handler.
+                    LOGGER.warn("Entity [{}] property [{}]: default [{}] is not a number - the posting amend comparison ignores it",
+                            LoggedValue.of(entity.getName()), LoggedValue.of(authoredKey), LoggedValue.of(defaultValue));
+                }
+                return;
+            case "BOOLEAN":
+                String flag = defaultValue.trim();
+                target.put("derivedDefaultValue", reading("boolean", Boolean.toString("true".equalsIgnoreCase(flag) || "1".equals(flag))));
+                return;
+            default:
+                // A string default is authored either bare (what the item dialog seeds) or SQL-quoted
+                // (what a working DB DEFAULT needs, since the value reaches the DDL verbatim); both
+                // stand for the same stored string - the DAO template's #defaultLiteral reads it the
+                // same way.
+                String text = defaultValue.trim();
+                if (text.length() > 1 && text.startsWith("'") && text.endsWith("'")) {
+                    text = text.substring(1, text.length() - 1);
+                }
+                // Always a QUOTED literal, even for a default that reads as a number: the column holds
+                // a string, and `same()` would compare a bare 0 against the stored "0" as unequal.
+                target.put("derivedDefaultValue", reading("string", text));
+                return;
+        }
+    }
+
+    /**
+     * What the generated {@code save()} - and, on a rewrite, {@code update()} - fills into one column
+     * ITSELF, after the defaults #7131 already accounts for. A rule cell (or a {@code map:} entry)
+     * writing such a column derives one value while the stored row carries another, permanently - the
+     * exact #7131 symptom, reached by a different route: every redelivery reads as an amendment and
+     * rewrites the whole post (#7177, #7234).
+     *
+     * <p>
+     * Two shapes, and they are not the same defect:
+     * <ul>
+     * <li>{@code overwrittenOnSave} - the column is filled UNCONDITIONALLY, so the derived value never
+     * STAYS in it. On every write: a field's {@code calculatedOnCreate} /
+     * {@code calculatedActionOnCreate}, and an {@code aggregate: true} column of a document master that
+     * its lines also declare, which {@code recalculate()} sets to the sum over the lines (#7234 - the
+     * item sum the write stored against the source value the map computed, differing by a rounding, a
+     * sign convention or a partially posted line set). On every REWRITE, for the one entity the posting
+     * rewrites in place through {@code update()} - the created document; its lines are deleted and
+     * re-inserted instead: a {@code calculatedOnUpdate} / {@code calculatedActionOnUpdate} column,
+     * recomputed by the rewrite, and an {@code aggregate} or {@code readOnly} column, which
+     * {@code update()} preserves from the stored row (the #6226/#6306 lost-update family's user-update
+     * edition) - the derived value is written once, on the create, and discarded by every rewrite after
+     * it, so after one legitimate amendment the compared cell mismatches forever. Either way the
+     * property is dropped from the comparison entirely and the discarded assignment is reported - what
+     * the row really carries is derived from the entity's OTHER columns, which are compared. (The other
+     * unconditional fill, an entity {@code label:} recomputing its {@code Name}, cannot be reached:
+     * that property is synthesized rather than authored, and the parser refuses a cell or a
+     * {@code map:} key naming anything but an authored field or to-one.)</li>
+     * <li>{@code compareOnlyWhenDerived} - the column is filled only when the write leaves it empty: a
+     * {@code uuid} field, or a {@code number:} field (a {@code stampOn: create} allocation, or the UUID
+     * placeholder a {@code stampOn: issue} carries until the issue step). A value the rule does derive
+     * is stored verbatim and still says what it always said; an empty one is answered by a value no
+     * handler can derive - a fresh UUID, the next number in the series - so it asserts nothing. The
+     * same treatment, and the same generated helper, as a default only the database can apply.</li>
+     * </ul>
+     *
+     * @param target the map to write the keys onto - {@code compareOnlyWhenDerived} is raised on top of
+     *        what {@link #putDerivedDefault} left there, so call this after it
+     * @param entity the entity the property belongs to
+     * @param lines the line-items entity the generated repository resums {@code entity}'s aggregate
+     *        columns from, or {@code null} when the pipeline does not treat it as a document master
+     *        (see {@link IntentEntities#documentMasters})
+     * @param updatedOnRewrite whether the posting rewrites a stored row of {@code entity} in place
+     *        through {@code update()} - the created document - rather than deleting and re-inserting it
+     *        - its lines
+     * @param authoredKey the cell/map key as authored
+     * @param postingName the posting whose rule writes the column, for the report
+     * @param context the generation context collecting the issue, may be {@code null}
+     */
+    private static void putSaveTimeFill(Map<String, Object> target, EntityIntent entity, EntityIntent lines, boolean updatedOnRewrite,
+            String authoredKey, String postingName, IntentGenerationContext context) {
+        target.put("overwrittenOnSave", false);
+        FieldIntent field = fieldOf(entity, authoredKey);
+        if (field == null) {
+            return; // a to-one relation: its FK carries only the init: default putDerivedDefault read
+        }
+        String fill = null;
+        if (isSet(field.getCalculatedOnCreate()) || isSet(field.getCalculatedActionOnCreate())) {
+            fill = "computes itself on create - the assigned value is discarded by the write";
+        } else if (field.isAggregate() && lines != null && fieldOf(lines, field.getName()) != null) {
+            fill = "resums from its " + lines.getName() + " lines on every write - the assigned value is discarded by the write";
+        } else if (updatedOnRewrite && (isSet(field.getCalculatedOnUpdate()) || isSet(field.getCalculatedActionOnUpdate()))) {
+            fill = "recomputes itself on every rewrite of the post - the assigned value is kept only until the first amendment";
+        } else if (updatedOnRewrite && (field.isAggregate() || field.isReadOnly())) {
+            fill = "preserves from the stored row on every rewrite of the post - the assigned value is kept only until the first"
+                    + " amendment";
+        }
+        if (fill != null) {
+            target.put("overwrittenOnSave", true);
+            String issue = "Posting [" + postingName + "] assigns [" + entity.getName() + "." + authoredKey + "], which the repository "
+                    + fill + ", so the column is left out of the amend comparison";
+            LOGGER.warn(LoggedValue.of(issue));
+            if (context != null) {
+                context.addIssue(issue);
+            }
+            return;
+        }
+        if ("uuid".equalsIgnoreCase(field.getType()) || field.getNumber() != null) {
+            target.put("compareOnlyWhenDerived", true);
+        }
+    }
+
+    /** Whether an authored string carries a value. */
+    private static boolean isSet(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    /**
+     * The entity's relation of that name, whatever its kind - a posting cell/map key naming a relation
+     * writes its FK column, and it is that column's default the comparison needs.
+     *
+     * @param entity the owning entity
+     * @param name the authored relation name
+     * @return the relation, or {@code null}
+     */
+    private static RelationIntent relationNamed(EntityIntent entity, String name) {
+        if (entity.getRelations() == null || name == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equalsIgnoreCase(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**
@@ -2142,20 +2945,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 null);
     }
 
-    /** The entity's composition child (first entity declaring a composition to-one back to it). */
-    private static EntityIntent compositionChild(EntityIntent entity, Map<String, EntityIntent> byName) {
-        for (EntityIntent candidate : byName.values()) {
-            if (candidate.getRelations() == null) {
-                continue;
-            }
-            for (RelationIntent relation : candidate.getRelations()) {
-                if (relation.isComposition() && entity.getName()
-                                                      .equals(relation.getTo())) {
-                    return candidate;
-                }
-            }
-        }
-        return null;
+    /**
+     * The entity's document-items child - its LINES, through the one shared resolution every consumer
+     * must agree on ({@code function: DocumentItem}, else the {@code *Item} name, else the sole child,
+     * else the first declared). A hash-ordered scan for "some composition child" let a posting emit its
+     * lines into a document's snapshot/allocation child instead (#7027).
+     */
+    private static EntityIntent compositionChild(EntityIntent entity, IntentModel model) {
+        return entity == null ? null : IntentEntities.documentItemsChild(entity.getName(), model.getEntities());
+    }
+
+    /**
+     * The line-items entity the generated repository resums {@code entity}'s {@code aggregate: true}
+     * columns from on every write, or {@code null} when the pipeline does not treat it as a document
+     * master. Resolved through {@link IntentEntities#documentMasters} - the rule the document layout,
+     * and so the DAO's {@code documentMaster}, is emitted by - and deliberately NOT through
+     * {@link #compositionChild}: that broader resolution also names a sole or first composition child
+     * whose master keeps the master-detail layout, where nothing resums anything (#7234).
+     *
+     * @param entity the entity whose aggregates may be resummed, may be {@code null}
+     * @param documentMasters the model's document masters, by name
+     * @param byName the model's entities by name
+     * @return the lines entity, or {@code null}
+     */
+    private static EntityIntent linesOf(EntityIntent entity, Map<String, String> documentMasters, Map<String, EntityIntent> byName) {
+        String lines = entity == null ? null : documentMasters.get(entity.getName());
+        return lines == null ? null : byName.get(lines);
     }
 
     /** The entity's field by authored name (case-insensitive), or null. */
@@ -2264,12 +3079,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             "subject", "body", "document", "part", "parts", "from", "to");
 
     /**
+     * The extra locals a schedule's escalation ladder (issue #7276) declares in the same scope. Kept
+     * apart from {@link #CREATE_FROM_LOCALS} deliberately: they exist only where an {@code escalate:}
+     * block does, and folding them in would refuse a perfectly ordinary relation named {@code Level} on
+     * every create-from that never declares one.
+     */
+    private static final Set<String> ESCALATION_LOCALS =
+            Set.of(NotificationSupport.ESCALATION_LOCAL, "escalationCandidate", "overdueDays", "level");
+
+    /**
      * The first one-hop load whose local would collide with a name the template already declares, or
      * {@code null} when none does.
      */
     private static String collidingLocal(List<NotificationSupport.RelationLoad> loads) {
+        return collidingLocal(loads, CREATE_FROM_LOCALS);
+    }
+
+    /** The first load whose local is one of the given reserved names, or {@code null} when none is. */
+    private static String collidingLocal(List<NotificationSupport.RelationLoad> loads, Set<String> reserved) {
         for (NotificationSupport.RelationLoad load : loads) {
-            if (CREATE_FROM_LOCALS.contains(load.local())) {
+            if (reserved.contains(load.local())) {
                 return load.local();
             }
         }
@@ -2305,9 +3134,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
     private static String javaLiteral(Object value) {
         // A Boolean written as a String would filter a boolean column with the text "true" and match
-        // nothing; the backslash is escaped before the quote so a value carrying either cannot close the
-        // literal early. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare
-        // integer branch.
+        // nothing. Statuses arrive already resolved to ids, so a lifecycle filter takes the bare integer
+        // branch. The quoted branch goes through the ONE escape helper (dirigible #7287) - a local
+        // backslash-then-quote pass survived a quote but not a newline, which closes the literal too.
         if (value instanceof Boolean) {
             return String.valueOf(value);
         }
@@ -2315,9 +3144,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (v.matches("-?\\d+")) {
             return v;
         }
-        return '"' + v.replace("\\", "\\\\")
-                      .replace("\"", "\\\"")
-                + '"';
+        return '"' + JavaLiterals.escape(v) + '"';
     }
 
     /**
@@ -2630,8 +3457,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // `now` / a literal in the field's own shape (month -> YYYY-MM, week -> YYYY-Www, else
                 // LocalDate / boolean / quoted string).
                 String copy = bareSourceCopy(v, sourceProps);
-                String temporalKind = "month".equals(kind) || "week".equals(kind) ? kind : null;
-                return copy != null ? copy : literalExpression(v, temporalKind);
+                return copy != null ? copy : literalExpression(v, kind);
             }
             case "string":
                 return stringCellExpression(v, sourceProps);
@@ -2646,9 +3472,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code Calc.eval("<expr>", source, <scale>)} - the calculated-field / posting-amount convention.
      */
     private static String calcExpression(String expr, int scale) {
-        return "Calc.eval(\"" + expr.replace("\\", "\\\\")
-                                    .replace("\"", "\\\"")
-                + "\", source, " + scale + ")";
+        return "Calc.eval(\"" + JavaLiterals.escape(expr) + "\", source, " + scale + ")";
     }
 
     /**
@@ -2682,11 +3506,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (copy != null) {
             return copy;
         }
-        return "\"" + v.replace("\\", "\\\\")
-                       .replace("\"", "\\\"")
-                       .replace("\n", "\\n")
-                       .replace("\r", "\\r")
-                + "\"";
+        return "\"" + JavaLiterals.escape(v) + "\"";
     }
 
     /**
@@ -2721,13 +3541,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return "";
     }
 
+    /** The logical kinds a {@code now} default renders in the field's own shape. */
+    private static final java.util.Set<String> TEMPORAL_KINDS = java.util.Set.of("date", "timestamp", "month", "week");
+
+    /**
+     * The widget an EDM property carries -> the logical temporal kind, or null for a non-temporal one.
+     */
+    private static String temporalKindOfWidget(String widget) {
+        return switch (widget == null ? "" : widget) {
+            case "MONTH" -> "month";
+            case "WEEK" -> "week";
+            case "DATE" -> "date";
+            case "DATETIME-LOCAL" -> "timestamp";
+            default -> null;
+        };
+    }
+
     /**
      * The logical temporal kind of the TARGET entity's fields, for the type-aware {@code now} default:
-     * PascalCase property name -> {@code month} / {@code week}; anything else absent (null). A
-     * same-model target reads its intent fields directly; a cross-model target reads the owner model's
-     * widget types through {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model}
-     * is the only cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the
-     * JDBC level. An unresolved target (unit test / convention fallback) keeps the untyped behavior.
+     * PascalCase property name -> {@code date} / {@code timestamp} / {@code month} / {@code week};
+     * anything else absent (null). A same-model target reads its intent fields directly; a cross-model
+     * target reads the owner model's widget types through
+     * {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model} is the only
+     * cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the JDBC level.
+     * Every temporal kind is carried, not only the two that render as a String: a {@code timestamp}
+     * property is a {@code java.time.Instant} on the generated entity, so the untyped
+     * {@code LocalDate.now()} does not compile against it either. An unresolved target (unit test /
+     * convention fallback) keeps the untyped behavior.
      */
     private static java.util.function.Function<String, String> temporalKinds(EntityIntent local, CrossModelSupport.TargetInfo target) {
         Map<String, String> kinds = new LinkedHashMap<>();
@@ -2736,20 +3576,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (field.getName() == null || field.getType() == null) {
                     continue;
                 }
-                String type = field.getType()
-                                   .toLowerCase(java.util.Locale.ROOT);
-                if ("month".equals(type) || "week".equals(type)) {
-                    kinds.put(IntentNaming.pascalCase(field.getName()), type);
+                String kind = kindOfIntentType(field.getType());
+                if (TEMPORAL_KINDS.contains(kind)) {
+                    kinds.put(IntentNaming.pascalCase(field.getName()), kind);
                 }
             }
         }
         if (target != null && target.propertyWidgets() != null) {
             for (Map.Entry<String, String> widget : target.propertyWidgets()
                                                           .entrySet()) {
-                if ("MONTH".equals(widget.getValue())) {
-                    kinds.put(widget.getKey(), "month");
-                } else if ("WEEK".equals(widget.getValue())) {
-                    kinds.put(widget.getKey(), "week");
+                String kind = temporalKindOfWidget(widget.getValue());
+                if (kind != null) {
+                    kinds.put(widget.getKey(), kind);
                 }
             }
         }
@@ -2766,10 +3604,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * A Java expression for a {@code defaults} value: {@code now} -> today's value in the TARGET
      * field's own shape - a {@code month} field gets the {@code YYYY-MM} string, a {@code week} field
-     * the {@code YYYY-Www} ISO-week string, anything else today's {@code LocalDate} (month/week are
-     * plain {@code String} properties on the generated entity, so the untyped {@code LocalDate.now()}
-     * would not even compile against them); an integer / decimal / boolean literal -> its Java form;
-     * anything else -> a quoted Java string.
+     * the {@code YYYY-Www} ISO-week string, a {@code timestamp} field the {@code Instant} of the
+     * moment, anything else today's {@code LocalDate}. The shape is not cosmetic: month/week are plain
+     * {@code String} properties on the generated entity and a timestamp is a {@code java.time.Instant},
+     * so the untyped {@code LocalDate.now()} would not even compile against any of them. An integer /
+     * decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
      */
     private static String literalExpression(String value, String temporalKind) {
         String v = value.trim();
@@ -2780,6 +3619,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if ("week".equals(temporalKind)) {
                 return "String.format(\"%04d-W%02d\", java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_BASED_YEAR), "
                         + "java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR))";
+            }
+            if ("timestamp".equals(temporalKind)) {
+                return "java.time.Instant.now()";
             }
             return "java.time.LocalDate.now()";
         }
@@ -2792,11 +3634,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (v.matches("-?\\d+\\.\\d+")) {
             return "new java.math.BigDecimal(\"" + v + "\")";
         }
-        return "\"" + v.replace("\\", "\\\\")
-                       .replace("\"", "\\\"")
-                       .replace("\n", "\\n")
-                       .replace("\r", "\\r")
-                + "\"";
+        return "\"" + JavaLiterals.escape(v) + "\"";
     }
 
     /** The junction's to-one relation whose target is the given entity, or null. */
@@ -2882,7 +3720,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("expansions", expansion.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing handlers for expansion [{}] (not generated)", expansion.getName());
+                LOGGER.info("Settings opt-out: keeping existing handlers for expansion [{}] (not generated)",
+                        LoggedValue.of(expansion.getName()));
                 continue;
             }
             RelationIntent back = null;
@@ -2943,8 +3782,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             .toString());
             base.put("countProperty", expansionCountProperty(master, expansion));
             base.put("countValue", expansionCountValue(master, expansion));
-            base.put("criteriaExpression",
-                    "Criteria.create().eq(\"" + fkProperty + "\", master." + IntentEntities.keyFieldName(master) + ")");
+            // The child set is queried by the master foreign key alone, which the descriptor already
+            // carries alongside the master's own key - the template layer builds the `Criteria` from the
+            // two rather than the glue carrying the builder call (issue #7406).
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
             expansions.add(rollupEntry(base, className + "OnCreate", ""));
             expansions.add(rollupEntry(base, className + "OnUpdate", "-updated"));
@@ -3148,7 +3988,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             return null;
         }
         if (!settings.shouldGenerate("inbound", ingest.getName())) {
-            LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun, ingest.getName());
+            LOGGER.info("Settings opt-out: keeping existing {} for inbound [{}] (not generated)", handlerNoun,
+                    LoggedValue.of(ingest.getName()));
             return null;
         }
         ArrivalSupport.Plan arrival;
@@ -3178,7 +4019,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> stepEvents = new ArrayList<>();
         for (StepEventSupport.Emitter emitter : StepEventSupport.emitters(model)) {
             if (!settings.shouldGenerate("stepEvents", emitter.className())) {
-                LOGGER.info("Settings opt-out: keeping existing delegate for step event [{}] (not generated)", emitter.className());
+                LOGGER.info("Settings opt-out: keeping existing delegate for step event [{}] (not generated)",
+                        LoggedValue.of(emitter.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3210,7 +4052,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if (!settings.shouldGenerate("integrations", integration.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)", integration.getName());
+                LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)",
+                        LoggedValue.of(integration.getName()));
                 continue;
             }
             // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
@@ -3236,7 +4079,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));
             // The event axis carries a `when` guard and every other consumer of the axis honours it -
             // an integration that ignored it forwarded records the author had excluded.
-            entry.putAll(guardFields(integration.getEvent()));
+            entry.putAll(guardFields(integration.getEvent(), byName.get(entity), byName));
             entry.putAll(PayloadSupport.payloadFields(payload));
             entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             integrations.add(entry);
@@ -3272,7 +4115,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue; // parser already reported "exactly one of queue/topic"
             }
             if (!settings.shouldGenerate("outbound", outbound.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing publisher for outbound [{}] (not generated)", outbound.getName());
+                LOGGER.info("Settings opt-out: keeping existing publisher for outbound [{}] (not generated)",
+                        LoggedValue.of(outbound.getName()));
                 continue;
             }
             // The declared envelope, when there is one. A value that cannot be resolved (a cross-model
@@ -3297,12 +4141,49 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("channel", target.channel()
                                        .name());
             entry.put("producerMethod", target.producerMethod());
-            entry.putAll(guardFields(outbound.getEvent()));
+            entry.putAll(guardFields(outbound.getEvent(), byName.get(entity), byName));
             entry.putAll(PayloadSupport.payloadFields(payload));
             entry.put("relationLoads", relationLoads(payload == null ? List.of() : payload.loads()));
             departures.add(entry);
         }
         return departures;
+    }
+
+    /**
+     * The glue facts of a schedule's days-past-due escalation ladder (issue #7276): which entity holds
+     * the levels, which of its columns is the threshold, which date of the row the days are counted
+     * from, and where the chosen level is written on the generated record.
+     *
+     * <p>
+     * Everything here is resolved against LOCAL entities - the parser refuses a cross-model source and
+     * a cross-model generate target for exactly that reason - so a miss is a model that reached
+     * generation unvalidated, and the schedule is dropped loudly rather than emitting a ladder that
+     * does not compile.
+     *
+     * @return the template keys, or {@code null} when the ladder cannot be resolved (reported)
+     */
+    private static Map<String, Object> escalationFields(ScheduleIntent schedule, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentModel model, IntentGenerationContext context) {
+        EscalateIntent escalate = schedule.getEscalate();
+        EntityIntent ladder = escalate.getLadder() == null ? null : byName.get(escalate.getLadder());
+        if (ladder == null || escalate.getAfter() == null || escalate.getSince() == null || escalate.getInto() == null) {
+            reportDroppedGlue(context,
+                    "Schedule [" + schedule.getName() + "] escalate does not resolve: ladder [" + escalate.getLadder() + "], after ["
+                            + escalate.getAfter() + "], since [" + escalate.getSince() + "], into [" + escalate.getInto()
+                            + "] - the schedule was NOT generated");
+            return null;
+        }
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("escalationEntity", ladder.getName());
+        // The local the generated loop holds the chosen level in - the SAME name an
+        // {escalation.<field>} placeholder renders against, which is what keeps the two in step.
+        fields.put("escalationLocal", NotificationSupport.ESCALATION_LOCAL);
+        fields.put("escalationPerspective", IntentEntities.resolvePerspective(ladder.getName(), compositionParents, model));
+        fields.put("escalationKeyProperty", IntentEntities.keyFieldName(ladder));
+        fields.put("escalationAfterProperty", IntentNaming.pascalCase(escalate.getAfter()));
+        fields.put("escalationSinceProperty", IntentNaming.pascalCase(escalate.getSince()));
+        fields.put("escalationIntoProperty", IntentNaming.pascalCase(escalate.getInto()));
+        return fields;
     }
 
     private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,
@@ -3338,11 +4219,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             boolean generates = schedule.getGenerate() != null;
-            if (!generates && schedule.getNotify() == null) {
+            boolean notifies = schedule.getNotify() != null;
+            if (!generates && !notifies) {
                 continue; // parser already reported "no notify/generate action"
             }
             if (!settings.shouldGenerate("schedules", schedule.getName())) {
-                LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
+                LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", LoggedValue.of(schedule.getName()));
                 continue;
             }
             // Never emit a job that cannot compile: for a cross-model source, validate every reference
@@ -3356,6 +4238,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] " + missingRef + " does not resolve against the ["
                             + schedule.getModel() + "] source - the schedule was NOT generated");
                     continue;
+                }
+                // The row query's status condition on a cross-model source (#7288): the source's
+                // nomenclature is seeded in the owner model, so the parser's resolver left the query
+                // alone - and which condition even names the status is known only here, off the owner
+                // .model's DOCUMENT_STATUS widget. A NAME left in it would render as a string compared
+                // against the integer status FK, a query that matches nothing on every tick. Refused
+                // the way every cross-model status site is: by seed id only.
+                ScheduleConditionIntent namedStatus = crossModelStatusName(schedule.getWhere(), sourceTarget);
+                if (namedStatus != null) {
+                    throw new IntentValidationException(List.of("schedule [" + schedule.getName()
+                            + "] where-condition on the status relation [" + sourceTarget.statusProperty() + "] names the status ["
+                            + namedStatus.getValue() + "] of [" + entity + "], which belongs to model [" + schedule.getModel()
+                            + "] and is seeded there - a cross-model status must be referenced by its numeric seed id"));
+                }
+                // The row query's moment against a cross-model column (#7393): the parser could not see
+                // the field's type either, and a moment of the other shape than the column fails the
+                // query's bind on every tick. Held to the same rule the same-model case is, off the
+                // owner .model's own dataType.
+                String momentMismatch = crossModelMomentMismatch(schedule.getWhere(), sourceTarget, entity, schedule.getModel());
+                if (momentMismatch != null) {
+                    throw new IntentValidationException(List.of("schedule [" + schedule.getName() + "] " + momentMismatch));
                 }
             }
 
@@ -3376,12 +4279,48 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", sourceCrossModel ? sourceTarget.keyField() : IntentEntities.keyFieldName(byName.get(entity)));
-            entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
+            // The tick's filter, as the CLAUSES it is (issue #7406) - the `Criteria` chain is rendered
+            // from them by the template layer, so the process description carries no builder call and no
+            // java.time.
+            entry.put("criteria", ScheduleSupport.criteria(schedule));
             // The attachment and deep-link keys are always present (empty for a generate schedule): an
             // undefined Velocity variable renders as its own name, so a template must never rely on
             // absence.
             entry.putAll(NotifySupport.attachmentFields(null));
             entry.putAll(NotifySupport.deepLinkFields(null, null));
+            entry.putAll(NotifySupport.outcomeFields(null, null, compositionParents, IntentEntities.settingEntities(byName.values())));
+            // A tick may do BOTH (issue #7276) - create the record AND mail about it - so the two are
+            // flags rather than one `action`, which stays for a .glue written before the combined form.
+            entry.put("generates", generates);
+            entry.put("notifies", notifies);
+            entry.put("action", generates ? "generate" : "notify");
+            // The one-hop loads of both halves share the loop's locals: a `Customer.email` recipient and
+            // a `Customer: Customer` map source load the same row once.
+            List<NotificationSupport.RelationLoad> allLoads = new ArrayList<>();
+            // The escalation ladder (issue #7276): resolved BEFORE the generate, whose assignments and
+            // natural key both carry the chosen level.
+            EscalateIntent escalate = schedule.getEscalate();
+            Map<String, Object> escalation = null;
+            if (escalate != null) {
+                if (!generates || sourceCrossModel) {
+                    // The parser refuses both, precisely; a generation reached by another route drops the
+                    // schedule rather than emitting a ladder with nowhere to record what it applied.
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] declares escalate"
+                                    + (generates
+                                            ? " on the cross-model source [" + entity + "], whose properties belong to the ["
+                                                    + schedule.getModel() + "] model"
+                                            : " without a generate to record the level it applies")
+                                    + " - the schedule was NOT generated");
+                    continue;
+                }
+                escalation = escalationFields(schedule, byName, compositionParents, model, context);
+                if (escalation == null) {
+                    continue; // reported above
+                }
+                entry.putAll(escalation);
+            }
+            entry.put("hasEscalation", escalation != null);
 
             if (generates) {
                 // Scheduled record generation: the queried row is the source, so its create-from maps the
@@ -3432,8 +4371,39 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                     + " - rename the relation, or map a direct property instead - the schedule was NOT generated");
                     continue;
                 }
+                if (escalation != null) {
+                    // The chosen level lands on the generated record. It is appended AFTER the authored
+                    // map / defaults so the natural key below reads it like any other assigned property -
+                    // which is what makes `unique: [Invoice, Level]` send each level exactly once.
+                    genFieldAssignments.add(assignment(String.valueOf(escalation.get("escalationIntoProperty")),
+                            NotificationSupport.ESCALATION_LOCAL + "." + escalation.get("escalationKeyProperty")));
+                }
                 entry.put("genFieldAssignments", genFieldAssignments);
-                entry.put("relationLoads", relationLoads(hopLoads));
+                allLoads.addAll(hopLoads);
+                // The natural key that makes a SECOND run of this job a no-op (issue #7070). Every tick
+                // used to create unconditionally, so a redeploy, a Quartz misfire recovery or an admin
+                // pressing Run in Monitoring minted a duplicate project-month / recurring invoice /
+                // payroll run - with duplicate children under it, and both would bill.
+                List<Map<String, Object>> genUnique = uniqueTerms(g, genFieldAssignments);
+                if (genUnique == null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] generate unique names a property this generate does not assign"
+                                    + " through map or defaults, or a run: period over a target date it does not assign from now"
+                                    + " (or assigns more than once, which of: answers) - the schedule was NOT generated");
+                    continue;
+                }
+                entry.put("hasGenUnique", !genUnique.isEmpty());
+                entry.put("genUnique", genUnique);
+                if (genUnique.isEmpty()) {
+                    // Advisory, not a refusal: every intent authored before the key existed keeps
+                    // generating exactly what it did. But silence here is what the duplicate looked
+                    // like on sta, so the generation says it out loud.
+                    reportGenerationAdvice(context,
+                            "Schedule [" + schedule.getName() + "] generate declares no unique: natural key, so a SECOND run of the job"
+                                    + " (a redeploy, a Quartz misfire recovery, an admin pressing Run) creates another [" + g.getTo()
+                                    + "] per matching [" + entity + "] - declare unique: with the target properties that identify one"
+                                    + " tick's output to make a re-run a no-op");
+                }
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved
@@ -3441,9 +4411,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // expansions convention) - the job template stays shape-only.
                     entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, model, byName, compositionParents, context, 1));
                 }
-            } else {
+            }
+            if (notifies) {
                 // The per-row action reuses the notification machinery against the queried row entity.
-                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName,
+                // For a cross-model source that entity is the OWNER's, so the row is projected from the
+                // owner's .model facts (#7030) - which is what lets a statement mail live in the model
+                // that owns the report rather than the one that owns the customer.
+                EntityIntent rowEntity = sourceCrossModel ? crossModelRow(entity, sourceTarget) : byName.get(entity);
+                // The chosen escalation level is an extra scope the message text may read - the per-level
+                // wording ("a friendly reminder" vs "final notice") a flat schedule cannot express.
+                EntityIntent ladderEntity = escalate == null ? null : byName.get(escalate.getLadder());
+                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), rowEntity, ladderEntity, byName,
                         compositionParents, crossModelLookup(model, context));
                 if (plan == null) {
                     reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify recipient [" + schedule.getNotify()
@@ -3451,22 +4429,117 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
-                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                if (sourceCrossModel && plan.usesRecordUrl()) {
+                    // The record link is composed from THIS application's routes; the source row is a
+                    // record of the owner's application, so the link would point at a page that is not
+                    // there. The parser reports this too - a generation reached by another route drops it.
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] notify uses {" + NotificationSupport.RECORD_URL_TOKEN
+                                    + "} for the cross-model source [" + entity + "], whose record belongs to the [" + schedule.getModel()
+                                    + "] application - the schedule was NOT generated");
+                    continue;
+                }
+                if (sourceCrossModel && schedule.getNotify()
+                                                .getOutcome() != null
+                        && !schedule.getNotify()
+                                    .getOutcome()
+                                    .isBlank()) {
+                    // The stamp writes through the row's own repository and publishes on its own
+                    // failure topic - both generated in the model that owns the row. The parser reports
+                    // this too; a generation reached by another route drops rather than stamps nothing.
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify declares outcome [" + schedule.getNotify()
+                                                                                                                           .getOutcome()
+                            + "] on the cross-model source [" + entity + "], whose repository and failure topic belong to the ["
+                            + schedule.getModel() + "] model - the schedule was NOT generated");
+                    continue;
+                }
+                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), rowEntity, model, byName,
                         compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
-                entry.put("action", "notify");
-                entry.put("relationLoads", relationLoads(plan, attachment));
+                NotifySupport.ReportAttachment reportAttachment = reportAttachment(schedule.getNotify(), rowEntity, model, byName,
+                        compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
+                if (reportAttachment == null && NotifySupport.attachesReport(schedule.getNotify())) {
+                    continue; // asked for the report but it cannot be scoped - reported above
+                }
+                allLoads.addAll(mergedLoads(plan, attachment, reportAttachment));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
-                entry.putAll(NotifySupport.attachmentFields(attachment));
-                entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
+                entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
+                entry.putAll(NotifySupport.deepLinkFields(plan, rowEntity));
+                // A schedule already runs once per matched row, so the row IS the record the message is
+                // about and the stamp lands on it - which is what makes a dunning run auditable per
+                // invoice instead of one aggregate line per tick. A cross-model row is stamped through
+                // the OWNER's repository on the OWNER's failure topic, neither of which this model can
+                // name, so the parser refuses that combination and this stays the local row.
+                entry.putAll(NotifySupport.outcomeFields(schedule.getNotify(), byName.get(entity), compositionParents,
+                        IntentEntities.settingEntities(byName.values())));
             }
+            List<NotificationSupport.RelationLoad> loads = dedupeLoads(allLoads);
+            if (escalation != null) {
+                // The ladder block declares locals of its own in the loop's scope, so a relation hopped
+                // through under one of those names would shadow it and not compile.
+                String ladderCollision = collidingLocal(loads, ESCALATION_LOCALS);
+                if (ladderCollision != null) {
+                    reportDroppedGlue(context,
+                            "Schedule [" + schedule.getName() + "] hops through the relation [" + ladderCollision + "] of [" + entity
+                                    + "], whose name is one the escalation ladder already uses for a local of its own"
+                                    + " - rename the relation, or reference a direct property instead - the schedule was NOT generated");
+                    continue;
+                }
+            }
+            entry.put("relationLoads", relationLoads(loads));
             schedules.add(entry);
         }
         return schedules;
+    }
+
+    /**
+     * The cross-model source row of a schedule's {@code notify}, projected from the owner's
+     * {@code .model} facts into the {@link EntityIntent} shape the notify machinery resolves paths
+     * against (dirigible #7030). It carries the owner's property names and its primary key - enough for
+     * a recipient, a placeholder, a bound report parameter and the default attachment name.
+     *
+     * <p>
+     * Relations are deliberately absent: a foreign entity's relations are known only to its owner
+     * model, which is the same reason a cross-model {@code generate map} refuses a
+     * {@code relation.field} source. So such a path resolves to nothing here and the block is dropped
+     * with that reason rather than emitting a load of a record this model cannot name. Each property is
+     * registered under the owner's PascalCase name AND its lower-camel form, because the author names
+     * it as the owner's intent authored it while the {@code .model} carries the PascalCase property -
+     * both render the same access ({@code entity.<PascalName>}), so the alias is a lookup affordance
+     * only, matching the tolerance {@code where} fields already have.
+     *
+     * @param entity the source entity name
+     * @param target the owner's resolved facts ({@code propertyNames} null on a convention fallback,
+     *        where only the key is known and every authored field is trusted)
+     * @return the projected row entity
+     */
+    private static EntityIntent crossModelRow(String entity, CrossModelSupport.TargetInfo target) {
+        EntityIntent row = new EntityIntent();
+        row.setName(entity);
+        String keyProperty = target == null ? "Id" : target.keyField();
+        java.util.Set<String> properties = new java.util.LinkedHashSet<>();
+        properties.add(keyProperty);
+        if (target != null && target.propertyNames() != null) {
+            properties.addAll(target.propertyNames());
+        }
+        List<FieldIntent> fields = new ArrayList<>();
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (String property : properties) {
+            names.add(property);
+            names.add(IntentNaming.camelCase(property));
+        }
+        for (String name : names) {
+            FieldIntent field = new FieldIntent();
+            field.setName(name);
+            field.setPrimaryKey(keyProperty.equals(IntentNaming.pascalCase(name)));
+            fields.add(field);
+        }
+        row.setFields(fields);
+        return row;
     }
 
     /**
@@ -3475,8 +4548,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * mapping and action shape).
      */
     static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
+        return buildSchedulesForTest(model, null);
+    }
+
+    /**
+     * Test hook: build the {@code schedules} glue collection against a context, so what the generation
+     * reads off a cross-model source's owner {@code .model} - its perspective, its key, and which of
+     * its properties is the status relation - is the real fact rather than a naming-convention default.
+     */
+    static List<Map<String, Object>> buildSchedulesForTest(IntentModel model, IntentGenerationContext context) {
         return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
-                null);
+                context);
     }
 
     /**
@@ -3492,23 +4574,89 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static String firstUnresolvableScheduleRef(IntentModel model, ScheduleIntent schedule,
             CrossModelSupport.TargetInfo sourceTarget, IntentGenerationContext context) {
         java.util.Set<String> sourceProps = sourceTarget == null ? null : sourceTarget.propertyNames();
+        GeneratesIntent generate = schedule.getGenerate();
         if (sourceProps != null) {
             for (ScheduleConditionIntent condition : schedule.getWhere()) {
                 if (isMissing(sourceProps, condition.getField())) {
                     return "where field [" + condition.getField() + "]";
                 }
             }
-            for (Map.Entry<String, String> mapping : schedule.getGenerate()
-                                                             .getMap()
-                                                             .entrySet()) {
-                if (isMissing(sourceProps, mapping.getValue())) {
-                    return "generate map source [" + mapping.getValue() + "]";
+            if (generate != null) {
+                for (Map.Entry<String, String> mapping : generate.getMap()
+                                                                 .entrySet()) {
+                    if (isMissing(sourceProps, mapping.getValue())) {
+                        return "generate map source [" + mapping.getValue() + "]";
+                    }
+                }
+            } else {
+                String notifyRef = firstUnresolvableNotifyRef(schedule.getNotify(), sourceProps);
+                if (notifyRef != null) {
+                    return notifyRef;
                 }
             }
         }
-        return firstUnresolvableChildRef(model, schedule.getGenerate()
-                                                        .getChildren(),
-                sourceProps, context);
+        return generate == null ? null : firstUnresolvableChildRef(model, generate.getChildren(), sourceProps, context);
+    }
+
+    /**
+     * The first reference of a cross-model source's {@code notify} that names no property of the owner
+     * entity, or {@code null} when they all resolve (dirigible #7030). A direct path is emitted as a
+     * plain field read without a local check, so a mistyped name would otherwise reach {@code javac};
+     * and a placeholder that does not resolve degrades to its own literal text, which is a statement
+     * mail quietly saying {@code {name}}. Both are checked here, against the owner's property names,
+     * with the same PascalCase tolerance the {@code where} fields have.
+     *
+     * <p>
+     * A path that hops through a relation is refused for what it is - the source's relations belong to
+     * its owner - and the reserved link tokens are not paths at all.
+     *
+     * @param notify the notify block
+     * @param sourceProps the owner entity's property names (never {@code null} here)
+     * @return the offending reference, described for the drop message, or {@code null}
+     */
+    private static String firstUnresolvableNotifyRef(NotificationIntent notify, java.util.Set<String> sourceProps) {
+        Map<String, String> paths = new LinkedHashMap<>();
+        String to = notify.getTo();
+        if (to != null && !to.isBlank() && !to.contains("@")) {
+            paths.put("notify recipient", to.trim());
+        }
+        collectNotifyPlaceholders(notify.getSubject(), paths);
+        collectNotifyPlaceholders(notify.getBody(), paths);
+        NotificationIntent.ReportAttachment report = notify.getReportAttachment();
+        if (report != null) {
+            for (Map.Entry<String, String> bound : report.bind()
+                                                         .entrySet()) {
+                if (bound.getValue() != null && !bound.getValue()
+                                                      .isBlank()) {
+                    paths.put("notify attach bind [" + bound.getKey() + "]", bound.getValue()
+                                                                                  .trim());
+                }
+            }
+        }
+        for (Map.Entry<String, String> path : paths.entrySet()) {
+            String value = path.getValue();
+            if (RESERVED_NOTIFY_TOKENS.contains(value)) {
+                continue;
+            }
+            if (value.indexOf('.') >= 0) {
+                return path.getKey() + " [" + value + "] (a relation of the source, known only to its owner model)";
+            }
+            if (isMissing(sourceProps, value)) {
+                return path.getKey() + " [" + value + "]";
+            }
+        }
+        return null;
+    }
+
+    /** The {@code {path}} placeholders of one text, keyed by the message they are reported under. */
+    private static void collectNotifyPlaceholders(String text, Map<String, String> paths) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        java.util.regex.Matcher matcher = NOTIFY_PLACEHOLDER.matcher(text);
+        while (matcher.find()) {
+            paths.put("notify placeholder [{" + matcher.group(1) + "}]", matcher.group(1));
+        }
     }
 
     /**
@@ -3619,7 +4767,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> assignees = new ArrayList<>();
         for (ProcessAssigneeSupport.Assignee assignee : ProcessAssigneeSupport.assignees(model, assigneeCrossModelLookup(model, context))) {
             if (!settings.shouldGenerate("assignees", assignee.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for assignee resolver [{}] (not generated)", assignee.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for assignee resolver [{}] (not generated)",
+                        LoggedValue.of(assignee.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3673,11 +4822,299 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * the log AND as a generate-response issue, so the drop is not silent at the API level (dirigible
      * #6360). The generation itself still succeeds - the issue is a warning, not a 422.
      */
+    /**
+     * The condition of a cross-model items rule that compares the item's status relation with a NAME
+     * rather than a seed id (#7225), or null when there is none - no rule, a rule that gives the id, or
+     * an owner model that declares no status relation (or was not resolvable, the convention fallback
+     * of a unit test), in which case nothing here can tell which condition is the status one.
+     */
+    private static ScheduleConditionIntent crossModelItemStatusName(GeneratesItemsIntent items, CrossModelSupport.TargetInfo itemSource) {
+        return items == null || !items.hasWhere() ? null : crossModelStatusName(items.getWhere(), itemSource);
+    }
+
+    /**
+     * The condition of a cross-model row query that compares the owner's status relation with a NAME
+     * rather than a seed id, or null when there is none - no condition names the status, the one that
+     * does gives the id, or the owner model declares no status relation (or was not resolvable, the
+     * convention fallback of a unit test), in which case nothing here can tell which condition is the
+     * status one.
+     *
+     * <p>
+     * Shared by the two sites whose {@code { field, op, value }} triples run against a row this model
+     * does not own, and whose status names the parser's resolver therefore had to leave alone: a
+     * create-from's items rule (#7225) and a schedule's {@code where} (#7288).
+     *
+     * @param conditions the authored conditions
+     * @param target the owner's resolved facts
+     * @return the offending condition, or null
+     */
+    private static ScheduleConditionIntent crossModelStatusName(List<ScheduleConditionIntent> conditions,
+            CrossModelSupport.TargetInfo target) {
+        if (conditions == null || target == null || target.statusProperty() == null) {
+            return null;
+        }
+        for (ScheduleConditionIntent condition : conditions) {
+            if (condition.getField() != null && condition.getField()
+                                                         .equalsIgnoreCase(target.statusProperty())
+                    && !isSeedId(condition.getValue())) {
+                return condition;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The message describing the first condition of a cross-model row query whose MOMENT value is of
+     * another shape than the column it is compared against, or {@code null} when every moment matches
+     * (issue #7393).
+     *
+     * <p>
+     * The parser holds a same-model {@code where} to exactly this rule, but bails out when it cannot
+     * see the field - which a cross-model source's fields never are, their properties living in the
+     * owner model. The comment there promised the check happens at generation time; only EXISTENCE ever
+     * did ({@link #firstUnresolvableScheduleRef}), so a {@code CURRENT_TIMESTAMP} compared with a
+     * {@code date} column parsed, generated, published and compiled, and then threw
+     * {@code QueryArgumentException} on every tick - the same bind failure #7384 removed for the
+     * same-model case, reachable by the other route.
+     *
+     * <p>
+     * A property this model does not resolve (an unresolved owner, the convention fallback of a unit
+     * test) or that the owner does not declare is left alone: whether a reference exists at all is
+     * {@link #firstUnresolvableScheduleRef}'s question, and answering it twice with two wordings helps
+     * nobody.
+     *
+     * @param conditions the authored conditions
+     * @param target the owner's resolved facts
+     * @param entity the queried entity, for the message
+     * @param modelAlias the owner model's alias, for the message
+     * @return the message, or {@code null}
+     */
+    private static String crossModelMomentMismatch(List<ScheduleConditionIntent> conditions, CrossModelSupport.TargetInfo target,
+            String entity, String modelAlias) {
+        if (conditions == null || target == null || target.propertyTypes() == null) {
+            return null;
+        }
+        for (ScheduleConditionIntent condition : conditions) {
+            ScheduleSupport.Moment moment = ScheduleSupport.moment(condition.getValue());
+            if (moment == null || condition.getField() == null) {
+                continue; // an ordinary literal
+            }
+            String columnType = target.propertyTypes()
+                                      .get(IntentNaming.pascalCase(condition.getField()));
+            if (columnType == null) {
+                continue; // not a property of the owner - an existence question, answered elsewhere
+            }
+            String owned = "] of [" + entity + "], which belongs to model [" + modelAlias + "], ";
+            ScheduleSupport.Moment.Shape columnShape = ScheduleSupport.shapeOfColumn(columnType);
+            if (columnShape == null) {
+                return "where-condition compares the non-temporal field [" + condition.getField() + owned + "and whose column is ["
+                        + columnType + "], with the moment [" + condition.getValue() + "]";
+            }
+            if (columnShape != moment.shape()) {
+                return "where-condition compares the [" + columnType.toLowerCase(java.util.Locale.ROOT) + "] field [" + condition.getField()
+                        + owned + "with a moment of the other shape - use "
+                        + (columnShape == ScheduleSupport.Moment.Shape.DATE ? "CURRENT_DATE" : "CURRENT_TIMESTAMP");
+            }
+        }
+        return null;
+    }
+
+    /** Whether a where value is a whole number - as an id, or as the text of one. */
+    private static boolean isSeedId(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue() == number.doubleValue();
+        }
+        if (value == null) {
+            return false;
+        }
+        try {
+            Long.parseLong(String.valueOf(value)
+                                 .trim());
+            return true;
+        } catch (NumberFormatException ex) {
+            return false;
+        }
+    }
+
     private static void reportDroppedGlue(IntentGenerationContext context, String message) {
-        LOGGER.warn(message);
+        LOGGER.warn(LoggedValue.of(message));
         if (context != null) {
             context.addIssue(message);
         }
+    }
+
+    /**
+     * Report something the author should know about generated glue that WAS emitted - as opposed to
+     * {@link #reportDroppedGlue}, which reports what was refused. Both land in the same generate
+     * response; the wording is what tells them apart.
+     *
+     * @param context the generation context (null in a unit test)
+     * @param message a human-readable description of what was generated and what it will do
+     */
+    private static void reportGenerationAdvice(IntentGenerationContext context, String message) {
+        LOGGER.warn(LoggedValue.of(message));
+        if (context != null) {
+            context.addIssue(message);
+        }
+    }
+
+    /**
+     * The Java expression a {@code date} property assigned {@code now} renders as - the base every
+     * {@code run:} period bound is built from, and the marker that identifies which of a generate's
+     * assignments is the date the run writes.
+     */
+    /**
+     * The periods a {@code run:} key term ranges over - a {@code day} is a single date, not a range.
+     */
+    private static final java.util.Set<String> RANGED_PERIODS = java.util.Set.of("week", "month", "quarter", "year");
+
+    /**
+     * The pre-rendered terms of a scheduled generation's natural key (issues #7070, #7106): one
+     * {@code { property, expr }} per {@code generate.unique:} entry, the expression being the very one
+     * the target property is about to be assigned from - or, for a {@code { run: <period> }} entry, one
+     * {@code { kind: range, property, lower, upper }} over the date the run writes. The generated job
+     * queries the target by these before it builds anything, so a tick that already ran finds its own
+     * output and skips the row.
+     *
+     * <p>
+     * Reusing the assignment expression rather than re-deriving one is what keeps the guard honest: the
+     * value looked up and the value written cannot drift, including the shapes {@code now} renders per
+     * target field ({@code YearMonth.now().toString()} for a {@code month}, which is exactly what makes
+     * "the same month" comparable at all). A period term extends the same discipline: its bounds are
+     * derived from the assignment's own {@code LocalDate.now()}, so the period the guard queries is by
+     * construction the period the generated row is dated into.
+     *
+     * <p>
+     * The {@code kind} key is deliberately absent from a property term: a {@code .glue} written before
+     * #7106 carries none, Velocity evaluates the template's {@code #if($u.kind == "range")} as false
+     * for a map without the key, and such a job therefore still renders byte-identically.
+     *
+     * @param g the create-from block
+     * @param assignments the already-rendered map/defaults assignments against the loop row
+     * @return the key terms in declared order, empty when no key is declared, or null when an entry
+     *         names a property nothing assigns (the parser reports this too; a generation reached by
+     *         another route drops the schedule rather than emitting a guard on a null column)
+     */
+    private static List<Map<String, Object>> uniqueTerms(GeneratesIntent g, List<Map<String, Object>> assignments) {
+        if (!g.hasUnique()) {
+            return List.of();
+        }
+        Map<String, String> byProperty = new LinkedHashMap<>();
+        for (Map<String, Object> assignment : assignments) {
+            byProperty.put(String.valueOf(assignment.get("targetProp")), String.valueOf(assignment.get("expr")));
+        }
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (UniqueKeyIntent entry : g.getUnique()) {
+            if (entry == null) {
+                return null;
+            }
+            if (entry.isRun()) {
+                Map<String, Object> term = runTerm(entry, byProperty);
+                if (term == null) {
+                    return null;
+                }
+                terms.add(term);
+                continue;
+            }
+            String property = entry.getProperty();
+            if (property == null || property.isBlank()) {
+                return null;
+            }
+            String targetProp = IntentNaming.pascalCase(property);
+            String expression = byProperty.get(targetProp);
+            if (expression == null) {
+                return null;
+            }
+            terms.add(term("property", targetProp, "expr", expression));
+        }
+        return terms;
+    }
+
+    /**
+     * One period-of-the-run key term (issue #7106), as a range over the target date this generate
+     * assigns from {@code now}. The recurring-template family has no period column to key on - a
+     * monthly rent bill is a plain document with a {@code date} - and needs none: the document's own
+     * date already carries the period, so the guard asks whether a target dated anywhere inside the
+     * current period exists. That is what makes a re-run on the 14th find what the 1st created, and it
+     * is why no hidden period column and no run ledger were introduced.
+     *
+     * @param entry the {@code { run: <period> }} entry, its {@code of:} carrying the date the parser
+     *        resolved and pinned (issue #7229) - authored, or the single {@code date} default it chose
+     * @param byProperty the rendered assignment expression per target property
+     * @return the term, or null when {@code of:} is unpinned (an unvalidated model reached by another
+     *         route) or names a property this generate does not assign - either way the schedule is
+     *         dropped rather than a guard emitted over the wrong column
+     */
+    private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, String> byProperty) {
+        // The date the run writes is the property the parser PINNED onto `of` (issue #7229): the single
+        // `date` field this block assigns from `now`, chosen by a type check. Reusing that one resolution
+        // is what keeps the two layers from each defining "the date assigned from now" - this method sees
+        // only rendered expressions, and `now` on a timestamp field renders as the same LocalDate.now() a
+        // `date` field does, so the string scan this replaced counted a field the parser's check excludes.
+        // An `of` that is blank means an unvalidated model reached here by another route; drop the guard
+        // rather than range it over a guessed column.
+        if (entry.getOf() == null || entry.getOf()
+                                          .isBlank()) {
+            return null;
+        }
+        String property = IntentNaming.pascalCase(entry.getOf());
+        if (byProperty.get(property) == null) {
+            return null;
+        }
+        String period = entry.getRun()
+                             .trim()
+                             .toLowerCase(java.util.Locale.ROOT);
+        if ("day".equals(period)) {
+            // A single day needs no range - and rendering it as one would make the generated guard say
+            // `between(today, today)` where the author wrote `run: day`.
+            return term("property", property, "period", "day");
+        }
+        if (!RANGED_PERIODS.contains(period)) {
+            return null;
+        }
+        // The PERIOD, not where it begins and ends (issue #7406): a month is what the author declared,
+        // and the calendar arithmetic that turns it into a range is the template layer's rendering of
+        // it - which is also the only place the two bounds can be kept derived from one another.
+        return term("kind", "range", "property", property, "period", period);
+    }
+
+    /**
+     * One neutral value reading - a kind and the text of the value, in that order (issue #7406). The
+     * glue carries these where it used to carry the Java literal rendered from them; the rendering
+     * moved to the template layer, which is the only layer that knows what language it is generating.
+     *
+     * @param kind the reading's kind
+     * @param text the value, as text - the spelling survives a JSON round-trip, a number's parsed value
+     *        does not
+     * @return the reading
+     */
+    private static Map<String, Object> reading(String kind, String text) {
+        Map<String, Object> reading = new LinkedHashMap<>();
+        reading.put("kind", kind);
+        reading.put("text", text);
+        return reading;
+    }
+
+    /**
+     * One key term, in the order its keys are written here. The glue is a serialized artifact a regen
+     * rewrites in place, so a term's byte order has to be a property of the intent and nothing else -
+     * {@code Map.of} iterates in an order derived from a per-JVM random salt, which made the same
+     * intent serialize {@code {property, expr}} on one container and {@code {expr, property}} on the
+     * next (issue #7130). A hunk like that carries no meaning, has to be read and explained on every
+     * regen sweep, and would defeat a byte-identity check between two generations of one intent.
+     *
+     * @param keysAndValues the term's keys and values, alternating, in declaration order
+     * @return the term, iterating in that order
+     */
+    private static Map<String, Object> term(Object... keysAndValues) {
+        if (keysAndValues.length % 2 != 0) {
+            throw new IllegalArgumentException("a term is written as key/value pairs, got " + keysAndValues.length + " arguments");
+        }
+        Map<String, Object> term = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < keysAndValues.length; i += 2) {
+            term.put(String.valueOf(keysAndValues[i]), keysAndValues[i + 1]);
+        }
+        return term;
     }
 
     /**
@@ -3711,6 +5148,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The report attachment of a notify block, or {@code null} when none was asked for or it cannot be
+     * resolved - in which case the drop is reported with the precise reason. A report attachment that
+     * cannot be resolved must never degrade to a plain-text mail: the parameters are what scope the
+     * report to its recipient, so a mail whose bindings did not resolve would carry the wrong rows.
+     *
+     * @param notify the notify block
+     * @param entity the entity the message is about
+     * @param model the parsed model
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @param context the generation context (to surface the drop as a response issue)
+     * @param subject the call site, for the reported message
+     * @return the attachment, or {@code null}
+     */
+    private static NotifySupport.ReportAttachment reportAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        try {
+            return NotifySupport.reportAttachment(notify, entity, model, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
+    }
+
+    /**
      * The relation loads a notify-bearing handler must declare: the ones the message text needs, plus
      * the ones an authored {@code fileName:} pattern reads on top of them. Both sides name their local
      * after the relation, so a relation referenced by both is loaded ONCE - declaring it twice would
@@ -3721,19 +5183,70 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the merged loads, message-text ones first
      */
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment) {
+        return relationLoads(plan, attachment, null);
+    }
+
+    /**
+     * The same merge with a report attachment's loads folded in - the bindings and the file name of a
+     * rendered report read the same one-hop relations the message text does, through the same locals.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the merged loads, message-text ones first
+     */
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan, NotifySupport.PrintAttachment attachment,
+            NotifySupport.ReportAttachment report) {
+        return relationLoads(mergedLoads(plan, attachment, report));
+    }
+
+    /**
+     * The one-hop loads a notify block needs, in first-use order and deduplicated by local: the message
+     * text's, then a print attachment's file-name ones, then a report attachment's bindings. Returned
+     * as the typed records (rather than the glue projection) so a caller that also has loads of its own
+     * - a schedule that both generates and notifies (issue #7276) - can merge before projecting: the
+     * generated loop declares each local ONCE, so the same relation reached by both halves must not be
+     * loaded twice.
+     *
+     * @param plan the translated notify block
+     * @param attachment the resolved print attachment, or {@code null}
+     * @param report the resolved report attachment, or {@code null}
+     * @return the merged loads, message-text ones first
+     */
+    private static List<NotificationSupport.RelationLoad> mergedLoads(NotificationSupport.Plan plan,
+            NotifySupport.PrintAttachment attachment, NotifySupport.ReportAttachment report) {
         List<NotificationSupport.RelationLoad> merged = new ArrayList<>(plan.loads());
+        Set<String> declared = new LinkedHashSet<>();
+        for (NotificationSupport.RelationLoad load : merged) {
+            declared.add(load.local());
+        }
         if (attachment != null) {
-            Set<String> declared = new LinkedHashSet<>();
-            for (NotificationSupport.RelationLoad load : merged) {
-                declared.add(load.local());
-            }
             for (NotificationSupport.RelationLoad load : attachment.fileNameLoads()) {
                 if (declared.add(load.local())) {
                     merged.add(load);
                 }
             }
         }
-        return relationLoads(merged);
+        if (report != null) {
+            for (NotificationSupport.RelationLoad load : report.loads()) {
+                if (declared.add(load.local())) {
+                    merged.add(load);
+                }
+            }
+        }
+        return merged;
+    }
+
+    /** The loads with every repeated local dropped, keeping first-use order. */
+    private static List<NotificationSupport.RelationLoad> dedupeLoads(List<NotificationSupport.RelationLoad> loads) {
+        List<NotificationSupport.RelationLoad> unique = new ArrayList<>();
+        Set<String> declared = new LinkedHashSet<>();
+        for (NotificationSupport.RelationLoad load : loads) {
+            if (declared.add(load.local())) {
+                unique.add(load);
+            }
+        }
+        return unique;
     }
 
     private static List<Map<String, Object>> relationLoads(List<NotificationSupport.RelationLoad> resolved) {
@@ -3744,7 +5257,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> loaders = new ArrayList<>();
         for (FieldLoad load : ProcessFieldLoadSupport.fieldLoads(model)) {
             if (!settings.shouldGenerate("fieldLoaders", load.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for field loader [{}] (not generated)", load.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for field loader [{}] (not generated)",
+                        LoggedValue.of(load.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3770,7 +5284,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> loaders = new ArrayList<>();
         for (ProcessTimerSupport.TimerLoad load : ProcessTimerSupport.timerLoads(model)) {
             if (!settings.shouldGenerate("timerLoaders", load.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for timer loader [{}] (not generated)", load.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for timer loader [{}] (not generated)",
+                        LoggedValue.of(load.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3797,7 +5312,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> waits = new ArrayList<>();
         for (ProcessWaitSupport.Wait wait : ProcessWaitSupport.waits(model)) {
             if (!settings.shouldGenerate("waits", wait.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for wait [{}] (not generated)", wait.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for wait [{}] (not generated)", LoggedValue.of(wait.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3819,11 +5334,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return waits;
     }
 
-    private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {
+    private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> resolvers = new ArrayList<>();
-        for (Resolver resolver : ProcessResolverSupport.resolvers(model)) {
+        for (Resolver resolver : ProcessResolverSupport.resolvers(model, resolverCrossModelLookup(model, context))) {
             if (!settings.shouldGenerate("resolvers", resolver.handler())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)", resolver.handler());
+                LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)",
+                        LoggedValue.of(resolver.handler()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3841,16 +5357,40 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("ownerPerspective", resolver.ownerPerspective());
             entry.put("ownerKeyProperty", resolver.ownerKeyProperty());
             entry.put("ownerKeyAccessor", resolver.ownerKeyAccessor());
+            // A cross-model target's Entity/Repository live in the OWNER model's generation folder - the
+            // same registry-wide-compile mechanism a notify recipient's relation load uses.
+            entry.put("crossModel", resolver.crossModel());
+            entry.put("targetModel", resolver.targetModel());
             resolvers.add(entry);
         }
         return resolvers;
+    }
+
+    /**
+     * The owner facts of a cross-model {@code relation.field} referenced by a task form or a decision
+     * (dirigible #7093), read off the owner model's {@code .model}.
+     */
+    private static ProcessResolverSupport.CrossModelLookup resolverCrossModelLookup(IntentModel model, IntentGenerationContext context) {
+        if (context == null) {
+            return relation -> null;
+        }
+        return relation -> {
+            UsesIntent uses = findUses(model, relation.getModel());
+            if (uses == null) {
+                return null;
+            }
+            CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
+            return new ProcessResolverSupport.CrossModelTarget(target.perspectiveName(), uses.getModel(), target.propertyNames(),
+                    target.fkType());
+        };
     }
 
     private static List<Map<String, Object>> buildWriters(IntentModel model, IntentSettings settings) {
         List<Map<String, Object>> writers = new ArrayList<>();
         for (Writer writer : WriterSupport.writers(model)) {
             if (!settings.shouldGenerate("writers", writer.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for writer [{}] (not generated)", writer.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for writer [{}] (not generated)",
+                        LoggedValue.of(writer.className()));
                 continue;
             }
             List<Map<String, Object>> fields = new ArrayList<>();
@@ -3878,7 +5418,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> setters = new ArrayList<>();
         for (Setter setter : SetFieldSupport.setters(model)) {
             if (!settings.shouldGenerate("setters", setter.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for setter [{}] (not generated)", setter.className());
+                LOGGER.info("Settings opt-out: keeping existing handler for setter [{}] (not generated)",
+                        LoggedValue.of(setter.className()));
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -3891,6 +5432,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("field", setter.field());
             entry.put("value", setter.value());
             entry.put("relation", setter.relation() ? "true" : "false");
+            // A clearField setter assigns null instead of a literal (#7386). Emitted only when it is
+            // one, so every other setter's descriptor stays byte-identical.
+            if (setter.clear()) {
+                entry.put("clear", "true");
+            }
             // The {error} token (whole-value, parser-enforced) reads the failure message the runtime
             // conversion published instead of assigning a literal. Emitted only when used, so every
             // other setter's descriptor stays byte-identical.

@@ -20,11 +20,12 @@
         <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.togglePause()"
                 :title="state.paused ? T('monitoring:overview.resume', 'Resume auto-refresh') : T('monitoring:overview.pause', 'Pause auto-refresh')"
                 :aria-label="state.paused ? 'Resume auto-refresh' : 'Pause auto-refresh'">
-          <svg x-h-lucide x-show="!state.paused" role="img" data-lucide="pause"></svg>
-          <svg x-h-lucide x-show="state.paused" role="img" data-lucide="play"></svg>
+          <svg x-h-lucide x-show="!state.paused" role="presentation" data-lucide="pause"></svg>
+          <svg x-h-lucide x-show="state.paused" role="presentation" data-lucide="play"></svg>
         </button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()" :data-loading="state.refreshing">
-          <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+        <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()" :disabled="state.refreshing">
+          <template x-if="state.refreshing"><span x-h-spinner class="size-4"></span></template>
+          <svg role="presentation" x-h-lucide data-lucide="refresh-cw" x-show="!state.refreshing"></svg>
           <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
         </button>
       </div>
@@ -32,7 +33,7 @@
 
     <!-- First load: skeletons rather than an empty page that looks like "nothing is wrong". -->
     <div x-show="state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-24 w-full"></div></template>
+      <template x-for="i in 4" :key="i"><div x-h-skeleton class="w-full" style="height: 6rem"></div></template>
     </div>
 
     <!-- The all-clear. Shown only once every source has been read and none of them counted anything. -->
@@ -41,7 +42,7 @@
         <span x-h-avatar class="rounded-full" data-variant="positive">
           <svg x-h-icon data-icon="circle-success" role="img" aria-label="ok"></svg>
         </span>
-        <div class="vbox gap-0">
+        <div class="vbox">
           <span class="font-medium" x-text="T('monitoring:overview.allClear', 'Nothing needs attention')"></span>
           <span x-h-text.muted class="text-sm"
                 x-text="T('monitoring:overview.allClearHint', 'Synchronization, jobs and processes are all in a good state.')"></span>
@@ -55,7 +56,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="heart-pulse" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="heart-pulse" class="size-4"></svg>
             <span x-text="T('monitoring:overview.health', 'Health')"></span>
           </div>
         </div>
@@ -73,7 +74,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="plug-zap" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="plug-zap" class="size-4"></svg>
             <span x-text="T('monitoring:overview.readiness', 'Readiness')"></span>
           </div>
         </div>
@@ -90,7 +91,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="file-warning" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="file-warning" class="size-4"></svg>
             <span x-text="T('monitoring:overview.artefacts', 'Artefacts in error')"></span>
           </div>
         </div>
@@ -103,7 +104,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="alarm-clock" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="alarm-clock" class="size-4"></svg>
             <span x-text="T('monitoring:overview.jobs', 'Failed jobs')"></span>
           </div>
         </div>
@@ -116,7 +117,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="workflow" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="workflow" class="size-4"></svg>
             <span x-text="T('monitoring:overview.incidents', 'Process incidents')"></span>
           </div>
         </div>
@@ -131,7 +132,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="database" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="database" class="size-4"></svg>
             <span x-text="T('monitoring:overview.pools', 'Database pools')"></span>
           </div>
         </div>
@@ -153,7 +154,7 @@
       <div x-h-card>
         <div x-h-card-header>
           <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-            <i role="img" x-h-lucide data-lucide="mails" class="size-4"></i>
+            <svg role="presentation" x-h-lucide data-lucide="mails" class="size-4"></svg>
             <span x-text="T('monitoring:overview.broker', 'Broker backlog')"></span>
           </div>
         </div>
@@ -178,85 +179,91 @@
       </div>
     </div>
 
-    <div x-show="state.failedArtefacts.length" x-cloak x-h-card>
-      <div x-h-card-header>
+    <div x-show="state.failedArtefacts.length" x-cloak x-h-card class="overflow-hidden">
+      <div x-h-card-header class="border-b">
         <h2 x-h-card-title x-text="T('monitoring:overview.artefactsTitle', 'Artefacts that did not synchronize')"></h2>
       </div>
-      <div x-h-card-content class="overflow-x-auto">
-        <table x-h-table>
-          <thead x-h-table-header>
-            <tr>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProject', 'Project')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colLocation', 'Location')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colPhase', 'Phase')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colError', 'Error')"></th>
-            </tr>
-          </thead>
-          <tbody x-h-table-body>
-            <template x-for="artefact in state.failedArtefacts" :key="artefact.type + artefact.location + artefact.name">
+      <div x-h-card-content.flush>
+        <div x-h-table-container>
+          <table x-h-table>
+            <thead x-h-table-header data-bordered="horizontal">
               <tr x-h-table-row>
-                <td x-h-table-cell x-text="projectOf(artefact.location)"></td>
-                <td x-h-table-cell x-text="artefact.location"></td>
-                <td x-h-table-cell><span x-h-badge data-variant="negative" x-text="(artefact.phase || '') + ' · ' + artefact.status"></span></td>
-                <td x-h-table-cell :title="artefact.error" x-text="shorten(artefact.error)"></td>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProject', 'Project')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colLocation', 'Location')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colPhase', 'Phase')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colError', 'Error')"></th>
               </tr>
-            </template>
-          </tbody>
-        </table>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="artefact in state.failedArtefacts" :key="artefact.type + artefact.location + artefact.name">
+                <tr x-h-table-row>
+                  <td x-h-table-cell x-text="projectOf(artefact.location)"></td>
+                  <td x-h-table-cell x-text="artefact.location"></td>
+                  <td x-h-table-cell><span x-h-badge data-variant="negative" x-text="(artefact.phase || '') + ' · ' + artefact.status"></span></td>
+                  <td x-h-table-cell :title="artefact.error" x-text="shorten(artefact.error)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <div x-show="state.failedJobs.length" x-cloak x-h-card>
-      <div x-h-card-header>
+    <div x-show="state.failedJobs.length" x-cloak x-h-card class="overflow-hidden">
+      <div x-h-card-header class="border-b">
         <h2 x-h-card-title x-text="T('monitoring:overview.jobsTitle', 'Failed job executions')"></h2>
       </div>
-      <div x-h-card-content class="overflow-x-auto">
-        <table x-h-table>
-          <thead x-h-table-header>
-            <tr>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJob', 'Job')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colExecuted', 'Last run')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
-            </tr>
-          </thead>
-          <tbody x-h-table-body>
-            <template x-for="job in state.failedJobs" :key="job.name">
+      <div x-h-card-content.flush>
+        <div x-h-table-container>
+          <table x-h-table>
+            <thead x-h-table-header data-bordered="horizontal">
               <tr x-h-table-row>
-                <td x-h-table-cell x-text="job.name"></td>
-                <td x-h-table-cell x-text="executedAtText(job)"></td>
-                <td x-h-table-cell :title="job.message" x-text="shorten(job.message)"></td>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJob', 'Job')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colExecuted', 'Last run')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
               </tr>
-            </template>
-          </tbody>
-        </table>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="job in state.failedJobs" :key="job.name">
+                <tr x-h-table-row>
+                  <td x-h-table-cell x-text="job.name"></td>
+                  <td x-h-table-cell x-text="executedAtText(job)"></td>
+                  <td x-h-table-cell :title="job.message" x-text="shorten(job.message)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <div x-show="state.incidents.length" x-cloak x-h-card>
-      <div x-h-card-header>
+    <div x-show="state.incidents.length" x-cloak x-h-card class="overflow-hidden">
+      <div x-h-card-header class="border-b">
         <h2 x-h-card-title x-text="T('monitoring:overview.incidentsTitle', 'Stuck process instances')"></h2>
       </div>
-      <div x-h-card-content class="overflow-x-auto">
-        <table x-h-table>
-          <thead x-h-table-header>
-            <tr>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProcess', 'Process')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJobs', 'Dead-letter jobs')"></th>
-              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
-            </tr>
-          </thead>
-          <tbody x-h-table-body>
-            <template x-for="incident in state.incidents" :key="incident.id">
+      <div x-h-card-content.flush>
+        <div x-h-table-container>
+          <table x-h-table>
+            <thead x-h-table-header data-bordered="horizontal">
               <tr x-h-table-row>
-                <td x-h-table-cell x-text="incident.definition"></td>
-                <td x-h-table-cell x-text="incident.businessKey"></td>
-                <td x-h-table-cell x-text="incident.jobCount"></td>
-                <td x-h-table-cell :title="incident.message" x-text="shorten(incident.message)"></td>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProcess', 'Process')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJobs', 'Dead-letter jobs')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
               </tr>
-            </template>
-          </tbody>
-        </table>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="incident in state.incidents" :key="incident.id">
+                <tr x-h-table-row>
+                  <td x-h-table-cell x-text="incident.definition"></td>
+                  <td x-h-table-cell x-text="incident.businessKey"></td>
+                  <td x-h-table-cell x-text="incident.jobCount"></td>
+                  <td x-h-table-cell :title="incident.message" x-text="shorten(incident.message)"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

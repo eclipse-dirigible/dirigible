@@ -13,10 +13,34 @@ import java.util.List;
 
 /**
  * A declarative validation on an {@link EntityIntent} - the cross-field / cross-line rules a plain
- * {@code required}/{@code unique} cannot express. Three kinds:
+ * {@code required}/{@code unique} cannot express. Five kinds:
  * <ul>
  * <li>{@code exactlyOne} (row-level): exactly one of {@link #fields} is non-null on the record (a
  * journal line is either debit or credit) - enforced on every user write;</li>
+ * <li>{@code compare}: {@link #field} compared with {@link #op} either to {@link #than} - another
+ * value of the SAME row that it must stand in a relation to (a due date not before the document
+ * date, a validity end not before its start) - or to a {@link #value} LITERAL (a quantity greater
+ * than zero, a percentage at most 100, a date not in the past). Row-level by default, so it is
+ * enforced on every user write; with a {@link #status} gate it is the repository's, and holds when
+ * the record is persisted carrying that status - "days &gt; 0 before SUBMITTED" rather than on the
+ * first draft;</li>
+ * <li>{@code agree}: the two to-one {@link #relations} of a junction row must AGREE on
+ * {@link #onProperty} - the property both their targets declare (a payment allocated against an
+ * invoice of another customer, or in another currency, is the rule a hand-written guard class used
+ * to carry). Row-level, so it is enforced on every user write; {@link #whenNull} decides what an
+ * unset side means, and defaults to skipping (the relation's own {@code required} is what makes it
+ * mandatory);</li>
+ * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
+ * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
+ * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
+ * document is persisted carrying that status - the moment the value is finally needed;</li>
+ * <li>{@code forbidWhen}: the reject-twin of {@code requiredWhen} - reject the write while
+ * {@link #when} holds (a payment allocation cannot be added to an already PAID invoice). It carries
+ * no {@link #field}/value, only the condition; its one added reach is that a {@link #when} term may
+ * name a one-hop {@code Relation.field}, so a child can test its parent (the status literal there
+ * resolving against the relation target's nomenclature). Same gate rule as {@code requiredWhen}: no
+ * gate = every user write (a 400 the generated controller raises), a gate = the repository when the
+ * record is persisted carrying that status;</li>
  * <li>{@code itemsSumEqual} (document-level): the sums of the two {@link #over} fields across the
  * document's composition items are equal (the double-entry invariant) - enforced when the document
  * is persisted carrying the {@link #status} gate seed id, i.e. at the workflow transition;</li>
@@ -29,13 +53,67 @@ public class CheckIntent {
     private String kind;
     /** {@code exactlyOne}: the record's own fields, exactly one of which must be non-null. */
     private List<String> fields;
+    /**
+     * The value the check is ABOUT - the two row-level kinds that name one share the key.
+     * {@code compare}: the record's own field on the left of the comparison. {@code requiredWhen}: the
+     * value that must be present - the record's own field, or a one-hop {@code Relation.field} over a
+     * to-one (whose target may be owned by another model, as everywhere else a path is walked).
+     */
+    private String field;
+    /**
+     * {@code compare}: the comparison - {@code ge}, {@code gt}, {@code le}, {@code lt}, {@code eq} or
+     * {@code ne}. Required: an omitted operator has no defensible default (a due date not BEFORE the
+     * document date and one strictly AFTER it are different rules).
+     */
+    private String op;
+    /** {@code compare}: the record's own field on the right of the comparison. */
+    private String than;
+    /**
+     * {@code compare}: a LITERAL on the right of the comparison, the alternative to {@link #than}
+     * (issue #7338) - exactly one of the two, since a comparison has one right-hand side. Typed by the
+     * field it is compared with: a number for a numeric field, and for a temporal one either a moment
+     * ({@code CURRENT_DATE}, {@code CURRENT_TIMESTAMP}, {@code NOW}, with at most one signed ISO-8601
+     * offset - the vocabulary a schedule's {@code where:} already carries, resolved against the clock
+     * of the write) or a quoted ISO-8601 date/instant. This is what makes "a quantity is positive", "a
+     * percentage is at most 100" and "a date is not in the past" declarations rather than a hand-edited
+     * {@code validate()} or a calculation that throws.
+     */
+    private Object value;
     /** {@code itemsSumEqual}: the two numeric item fields whose sums must be equal. */
     private List<String> over;
+    /**
+     * {@code agree}: exactly two to-one relations of the entity - the two records the junction row
+     * links, which must point at the same {@link #onProperty}.
+     */
+    private List<String> relations;
+    /**
+     * {@code agree}: the property BOTH targets declare and must agree on - a to-one of theirs (compared
+     * by its foreign key: the same {@code Customer}, the same {@code Currency}) or a scalar field with
+     * an exact equality. Spelled {@code onProperty} and not {@code on}, because YAML 1.1 resolves a
+     * bare {@code on} key to the boolean {@code true} and the declaration would silently bind to
+     * nothing - the parser refuses that spelling by name rather than dropping it.
+     */
+    private String onProperty;
+    /**
+     * {@code agree}: what an unset side means - {@code skip} (the default: a row that does not carry
+     * both values yet has nothing to disagree about, and requiredness is its own declaration) or
+     * {@code refuse}.
+     */
+    private String whenNull;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
     /**
-     * Document-level checks only: the EntityStatus seed id gating the check - it runs when the document
-     * is persisted carrying this status (the workflow transition into e.g. POSTED), so drafting
+     * {@code requiredWhen} / {@code forbidWhen}: the condition - a {@code <Property> == <literal>} /
+     * {@code != } comparison, or a list of them (an implicit AND). {@code requiredWhen} reads the
+     * record's own properties; {@code forbidWhen} additionally accepts a one-hop {@code Relation.field}
+     * (a child testing its parent). A status name resolves to its seed id, as in every other guard.
+     */
+    private Object when;
+    /**
+     * The {@code status} gate. On the document-level checks it is required; on {@code requiredWhen} /
+     * {@code forbidWhen} it is optional and it is the routing: without one the check holds on every
+     * user write (the generated controller), with one it runs in the repository when the record is
+     * persisted carrying this status (the workflow transition into e.g. POSTED), so drafting
      * item-by-item stays unconstrained.
      */
     private Integer status;
@@ -83,6 +161,22 @@ public class CheckIntent {
 
     public String getKind() {
         return kind;
+    }
+
+    public String getField() {
+        return field;
+    }
+
+    public void setField(String field) {
+        this.field = field;
+    }
+
+    public Object getWhen() {
+        return when;
+    }
+
+    public void setWhen(Object when) {
+        this.when = when;
     }
 
     public String getOutcome() {
@@ -137,6 +231,30 @@ public class CheckIntent {
         this.kind = kind;
     }
 
+    public String getOp() {
+        return op;
+    }
+
+    public void setOp(String op) {
+        this.op = op;
+    }
+
+    public String getThan() {
+        return than;
+    }
+
+    public Object getValue() {
+        return value;
+    }
+
+    public void setValue(Object value) {
+        this.value = value;
+    }
+
+    public void setThan(String than) {
+        this.than = than;
+    }
+
     public List<String> getFields() {
         return fields;
     }
@@ -151,6 +269,30 @@ public class CheckIntent {
 
     public void setOver(List<String> over) {
         this.over = over;
+    }
+
+    public List<String> getRelations() {
+        return relations;
+    }
+
+    public void setRelations(List<String> relations) {
+        this.relations = relations;
+    }
+
+    public String getOnProperty() {
+        return onProperty;
+    }
+
+    public void setOnProperty(String onProperty) {
+        this.onProperty = onProperty;
+    }
+
+    public String getWhenNull() {
+        return whenNull;
+    }
+
+    public void setWhenNull(String whenNull) {
+        this.whenNull = whenNull;
     }
 
     public Integer getCount() {

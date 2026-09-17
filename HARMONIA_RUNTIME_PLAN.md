@@ -62,8 +62,8 @@ this repo as the canonical pattern source for Workstreams 1–5.
      <div x-h-split-panel> … main … </div>
    </div>
    ```
-   Documented attributes: `data-orientation="horizontal|vertical"` (h is default), `data-default-size`
-   (percentages, panels should sum to 100), `data-min` / `data-max` (px clamps), `data-locked="true"`
+   Documented attributes: `data-orientation="horizontal|vertical"` (h is default), `data-size`
+   (a percentage or px per panel; the sizes should sum to 100%), `data-min` / `data-max` (px clamps), `data-locked="true"`
    (non-resizable pane), `data-gutterless="true"` (hide the drag handle), `data-variant="border"`,
    `:data-hidden` (collapse a pane reactively). This covers **both** uses the plan flagged — master-detail
    views *and* shell layout — so the `platformSplit` port is unnecessary. Decision in Phase 1 is resolved:
@@ -88,13 +88,14 @@ this repo as the canonical pattern source for Workstreams 1–5.
    the existing Angular shell over the hub protocol. The two models are mutually exclusive per app; choose
    deliberately (see "Reconciling the two shell models" below).
 
-4. **Icons are Lucide + Harmonia built-ins, not Unicons.** athena loads `lucide` UMD and uses
-   `<i data-lucide="file-text">` for nav/content icons plus Harmonia's built-in `x-h-icon.*` set
-   (`.home`, `.bell`, `.close`, `.circle-info`, `.search`, `.edit`, `.trash`, ~30 glyphs — no Lucide
-   dependency for those). It re-runs `lucide.createIcons()` on `alpine:initialized` and every
-   `pinecone:end` (and pages call a `refreshIcons()` mixin after DOM-mutating actions, since injected
-   markup isn't auto-processed). Workstream 6 should re-scope from "→ Unicons" to "→ Lucide + Harmonia
-   built-ins" unless Unicons is a hard brand requirement.
+4. **Icons are Lucide + Harmonia built-ins, not Unicons.** athena loads the `lucide` UMD and uses
+   `<svg x-h-lucide data-lucide="file-text">` placeholders for nav/content icons plus Harmonia's
+   built-in `x-h-icon data-icon="..."` set (`home`, `bell`, `close`, `circle-info`, `search`, `edit`,
+   `trash`, ~40 glyphs — no Lucide dependency for those). The `harmonia-lucide` plugin renders each
+   placeholder when Alpine initializes it, in router-swapped views and `x-for` loops alike, so there is
+   no `lucide.createIcons()` pass anywhere (the `refreshIcons()` mixin is a kept-for-compatibility
+   no-op). Workstream 6 should re-scope from "→ Unicons" to "→ Lucide + Harmonia built-ins" unless
+   Unicons is a hard brand requirement.
 
 5. **The "EntityClient" and i18n/error layers already exist** (Workstream 2 is largely written):
    - `js/services/api.js` — a plain `fetch` client `App.services.api` with `get/post/put/delete`,
@@ -127,7 +128,8 @@ this repo as the canonical pattern source for Workstreams 1–5.
   (`asc → desc → none` via `cycleSort`), and client pagination with an ellipsis `pageNumbers` builder.
   This is the parity target for the generated `list` / `master-list` templates.
 - **Toasts** are an `Alpine.store('toasts')` queue rendered through `x-h-notification-overlay` templates;
-  the richer `$notifications.add({ template, data, timeout })` magic is also available.
+  the public `$notifications.add({ id, template, position, timeout, data, sound })` magic is the way to
+  raise one (Dirigible's shared `notifications` store is handed it once at shell init via `attachToaster`).
 - **Empty/error states** use `x-h-info-page` (icon/title/description/actions) — the answer to the plan's
   "message page (empty-state)" minor gap. Dashboards use `x-h-tile` + the `tile-*`/`grid-cols-1..12`
   utilities.
@@ -300,7 +302,7 @@ Consequences of this choice that reshape the phasing:
    task forms**, completing via `/services/inbox/tasks/{id}` and self-closing), plus the Alpine
    `entity-process-tasks` equivalent gated on the `hasProcess`/`ProcessId` flag.
 4. **Icons, theming, polish.** Migrate `sap-icon--*`/perspective SVGs to **Lucide + Harmonia built-ins**
-   (re-run `lucide.createIcons()` on `pinecone:end`/after DOM mutations); finalize the theme bridge;
+   (`<svg x-h-lucide>` placeholders rendered by the `harmonia-lucide` plugin); finalize the theme bridge;
    empty-states via `x-h-info-page`; scrollbars; and an audit that all generated markup stays inside
    Harmonia's curated Tailwind subset (no arbitrary/hue/`>12` utilities).
 5. **Wire generation + parity ITs.** Register the template in `service-generate`; add the stack choice to
@@ -369,10 +371,11 @@ Process Inbox (`/inbox`) and Documents (`/documents`).
 
 ### Embedding (Phase 1 — no CDN)
 
-Alpine `3.15.11`, Harmonia `2.1.0`, Lucide `1.8.0`, chart.js `4.4.3` are **webjars** (served
-version-less via webjars-locator at `/webjars/...`); Pinecone Router (no webjar) is **vendored** under
-`application-core/.../vendor/` (license-excluded). The generated `index.html` references only these
-local URLs.
+Alpine `3.16.3`, Harmonia `3.1.2`, Lucide `1.20.0` and Pinecone Router `7.6.0` are **webjars** (served
+version-less via webjars-locator at `/webjars/...`; the versions are the `*.version` properties in the
+root pom). The chart.js webjar was dropped with the AngularJS dashboard shell (reports use Harmonia's
+native `x-h-chart-*`), and the once-vendored Pinecone Router copy under `application-core/.../vendor/`
+is gone. The generated `index.html` references only these local URLs.
 
 ### Runtime contracts (the invariants future work must keep)
 

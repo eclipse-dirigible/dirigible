@@ -27,8 +27,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.eclipse.dirigible.engine.java.runtime.ClientBeanResolver;
+import org.eclipse.dirigible.engine.java.runtime.ClientBeanFactory;
 import org.eclipse.dirigible.engine.java.runtime.ClientBeansHolder;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -43,12 +44,14 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
  * eagerly instantiates singletons with recursive <em>constructor injection</em> (plus
  * {@code @Inject} field injection and {@code @PostConstruct} callbacks), detecting construction
  * cycles. The behaviour consumers ({@code @Controller}, {@code @Scheduled}, {@code @Listener},
- * {@code @Websocket}, {@code @Extension}) then fetch the ready instances via
- * {@link #instanceOf(Class)} rather than instantiating client classes themselves.
+ * {@code @Websocket}) then fetch the ready instances via {@link #instanceOf(Class)} rather than
+ * instantiating client classes themselves.
  *
  * <p>
- * Implements {@link ClientBeanResolver} and publishes itself into {@link ClientBeansHolder} so the
- * SDK facade {@code org.eclipse.dirigible.sdk.component.Beans} can resolve client beans.
+ * Implements {@link ClientBeanFactory} and publishes itself into {@link ClientBeansHolder} so the
+ * SDK facade {@code org.eclipse.dirigible.sdk.component.Beans} can resolve client beans, and the
+ * BPM engine can wire a client {@code JavaDelegate} Flowable instantiated itself
+ * ({@link #createUnmanaged(Class)}).
  *
  * <p>
  * Threading: {@link #rebuild(Collection)} runs on the single synchronization thread and publishes
@@ -56,9 +59,12 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
  * HTTP dispatch threads.
  */
 @org.springframework.stereotype.Component
-public class ComponentContainer implements ClientBeanResolver {
+public class ComponentContainer implements ClientBeanFactory {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ComponentContainer.class);
+
+    /** Flowable's delegate interface, referenced by name — see {@link #isJavaDelegate(Class)}. */
+    private static final String FLOWABLE_JAVA_DELEGATE = "org.flowable.engine.delegate.JavaDelegate";
 
     /** Definitions of the live generation, in registration order. */
     private volatile List<BeanDefinition> definitions = List.of();
@@ -71,6 +77,16 @@ public class ComponentContainer implements ClientBeanResolver {
 
     /** client class FQN → wiring error from the last rebuild (so the synchronizer can surface it). */
     private volatile Map<String, String> wiringErrors = Map.of();
+
+    /** client class FQN → wiring warning from the last rebuild (surfaced, but not a failure). */
+    private volatile Map<String, String> wiringWarnings = Map.of();
+
+    /**
+     * Classes already warned about on the {@link #createUnmanaged(Class)} path in this generation, so
+     * the same fact is stated once and then only at DEBUG. Cleared by {@link #rebuild(Collection)}: a
+     * republish is a new generation, and the developer who just changed the class should hear it again.
+     */
+    private final Set<String> reportedUnmanagedBeans = ConcurrentHashMap.newKeySet();
 
     public ComponentContainer(ClientBeansHolder holder) {
         holder.swap(this);
@@ -89,6 +105,19 @@ public class ComponentContainer implements ClientBeanResolver {
     }
 
     /**
+     * Wiring <em>warnings</em> from the last {@link #rebuild(Collection)} keyed by client class FQN —
+     * today exactly one: a bean that is also a Flowable {@code JavaDelegate}. The class still works, so
+     * this is deliberately not a {@link #wiringErrors() wiring error} (the artefact stays healthy); it
+     * is surfaced on the Problems view at publish because that is where the developer who annotated the
+     * class looks, whereas the execution-time WARN only reaches whoever happens to run the process.
+     *
+     * @return an immutable FQN → message map (empty if the last rebuild had nothing to warn about)
+     */
+    public Map<String, String> wiringWarnings() {
+        return wiringWarnings;
+    }
+
+    /**
      * Re-create the whole client bean set for a new generation. Builds and instantiates the new beans
      * first, publishes them atomically, then tears down the previous generation (so reads transition
      * cleanly old → new). Per-bean failures are logged and skipped — one bad bean never aborts the
@@ -103,6 +132,7 @@ public class ComponentContainer implements ClientBeanResolver {
         Map<String, BeanDefinition> byName = new LinkedHashMap<>();
         List<BeanDefinition> ordered = new ArrayList<>();
         Map<String, String> errors = new LinkedHashMap<>();
+        Map<String, String> warnings = new LinkedHashMap<>();
         ClassLoader loader = null;
         for (LoadedClass info : loaded) {
             if (info == null) {
@@ -113,6 +143,14 @@ public class ComponentContainer implements ClientBeanResolver {
                 continue;
             }
             loader = info.loader();
+            if (isJavaDelegate(type)) {
+                // The bean is still registered - the annotation is the mistake, not the class - so this
+                // rebuild behaves exactly as it did before the check existed, and the only new effect is
+                // the Problems entry the synchronizer projects from wiringWarnings().
+                String message = componentOnDelegateMessage(type.getName());
+                LOGGER.warn(message);
+                warnings.put(type.getName(), message);
+            }
             try {
                 String name = beanName(type);
                 BeanDefinition existing = byName.get(name);
@@ -171,6 +209,8 @@ public class ComponentContainer implements ClientBeanResolver {
         this.singletons = java.util.Collections.unmodifiableMap(snapshot);
         this.instancesByType = java.util.Collections.unmodifiableMap(byType);
         this.wiringErrors = Map.copyOf(errors);
+        this.wiringWarnings = Map.copyOf(warnings);
+        reportedUnmanagedBeans.clear();
 
         destroy(previousDefinitions, previousSingletons);
         LOGGER.info("Client bean container rebuilt: {} bean(s).", snapshot.size());
@@ -188,28 +228,12 @@ public class ComponentContainer implements ClientBeanResolver {
         }
         inCreation.addLast(definition.name());
         try {
-            Constructor<?> constructor = definition.constructor();
-            Parameter[] parameters = constructor.getParameters();
-            Object[] args = new Object[parameters.length];
-            for (int i = 0; i < parameters.length; i++) {
-                args[i] = resolve(parameters[i].getType(), parameters[i].getParameterizedType(), parameterName(parameters[i]),
-                        definition.type(), byName, ordered, created, inCreation);
-            }
-            Object instance;
-            try {
-                instance = constructor.newInstance(args);
-            } catch (InvocationTargetException e) {
-                Throwable cause = e.getCause() != null ? e.getCause() : e;
-                throw new BeanContainerException("Constructor of [" + definition.type()
-                                                                                .getName()
-                        + "] threw: " + cause.getMessage(), cause);
-            } catch (ReflectiveOperationException e) {
-                throw new BeanContainerException("Cannot instantiate [" + definition.type()
-                                                                                    .getName()
-                        + "]: " + e.getMessage(), e);
-            }
+            CandidateSource source = generationSource(byName, ordered, created, inCreation);
+            Object instance = instantiate(definition, source);
+            // Registered before field injection on purpose: an @Inject-field cycle then terminates on
+            // the half-built instance, while a constructor cycle is caught above.
             created.put(definition.name(), instance);
-            injectFields(definition, instance, byName, ordered, created, inCreation);
+            injectFields(definition, instance, source);
             invokePostConstruct(definition, instance);
             return instance;
         } finally {
@@ -217,11 +241,36 @@ public class ComponentContainer implements ClientBeanResolver {
         }
     }
 
-    private void injectFields(BeanDefinition definition, Object instance, Map<String, BeanDefinition> byName, List<BeanDefinition> ordered,
-            Map<String, Object> created, Deque<String> inCreation) {
+    /**
+     * Construct one instance, resolving every constructor parameter through {@code source}. Shared by
+     * the rebuild path and {@link #createUnmanaged(Class)} so both obey one constructor-selection and
+     * one dependency-resolution rule.
+     */
+    private Object instantiate(BeanDefinition definition, CandidateSource source) {
+        Constructor<?> constructor = definition.constructor();
+        Parameter[] parameters = constructor.getParameters();
+        Object[] args = new Object[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+            args[i] = resolve(parameters[i].getType(), parameters[i].getParameterizedType(), parameterName(parameters[i]),
+                    definition.type(), source);
+        }
+        try {
+            return constructor.newInstance(args);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            throw new BeanContainerException("Constructor of [" + definition.type()
+                                                                            .getName()
+                    + "] threw: " + cause.getMessage(), cause);
+        } catch (ReflectiveOperationException e) {
+            throw new BeanContainerException("Cannot instantiate [" + definition.type()
+                                                                                .getName()
+                    + "]: " + e.getMessage(), e);
+        }
+    }
+
+    private void injectFields(BeanDefinition definition, Object instance, CandidateSource source) {
         for (Field field : definition.injectFields()) {
-            Object value = resolve(field.getType(), field.getGenericType(), field.getName(), definition.type(), byName, ordered, created,
-                    inCreation);
+            Object value = resolve(field.getType(), field.getGenericType(), field.getName(), definition.type(), source);
             try {
                 field.set(instance, value);
             } catch (IllegalAccessException e) {
@@ -233,42 +282,92 @@ public class ComponentContainer implements ClientBeanResolver {
     }
 
     /** Resolve one injection point — a collection of all matches, or the single matching bean. */
-    private Object resolve(Class<?> rawType, Type genericType, String nameHint, Class<?> owner, Map<String, BeanDefinition> byName,
-            List<BeanDefinition> ordered, Map<String, Object> created, Deque<String> inCreation) {
+    private Object resolve(Class<?> rawType, Type genericType, String nameHint, Class<?> owner, CandidateSource source) {
         if (Collection.class.isAssignableFrom(rawType)) {
             Class<?> element = elementType(genericType);
             List<Object> values = new ArrayList<>();
-            for (BeanDefinition candidate : ordered) {
-                if (element.isAssignableFrom(candidate.type())) {
-                    values.add(getOrCreate(candidate, byName, ordered, created, inCreation));
-                }
+            for (String name : source.namesAssignableTo(element)) {
+                values.add(source.instanceFor(name));
             }
             return Set.class.isAssignableFrom(rawType) ? new LinkedHashSet<>(values) : values;
         }
-        List<BeanDefinition> candidates = new ArrayList<>();
-        for (BeanDefinition candidate : ordered) {
-            if (rawType.isAssignableFrom(candidate.type())) {
-                candidates.add(candidate);
-            }
-        }
+        List<String> candidates = source.namesAssignableTo(rawType);
         if (candidates.size() == 1) {
-            return getOrCreate(candidates.get(0), byName, ordered, created, inCreation);
+            return source.instanceFor(candidates.get(0));
         }
         if (candidates.isEmpty()) {
             throw new BeanContainerException("No client bean of type [" + rawType.getName() + "] to inject into [" + owner.getName()
                     + "]. Declare it as @Component, or use Beans.get(...) for a platform service.");
         }
-        if (nameHint != null) {
-            BeanDefinition named = byName.get(nameHint);
-            if (named != null && rawType.isAssignableFrom(named.type())) {
-                return getOrCreate(named, byName, ordered, created, inCreation);
-            }
+        if (nameHint != null && candidates.contains(nameHint)) {
+            return source.instanceFor(nameHint);
         }
-        List<String> names = candidates.stream()
-                                       .map(BeanDefinition::name)
-                                       .toList();
         throw new BeanContainerException("Ambiguous dependency of type [" + rawType.getName() + "] for [" + owner.getName()
-                + "]: candidates " + names + ". Use a more specific type or match the parameter/field name to a bean name.");
+                + "]: candidates " + candidates + ". Use a more specific type or match the parameter/field name to a bean name.");
+    }
+
+    /**
+     * Where an injection point's candidates come from, and how one becomes an instance. Two
+     * implementations — the generation being built (constructing a collaborator on demand) and the live
+     * singletons (constructing nothing) — so {@link #resolve} states the resolution rule once, for
+     * beans and for unmanaged instances alike.
+     */
+    private interface CandidateSource {
+
+        /** Bean names assignable to {@code required}, in registration order. */
+        List<String> namesAssignableTo(Class<?> required);
+
+        /** The instance registered under {@code name}, created on demand if this source builds beans. */
+        Object instanceFor(String name);
+    }
+
+    /** Candidates from the generation currently being built; a collaborator is created on demand. */
+    private CandidateSource generationSource(Map<String, BeanDefinition> byName, List<BeanDefinition> ordered, Map<String, Object> created,
+            Deque<String> inCreation) {
+        return new CandidateSource() {
+
+            @Override
+            public List<String> namesAssignableTo(Class<?> required) {
+                List<String> names = new ArrayList<>();
+                for (BeanDefinition candidate : ordered) {
+                    if (required.isAssignableFrom(candidate.type())) {
+                        names.add(candidate.name());
+                    }
+                }
+                return names;
+            }
+
+            @Override
+            public Object instanceFor(String name) {
+                return getOrCreate(byName.get(name), byName, ordered, created, inCreation);
+            }
+        };
+    }
+
+    /**
+     * Candidates from the live generation's singletons — the source an unmanaged instance wires
+     * against. It constructs nothing, so a dependency cycle is impossible on this path; the snapshot is
+     * read once by the caller so the whole instance is wired against one consistent generation.
+     */
+    private static CandidateSource singletonSource(Map<String, Object> live) {
+        return new CandidateSource() {
+
+            @Override
+            public List<String> namesAssignableTo(Class<?> required) {
+                List<String> names = new ArrayList<>();
+                for (Map.Entry<String, Object> entry : live.entrySet()) {
+                    if (required.isInstance(entry.getValue())) {
+                        names.add(entry.getKey());
+                    }
+                }
+                return names;
+            }
+
+            @Override
+            public Object instanceFor(String name) {
+                return live.get(name);
+            }
+        };
     }
 
     private void invokePostConstruct(BeanDefinition definition, Object instance) {
@@ -363,8 +462,98 @@ public class ComponentContainer implements ClientBeanResolver {
         return result;
     }
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>
+     * The one client class the container cannot own: a {@code JavaDelegate}, which Flowable
+     * instantiates itself. Wiring it here rather than registering it as a bean is deliberate —
+     * annotating a delegate {@code @Component} would build a fully-injected singleton the engine never
+     * runs, next to the un-injected instance it does.
+     */
+    @Override
+    public <T> Optional<T> createUnmanaged(Class<T> type) {
+        if (isBean(type)) {
+            // Once per class per generation, then DEBUG: on the ${JavaTask} path a fresh delegate is
+            // wired for every execution, so an unconditional WARN would restate the same fact on every
+            // tick of a step that runs all day. The publish-time entry in wiringWarnings() is the one a
+            // developer is meant to read; this line only serves whoever is already reading the log.
+            if (reportedUnmanagedBeans.add(type.getName())) {
+                LOGGER.warn(componentOnUnmanagedMessage(type.getName()));
+            } else if (LOGGER.isDebugEnabled()) {
+                // Guarded because this runs per step execution: with DEBUG off, the suppressed repeat
+                // must not even build its message.
+                LOGGER.debug(componentOnUnmanagedMessage(type.getName()));
+            }
+        }
+        BeanDefinition definition = new BeanDefinition(type.getName(), type);
+        if (!declaresInjectionPoint(definition)) {
+            // Nothing to wire: the caller's own no-arg instantiation is equivalent, so it stays on it
+            // and every class that worked before this existed behaves identically.
+            return Optional.empty();
+        }
+        // One read of the volatile snapshot, so the whole instance is wired against one generation.
+        CandidateSource source = singletonSource(singletons);
+        Object instance = instantiate(definition, source);
+        injectFields(definition, instance, source);
+        invokePostConstruct(definition, instance);
+        if (!definition.preDestroyMethods()
+                       .isEmpty()) {
+            LOGGER.warn("[{}] declares @PreDestroy, which is never invoked: the container does not own this instance.", type.getName());
+        }
+        return Optional.of(type.cast(instance));
+    }
+
+    /** Whether the container would do anything for this class beyond calling its no-arg constructor. */
+    private static boolean declaresInjectionPoint(BeanDefinition definition) {
+        return definition.constructor()
+                         .getParameterCount() > 0
+                || !definition.injectFields()
+                              .isEmpty()
+                || !definition.postConstructMethods()
+                              .isEmpty();
+    }
+
     private static boolean isBean(Class<?> type) {
         return AnnotatedElementUtils.hasAnnotation(type, Component.class);
+    }
+
+    /**
+     * Whether {@code type} is a Flowable {@code JavaDelegate}, matched by interface <em>name</em>:
+     * {@code engine-java} cannot see the Flowable type ({@code engine-bpm-flowable} depends on this
+     * module, not the other way round), which is also why the {@link #createUnmanaged(Class)} check is
+     * the broader {@code isBean}.
+     */
+    private static boolean isJavaDelegate(Class<?> type) {
+        for (Class<?> current = type; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (Class<?> implemented : current.getInterfaces()) {
+                if (FLOWABLE_JAVA_DELEGATE.equals(implemented.getName()) || isJavaDelegate(implemented)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The publish-time wording: the rebuild knows the bean is a delegate, so it says so. */
+    private static String componentOnDelegateMessage(String className) {
+        return "[" + className + "] implements " + FLOWABLE_JAVA_DELEGATE + " and is annotated @Component. A JavaDelegate"
+                + " must NOT be a @Component: Flowable instantiates the delegate itself, so the annotation additionally builds"
+                + " a container-managed singleton the engine never runs — a stray candidate for every List<JavaDelegate>"
+                + " injection. Remove @Component from the delegate.";
+    }
+
+    /**
+     * The execution-time wording. It says {@code instantiated outside the container} rather than
+     * {@code JavaDelegate}, because the detection here is {@code isBean} on whatever class the caller
+     * asked to wire unmanaged - true of a delegate today, but the message must not claim more than it
+     * actually checked.
+     */
+    private static String componentOnUnmanagedMessage(String className) {
+        return "[" + className + "] is annotated @Component but is instantiated outside the container (which is what a"
+                + " JavaDelegate is: Flowable instantiates it itself). Such a class must NOT be a @Component: the annotation"
+                + " additionally builds a container-managed singleton nothing ever runs — a stray candidate for every"
+                + " collection injection point of its type. Remove @Component from it.";
     }
 
     private static String beanName(Class<?> type) {

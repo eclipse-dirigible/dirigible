@@ -37,9 +37,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.quartz.JobKey;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -110,9 +107,6 @@ class TenantSelectionIT extends IntegrationTest {
     @Autowired
     private TenantConfigurationService tenantConfigurationService;
 
-    @Autowired
-    private Scheduler scheduler;
-
     @BeforeAll
     static void useTokenGroupsResolution() {
         DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
@@ -124,17 +118,15 @@ class TenantSelectionIT extends IntegrationTest {
     /**
      * Provisions the tenants and seeds the markers, once for the class.
      *
-     * @throws SchedulerException if the provisioning job cannot be triggered
      * @throws SQLException if a marker cannot be written
      */
     @BeforeEach
-    void provisionTenantsAndSeedMarkers() throws SchedulerException, SQLException {
+    void provisionTenantsAndSeedMarkers() throws SQLException {
         if (provisionedTenant != null) {
             return;
         }
         DirigibleTestTenant created = new DirigibleTestTenant("tenant-selection-it");
         createTenants(created);
-        scheduler.triggerJob(JobKey.jobKey("TenantsProvisioningJob", "system"));
         waitForTenantProvisioning(created);
         provisionedTenant = created;
 

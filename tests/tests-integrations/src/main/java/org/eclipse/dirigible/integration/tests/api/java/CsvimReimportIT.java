@@ -88,7 +88,12 @@ class CsvimReimportIT extends IntegrationTest {
             }
             """;
 
-    /** The CSVIM fixture source - a stable pointer that is NEVER touched after the initial import. */
+    /**
+     * The CSVIM fixture source - a stable pointer that is NEVER touched after the initial import.
+     * Declares {@code "upsert": true} explicitly: this fixture exercises change DETECTION (the second
+     * sync must fire off a CSV-only edit), so it opts into update semantics; the default-semantics
+     * fixture below deliberately omits the key.
+     */
     private static final String CSVIM_SOURCE = """
             {
                 "files": [
@@ -100,11 +105,15 @@ class CsvimReimportIT extends IntegrationTest {
                         "useHeaderNames": true,
                         "delimField": ",",
                         "distinguishEmptyFromNull": true,
+                        "upsert": true,
                         "version": "1.0"
                     }
                 ]
             }
             """.formatted(PROJECT);
+
+    /** The same declaration WITHOUT {@code upsert} - the platform-default semantics under test. */
+    private static final String CSVIM_SOURCE_DEFAULT = CSVIM_SOURCE.replace("            \"upsert\": true,\n", "");
 
     /** The default data source name. */
     @Autowired
@@ -203,6 +212,39 @@ class CsvimReimportIT extends IntegrationTest {
     }
 
     /**
+     * The default semantics: a .csvim that never mentions {@code upsert} is starter content. A
+     * re-import (here: a changed seed value, which changes the tracked content) INSERTs the rows it
+     * does not find and never touches the ones it does - specifically not a row the user edited after
+     * the first import. This is the #6980 production shape: the seeded company row was renamed by the
+     * user, a later release changed the seed artefacts, and the re-import must not stomp the rename.
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    void defaultReimportInsertsMissingRowsAndNeverTouchesExistingOnes() throws Exception {
+        write(TABLE_PATH, TABLE_SOURCE);
+        write(CSV_PATH, "CITY_ID,CITY_NAME\n1,Sofia");
+        write(CSVIM_PATH, CSVIM_SOURCE_DEFAULT);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertEquals("Sofia", cityName(1), "The initial import did not seed the row");
+
+        // the user makes the seeded row their own
+        try (Connection connection = dataSourceManager.getDefaultDataSource()
+                                                      .getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("UPDATE \"" + TABLE_NAME + "\" SET \"CITY_NAME\" = 'Sredets' WHERE \"CITY_ID\" = 1");
+        }
+
+        // a later release changes the seed: row 1 differs, row 2 is new
+        write(CSV_PATH, "CITY_ID,CITY_NAME\n1,Serdica\n2,Plovdiv");
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertEquals("Sredets", cityName(1), "Without upsert the re-import must not touch an existing row");
+        assertEquals("Plovdiv", cityName(2), "Without upsert the re-import must still insert the rows it does not find");
+    }
+
+    /**
      * A changed value in a CSV that carries fewer columns than its table must be applied on re-import.
      *
      * @throws Exception the exception
@@ -216,6 +258,8 @@ class CsvimReimportIT extends IntegrationTest {
             try {
                 csvimProcessor.setStrictMode(false);
                 CsvFile csvFile = new CsvFile(null, "CSV_REIMPORT", null, "import", true, true, ",", "\"", null, false, null);
+                // update semantics are the explicit opt-in; this test exercises the update BINDING
+                csvFile.setUpsert(true);
 
                 csvimProcessor.process(csvFile, "R1,R2,R3\n1,r2_1,r3_1\n2,r2_2,r3_2".getBytes(), defaultDataSourceName);
 
@@ -253,6 +297,8 @@ class CsvimReimportIT extends IntegrationTest {
             try {
                 csvimProcessor.setStrictMode(false);
                 CsvFile csvFile = new CsvFile(null, "CSV_REIMPORT_NH", null, "import", false, false, ",", "\"", null, false, null);
+                // update semantics are the explicit opt-in; this test exercises the update BINDING
+                csvFile.setUpsert(true);
 
                 csvimProcessor.process(csvFile, "1,n2_1\n2,n2_2".getBytes(), defaultDataSourceName);
 

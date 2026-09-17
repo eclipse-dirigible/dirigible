@@ -11,13 +11,17 @@ package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.junit.jupiter.api.Test;
 
 class IntentParserTest {
@@ -546,6 +550,154 @@ class IntentParserTest {
     }
 
     @Test
+    void periodLockParsesAndValidates() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                seeds:
+                  - name: period-statuses
+                    entity: PeriodStatus
+                    rows:
+                      - { id: 1, name: OPEN }
+                      - { id: 2, name: CLOSED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        PeriodIntent period = model.getEntities()
+                                   .get(1)
+                                   .getPeriod();
+        assertEquals("startDate", period.getStart());
+        assertEquals("endDate", period.getEnd());
+        // The seeded name resolves to the id before the typed mapping, as everywhere a status is named.
+        assertEquals("Status == 2", period.getClosedWhen());
+        PeriodLockIntent lock = model.getEntities()
+                                     .get(2)
+                                     .getImmutableInPeriod();
+        assertEquals("AccountingPeriod", lock.getPeriod());
+        assertEquals("entryDate", lock.getDate());
+    }
+
+    @Test
+    void periodLockRejectsWhatItCannotGenerate() {
+        String timestampBound = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: timestamp }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(timestampBound));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("end [endDate] must be a date field")),
+                "expected a bound-type issue, got: " + ex.getIssues());
+
+        String noStatus = """
+                name: ledger
+                entities:
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(noStatus));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("closedWhen requires a `function: EntityStatus` relation")),
+                "expected a missing-status issue, got: " + ex.getIssues());
+
+        String notARegister = """
+                name: ledger
+                entities:
+                  - name: AccountingPeriod
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(notARegister));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not declare period:")),
+                "expected a not-a-register issue, got: " + ex.getIssues());
+
+        String unknownRegister = """
+                name: ledger
+                entities:
+                  - name: JournalEntry
+                    immutableInPeriod: { period: FiscalPeriod, date: entryDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(unknownRegister));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("is not an entity of this model")),
+                "expected a cross-model issue, got: " + ex.getIssues());
+
+        String wrongDate = """
+                name: ledger
+                entities:
+                  - name: PeriodStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: AccountingPeriod
+                    period: { start: startDate, end: endDate, closedWhen: "Status == 2" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: startDate, type: date }
+                      - { name: endDate, type: date }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntry
+                    immutableInPeriod: { period: AccountingPeriod, date: postedAt }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: postedAt, type: timestamp }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(wrongDate));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("date [postedAt] must be a date field")),
+                "expected a date-type issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void immutableWhenParsesAndValidates() {
         String yaml = """
                 name: ledger
@@ -700,6 +852,372 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("requires a `status` gate")),
                 "expected a gate issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A {@code compare} check relates two values of the SAME row - the rule that could not be declared
+     * at all, so a document was saved and issued with a due date behind its own date (dirigible #7095).
+     * Both operands must be own fields of ONE comparison family and the operator is explicit.
+     */
+    @Test
+    void compareChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the date" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: due, type: date }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(0)
+                                        .getChecks()
+                                        .get(0);
+        assertEquals("due", check.getField());
+        assertEquals("ge", check.getOp());
+        assertEquals("date", check.getThan());
+
+        assertCompareIssue(yaml.replace("op: ge", "op: after"), "requires `op`");
+        assertCompareIssue(yaml.replace("than: date", "than: total"), "must be dates, both timestamps or both numbers");
+        assertCompareIssue(yaml.replace("field: due", "field: note"), "only dates, timestamps and numbers compare");
+        assertCompareIssue(yaml.replace("than: date", "than: issuedOn"), "is not a field of [SalesInvoice]");
+        assertCompareIssue(yaml.replace("field: due", "field: date"), "compares [date] with itself");
+        assertCompareIssue(yaml.replace("field: due, op: ge, than: date, ", ""), "exactly one right-hand side");
+        // ...and a right-hand side is exactly ONE thing: neither both operands nor none of them.
+        assertCompareIssue(yaml.replace("than: date,", "than: date, value: \"CURRENT_DATE\","), "exactly one right-hand side");
+    }
+
+    /**
+     * A {@code compare} check against a LITERAL (dirigible #7338) - the commonest business validation
+     * of all ("a quantity is positive", "a percentage is at most 100"), which had no declaration at all
+     * and was hand-edited into the generated {@code validate()} or smuggled into a calculation that
+     * throws. The literal is typed by the field it is compared with, and the optional status gate is
+     * the routing: with one, the rule holds at the transition rather than on the first draft.
+     */
+    @Test
+    void compareChecksAgainstLiteralsParseAndValidate() {
+        String yaml = """
+                name: leave
+                seeds:
+                  - name: request-statuses
+                    entity: RequestStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SUBMITTED }
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    checks:
+                      - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+                          message: "A request must cover at least one working day" }
+                      - { kind: compare, field: share, op: le, value: 100, message: "A share cannot exceed 100%" }
+                      - { kind: compare, field: from, op: ge, value: "CURRENT_DATE", message: "Leave cannot start in the past" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: days, type: decimal }
+                      - { name: share, type: integer }
+                      - { name: from, type: date }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus }
+                """;
+        List<CheckIntent> checks = IntentParser.parse(yaml)
+                                               .getEntities()
+                                               .get(1)
+                                               .getChecks();
+        assertEquals("days", checks.get(0)
+                                   .getField());
+        assertEquals(0L, checks.get(0)
+                               .getValue());
+        assertEquals(2, checks.get(0)
+                              .getStatus(),
+                "the gate resolves the status NAME to its seed id, as every other gate does");
+        assertNull(checks.get(1)
+                         .getStatus(),
+                "a gate is optional - without one the comparison holds on every user write");
+        assertEquals("CURRENT_DATE", checks.get(2)
+                                           .getValue());
+
+        assertCompareIssue(yaml.replace("value: 100", "value: \"most\""), "is not a number");
+        assertCompareIssue(yaml.replace("field: share", "field: note"), "only dates, timestamps and numbers compare");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"CURRENT_TIMESTAMP\""),
+                "compares with dates - use CURRENT_DATE");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"CURRENT_DATE-PT30M\""), "a date has no time component");
+        assertCompareIssue(yaml.replace("value: \"CURRENT_DATE\"", "value: \"next monday\""), "nor a quoted ISO-8601 date");
+        assertCompareIssue(yaml.replace("status: SUBMITTED", "status: 2")
+                               .replace("function: EntityStatus", "function: Label"),
+                "requires the entity to declare a `function: EntityStatus` relation");
+    }
+
+    /**
+     * An {@code agree} check relates the two records a JUNCTION row links: both must point at the same
+     * third thing (dirigible #7409). Nothing in the DSL could say it, so a payment of one customer was
+     * allocated against another customer's invoice, in another currency, and the write answered 200 -
+     * every module carrying the shape closed it with a hand-written Java guard class instead.
+     */
+    @Test
+    void agreeChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Currency
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: integer }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: InvoicePayment
+                    checks:
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer,
+                          message: "This payment belongs to a different customer than the invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: customerPayment, kind: manyToOne, to: CustomerPayment }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(4)
+                                        .getChecks()
+                                        .get(0);
+        assertEquals(List.of("salesInvoice", "customerPayment"), check.getRelations());
+        assertEquals("customer", check.getOnProperty());
+        assertNull(check.getWhenNull());
+
+        // A scalar both targets declare agrees too, and so does an explicit whenNull.
+        IntentParser.parse(yaml.replace("onProperty: customer", "onProperty: note, whenNull: refuse"));
+
+        assertCompareIssue(yaml.replace("relations: [salesInvoice, customerPayment]", "relations: [salesInvoice]"),
+                "requires `relations`: exactly two");
+        assertCompareIssue(yaml.replace("relations: [salesInvoice, customerPayment]", "relations: [salesInvoice, salesInvoice]"),
+                "twice - a relation always agrees with itself");
+        assertCompareIssue(yaml.replace(", onProperty: customer", ""), "requires `onProperty`");
+        assertCompareIssue(yaml.replace("onProperty: customer", "on: customer"), "spell it `onProperty`");
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: supplier"), "has no field or to-one relation [supplier]");
+        // A decimal is not compared for equality by anybody who means it - the line a condition draws.
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: total"), "the values an equality is exact on");
+        // ...nor may the two sides be different kinds of value: the boxed comparison is always false.
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: reference"), "both sides must be the same kind of value");
+        assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, whenNull: maybe,"), "unknown `whenNull`");
+        assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, status: 1,"), "cannot carry a `status` gate");
+    }
+
+    private static void assertCompareIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionallyRequiredValuesParseAndValidate() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 4, name: SENT }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: email, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: SENT,
+                          message: "Sent Method is E-mail but the customer has no e-mail address" }
+                      - { kind: requiredWhen, field: reference, when: ["sentMethod == 1", "kind == 'export'"],
+                          message: "An e-mailed export needs a reference" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                      - { name: kind, type: string }
+                      - { name: reference, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.model.EntityIntent invoice = model.getEntities()
+                                                                                  .get(2);
+        assertEquals(2, invoice.getChecks()
+                               .size());
+        // The gate resolves the seeded status NAME to its id, like every other status site.
+        assertEquals(4, invoice.getChecks()
+                               .get(0)
+                               .getStatus());
+
+        // The value must resolve - a path walking on past the relation names nothing readable.
+        String unknown = yaml.replace("field: Customer.email", "field: Customer.mail");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(unknown));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has no field or to-one relation [mail]")),
+                "expected an unresolved value issue, got: " + ex.getIssues());
+
+        // A condition the generator cannot compile would leave the value unconditionally required.
+        String malformed = yaml.replace("when: \"sentMethod == 1\"", "when: \"sentMethod is email\"");
+        IntentValidationException garbled = assertThrows(IntentValidationException.class, () -> IntentParser.parse(malformed));
+        assertTrue(garbled.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("must be `<Property> ==|!= <literal>`")),
+                "expected a condition-shape issue, got: " + garbled.getIssues());
+
+        // A comparison across types never holds, so it is refused rather than silently switched off.
+        String mistyped = yaml.replace("when: \"sentMethod == 1\"", "when: \"sentMethod == 'email'\"");
+        IntentValidationException wrongType = assertThrows(IntentValidationException.class, () -> IntentParser.parse(mistyped));
+        assertTrue(wrongType.getIssues()
+                            .stream()
+                            .anyMatch(i -> i.contains("which is not a value of that type")),
+                "expected a literal-type issue, got: " + wrongType.getIssues());
+
+        // The condition is read off the record itself - nothing is loaded to evaluate it.
+        String foreign = yaml.replace("when: \"sentMethod == 1\"", "when: \"postage == 1\"");
+        IntentValidationException unknownProperty = assertThrows(IntentValidationException.class, () -> IntentParser.parse(foreign));
+        assertTrue(unknownProperty.getIssues()
+                                  .stream()
+                                  .anyMatch(i -> i.contains("is not a field or to-one relation of [SalesInvoice]")),
+                "expected an unknown-property issue, got: " + unknownProperty.getIssues());
+
+        // A field declared without a `type:` is a string here as it is everywhere else in the DSL -
+        // the guard is legal, and the type must not reach the immutable set's contains() as a null,
+        // which throws and answered a 500 for a legal intent (#7237).
+        String typeless = yaml.replace("- { name: kind, type: string }", "- { name: kind }");
+        assertEquals(2, IntentParser.parse(typeless)
+                                    .getEntities()
+                                    .get(2)
+                                    .getChecks()
+                                    .size());
+
+        // A type is matched case-insensitively: `Integer` is the declaration the rest of the parser
+        // lower-cases, so a guard on it is not "a [Integer] field" the condition cannot compare.
+        String spelled = yaml.replace("- { name: sentMethod, type: integer }", "- { name: sentMethod, type: Integer }");
+        assertEquals(2, IntentParser.parse(spelled)
+                                    .getEntities()
+                                    .get(2)
+                                    .getChecks()
+                                    .size());
+
+        // A type without an exact equality is still refused, and named as authored.
+        String inexact = yaml.replace("- { name: sentMethod, type: integer }", "- { name: sentMethod, type: decimal }");
+        IntentValidationException notGuardable = assertThrows(IntentValidationException.class, () -> IntentParser.parse(inexact));
+        assertTrue(notGuardable.getIssues()
+                               .stream()
+                               .anyMatch(i -> i.contains("which is a [decimal] field")),
+                "expected a guardable-type issue, got: " + notGuardable.getIssues());
+    }
+
+    @Test
+    void conditionalRefusalsParseAndValidate() {
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 7, name: PAID }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                  - name: SalesInvoiceCustomerPayment
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == PAID",
+                          message: "Cannot add a payment to a fully paid invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, required: true, composition: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        org.eclipse.dirigible.components.intent.model.CheckIntent check = model.getEntities()
+                                                                               .get(2)
+                                                                               .getChecks()
+                                                                               .get(0);
+        assertEquals("forbidWhen", check.getKind());
+        // The status NAME one hop away resolves against the RELATION TARGET's nomenclature (PAID -> 7).
+        assertEquals("SalesInvoice.Status == 7", String.valueOf(check.getWhen()));
+
+        // A forbidWhen carries the condition alone - no value to read.
+        String withField = yaml.replace("when: \"SalesInvoice.Status == PAID\",", "field: amount, when: \"SalesInvoice.Status == PAID\",");
+        assertForbidIssue(withField, "carries a `field`");
+
+        // The message is the whole point - it is what the user is told when the write is refused.
+        String noMessage = yaml.replace("""
+                message: "Cannot add a payment to a fully paid invoice" }""", "}");
+        assertForbidIssue(noMessage, "requires `message`");
+
+        // A misspelt status is a generation error, never a silently-never-matching guard.
+        assertForbidIssue(yaml.replace("== PAID", "== PAYED"), "not a seeded status");
+
+        // The one-hop relation must exist - the walker refuses a path that names nothing readable.
+        assertForbidIssue(yaml.replace("SalesInvoice.Status ==", "Invoice.Status =="), "has no to-one relation [Invoice]");
+
+        // requiredWhen's grammar is unchanged: its condition stays record-local, so a dotted
+        // `Relation.field`
+        // term is not one of its own fields/to-ones and is refused (only a forbidWhen walks a hop). An
+        // integer literal here, so the status resolver leaves the term alone and the parser is what refuses
+        // it.
+        String requiredDotted = yaml.replace("kind: forbidWhen, when: \"SalesInvoice.Status == PAID\",",
+                "kind: requiredWhen, field: amount, when: \"SalesInvoice.Amount == 5\",");
+        assertForbidIssue(requiredDotted, "is not a field or to-one relation of [SalesInvoiceCustomerPayment]");
+    }
+
+    private static void assertForbidIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
     }
 
     @Test
@@ -948,6 +1466,35 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("rule(by: Nonsuch) is not a field or to-one relation of the source [Payment]")),
                 "expected an unknown-classifier issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A determination rule's {@code match} needs a literal that says something (#7180).
+     *
+     * <p>
+     * The value is rendered into the generated posting handler AS an authored Java literal, so a blank
+     * one emits a lookup on the empty string - it matches no rule row, and every source document is
+     * left silently on the unposted worklist with the parse, the generation and the publish all green.
+     * A value omitted outright is already refused as an empty selector (the typed mapping drops a null
+     * entry, so the selector is not there at all); both readings now fail where they are authored.
+     */
+    @Test
+    void postingRuleMatchWithNoLiteralIsRejected() {
+        String item = "{ Account: rule(BankAccount), debit: \"Amount\" }";
+        String blank = conditionalRulePosting(item).replace("match: { documentType: \"Payment\" }", "match: { documentType: \"\" }");
+        IntentValidationException blankEx = assertThrows(IntentValidationException.class, () -> IntentParser.parse(blank));
+        assertTrue(blankEx.getIssues()
+                          .stream()
+                          .anyMatch(i -> i.contains("rule.match [documentType] has no value")),
+                "expected a blank rule.match issue, got: " + blankEx.getIssues());
+        String omitted = conditionalRulePosting(item).replace("match: { documentType: \"Payment\" }", "match: { documentType: }");
+        IntentValidationException omittedEx = assertThrows(IntentValidationException.class, () -> IntentParser.parse(omitted));
+        assertTrue(omittedEx.getIssues()
+                            .stream()
+                            .anyMatch(i -> i.contains("rule.match must be a single `column: literal` selector")),
+                "expected an empty-selector issue, got: " + omittedEx.getIssues());
+        // ...and the authored literal still parses, so nothing written before this changes.
+        IntentParser.parse(conditionalRulePosting(item));
     }
 
     /** The event declares exactly one trigger - onTransition XOR onCreate. */
@@ -1366,6 +1913,39 @@ class IntentParserTest {
                 "expected a value-on-count issue, got: " + ex.getIssues());
     }
 
+    @Test
+    void countWidgetOnAnAggregatingReportNeedsACountMeasure() {
+        // The report yields one row per group, so counting rows shows the number of statuses, not the
+        // number of records (dirigible #7102) - the tile has nothing honest to show without count(*).
+        String yaml = WIDGET_HEAD.replace("value: \"sum(total)\"", "kind: count");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("of kind [count] needs a `count(*)` measure to sum")),
+                "expected a count-over-aggregate issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void countWidgetOnAnAggregatingReportAcceptsADeclaredCountMeasure() {
+        String yaml = WIDGET_HEAD.replace("measures: [\"sum(total)\"]", "measures: [\"count(*)\", \"sum(total)\"]")
+                                 .replace("value: \"sum(total)\"", "kind: count");
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("count(*)", model.getReports()
+                                      .get(0)
+                                      .getCountMeasure());
+    }
+
+    @Test
+    void countWidgetOnAnUnaggregatedReportNeedsNoMeasure() {
+        // One row is one record there, so the count endpoint is right and nothing is required.
+        String yaml = WIDGET_HEAD.replace("measures: [\"sum(total)\"]", "")
+                                 .replace("value: \"sum(total)\"", "kind: count");
+        IntentModel model = IntentParser.parse(yaml);
+        assertFalse(model.getReports()
+                         .get(0)
+                         .isAggregated());
+    }
+
     private static final String CUSTOM_WIDGET_HEAD = """
             name: sales
             entities:
@@ -1457,7 +2037,27 @@ class IntentParserTest {
     }
 
     @Test
-    void scheduleWithBothNotifyAndGenerateIsRejected() {
+    void scheduleMayBothNotifyAndGenerate() {
+        // Issue #7276: one tick that BOTH mails and records what it sent - what a reminder history
+        // needs to reflect the automated sends, not only the manual clicks.
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    notify:
+                      to: status
+                      subject: "x"
+                      body: "y"
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee]
+                      map:
+                        Employee: id
+                """;
+        IntentParser.parse(yaml);
+    }
+
+    @Test
+    void scheduleThatNotifiesAndGeneratesWithoutUniqueIsRejected() {
+        // Without the natural key the combined tick re-mails every matched row on every tick and
+        // writes another record beside each send - the failure the combined form exists to remove.
         String yaml = SCHEDULE_GEN_HEAD + """
                     notify:
                       to: status
@@ -1471,8 +2071,8 @@ class IntentParserTest {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("has both notify and generate")),
-                "expected a both-actions issue, got: " + ex.getIssues());
+                     .anyMatch(i -> i.contains("both notify and generate but no generate unique")),
+                "expected a missing-unique issue, got: " + ex.getIssues());
     }
 
     @Test
@@ -1606,7 +2206,7 @@ class IntentParserTest {
     }
 
     @Test
-    void crossModelScheduleSourceWithNotifyIsRejected() {
+    void crossModelScheduleSourceMayNotify() {
         String yaml = """
                 name: timesheets
                 uses:
@@ -1625,11 +2225,14 @@ class IntentParserTest {
                       subject: "x"
                       body: "y"
                 """;
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
-        assertTrue(ex.getIssues()
-                     .stream()
-                     .anyMatch(i -> i.contains("notify needs the source's relation metadata")),
-                "expected a cross-model-notify-unsupported issue, got: " + ex.getIssues());
+        // The source's fields are the owner's, resolved at generation against its .model (#7030) - the
+        // same split validation the where / map references use. See CrossModelScheduleNotifyIntentTest
+        // for what only the owner can supply and is therefore still refused.
+        assertEquals("contactEmail", IntentParser.parse(yaml)
+                                                 .getSchedules()
+                                                 .get(0)
+                                                 .getNotify()
+                                                 .getTo());
     }
 
     @Test
@@ -1850,6 +2453,8 @@ class IntentParserTest {
                 + "  - name: Claim\n" //
                 + "    fields:\n" //
                 + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "    relations:\n" //
+                + "      - { name: Person, kind: manyToOne, to: Person }\n" //
                 + "  - name: ClaimLine\n" //
                 + "    fields:\n" //
                 + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //

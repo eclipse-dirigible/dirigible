@@ -59,7 +59,7 @@ document.addEventListener('alpine:init', () => {
         this.calCfg = { view: '${calendarInitialView}', events: this.buildEvents() };
         this.state = 'default';
       } catch (e) {
-        this.error = (e && e.message) || 'Could not load your ${menuLabel}.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
         this.state = 'error';
       }
       this.refreshIcons();

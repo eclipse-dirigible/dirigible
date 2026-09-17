@@ -55,6 +55,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Both halves are asserted through the real machinery: the first from a client repository's save,
  * the second from an entry planted in the outbox the way a broker outage would have left one —
  * which is the only failure a test can stage without tearing the broker down under the whole suite.
+ *
+ * <p>
+ * The same fixture asserts what a delete announces (issue #7146): the row as it was read inside the
+ * deleting transaction, not the partial instance the caller passed in.
  */
 class JavaEventOutboxIT extends IntegrationTest {
 
@@ -63,7 +67,9 @@ class JavaEventOutboxIT extends IntegrationTest {
     private static final String ENTITY_TABLE = "EVENT_OUTBOX_THING";
     private static final String OUTBOX_TABLE = "DIRIGIBLE_EVENT_OUTBOX";
     private static final String CREATED_TOPIC = "event-outbox-it-thing";
+    private static final String DELETED_TOPIC = "event-outbox-it-thing-deleted";
     private static final String ECHO_QUEUE = "event-outbox-it-echo";
+    private static final String DELETED_ECHO_QUEUE = "event-outbox-it-echo-deleted";
     private static final long TIMEOUT_SECONDS = 60;
     private static final long RECEIVE_TIMEOUT_MILLIS = 2000;
     private static final String STRANDED_PAYLOAD = "{\"name\":\"stranded\"}";
@@ -87,7 +93,7 @@ class JavaEventOutboxIT extends IntegrationTest {
     private Scheduler scheduler;
 
     @Test
-    void a_write_publishes_through_the_outbox_and_a_stranded_entry_is_relayed() throws Exception {
+    void a_write_publishes_through_the_outbox_a_delete_announces_the_stored_row_and_a_stranded_entry_is_relayed() throws Exception {
         ClientJavaProjectDeployer.deploy(repository, projectUtil, synchronizationProcessor, PROJECT, PROJECT);
 
         // A create still reaches its listener - the write records the event in the outbox and hands it
@@ -153,6 +159,22 @@ class JavaEventOutboxIT extends IntegrationTest {
                                    .until(this::receiveEcho, echo -> echo != null);
         assertEquals(STRANDED_PAYLOAD, relayed, "the relay must publish exactly what the write recorded");
         assertTrue(entryIsGone(strandedId), "a delivered entry must be cleared, so it is not published twice");
+
+        // A delete announces the row that was removed, not the instance the caller happened to hold: the
+        // controller deletes through a snapshot carrying nothing but the id, and the payload must still
+        // name the row's stored value (issue #7146). Published the caller's way, every unset column
+        // arrived null and a reaction reading one - the abort listener reading ProcessIds - no-oped in
+        // silence, leaving the process running after its record.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CONTROLLER + "/deletePartial")
+                                                 .then()
+                                                 .statusCode(200));
+        String deleted = Awaitility.await()
+                                   .pollInterval(1, TimeUnit.SECONDS)
+                                   .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                                   .until(this::receiveDeletedEcho, echo -> echo != null);
+        assertTrue(deleted.contains("doomed"),
+                "the delete must announce the row as it was stored, not the caller's partial snapshot: " + deleted);
     }
 
     private void seed() {
@@ -172,6 +194,14 @@ class JavaEventOutboxIT extends IntegrationTest {
     private String receiveEcho() {
         try {
             return MessagingFacade.receiveFromQueue(ECHO_QUEUE, RECEIVE_TIMEOUT_MILLIS);
+        } catch (RuntimeException nothingYet) {
+            return null;
+        }
+    }
+
+    private String receiveDeletedEcho() {
+        try {
+            return MessagingFacade.receiveFromQueue(DELETED_ECHO_QUEUE, RECEIVE_TIMEOUT_MILLIS);
         } catch (RuntimeException nothingYet) {
             return null;
         }
@@ -249,7 +279,8 @@ class JavaEventOutboxIT extends IntegrationTest {
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS \"" + ENTITY_TABLE + "\"");
             if (outboxTableExists()) {
-                statement.execute("DELETE FROM \"" + OUTBOX_TABLE + "\" WHERE \"EVENT_TOPIC\" = '" + CREATED_TOPIC + "'");
+                statement.execute(
+                        "DELETE FROM \"" + OUTBOX_TABLE + "\" WHERE \"EVENT_TOPIC\" IN ('" + CREATED_TOPIC + "', '" + DELETED_TOPIC + "')");
             }
         }
     }

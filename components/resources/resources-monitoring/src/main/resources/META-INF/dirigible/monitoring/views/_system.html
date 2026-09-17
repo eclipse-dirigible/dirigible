@@ -16,7 +16,7 @@
         <p x-h-text.muted x-text="T('monitoring:system.subtitle', 'The build this instance runs, and the Java virtual machine running it.')"></p>
       </div>
       <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()">
-        <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+        <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
         <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
       </button>
     </div>
@@ -30,29 +30,29 @@
       </div>
       <div x-h-card-content class="vbox gap-4">
         <div class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.product', 'Product')"></span>
             <span class="text-sm" x-text="orDash(version.productName)"></span>
           </div>
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.version', 'Version')"></span>
             <span class="text-sm font-medium" x-text="orDash(version.productVersion)"></span>
           </div>
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.commit', 'Commit')"></span>
             <a x-show="version.commitUrl" class="text-sm underline" :href="version.commitUrl"
                target="_blank" rel="noopener noreferrer" x-text="version.commitShort"></a>
             <span x-show="!version.commitUrl" class="text-sm" x-text="orDash(version.commitShort)"></span>
           </div>
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.instance', 'Instance')"></span>
             <span class="text-sm" x-text="orDash(version.instanceName)"></span>
           </div>
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.repository', 'Repository')"></span>
             <span class="text-sm" x-text="orDash(version.value('repositoryProvider'))"></span>
           </div>
-          <div class="vbox gap-0">
+          <div class="vbox">
             <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.database', 'Database')"></span>
             <span class="text-sm" x-text="orDash(version.value('databaseProvider'))"></span>
           </div>
@@ -71,7 +71,7 @@
     </div>
 
     <div x-show="state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-24 w-full"></div></template>
+      <template x-for="i in 4" :key="i"><div x-h-skeleton class="w-full" style="height: 6rem"></div></template>
     </div>
 
     <div x-show="!state.loading && state.error" x-cloak x-h-text.muted class="text-sm"
@@ -85,7 +85,7 @@
           <div x-h-card>
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" x-h-lucide data-lucide="cpu" class="size-4"></i>
+                <svg role="presentation" x-h-lucide data-lucide="cpu" class="size-4"></svg>
                 <span x-text="T('monitoring:system.cpu', 'CPU')"></span>
               </div>
             </div>
@@ -99,7 +99,7 @@
           <div x-h-card>
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" x-h-lucide data-lucide="memory-stick" class="size-4"></i>
+                <svg role="presentation" x-h-lucide data-lucide="memory-stick" class="size-4"></svg>
                 <span x-text="T('monitoring:system.heap', 'Heap')"></span>
               </div>
             </div>
@@ -114,7 +114,7 @@
           <div x-h-card>
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" x-h-lucide data-lucide="layers" class="size-4"></i>
+                <svg role="presentation" x-h-lucide data-lucide="layers" class="size-4"></svg>
                 <span x-text="T('monitoring:system.threads', 'Threads')"></span>
               </div>
             </div>
@@ -131,11 +131,11 @@
           <div x-h-card>
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" x-h-lucide data-lucide="server" class="size-4"></i>
+                <svg role="presentation" x-h-lucide data-lucide="server" class="size-4"></svg>
                 <span x-text="T('monitoring:system.runtime', 'Runtime')"></span>
               </div>
             </div>
-            <div x-h-card-content class="vbox gap-0">
+            <div x-h-card-content class="vbox">
               <p class="text-lg font-semibold" x-text="uptime(state.metrics.runtime.uptimeMillis)"></p>
               <span x-h-text.muted class="text-xs" x-text="state.metrics.runtime.vmName"></span>
               <span x-h-text.muted class="text-xs"
@@ -165,58 +165,62 @@
         </div>
 
         <!-- Memory pools -->
-        <div x-h-card>
-          <div x-h-card-header>
+        <div x-h-card class="overflow-hidden">
+          <div x-h-card-header class="border-b">
             <h2 x-h-card-title x-text="T('monitoring:system.pools', 'Memory pools')"></h2>
           </div>
-          <div x-h-card-content class="overflow-x-auto">
-            <table x-h-table>
-              <thead x-h-table-header>
-                <tr>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colPool', 'Pool')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colUsed', 'Used')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCommitted', 'Committed')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colMax', 'Max')"></th>
-                </tr>
-              </thead>
-              <tbody x-h-table-body>
-                <template x-for="pool in state.metrics.memory.pools" :key="pool.name">
+          <div x-h-card-content.flush>
+            <div x-h-table-container>
+              <table x-h-table>
+                <thead x-h-table-header data-bordered="horizontal">
                   <tr x-h-table-row>
-                    <td x-h-table-cell x-text="pool.name"></td>
-                    <td x-h-table-cell x-text="mb(pool.usage.used)"></td>
-                    <td x-h-table-cell x-text="mb(pool.usage.committed)"></td>
-                    <td x-h-table-cell x-text="mb(pool.usage.max)"></td>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colPool', 'Pool')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colUsed', 'Used')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colCommitted', 'Committed')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colMax', 'Max')"></th>
                   </tr>
-                </template>
-              </tbody>
-            </table>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="pool in state.metrics.memory.pools" :key="pool.name">
+                    <tr x-h-table-row>
+                      <td x-h-table-cell x-text="pool.name"></td>
+                      <td x-h-table-cell x-text="mb(pool.usage.used)"></td>
+                      <td x-h-table-cell x-text="mb(pool.usage.committed)"></td>
+                      <td x-h-table-cell x-text="mb(pool.usage.max)"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
         <!-- Garbage collectors -->
-        <div x-h-card>
-          <div x-h-card-header>
+        <div x-h-card class="overflow-hidden">
+          <div x-h-card-header class="border-b">
             <h2 x-h-card-title x-text="T('monitoring:system.gc', 'Garbage collection')"></h2>
           </div>
-          <div x-h-card-content class="overflow-x-auto">
-            <table x-h-table>
-              <thead x-h-table-header>
-                <tr>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollector', 'Collector')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollections', 'Collections')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colTime', 'Time')"></th>
-                </tr>
-              </thead>
-              <tbody x-h-table-body>
-                <template x-for="collector in state.metrics.gc" :key="collector.name">
+          <div x-h-card-content.flush>
+            <div x-h-table-container>
+              <table x-h-table>
+                <thead x-h-table-header data-bordered="horizontal">
                   <tr x-h-table-row>
-                    <td x-h-table-cell x-text="collector.name"></td>
-                    <td x-h-table-cell x-text="collector.collectionCount.toLocaleString()"></td>
-                    <td x-h-table-cell x-text="collector.collectionTimeMillis.toLocaleString() + ' ms'"></td>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollector', 'Collector')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollections', 'Collections')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colTime', 'Time')"></th>
                   </tr>
-                </template>
-              </tbody>
-            </table>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="collector in state.metrics.gc" :key="collector.name">
+                    <tr x-h-table-row>
+                      <td x-h-table-cell x-text="collector.name"></td>
+                      <td x-h-table-cell x-text="collector.collectionCount.toLocaleString()"></td>
+                      <td x-h-table-cell x-text="collector.collectionTimeMillis.toLocaleString() + ' ms'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -238,37 +242,39 @@
         </template>
 
         <!-- Live threads -->
-        <div x-h-card>
-          <div x-h-card-header>
+        <div x-h-card class="overflow-hidden">
+          <div x-h-card-header class="border-b">
             <div class="hbox items-center gap-3">
               <h2 x-h-card-title class="flex-1" x-text="T('monitoring:system.threadList', 'Live threads')"></h2>
-              <div class="w-56 shrink-0">
+              <div class="shrink-0" style="width: 14rem">
                 <input x-h-input type="search" x-model="state.threadFilter"
                        :placeholder="T('monitoring:system.threadFilter', 'Filter by name or state')" />
               </div>
             </div>
           </div>
-          <div x-h-card-content class="overflow-x-auto">
-            <table x-h-table>
-              <thead x-h-table-header>
-                <tr>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colThread', 'Thread')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colState', 'State')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCpuTime', 'CPU time')"></th>
-                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colLock', 'Waiting on')"></th>
-                </tr>
-              </thead>
-              <tbody x-h-table-body>
-                <template x-for="thread in state.visibleThreads" :key="thread.id">
+          <div x-h-card-content.flush>
+            <div x-h-table-container>
+              <table x-h-table>
+                <thead x-h-table-header data-bordered="horizontal">
                   <tr x-h-table-row>
-                    <td x-h-table-cell x-text="thread.name"></td>
-                    <td x-h-table-cell x-text="thread.state"></td>
-                    <td x-h-table-cell x-text="cpuTime(thread.cpuTimeNanos)"></td>
-                    <td x-h-table-cell x-text="thread.lockOwnerName ? thread.lockOwnerName : (thread.lockName || '')"></td>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colThread', 'Thread')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colState', 'State')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colCpuTime', 'CPU time')"></th>
+                    <th x-h-table-head scope="col" x-text="T('monitoring:system.colLock', 'Waiting on')"></th>
                   </tr>
-                </template>
-              </tbody>
-            </table>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="thread in state.visibleThreads" :key="thread.id">
+                    <tr x-h-table-row>
+                      <td x-h-table-cell x-text="thread.name"></td>
+                      <td x-h-table-cell x-text="thread.state"></td>
+                      <td x-h-table-cell x-text="cpuTime(thread.cpuTimeNanos)"></td>
+                      <td x-h-table-cell x-text="thread.lockOwnerName ? thread.lockOwnerName : (thread.lockName || '')"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 

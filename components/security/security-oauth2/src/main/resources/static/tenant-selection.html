@@ -31,12 +31,6 @@
     <title>Select a tenant</title>
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
     <style>
       /* The tenant rows are framed tiles that lift towards the brand colour, like the Home tiles. */
       .tenant-tile { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; text-align: left; }
@@ -58,20 +52,32 @@
       <div class="hbox items-center gap-2 p-1">
         <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5"
              @error="branding.logo = ''" />
-        <div class="vbox gap-0">
+        <div class="vbox">
           <span class="font-bold leading-tight" x-text="branding.name"></span>
           <span x-show="branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="branding.subtitle"></span>
         </div>
       </div>
       <div x-h-toolbar-spacer></div>
-      <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
-              :aria-label="dark ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-        <svg x-h-lucide x-show="!dark" role="img" data-lucide="moon"></svg>
-        <svg x-h-lucide x-show="dark" role="img" data-lucide="sun"></svg>
+      <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" aria-label="Theme" title="Theme">
+        <svg x-h-lucide role="presentation" :data-lucide="themeIcon"></svg>
       </button>
+      <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+        <li x-h-menu-radio-item="'light'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+          <span>Light</span>
+        </li>
+        <li x-h-menu-radio-item="'dark'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+          <span>Dark</span>
+        </li>
+        <li x-h-menu-radio-item="'auto'" name="theme" x-model="themeMode">
+          <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+          <span>Auto</span>
+        </li>
+      </ul>
       <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
       <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
-        <svg x-h-lucide role="img" data-lucide="log-out"></svg> <span>Log out</span>
+        <svg x-h-lucide role="presentation" data-lucide="log-out"></svg> <span>Log out</span>
       </button>
     </div>
 
@@ -86,11 +92,11 @@
         </p>
 
         <div x-show="loading" class="hbox items-center gap-2 text-sm text-muted-foreground" style="margin-top: 2.5rem;">
-          <svg x-h-lucide role="img" data-lucide="loader-circle" class="size-4"></svg>
+          <svg x-h-lucide role="presentation" data-lucide="loader-circle" class="size-4"></svg>
           <span>Loading your tenants...</span>
         </div>
 
-        <div x-show="error" role="alert" class="rounded-md border border-destructive p-4 text-sm"
+        <div x-show="error" role="alert" class="rounded-md border border-negative p-4 text-sm"
              style="margin-top: 2.5rem;">
           <span x-text="error"></span>
         </div>
@@ -101,13 +107,13 @@
                     :disabled="!tenant.provisionedHere || busy" @click="select(tenant)"
                     :aria-current="tenant.id === selectedTenantId ? 'true' : 'false'">
               <span class="tenant-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
-                  <svg x-h-lucide role="img" data-lucide="building-2" class="size-5"></svg>
+                  <svg x-h-lucide role="presentation" data-lucide="building-2" class="size-5"></svg>
               </span>
               <span class="vbox min-w-0 flex-1" style="gap: .15rem;">
                 <span class="hbox items-center gap-2 text-lg font-semibold">
                   <span x-text="tenant.name || tenant.id"></span>
                   <template x-if="selectedTenantId && tenant.id === selectedTenantId">
-                    <span x-h-badge data-variant="secondary">Current</span>
+                    <span x-h-badge>Current</span>
                   </template>
                 </span>
                 <!-- The id is only worth a line of its own when it is not what the name already says. -->
@@ -117,7 +123,7 @@
                   Being prepared. Try again in a few minutes.
                 </span>
               </span>
-              <svg x-h-lucide role="img" data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
+              <svg x-h-lucide role="presentation" data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
                    x-show="tenant.provisionedHere"></svg>
             </button>
           </template>
@@ -149,7 +155,8 @@
               loading: true,
               busy: false,
               error: '',
-              dark: false,
+              _themeMode: 'auto',   // 'light' | 'dark' | 'auto' - the selection
+              themeScheme: 'light', // the scheme applied right now
 
               async init() {
                   const b = window.PlatformBranding || (window.top && window.top.PlatformBranding) || {};
@@ -159,7 +166,7 @@
                       const link = document.querySelector('link[rel="icon"]');
                       if (link) link.href = favicon;
                   }
-                  try { this.dark = window.Harmonia && Harmonia.getColorScheme() === 'dark'; } catch (e) { this.dark = false; }
+                  this.initTheme();
                   await Promise.all([this.loadUser(), this.loadTenants()]);
                   this.loading = false;
               },
@@ -236,9 +243,36 @@
               // only place that has to know where home is.
               goHome() { window.location.assign('/home'); },
 
-              toggleTheme() {
-                  this.dark = !this.dark;
-                  if (window.Harmonia) Harmonia.setColorScheme(this.dark ? 'dark' : 'light');
+              // Harmonia owns the colour scheme: it persists the selection, applies the `.dark` class
+              // and keeps every same-origin frame and tab in sync. The listener keeps this control in
+              // step when the change is made elsewhere, or when the OS flips while `auto` is selected.
+              initTheme() {
+                  if (!window.Harmonia) return;
+                  this._themeMode = Harmonia.getColorScheme();
+                  this.themeScheme = this.resolveScheme(this._themeMode);
+                  Harmonia.addColorSchemeListener((scheme, mode) => {
+                      this.themeScheme = scheme;
+                      if (mode) this._themeMode = mode;
+                  });
+              },
+
+              get themeMode() { return this._themeMode; },
+
+              set themeMode(value) {
+                  if (value !== 'light' && value !== 'dark' && value !== 'auto') return;
+                  this._themeMode = value;
+                  this.themeScheme = this.resolveScheme(value);
+                  if (window.Harmonia) Harmonia.setColorScheme(value);
+              },
+
+              get themeIcon() {
+                  if (this._themeMode === 'auto') return 'sun-moon';
+                  return this.themeScheme === 'dark' ? 'moon' : 'sun';
+              },
+
+              resolveScheme(mode) {
+                  if (mode === 'light' || mode === 'dark') return mode;
+                  return window.Harmonia ? Harmonia.getSystemColorScheme() : 'light';
               },
 
               logout() { window.location.replace('/logout'); },

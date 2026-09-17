@@ -148,16 +148,15 @@ public final class StepEventSupport {
     }
 
     /**
-     * The topic suffix a glue event binding appends to its entity's topic: the lifecycle suffix, or the
-     * step-scoped suffix the generated emitter publishes to.
+     * The topic suffix a glue event binding appends to its entity's topic: the lifecycle suffix, the
+     * declared phase, or the step-scoped suffix the generated emitter publishes to.
      *
      * @param event the {@code event:} map, may be {@code null}
      * @return the suffix ({@code ""} for an entity create event)
      */
     public static String topicSuffix(Map<String, Object> event) {
         Binding binding = binding(event);
-        return binding == null ? EventBinding.topicSuffix(EventBinding.kind(event))
-                : topicSuffix(binding.process(), binding.step(), binding.kind());
+        return binding == null ? EventBinding.topicSuffix(event) : topicSuffix(binding.process(), binding.step(), binding.kind());
     }
 
     /**

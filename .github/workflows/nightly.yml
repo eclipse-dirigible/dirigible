@@ -5,8 +5,9 @@ name: Nightly Integration Tests
 # PRs run the fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on
 # demand; the same full suite also runs on every push to master (see build.yml). Like build.yml, the
 # suite is sharded into four tag-selected slices (api / ui / samples / slow) that run in parallel,
-# so the wall-clock time is the slowest shard (~35 min), not the whole suite. build.yml carries the
-# description of what each shard selects; keep the two matrices identical.
+# so the wall-clock time is the slowest shard ("api", ~57 min on h2 and ~62 on PostgreSQL), not the
+# whole suite. build.yml carries the description of what each shard selects and the measured shard
+# times behind the job timeout; keep the two matrices identical.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -31,7 +32,7 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +71,34 @@ jobs:
       - name: Integration tests
         run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
 
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-h2-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
+      - name: Assert integration tests ran
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
+
       - name: Generate a random artifact name
         if: always()
         id: generate_name
@@ -99,9 +128,10 @@ jobs:
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       POSTGRES_DB: testdb
+      POSTGRES_SYSTEM_DB: systemdb
       POSTGRES_USER: testuser
       POSTGRES_PASS: testpass
     services:
@@ -153,13 +183,72 @@ jobs:
       - name: Verify ttyd installation
         run: ttyd --version
 
+      - name: Create the SystemDB database
+        run: PGPASSWORD=${{ env.POSTGRES_PASS }} psql -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c 'CREATE DATABASE ${{ env.POSTGRES_SYSTEM_DB }}'
+
+      # env: is placed before run: on purpose (#7249): with the block after it, a step appended to
+      # the job takes the datasource configuration with it, and this leg then runs the whole suite on
+      # file-backed H2 while still reporting itself as the PostgreSQL one. The run: refuses to start
+      # the suite without the variables, which turns that theft from silent into loud.
       - name: Integration tests
-        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
         env:
           DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER: org.postgresql.Driver
           DIRIGIBLE_DATASOURCE_DEFAULT_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_DB }}
           DIRIGIBLE_DATASOURCE_DEFAULT_USERNAME: ${{ env.POSTGRES_USER }}
           DIRIGIBLE_DATASOURCE_DEFAULT_PASSWORD: ${{ env.POSTGRES_PASS }}
+          DIRIGIBLE_DATABASE_SYSTEM_DRIVER: org.postgresql.Driver
+          DIRIGIBLE_DATABASE_SYSTEM_URL: jdbc:postgresql://localhost:5432/${{ env.POSTGRES_SYSTEM_DB }}
+          DIRIGIBLE_DATABASE_SYSTEM_USERNAME: ${{ env.POSTGRES_USER }}
+          DIRIGIBLE_DATABASE_SYSTEM_PASSWORD: ${{ env.POSTGRES_PASS }}
+        run: |
+          if [ -z "$DIRIGIBLE_DATASOURCE_DEFAULT_URL" ] || [ -z "$DIRIGIBLE_DATABASE_SYSTEM_URL" ]; then
+            echo "::error::The datasource configuration did not reach this step - the suite would run on H2 (see #7249)"
+            exit 1
+          fi
+          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+
+      # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
+      # and the build green, so what ran is asserted by count instead of by the job's colour.
+      # Failsafe's own failIfNoTests cannot cover this - scanning does find the IT classes, the tag
+      # filter drops them afterwards - and every shard expression selects a non-empty set.
+      # Guards #7249 too: the count says nothing about WHICH database ran the suite. The ITs clean
+      # both databases between test classes, so a finished run leaves no table to look for - what is
+      # asserted instead is that PostgreSQL was written to at all, through pg_stat_database's
+      # counters, which survive that cleanup. A database an H2 fallback never connected to reports
+      # zero rows inserted.
+      # A cancelled or failed shard must leave evidence behind (#7283): the job-level timeout kills
+      # the Maven step before the guard below ever runs, so without an always() upload the reports
+      # of every class that DID finish - and any thread dump TestStallWatchdog wrote for the one
+      # that did not - are thrown away with the runner.
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-postgresql-${{ matrix.shard.name }}-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
+      - name: Assert integration tests ran on PostgreSQL
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::No integration test was executed - the ITs stopped being discovered (see #7215)"
+            exit 1
+          fi
+          echo "$ran integration test classes ran"
+          inserted=$(PGPASSWORD=${{ env.POSTGRES_PASS }} psql -v ON_ERROR_STOP=1 -h localhost -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -tAc \
+            "SELECT coalesce(sum(tup_inserted), 0) FROM pg_stat_database WHERE datname IN ('${{ env.POSTGRES_DB }}', '${{ env.POSTGRES_SYSTEM_DB }}')") || {
+            echo "::error::Cannot read pg_stat_database - the database guard for #7249 could not run"
+            exit 1
+          }
+          if [ "$inserted" -eq 0 ]; then
+            echo "::error::The suite wrote nothing to PostgreSQL - this leg ran on H2 (see #7249)"
+            exit 1
+          fi
+          echo "$inserted row(s) were written to PostgreSQL"
 
       - name: Generate a random artifact name
         if: always()

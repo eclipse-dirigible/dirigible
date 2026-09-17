@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://www.flowable.org/processdef">
+  <process id="java-delegate-unsatisfied" name="Java delegate unsatisfied" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="unsatisfied-task"/>
+    <!--
+      Async, with one further attempt one second later, so the unsatisfiable injection takes exactly
+      the path an intent step's retry: / onError: rides and dead-letters promptly.
+    -->
+    <serviceTask id="unsatisfied-task" name="Unsatisfied" flowable:async="true"
+                 flowable:class="delegateinjection.UnsatisfiedDelegate">
+      <extensionElements>
+        <flowable:failedJobRetryTimeCycle>R2/PT1S</flowable:failedJobRetryTimeCycle>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f2" sourceRef="unsatisfied-task" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

@@ -18,10 +18,17 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+import org.eclipse.dirigible.components.data.structures.domain.Table;
+import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.eclipse.dirigible.components.data.structures.synchronizer.SchemasSynchronizer;
+import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -32,6 +39,9 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 
 /**
  * End-to-end test for the intent editor services: {@code POST /services/ide/intent/parse} (the
@@ -50,6 +60,64 @@ import org.springframework.test.annotation.DirtiesContext;
 @Tag("slow")
 class IntentEngineIT extends IntegrationTest {
 
+    /**
+     * A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with two
+     * LedgerLine rows (debit + credit) determined by a PostingRule. Shared by the tests that vary the
+     * created document's own lifecycle.
+     */
+    private static final String POSTING_YAML = """
+            name: postingtest
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+              - name: OrderStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+              - name: PostingRule
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: documentType, type: string }
+                relations:
+                  - { name: DebitAccount, kind: manyToOne, to: Account }
+                  - { name: CreditAccount, kind: manyToOne, to: Account }
+              - name: Order
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+              - name: Ledger
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: memo, type: string, length: 400 }
+                relations:
+                  - { name: Order, kind: manyToOne, to: Order }
+              - name: LedgerLine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
+                  - { name: Account, kind: manyToOne, to: Account, required: true }
+            postings:
+              - name: orderLedger
+                event: { onTransition: Order, when: "Status == 2" }
+                creates: Ledger
+                backReference: Order
+                map: { memo: "Order {number}" }
+                rule: { entity: PostingRule, match: { documentType: "Order" } }
+                items:
+                  - { Account: rule(debitAccount), debit: "Amount" }
+                  - { Account: rule(creditAccount), credit: "Amount" }
+            """;
+
     private static final String PROJECT = "intent-test";
     private static final String WORKSPACE = "workspace";
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
@@ -57,11 +125,25 @@ class IntentEngineIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     /**
-     * The generated -transitioned publish, matched on its sendToTopic argument. The code comments that
-     * explain the flip mention "-transitioned" as well, and they sit before the target save - matching
-     * the bare word would find a comment and read as a publish in the wrong place.
+     * The sibling project of the mutual cross-model pair (dirigible #6539). Its name IS the model alias
+     * the source intent declares in {@code uses:} - that is how the owner's {@code .model} is located.
      */
-    private static final String TRANSITIONED_PUBLISH = "-transitioned\", Json.stringify(source)";
+    private static final String DEPENDENCY_PROJECT = "quotations";
+    private static final String DEPENDENCY_PROJECT_PATH =
+            IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + DEPENDENCY_PROJECT;
+    /** A third project holding only a hand-written owner {@code .model} - see #7227's test. */
+    private static final String OWNER_PROJECT = "partners";
+
+    private static final String OWNER_PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + OWNER_PROJECT;
+
+    private static final String DEPENDENCY_GENERATE_URL =
+            "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + DEPENDENCY_PROJECT + "&path=app.intent";
+    /**
+     * The generated -transitioned announcement, matched on the topic ARGUMENT of the targeted write it
+     * rides (#7160). The code comments that explain the flip mention "-transitioned" as well, so
+     * matching the bare word would find a comment and read as an announcement.
+     */
+    private static final String TRANSITIONED_PUBLISH = "-transitioned\");";
     private static final String AGENT_URL = "/services/ide/intent/agent";
     private static final String ASSIST_URL = "/services/ide/intent/assist";
 
@@ -82,8 +164,12 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: name,    type: string,  required: true, length: 100 }
                   # An ISO alpha-2 code identifies exactly one country, which is what makes it legal
-                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`).
-                  - { name: code2,   type: string,  length: 2, unique: true }
+                  # as an arrival's business key (an inbound lookup refuses a non-unique `by`). Being
+                  # that key is also why it is `translatable: false` (#6545): on a multilingual entity
+                  # every string property would otherwise get a column in COUNTRY_LANG and be overlaid
+                  # on every read, and the arrival's `by: code2` would stop resolving the moment a
+                  # translation existed - silently, since the lookup simply finds nothing.
+                  - { name: code2,   type: string,  length: 2, unique: true, translatable: false }
 
               - name: Customer
                 fields:
@@ -190,10 +276,16 @@ class IntentEngineIT extends IntegrationTest {
                 actions: [approve, reject]
 
             reports:
+              # chart: doughnut renders the aggregated rows as a circular chart beside the table -
+              # its slices ARE the dimension values, so the page names them in the legend.
               - name: OrdersByCustomer
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+                chart: doughnut
+                # kind: count over an AGGREGATING report: one row per customer, so the tile sums the
+                # count(*) column instead of counting rows, which would show the number of customers.
+                widget: { kind: count, label: Orders, icon: shopping-cart }
               # month(field) buckets a date dimension into a sortable YYYYMM integer. The widget
               # turns the report into a dashboard KPI: one aggregate cell, the month pinned to now.
               - name: OrdersByMonth
@@ -220,6 +312,34 @@ class IntentEngineIT extends IntegrationTest {
                 debit: total
                 credit: creditSnapshot
                 dimensions: [customer]
+              # correspondence - the general ledger axis: the counter-side lines of the same document
+              # become one more bucket, and each amount is allocated proportionally across them. The
+              # document the lines share is the first hop of `date`.
+              - name: OrderItemCorrespondence
+                kind: balance
+                source: OrderItem
+                date: order.orderDate
+                debit: quantity
+                credit: creditSnapshot
+                dimensions: [order]
+                correspondence: order.orderDate
+              # kind: statement - the statutory shape over the SAME signed ledger: instead of one row
+              # per dimension value, a fixed line structure where each line is a formula over the
+              # account codes, plus arithmetic over other lines. (The ledger here is the balance
+              # report's; the country code stands in for the chart-of-accounts code.)
+              - name: OrderStatement
+                kind: statement
+                source: Order
+                date: orderDate
+                debit: total
+                credit: creditSnapshot
+                account: country.code2
+                lines:
+                  - { code: A.I,  label: Alpine markets, accounts: "AL,AT", measure: closingNetDebit }
+                  - { code: A.II, label: Other markets,  accounts: "B-Z",   measure: closingNetDebit }
+                  - { code: A,    label: Total markets,  sum: [A.I, A.II] }
+                  - { code: B,    label: Owed to markets, accounts: "A-Z",  measure: closingNetCredit }
+                  - { code: C,    label: Net position,   sum: [A], less: [B] }
 
             # Custom dashboard widgets - developer-supplied content: a REST KPI (the url returns
             # {value, description?}) and an embedded page tile.
@@ -345,6 +465,19 @@ class IntentEngineIT extends IntegrationTest {
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
 
+    /**
+     * Removing the PUBLISHED copy of a project is half of this class's cleanup - see
+     * {@link #removeProject()}.
+     */
+    @Autowired
+    private PublisherService publisherService;
+
+    /**
+     * Reads a generated .schema back exactly as the runtime does, to assert what it creates from it.
+     */
+    @Autowired
+    private SchemasSynchronizer schemasSynchronizer;
+
     @Test
     void parse_returns_the_full_model() {
         restAssuredExecutor.execute(() -> given().contentType("text/plain")
@@ -359,7 +492,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(4))
+                                                 .body("reports", hasSize(6))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -603,7 +736,9 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("project", equalTo(PROJECT))
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
-                                                                 "OrdersByCustomer.report", "OrderBalance.report", "orders.roles",
+                                                                 "OrdersByCustomer.report", "OrderBalance.report", "OrderStatement.report",
+                                                                 "OrderStatementLines.view", "OrderItemCorrespondence.report",
+                                                                 "OrderItemCorrespondenceCorrespondence.view", "orders.roles",
                                                                  "orders.glue", "countries.csvim", "countries.csv",
                                                                  "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
@@ -629,6 +764,7 @@ class IntentEngineIT extends IntegrationTest {
         assertGlue();
         assertSettings();
         assertAppTestManifest();
+        assertGenerationDescriptors();
     }
 
     @Test
@@ -900,16 +1036,19 @@ class IntentEngineIT extends IntegrationTest {
                 lookup.contains("@Component") && lookup.contains("class AssignSalesRepResolve implements MessageHandler")
                         && lookup.contains("return \"intent-test-Order-Order\""),
                 "the lookup should be a @Component MessageHandler bound to the record's create topic");
-        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))"),
+        // Every operand is hoisted into a local before it is null-tested and bound, so a path is walked
+        // once; a bare property - which is what this lookup declares - hoists the record's own column.
+        assertTrue(lookup.contains("Object key0 = entity.Customer;"), "the match key should be hoisted into a local");
+        assertTrue(lookup.contains("new CustomerAssignmentRepository().findAll(Criteria.create().eq(\"Customer\", key0))"),
                 "the lookup should query the register with a typed Criteria built from the match keys");
         assertTrue(
-                lookup.contains("Long at = millis(entity.OrderDate)") && lookup.contains("Long from = millis(row.ValidFrom)")
-                        && lookup.contains("Long to = endExclusive(row.ValidTo)"),
+                lookup.contains("Object on = entity.OrderDate;") && lookup.contains("Long at = millis(on)")
+                        && lookup.contains("Long from = millis(row.ValidFrom)") && lookup.contains("Long to = endExclusive(row.ValidTo)"),
                 "the lookup should compare the record's date against both period bounds");
         assertTrue(lookup.contains("if (entity.SalesRep != null)"),
                 "an already-resolved record should be skipped, so a manual correction is never overwritten");
         assertTrue(
-                lookup.contains("stamp(entity.Id, \"found\", resolved)") && lookup.contains("\"notFound\"")
+                lookup.contains("stamp(entity, \"found\", resolved, java.util.Map.of())") && lookup.contains("\"notFound\"")
                         && lookup.contains("\"ambiguous\""),
                 "all three outcomes should be generated - an ambiguous register is never resolved by picking one");
         // The RESULT - the relation and the trace - is one targeted update. The routing status is a
@@ -1003,9 +1142,11 @@ class IntentEngineIT extends IntegrationTest {
 
         String lookup = contentOf("gen/events/fines/IdentifyDriverResolve.java");
         // The filters are chained onto the SAME Criteria as the match keys, so they narrow the query
-        // rather than being applied after the period comparison.
+        // rather than being applied after the period comparison. The match key rides its hoisted local
+        // (the operand is read once, whether it is a column of the record or a path off it).
+        assertTrue(lookup.contains("Object key0 = entity.Vehicle;"), "the match key must be hoisted, got: " + lookup);
         assertTrue(lookup.contains(
-                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", entity.Vehicle).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
+                "new VehicleAssignmentRepository().findAll(Criteria.create().eq(\"Vehicle\", key0).eq(\"Status\", 7).eq(\"Kind\", \"PRIMARY\"))"),
                 "the register filter must be ANDed into the lookup's Criteria, got: " + lookup);
         // 7 is the REGISTER's ACTIVE; the record's own nomenclature seeds ACTIVE as 2.
         assertFalse(lookup.contains("eq(\"Status\", 2)"),
@@ -1095,6 +1236,111 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(lookup.contains("repository.updateProperty(id, \"Resolution\", outcome + \"-notRouted\")"),
                 "a rejected route should amend the trace so the record shows what happened");
         assertTrue(lookup.contains("could not be routed to status"), "a rejected route should also be logged");
+    }
+
+    @Test
+    void resolve_prices_a_line_from_the_header_and_copies_the_found_scalar() {
+        // The case dirigible #6712 named and could not express (#7025): an invoice LINE priced from the
+        // price list its HEADER's customer carries, valid on the HEADER's date, with the price itself -
+        // a scalar of the covering row - written onto the line. Neither operand is a column of the
+        // line, and the value needed is not the relation the row points at, so before paths and
+        // `copy:` the only way to get either was `dependsOn`, which is a UI-time copy: a REST create, a
+        // `generates:` create-from or a schedule fan-out never runs it, and those lines stayed unpriced
+        // while the interactive path looked correct.
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: PriceList
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: priceList, kind: manyToOne, to: PriceList }
+                  - name: PriceListItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                      - { name: validFrom, type: date }
+                      - { name: validTo, type: date }
+                    relations:
+                      - { name: priceList, kind: manyToOne, to: PriceList }
+                      - { name: product, kind: manyToOne, to: Product }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
+                      - { name: product, kind: manyToOne, to: Product }
+                      - { name: priceListItem, kind: manyToOne, to: PriceListItem }
+                resolves:
+                  - name: priceFromList
+                    event: { onCreate: SalesInvoiceItem }
+                    set: priceListItem
+                    from: PriceListItem
+                    match:
+                      product: product
+                      priceList: salesInvoice.customer.priceList
+                    between: { start: validFrom, end: validTo, value: salesInvoice.issuedOn }
+                    copy: { price: price }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+        String lookup = codeOf("gen/events/billing/PriceFromListResolve.java");
+
+        // Both hops are loaded, in order, each through the generated repository and each null-guarded -
+        // and the header is loaded ONCE although two operands read through it.
+        assertTrue(
+                lookup.contains("Object hop0Fk = entity.SalesInvoice;\n"
+                        + "        gen.billing.data.salesinvoice.SalesInvoiceEntity hop0 = hop0Fk == null ? null"
+                        + " : new gen.billing.data.salesinvoice.SalesInvoiceRepository().findById(hop0Fk);"),
+                "the first hop must load the header off the line's own FK, got: " + lookup);
+        // The second hop's FK is read off the FIRST hop's local, null-guarded - the walk never
+        // dereferences a link that is not there.
+        assertTrue(lookup.contains("Object hop1Fk = (hop0 == null ? null : hop0.Customer);"),
+                "the second hop must read its FK off the first hop's local, null-guarded, got: " + lookup);
+        assertEquals(1, occurrencesOf(lookup, "SalesInvoiceRepository().findById"),
+                "two operands through the same header must share ONE load");
+
+        // The operands are hoisted, so a path is walked once and the same value is null-tested and bound.
+        assertTrue(lookup.contains("Object key1 = (hop1 == null ? null : hop1.PriceList);"),
+                "the header path must be hoisted into the match local, got: " + lookup);
+        assertTrue(lookup.contains("Object on = (hop0 == null ? null : hop0.IssuedOn);"),
+                "the period date must be read off the header, got: " + lookup);
+        assertTrue(lookup.contains("findAll(Criteria.create().eq(\"Product\", key0).eq(\"PriceList\", key1))"),
+                "the register query must bind the hoisted operands, got: " + lookup);
+        assertTrue(lookup.contains("if (at != null && key0 != null && key1 != null)"),
+                "an unresolvable path must leave the operand null and skip the query, got: " + lookup);
+
+        // set: points at the REGISTER itself - a value-bearing register, where the row IS what the line
+        // links to - so the resolved value is the covering row's own key.
+        assertTrue(lookup.contains("Integer resolved = covered.Id;"),
+                "a lookup whose set: is the register must resolve to the covering row's own key, got: " + lookup);
+
+        // The copy is per field and never overwrites, and it rides the RESULT write rather than one of
+        // its own: a partial commit would leave a line pointing at a price-list item with no price.
+        assertTrue(lookup.contains("if (entity.Price == null) {\n            values.put(\"Price\", covered.Price);"),
+                "a copy must skip a field the record already carries a value in, got: " + lookup);
+        assertTrue(lookup.contains("values.putAll(copied);"), "the copied scalars must ride the result write, got: " + lookup);
+        assertFalse(lookup.contains("updateProperty(id, \"Price\""), "a copy must not be a write of its own, got: " + lookup);
     }
 
     @Test
@@ -1342,8 +1588,15 @@ class IntentEngineIT extends IntegrationTest {
                 wait.contains("ProcessStamps.idFor(carrier.ProcessIds, \"CaseHandling\")")
                         && wait.contains("Process.correlateMessageEvent(instance, \"CaseHandlingAwaitReply\""),
                 "the listener should correlate the catch event's message on THIS process's stamped instance (#6862)");
-        assertTrue(wait.contains("catch (RuntimeException"),
-                "correlation must be fail-soft - an instance not parked on the message is a no-op");
+        // Fail-soft, but not blind (#7230): only the platform's IllegalArgumentException - not parked,
+        // or already ended - is the expected no-op; every other failure leaves an instance that IS
+        // parked here parked forever, and is logged with its throwable.
+        assertTrue(wait.contains("catch (IllegalArgumentException notParked)") && wait.contains("LOG.debug("),
+                "the not-parked miss should be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(wait.contains("catch (RuntimeException failed)") && wait.contains("LOG.warn(\"Could not resume")
+                && wait.contains("failed);"), "any other correlation failure should be logged with the throwable");
+        assertFalse(wait.contains("catch (RuntimeException notParked)"),
+                "the empty catch that treated every failure as not-parked should be gone");
         String loader = codeOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
         assertTrue(loader.contains("class LoadCaseHandlingWorkExpire implements JavaDelegate"),
                 "the expire date loader should be a Flowable JavaDelegate");
@@ -1450,7 +1703,8 @@ class IntentEngineIT extends IntegrationTest {
                               - { name: dbPassword, clearAfter: provisionApp }
                             steps:
                               - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPassword], retry: { count: 3, every: PT30S }, onError: recordFailure } }
-                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: done } }
+                              - { name: provisionApp, kind: serviceTask, args: { delegate: custom.AppProvisioner, uses: [dbPassword], retry: { count: 5, every: PT1M }, onError: recordFailure, next: notifyOwner } }
+                              - { name: notifyOwner, kind: serviceTask, args: { notify: { to: owner@example.com, subject: "Tenant provisioned", body: "Ready." }, retry: { count: 1, every: PT5S }, onError: recordFailure, next: done } }
                               - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: markFailed } }
                               - { name: markFailed, kind: serviceTask, args: { setRelationField: Status, value: 3, next: end } }
                               - { name: done, kind: end }
@@ -1485,6 +1739,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the main flow must route around the error steps");
         assertTrue(bpmn.contains("BPMNShape_createSchemaError") && bpmn.contains("BPMNEdge_flow_createSchemaError_then"),
                 "the error boundary needs its DI shape and edge or the modeler opens it detached");
+
+        // #7056: a `notify:` step is the second shape step resilience applies to. Its element is the
+        // ${JavaTask} delegate-expression one, so the cycle has to share the extensionElements block
+        // with the handler field the dispatcher reads - and the boundary machinery is shape-agnostic.
+        int send = bpmn.indexOf("<serviceTask id=\"notifyOwner\"");
+        int sendHandler = bpmn.indexOf("TenantProvisioningNotifyOwnerSend");
+        int sendCycle = bpmn.indexOf("R2/PT5S");
+        int afterSend = bpmn.indexOf("<serviceTask id=\"recordFailure\"");
+        assertTrue(send >= 0 && send < sendHandler && sendHandler < sendCycle && sendCycle < afterSend,
+                "the send's retry cycle should ride its own element, after its handler field");
+        assertTrue(bpmn.contains("<flowable:failedJobRetryTimeCycle>R2/PT5S</flowable:failedJobRetryTimeCycle>"),
+                "the send's retry count: 1 should emit an R2 failed-job retry cycle");
+        assertTrue(bpmn.contains("<serviceTask id=\"notifyOwner\" name=\"Notify Owner\" flowable:async=\"true\""),
+                "the send must keep its async boundary - a retry cycle only re-runs an async job");
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"notifyOwnerError\" attachedToRef=\"notifyOwner\" cancelActivity=\"true\">")
+                        && bpmn.contains("sourceRef=\"notifyOwnerError\" targetRef=\"recordFailure\""),
+                "the send should carry its own cancelling error boundary, routed like a delegate's");
 
         // clearAfter: an end-listener on the completing step removes the credential from the
         // instance data (and thereby from the history).
@@ -1564,6 +1836,12 @@ class IntentEngineIT extends IntegrationTest {
                             fields:
                               - { name: id, type: integer, primaryKey: true, generated: true }
                               - { name: failureMessage, type: string }
+                          - name: TenantContact
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: email, type: string }
+                            relations:
+                              - { name: tenant, kind: manyToOne, to: TenantApplication }
                         processes:
                           - name: TenantProvisioning
                             trigger: { onCreate: TenantApplication }
@@ -1571,7 +1849,8 @@ class IntentEngineIT extends IntegrationTest {
                               - { name: dbPassword, clearAfter: nowhere }
                             steps:
                               - { name: createSchema, kind: serviceTask, args: { delegate: custom.SchemaProvisioner, produces: [dbPasword], retry: { cout: 3, every: 30seconds }, onError: recordFailur } }
-                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end } }
+                              - { name: recordFailure, kind: serviceTask, args: { setField: failureMessage, value: "{error}", next: end, retry: { count: 1, every: PT5S } } }
+                              - { name: hold, kind: serviceTask, args: { notify: { forEach: TenantContact, to: email, subject: "Held", body: "." }, onError: end, next: end } }
                         """;
         restAssuredExecutor.execute(() -> given().contentType("text/plain")
                                                  .body(yaml)
@@ -1585,7 +1864,18 @@ class IntentEngineIT extends IntegrationTest {
                                                          "process [TenantProvisioning] step [createSchema] `onError` references unknown step [recordFailur]",
                                                          "process [TenantProvisioning] step [createSchema] produces names undeclared var [dbPasword] - declare it under the process `vars:`",
                                                          "process [TenantProvisioning] var [dbPassword] clearAfter references unknown step [nowhere]",
-                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route")));
+                                                         "process [TenantProvisioning] step [recordFailure] setField value {error} is only resolvable on a step reachable from an onError route",
+                                                         // #7056: the keys apply to a delegate: or a notify: step. A setter is refused
+                                                         // because a
+                                                         // check-gated status write is refused synchronously to the person who acted, and a
+                                                         // fan-out send because it never fails the task, so neither key could ever fire
+                                                         // there.
+                                                         "process [TenantProvisioning] step [recordFailure] declares retry but is neither a `delegate:` nor a `notify:` service task"
+                                                                 + " - step resilience applies to those two shapes (a check-gated status write is refused synchronously to the"
+                                                                 + " person who acted, so its failure must not be routed away)",
+                                                         "process [TenantProvisioning] step [hold] declares onError on a fan-out notify (forEach) - a fan-out sends per row and is"
+                                                                 + " fail-soft per row, so the step never fails and nothing would retry or route; observe the delivery with"
+                                                                 + " `outcome:` and an `event: { onNotifyFailed: <Entity> }` consumer")));
     }
 
     @Test
@@ -1671,7 +1961,14 @@ class IntentEngineIT extends IntegrationTest {
                 abort.contains("ProcessStamps.idFor(entity.ProcessIds, \"OrderApproval\")")
                         && abort.contains("Process.correlateMessageEvent(instance, \"OrderApprovalAbort\""),
                 "the abort listener should abort ITS OWN instance, not whichever flow stamped the record last (#6862)");
-        assertTrue(abort.contains("catch (RuntimeException"), "correlation must be fail-soft");
+        // Fail-soft, but not blind (#7230): the not-in-scope miss is typed and quiet, anything else is
+        // a flow still running over a record whose status says it is over - logged with its throwable.
+        assertTrue(abort.contains("catch (IllegalArgumentException notAborting)") && abort.contains("LOG.debug("),
+                "the not-in-abort-scope miss should be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(abort.contains("catch (RuntimeException failed)") && abort.contains("LOG.warn(\"Could not abort")
+                && abort.contains("failed);"), "any other correlation failure should be logged with the throwable");
+        assertFalse(abort.contains("catch (RuntimeException notAborting)"),
+                "the empty catch that treated every failure as not-aborting should be gone");
     }
 
     @Test
@@ -1879,6 +2176,567 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(job.contains(".EmployeeTimesheetRepository().save(target);"),
                 "the target is saved through its generated repository so create-time logic fires");
         assertFalse(job.contains("Mail.send"), "a generate schedule must not emit the notify (mail) path");
+        assertFalse(job.contains("existed++"),
+                "a schedule that declares no unique: key keeps generating exactly what it did - no guard, no counters");
+    }
+
+    @Test
+    void a_scheduled_generation_with_a_natural_key_skips_a_row_it_already_generated() {
+        // Issue #7070: a tick used to create unconditionally, so a second run of the job - a failed
+        // deploy replayed, a Quartz misfire recovery, an admin pressing Run in Monitoring - minted a
+        // duplicate target with a duplicate set of children under it. `unique:` names the target
+        // properties that identify ONE tick's output; the job looks the target up by those values
+        // BEFORE it builds anything and skips the source row, children included.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                  - name: EmployeeDayAllocation
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: EmployeeTimesheet, kind: manyToOne, to: EmployeeTimesheet }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    where:
+                      - { field: status, op: eq, value: ACTIVE }
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                      children:
+                        - to: EmployeeDayAllocation
+                          parent: EmployeeTimesheet
+                          forEach: { days: workingDays }
+                          dayField: day
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains(".EmployeeTimesheetRepository().findAll(Criteria.create()"),
+                "the guard should query the TARGET before building anything");
+        assertTrue(job.contains("Object keyEmployee = entity.Id;"), "the key term reuses the map assignment's own expression");
+        assertTrue(job.contains(".eq(\"Employee\", keyEmployee)"), "the guard queries by the value read for that term");
+        // The sharp one: a month field's `now` is YearMonth.now().toString(), which is what makes "the
+        // same month" comparable at all - a re-derived LocalDate.now() would never match the row the
+        // first tick wrote.
+        assertTrue(job.contains("Object keyPeriod = java.time.YearMonth.now().toString();"),
+                "the key term renders in the target field's own shape, exactly as the assignment does");
+        assertTrue(job.contains(".eq(\"Period\", keyPeriod)"), "the period half of the key is queried by that same value");
+        // Issue #7134: a key term whose value is null cannot tell two source rows apart, and the
+        // lookup used to match NOTHING for it - a duplicate on every re-run, reported as
+        // "already existed [0]". The value is now null-safe in the criteria (Criteria.eq binds
+        // `is null`) and the weak key is named in the log rather than left to be discovered.
+        assertTrue(job.contains("if (keyEmployee == null) {") && job.contains("nullKeyTerms.add(\"Employee\");"),
+                "a null key term is detected per row and named");
+        assertTrue(job.contains("unique key term(s) {} are null"), "the tick says which key term was null");
+        assertTrue(job.indexOf("nullKeyTerms.add(\"Employee\");") < job.indexOf(".eq(\"Employee\", keyEmployee)"),
+                "the diagnostic is emitted before the guard runs, so the reason is in the log either way");
+        // Skipping the ROW, not just the header: `continue` is what leaves the children alone.
+        assertTrue(job.contains("existed++;"), "a row whose target already exists is counted");
+        assertTrue(
+                job.indexOf(".EmployeeTimesheetRepository().findAll(Criteria.create()") < job.indexOf(".EmployeeTimesheetEntity target ="),
+                "the guard must run BEFORE the target is built");
+        assertTrue(job.contains("already existed [{}]"), "the tick reports what a re-run did nothing about");
+    }
+
+    @Test
+    void a_scheduled_generation_is_one_transaction_per_source_row_and_the_row_is_fail_soft() {
+        // Issue #7133: the header, its children and their grandchildren were written in a transaction
+        // each, so a tick that died halfway left a childless header behind - and once #7070's `unique:`
+        // guard found that header, every later run reported "already existed" and the project-month
+        // stayed childless forever. One failing row also aborted the whole tick, so every later matching
+        // row was silently never generated and the summary line never logged.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                  - name: EmployeeDayAllocation
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: EmployeeTimesheet, kind: manyToOne, to: EmployeeTimesheet }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                      children:
+                        - to: EmployeeDayAllocation
+                          parent: EmployeeTimesheet
+                          forEach: { days: workingDays }
+                          dayField: day
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains("UnitOfWork.run(() -> {"), "the whole generation of one source row is one transaction");
+        // The ordering is the point: the header must be built INSIDE the unit, or a refused child still
+        // leaves it behind - which is exactly the state the `unique:` guard then reads as "already done".
+        assertTrue(job.indexOf("UnitOfWork.run(() -> {") < job.indexOf(".EmployeeTimesheetEntity target ="),
+                "the header is created inside the unit, not before it");
+        assertTrue(job.indexOf(".EmployeeDayAllocationRepository().save(") > job.indexOf("UnitOfWork.run(() -> {"),
+                "the children are written inside the same unit as their header");
+        // Per-row fail-soft, like the notify branch: the loop goes on, and the row is counted and named.
+        assertTrue(job.contains("} catch (Exception ex) {"), "a refused row must not abort the tick");
+        assertTrue(job.contains("failed++;"), "a refused row is counted");
+        assertTrue(job.contains("could not generate EmployeeTimesheet from Employee [{}]"), "the refused row is logged with its own key");
+        assertTrue(job.contains("failed [{}]"), "the tick's summary reports the rows it could not generate");
+    }
+
+    @Test
+    void a_scheduled_generation_keeps_its_row_loads_and_unique_guard_inside_the_fail_soft_try() {
+        // Issue #7178: #7133 made each row's GENERATION fail-soft, but the row's one-hop relation loads
+        // and the `unique:` guard's lookup still ran BEFORE the try. Both read the database, so a throw
+        // from either - a connection blip, a foreign key at a row a concurrent delete removed - still
+        // aborted the whole tick: every later matching row silently ungenerated, no summary logged.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Department
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                    relations:
+                      - { name: department, kind: manyToOne, to: Department }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,             type: integer, primaryKey: true, generated: true }
+                      - { name: period,         type: month }
+                      - { name: departmentName, type: string }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      unique: [Employee, Period]
+                      map:
+                        Employee: id
+                        departmentName: department.name
+                      defaults:
+                        Period: now
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = codeOf("gen/events/hr/MonthlyTimesheetsJob.java");
+        int loop = job.indexOf("for (EmployeeEntity entity : rows) {");
+        int tryOpens = job.indexOf("try {", loop);
+        int load = job.indexOf("Repository().findById(entity.Department)");
+        int guard = job.indexOf(".EmployeeTimesheetRepository().findAll(Criteria.create()");
+        int unit = job.indexOf("UnitOfWork.run(() -> {");
+        int catches = job.indexOf("} catch (Exception ex) {");
+        assertTrue(loop > 0 && tryOpens > 0 && load > 0 && guard > 0 && unit > 0 && catches > 0, "got: " + job);
+        // The ordering is the whole fix: the try must open before the first per-row database read.
+        assertTrue(tryOpens < load, "the one-hop relation load runs inside the fail-soft try");
+        assertTrue(tryOpens < guard, "the `unique:` guard's lookup runs inside the fail-soft try");
+        assertTrue(guard < unit && unit < catches, "guard, then generation, then the row's catch - one try encloses all three");
+        // Skipping a row whose target exists is still a `continue` - it leaves the try, not the loop.
+        int existed = job.indexOf("existed++;");
+        assertTrue(tryOpens < existed && existed < catches, "an already-existing row is still skipped from inside the try");
+        assertTrue(job.contains("could not generate EmployeeTimesheet from Employee [{}]"),
+                "a row that failed on a load or the guard is logged with its own key");
+    }
+
+    @Test
+    void a_scheduled_notification_keeps_its_row_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7233: #7023 made each row's SEND fail-soft, but the per-row try enclosed only Mail.send.
+        // The row's one-hop relation loads, the render language's load and the attachment render all ran
+        // BEFORE it, and every one of them reads the database - so a foreign key at a row a concurrent
+        // delete removed, or a print template that fails for ONE document, still aborted the whole
+        // dunning run: every later matching row silently never mailed, no summary logged. The generate
+        // branch was fixed for exactly this in #7178; this is its twin.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                schedules:
+                  - name: overdue-reminders
+                    cron: "0 0 8 * * ?"
+                    entity: Invoice
+                    where:
+                      - { field: dueDate, op: lt, value: CURRENT_DATE }
+                    notify:
+                      to: Customer.email
+                      subject: "Invoice {id} is overdue"
+                      body: "Dear {Customer.name}, invoice {id} is still unpaid - it is attached."
+                      attach: print
+                      languageFrom: Customer.locale
+                      outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String job = codeOf("gen/events/billing/OverdueRemindersJob.java");
+        int loop = job.indexOf("for (InvoiceEntity entity : rows) {");
+        int recipient = job.indexOf("String to = null;", loop);
+        int tryOpens = job.indexOf("try {", loop);
+        int load = job.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int language = job.indexOf("attachLanguageSource =");
+        int render = job.indexOf("Print.render(\"Invoice\",");
+        int send = job.indexOf("Mail.send(");
+        int catches = job.indexOf("} catch (Exception ex) {");
+        assertTrue(loop > 0 && recipient > 0 && tryOpens > 0 && load > 0 && language > 0 && render > 0 && send > 0 && catches > 0,
+                "got: " + job);
+        // The ordering is the whole fix: the try must open before the first per-row database read.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < language && language < render, "the render language's load and the attachment render follow it, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the row's catch - one try encloses all of them");
+        int nextTry = job.indexOf("try {", tryOpens + 1);
+        assertTrue(nextTry < 0 || nextTry > catches, "one try encloses the whole row - no second try wraps only the send");
+        // The recipient local is declared ahead of the try, so the row's failure line can still name it.
+        assertTrue(recipient < tryOpens, "the recipient is declared outside the try the failure line reads it from");
+        assertTrue(job.contains("could not mail Invoice [{}] at [{}]\", entity.Id, to, ex"),
+                "a row that failed on a load or the render is logged with its own key and recipient");
+        // A row with nobody to mail is still a `continue` - it leaves the try, not the loop - and is
+        // still counted rather than failed.
+        int skipped = job.indexOf("skipped++;");
+        assertTrue(tryOpens < skipped && skipped < send, "a row with no recipient is still skipped from inside the try");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a row
+        // that failed on a load or the render is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = job.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = job.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + job);
+        assertTrue(job.contains("mailed [{}] of [{}] matching Invoice row(s), no recipient [{}], failed [{}]"),
+                "the tick's summary still reports the totals");
+    }
+
+    @Test
+    void a_dunning_schedule_records_what_it_sent_and_escalates_by_days_past_due() {
+        // Issue #7276. A `schedules[].notify` could mail but not RECORD, and could not tell a document
+        // three days overdue from one ninety days overdue - so a reminder history filled only from
+        // manual clicks, and a seeded Second reminder / Final notice was never applied by the system.
+        // One tick now does both: it picks the level off a days-past-due ladder, writes the history row
+        // with that level on it, and mails the level's own wording - with the generate's `unique:` key
+        // gating the SEND too, so each (invoice, level) goes out exactly once.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: ReminderLevel
+                    function: Setting
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: name,         type: string }
+                      - { name: daysAfterDue, type: integer }
+                      - { name: wording,      type: string, length: 500 }
+                  - name: Customer
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate, type: date }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: PaymentReminder
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: sentOn, type: date }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Level,   kind: manyToOne, to: ReminderLevel }
+                schedules:
+                  - name: overdue-dunning
+                    cron: "0 0 8 * * MON"
+                    entity: Invoice
+                    where:
+                      - { field: dueDate, op: lt, value: CURRENT_DATE }
+                    escalate:
+                      ladder: ReminderLevel
+                      after: daysAfterDue
+                      since: dueDate
+                      into: Level
+                    generate:
+                      to: PaymentReminder
+                      unique: [Invoice, Level]
+                      map: { Invoice: id }
+                      defaults: { sentOn: now }
+                    notify:
+                      to: Customer.email
+                      subject: "Invoice {id} - {escalation.name}"
+                      body: "{escalation.wording}"
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String job = codeOf("gen/events/billing/OverdueDunningJob.java");
+        int loop = job.indexOf("for (InvoiceEntity entity : rows) {");
+        int ladder = job.indexOf("ReminderLevelEntity escalationCandidate = null;", loop);
+        int days = job.indexOf("java.time.temporal.ChronoUnit.DAYS.between(entity.DueDate", loop);
+        int notDue = job.indexOf("notDue++;", loop);
+        int guard = job.indexOf("PaymentReminderRepository().findAll(Criteria.create()", loop);
+        int recipient = job.indexOf("if (to == null || to.isBlank())", loop);
+        int create = job.indexOf("UnitOfWork.run(", loop);
+        // #7365: the send is the unit of work's last act, so it is the unchecked `mail(...)` call
+        // inside the lambda - `Mail.send` itself lives in that helper, below the loop.
+        int send = job.indexOf("mail(from, recipient, subject, parts);", loop);
+        assertTrue(loop > 0 && ladder > 0 && days > 0 && notDue > 0 && guard > 0 && recipient > 0 && create > 0 && send > 0, "got: " + job);
+        // The ladder is read first: which level a row is at decides both what is written and what is
+        // said, so it cannot be resolved after either.
+        assertTrue(ladder < days && days < notDue && notDue < guard, "the level is picked before the idempotency guard: " + job);
+        // The highest threshold the row has PASSED - not the first, and not the bottom rung for a row
+        // that has passed none: that row is left for a later tick.
+        assertTrue(job.contains("if (level.DaysAfterDue == null || level.DaysAfterDue > overdueDays) {"),
+                "a level whose threshold is not reached yet is skipped: " + job);
+        assertTrue(job.contains("if (escalationCandidate == null"), "the highest passed threshold wins: " + job);
+        // Frozen into the local the write and the message both read: the generation runs inside a
+        // lambda, which may only close over an effectively final variable.
+        assertTrue(job.contains("ReminderLevelEntity escalation = escalationCandidate;"),
+                "the chosen level is frozen before the lambda closes over it: " + job);
+        // The chosen level lands on the history row AND in the natural key - the key is what makes the
+        // same (invoice, level) send once, so a Monday tick that already sent the second reminder does
+        // not send it again while the invoice ages towards the final notice.
+        assertTrue(job.contains("target.Level = escalation.Id;"), "the chosen level is written onto the history row: " + job);
+        assertTrue(job.contains(".eq(\"Level\", keyLevel)"), "the level is part of the guard's natural key: " + job);
+        // The guard gates the MAIL as well: it `continue`s before the send, in the same try.
+        int existed = job.indexOf("existed++;", loop);
+        assertTrue(guard < existed && existed < create && create < send, "an already-sent level skips the send too: " + job);
+        // #7365 - the order the combined form's claim rests on. The recipient is resolved BEFORE
+        // anything is written, so a row with nobody to mail leaves no history row saying a reminder
+        // went out; and the send is the LAST act of the unit that writes the record, so a delivery
+        // that fails rolls the record back and the next tick retries it, instead of leaving a record
+        // the guard reads as "already sent" and skips for good.
+        assertTrue(existed < recipient && recipient < create, "the recipient is resolved after the guard and before the write: " + job);
+        int closesUnit = job.indexOf("});", create);
+        int created = job.indexOf("created++;", loop);
+        assertTrue(send < closesUnit && closesUnit < created, "the send rides the unit of work it writes the record in: " + job);
+        assertTrue(job.contains("throw new IllegalStateException(reason, ex);"),
+                "a failed delivery leaves the lambda unchecked, so the record it was about is rolled back: " + job);
+        // Per-level wording: the message reads the level it is at.
+        assertTrue(job.contains("escalation.Name") && job.contains("escalation.Wording"),
+                "the message must be able to read the level's own text: " + job);
+        // One row, one try, one failure count - the combined tick keeps the fail-soft shape of both.
+        int tryOpens = job.indexOf("try {", loop);
+        int catches = job.indexOf("} catch (Exception ex) {", loop);
+        assertTrue(tryOpens < ladder && catches > send, "one try encloses the level lookup, the write and the send: " + job);
+        assertTrue(job.indexOf("try {", tryOpens + 1) < 0 || job.indexOf("try {", tryOpens + 1) > catches,
+                "no second try wraps only one half: " + job);
+        assertTrue(job.contains("could not generate PaymentReminder from Invoice [{}] and mail it to [{}]"),
+                "a failed row names both halves it could not complete: " + job);
+        // ONE summary line (#7365): created and mailed are one number because they are one unit, and
+        // `failed` counts rows - reported in a generate line AND a notify line, a tick with one bad row
+        // read as two. The rows no level applied to keep their own line.
+        assertTrue(job.contains("had passed no ReminderLevel threshold yet"), "the tick reports the rows no level applied to: " + job);
+        assertTrue(job.contains("created and mailed [{}] PaymentReminder(s)"), "the tick reports what it created and mailed: " + job);
+        assertTrue(!job.contains("mailed [{}] of [{}] matching Invoice row(s)") && !job.contains("sent++;"),
+                "the combined tick does not count or report the two halves separately: " + job);
+    }
+
+    @Test
+    void an_event_notification_keeps_its_relation_loads_and_attachment_render_inside_the_fail_soft_try() {
+        // Issue #7290 (the single-record twin of #7233/#7278): the per-row try above covers a
+        // SCHEDULE's notify branch. A notifications: entry (one record, no loop) had the identical gap
+        // - only Mail.send sat inside the try, so a relation load or a broken .print template
+        // propagated straight out of onMessage with NO stamp: the broker redelivers forever and the
+        // record's outcome stays empty, exactly the silent state #7023 introduced the stamp to remove.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: email,  type: string }
+                      - { name: locale, type: string, length: 5 }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id,              type: integer, primaryKey: true, generated: true }
+                      - { name: dueDate,         type: date }
+                      - { name: reminderOutcome, type: string, length: 128 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                notifications:
+                  - name: invoiceIssued
+                    event: { onCreate: Invoice }
+                    to: Customer.email
+                    subject: "Invoice {id} issued"
+                    body: "Dear {Customer.name}, your invoice is attached."
+                    attach: print
+                    languageFrom: Customer.locale
+                    outcome: reminderOutcome
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String notification = codeOf("gen/events/billing/InvoiceIssuedNotification.java");
+        int method = notification.indexOf("public void onMessage(String message) {");
+        int tryOpens = notification.indexOf("try {", method);
+        int load = notification.indexOf("new CustomerRepository().findById(entity.Customer)");
+        int render = notification.indexOf("Print.render(\"Invoice\",");
+        int send = notification.indexOf("Mail.send(");
+        int catches = notification.indexOf("} catch (Exception ex) {");
+        assertTrue(method > 0 && tryOpens > 0 && load > 0 && render > 0 && send > 0 && catches > 0, "got: " + notification);
+        // The ordering is the whole fix: the try must open before the relation load.
+        assertTrue(tryOpens < load, "the recipient's one-hop relation load runs inside the fail-soft try");
+        assertTrue(load < render, "the attachment render follows the load, in the same try");
+        assertTrue(render < send && send < catches, "render, then send, then the catch - one try encloses both");
+        // Both outcome stamps survive: `sent` inside the try, `failed: <reason>` from the catch - so a
+        // relation load or render failure is stamped on the record exactly as a bounced mailbox is.
+        int stampSent = notification.indexOf("stampNotifyOutcome(entity.Id, null);");
+        int stampFailed = notification.indexOf("stampNotifyOutcome(entity.Id, ex);");
+        assertTrue(send < stampSent && stampSent < catches && catches < stampFailed,
+                "both delivery outcomes are still stamped, got: " + notification);
+    }
+
+    @Test
+    void a_recurring_template_schedule_keys_on_the_period_of_the_run() {
+        // Issue #7106: the recurring-template family had no key to declare. A monthly bill generated
+        // from a standing BillTemplate is a plain document with a `date` - no period column to name -
+        // and the target carries no back-reference to the template either, so #7070's property-only
+        // key was not expressible: `monthly-recurring-bills` run twice on the same day created three
+        // more DRAFT invoices on sta. `run: month` keys on WHEN the tick fired, and stores nothing to
+        // do it: the guard ranges over the very date this run writes, so a re-run on any day of the
+        // month finds the invoice the 1st created.
+        String yaml = """
+                name: purchases
+                entities:
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: BillTemplate
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: active, type: boolean }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id,             type: integer, primaryKey: true, generated: true }
+                      - { name: date,           type: date }
+                      - { name: supplierNumber, type: string, length: 64 }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier }
+                schedules:
+                  - name: monthly-recurring-bills
+                    cron: "0 0 5 1 * ?"
+                    entity: BillTemplate
+                    where:
+                      - { field: active, op: eq, value: true }
+                    generate:
+                      to: PurchaseInvoice
+                      unique: [Supplier, supplierNumber, { run: month }]
+                      map:
+                        Supplier: Supplier
+                      defaults:
+                        date: now
+                        supplierNumber: "RECURRING - awaiting invoice"
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "purchases.glue");
+
+        String job = codeOf("gen/events/purchases/MonthlyRecurringBillsJob.java");
+        assertTrue(job.contains(".PurchaseInvoiceRepository().findAll(Criteria.create()"), "the guard should query the TARGET");
+        assertTrue(job.contains("Object keySupplier = entity.Supplier;") && job.contains(".eq(\"Supplier\", keySupplier)"),
+                "the row half of the key reuses the map assignment's expression");
+        // The period term: a RANGE over the date the run writes, built from that assignment's own
+        // LocalDate.now() - which is what makes the period queried the period the row is dated into.
+        assertTrue(
+                job.contains(".between(\"Date\", java.time.LocalDate.now().withDayOfMonth(1),"
+                        + " java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1))"),
+                "the run's month renders as a range over the target's own date, needing no period column");
+        // No storage was invented for the period - neither a hidden column on the document nor a ledger.
+        assertFalse(job.contains("_period"), "a period-of-the-run key adds no column of its own");
+        assertTrue(job.indexOf(".PurchaseInvoiceRepository().findAll(Criteria.create()") < job.indexOf(".PurchaseInvoiceEntity target ="),
+                "the guard must run BEFORE the target is built");
     }
 
     @Test
@@ -2011,6 +2869,20 @@ class IntentEngineIT extends IntegrationTest {
                 "with a capacity + balance, it should keep balance = capacity - sum");
         assertTrue(onCreate.contains("parent.Status = sum.compareTo(capacity) >= 0 ? 2 : 1"),
                 "with a capacity + status, it should set the status relation to whenFull/whenPartial at the thresholds");
+        // ...and lets go of it again (#7016): the status the roll-up displaces is remembered in a hidden
+        // parent column and restored when the sum returns to zero - in every variant, since an
+        // allocation amended to 0 or re-parented away is the same situation as a deleted one.
+        assertTrue(contentOf("billing.model").contains("\"name\": \"DisplacedStatus\""),
+                "the parent must carry the column remembering the status the roll-up displaced");
+        for (String variant : java.util.List.of("OnCreate", "OnUpdate", "OnDelete", "OnRekey")) {
+            String handler = codeOf("gen/events/billing/BillPaymentBillRollup" + variant + ".java");
+            assertTrue(
+                    handler.contains("parent.DisplacedStatus = parent.Status;") && handler.contains(
+                            "} else if (java.util.Objects.equals(parent.Status, 2) || java.util.Objects.equals(parent.Status, 1)) {")
+                            && handler.contains("parent.Status = parent.DisplacedStatus;")
+                            && handler.contains("derived.put(\"DisplacedStatus\", null);"),
+                    variant + " must snapshot the displaced status on the way in and restore it when the sum is back at zero");
+        }
     }
 
     @Test
@@ -2107,6 +2979,18 @@ class IntentEngineIT extends IntegrationTest {
                 "the re-key recompute must read the payment from the store, never trust the moved payload");
         assertTrue(onPaymentRekeyed.contains("release(payment.Id, allocated(payment.Id))"),
                 "the re-key recompute must release the whole allocation before re-allocating");
+
+        // Deleting the PAYMENT must take its allocation with it (#7061): the junction FK to the payment
+        // is never a database constraint here, so without this handler the rows outlived the payment as
+        // orphans and the invoice stayed PAID forever. Removing them through the junction repository is
+        // what makes the paid roll-up recompute and the invoice relinquish PAID (#7022).
+        String onPaymentDeleted = contentOf("gen/events/settle/AutoSettleOnPaymentDeleted.java");
+        assertTrue(onPaymentDeleted.contains("class AutoSettleOnPaymentDeleted implements MessageHandler"),
+                "a cleanup listener should be generated for the payment's delete event");
+        assertTrue(onPaymentDeleted.contains("return \"" + PROJECT + "-Payment-Payment-deleted\";"),
+                "it should bind the payment's delete topic");
+        assertTrue(onPaymentDeleted.contains(".eq(\"Payment\", payment.Id)") && onPaymentDeleted.contains("rows.delete(row)"),
+                "it should delete every allocation row of that payment through the junction repository");
 
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
@@ -2506,6 +3390,105 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void an_authored_default_is_escaped_into_the_item_dialog_seed() {
+        // #7207: the seed for a new line was interpolated into a JavaScript string literal verbatim,
+        // so an authored apostrophe ended the literal and the whole register was a syntax error - the
+        // page failed to load entirely, rather than one field mis-seeding. Sibling of #7154, which
+        // fixed the same interpolation one language over (the repository's Java literal).
+        writeIntent("""
+                name: registers
+                entities:
+                  - name: Ticket
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: issued, type: date }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: TicketLine }
+
+                  - name: TicketLine
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: copy,     type: string,  length: 40, defaultValue: "Owner's copy" }
+                      - { name: path,     type: string,  length: 40, defaultValue: 'C:\\tmp' }
+                      - { name: quantity, type: integer, defaultValue: 1 }
+                      - { name: billable, type: boolean, defaultValue: true }
+                      - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                    relations:
+                      - { name: ticket, kind: manyToOne, to: Ticket, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "registers.model");
+        String detailRegister = contentOf("gen/registers/js/components/pages/Ticket/TicketLine.detail.js");
+
+        // The seed keeps the shape the draft holds - a checkbox a real boolean, a numeric column a
+        // real number, everything else a string...
+        assertTrue(detailRegister.contains(", def: true"), "a boolean default must seed a real boolean, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 1"), "a numeric default must seed a real number, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'DRAFT'"), "a string default must seed a quoted string, got: " + detailRegister);
+        // ...and a value carrying the apostrophe that delimits it is escaped into the literal instead
+        // of ending it.
+        assertTrue(detailRegister.contains(", def: 'Owner\\'s copy'"),
+                "a default carrying the apostrophe that delimits the seed must be escaped into it, got: " + detailRegister);
+        assertTrue(detailRegister.contains(", def: 'C:\\\\tmp'"),
+                "a default carrying a backslash must be escaped into the seed, got: " + detailRegister);
+    }
+
+    @Test
+    void an_authored_label_is_escaped_into_every_harmonia_interpolation() {
+        // #7294: the authored field `label:` (#6424, widgetLabel) reached the Harmonia form's T()
+        // fallback argument and the master/list/item-dialog column literals verbatim, so an
+        // apostrophe ("Owner's copy") closed the literal early and blanked the whole generated
+        // page - the #7207 class, one authored property (label) over from the seeded default.
+        writeIntent("""
+                name: labels
+                entities:
+                  - name: Badge
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200, label: "Owner's copy" }
+                    relations:
+                      - { name: lines, kind: oneToMany, to: BadgeLine }
+
+                  - name: BadgeLine
+                    fields:
+                      - { name: id,  type: integer, primaryKey: true, generated: true }
+                      - { name: tag, type: string,   length: 40, label: "Reviewer's note" }
+                    relations:
+                      - { name: badge, kind: manyToOne, to: Badge, composition: true }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "labels.model");
+
+        // The reused manage form's T() fallback argument - the raw apostrophe would end the JS
+        // string literal inside the Alpine x-text expression, throwing at evaluation and aborting
+        // the walk of the enclosing element (the harmonia-ui guide's task-form rule, never applied
+        // to the entity views).
+        String badgeForm = contentOf("gen/labels/views/Badge/Badge-form.html");
+        assertTrue(badgeForm.contains("'Owner\\'s copy'"),
+                "the form's T() fallback must escape the apostrophe in the authored label, got: " + badgeForm);
+        assertFalse(badgeForm.contains("'Owner's copy'"),
+                "the raw unescaped apostrophe must never reach the generated form, got: " + badgeForm);
+
+        // The master page's column literal (Badge owns a oneToMany, so it generates as a MASTER,
+        // not a plain manage list) - a raw apostrophe here is a syntax error in the whole file.
+        String badgeMasterPage = contentOf("gen/labels/js/components/pages/Badge/BadgeMasterPage.js");
+        assertTrue(badgeMasterPage.contains("label: 'Owner\\'s copy'"),
+                "the master page's column label literal must escape the apostrophe, got: " + badgeMasterPage);
+
+        // The item dialog's column metadata (detail-register), the sibling #7152/#7255 already
+        // escape the seeded DEFAULT for.
+        String badgeLineRegister = contentOf("gen/labels/js/components/pages/Badge/BadgeLine.detail.js");
+        assertTrue(badgeLineRegister.contains("label: 'Reviewer\\'s note'"),
+                "the item dialog's column label literal must escape the apostrophe, got: " + badgeLineRegister);
+    }
+
+    @Test
     void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -2525,6 +3508,14 @@ class IntentEngineIT extends IntegrationTest {
         String bigItems = contentOf("BigOrderItems.report");
         assertTrue(bigItems.contains("\"kind\": \"count\""), "the count widget should carry its kind");
         assertTrue(bigItems.contains("\"icon\": \"alert-triangle\""), "the widget icon should be carried");
+        // An un-aggregated report has no count column: one of its rows IS one record, so the tile
+        // keeps the count endpoint.
+        assertFalse(bigItems.contains("\"countColumn\""), "an un-aggregated count widget must not name a count column");
+        // An aggregating one names the count(*) measure's own column, which the dashboard SUMS - the
+        // row count there is the number of groups (#7102).
+        String byCustomer = contentOf("OrdersByCustomer.report");
+        assertTrue(byCustomer.contains("\"kind\": \"count\""), "the count widget should carry its kind");
+        assertTrue(byCustomer.contains("\"countColumn\": \"Count\""), "a count over an aggregating report should name the count(*) column");
 
         // The .model root carries the custom widgets. (The per-entity count tiles are now suppressed
         // by the shell template itself when widgets are declared - the old `dashboardKpis` flag was
@@ -2728,61 +3719,7 @@ class IntentEngineIT extends IntegrationTest {
 
     @Test
     void postings_generates_the_idempotent_resumable_handler() {
-        // A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with
-        // two LedgerLine rows (debit + credit) determined by a PostingRule.
-        String postingYaml = """
-                name: postingtest
-                entities:
-                  - name: Account
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: number, type: string }
-                  - name: OrderStatus
-                    kind: setting
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: name, type: string, required: true, length: 100 }
-                  - name: PostingRule
-                    kind: setting
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: documentType, type: string }
-                    relations:
-                      - { name: DebitAccount, kind: manyToOne, to: Account }
-                      - { name: CreditAccount, kind: manyToOne, to: Account }
-                  - name: Order
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: number, type: string }
-                      - { name: amount, type: decimal, precision: 18, scale: 2 }
-                    relations:
-                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
-                  - name: Ledger
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: memo, type: string, length: 400 }
-                    relations:
-                      - { name: Order, kind: manyToOne, to: Order }
-                  - name: LedgerLine
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: debit, type: decimal, precision: 18, scale: 2 }
-                      - { name: credit, type: decimal, precision: 18, scale: 2 }
-                    relations:
-                      - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
-                      - { name: Account, kind: manyToOne, to: Account, required: true }
-                postings:
-                  - name: orderLedger
-                    event: { onTransition: Order, when: "Status == 2" }
-                    creates: Ledger
-                    backReference: Order
-                    map: { memo: "Order {number}" }
-                    rule: { entity: PostingRule, match: { documentType: "Order" } }
-                    items:
-                      - { Account: rule(debitAccount), debit: "Amount" }
-                      - { Account: rule(creditAccount), credit: "Amount" }
-                """;
-        writeIntent(postingYaml);
+        writeIntent(POSTING_YAML);
         restAssuredExecutor.execute(() -> given().when()
                                                  .post(GENERATE_URL)
                                                  .then()
@@ -2793,16 +3730,176 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"postings\""), "the .glue should carry the postings collection");
         assertTrue(glue.contains("OrderLedger"), "the posting className should be carried in the glue");
 
-        // Events template: the generated handler is idempotent + resumable (the cloud-native posting
-        // semantics - no cross-step transaction): it skips a complete post and rebuilds a half-post.
+        // Events template: the generated handler is idempotent + resumable + amendable. It derives the
+        // full content first and compares it with the existing post: identical is a no-op, different is
+        // either a half-post to complete or an amended source to rewrite from (#7071). The writes that
+        // rewrite are ONE transaction (#7132) - across STEPS the model stays non-transactional, a bad
+        // post being unwound by a correcting entry.
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
         String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
         assertTrue(posting.contains("-transitioned"), "it listens on the source's -transitioned channel");
-        assertTrue(posting.contains("int expectedItems = 0"), "it computes the expected item count for the completeness check");
+        assertTrue(posting.contains("derivedItems"), "it derives the full item set up front, to write AND to compare");
         assertTrue(posting.contains("existingTargets"), "it looks up an existing post by the back-reference (idempotency)");
-        assertTrue(posting.contains("currentItems.size() >= expectedItems"), "a complete post is a no-op (idempotent)");
-        assertTrue(posting.contains("itemsRepository.delete(stale)"), "a half-post rebuilds its items (resumable)");
+        assertTrue(posting.contains("if (unchanged) {"), "a post that already says what the source derives now is a no-op");
+        assertTrue(posting.contains("same(stored.Debit, derived.Debit)"), "every assigned item cell takes part in the comparison");
+        assertTrue(posting.contains("itemsRepository.delete(stale)"), "a stale or partial item set is cleared before the rewrite");
+        assertTrue(posting.contains("targetRepository.update(target) : targetRepository.save(target)"),
+                "an existing post is rewritten in place, a fresh one created");
+        // #7132: and all of it in one transaction - asserted by POSITION, since a header written outside
+        // the block with the lines inside it would still "mention UnitOfWork".
+        int unitOfWork = posting.indexOf("UnitOfWork.run(() -> {");
+        assertTrue(unitOfWork > 0, "the write phase runs in a unit of work");
+        assertTrue(posting.indexOf("itemsRepository.delete(stale)") > unitOfWork,
+                "the stale rows are deleted inside the unit of work, not before it");
+        assertTrue(posting.indexOf("targetRepository.update(target)") > unitOfWork, "the header is written inside the unit of work");
+        assertTrue(posting.indexOf("itemsRepository.save(item)") > unitOfWork, "the derived lines are written inside the unit of work");
+        // The Ledger carries no status lifecycle, so there is nothing to act on and nothing to guard.
+        assertFalse(posting.contains("was NOT rewritten"), "a target with no status lifecycle is always rewritable");
+    }
+
+    @Test
+    void posts_writes_every_row_of_one_source_event_in_one_transaction() {
+        // #7179: the FLAT per-item mode (posts:, no header document) had the same multi-write shape as
+        // the posting rewrite and no unit of work - one save per row, one transaction each. A row the
+        // repository refused left the rows before it durable, and the guard here is coarser than the
+        // posting's: it asks whether ANY row back-references this source, so the partial set read as a
+        // finished post and no redelivery ever wrote the rest. The half-post was PERMANENT. The rows
+        // are derived first and written together, so the guard sees a whole post or nothing.
+        String yaml = """
+                name: poststest
+                entities:
+                  - name: GoodsIssueStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: GoodsIssue
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 40 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: GoodsIssueStatus, function: EntityStatus, init: 1 }
+                  - name: GoodsIssueItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                  - name: StockMovement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: factor, type: decimal, precision: 18, scale: 2 }
+                      - { name: sequence, type: long }
+                      - { name: direction, type: integer }
+                      - { name: ledger, type: string, length: 20 }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                  - name: StockNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 100 }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
+                posts:
+                  - name: goodsIssueLedger
+                    forEntity: GoodsIssue
+                    event: 2
+                    forEach: items
+                    into: StockMovement
+                    idempotentBy: GoodsIssue
+                    set:
+                      Product: item.Product
+                      Quantity: "-item.Quantity"
+                      Factor: -1.5
+                      Sequence: 7
+                      Direction: 2
+                      Ledger: issued
+                  - name: goodsIssueNote
+                    forEntity: GoodsIssue
+                    event: create
+                    into: StockNote
+                    idempotentBy: GoodsIssue
+                    set:
+                      Note: source.Number
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String glue = contentOf("poststest.glue");
+        assertTrue(glue.contains("\"posts\""), "the .glue should carry the posts collection");
+        assertTrue(glue.contains("GoodsIssueLedger"), "the post className should be carried in the glue");
+
+        generateFromModel("template-application-events-java/template/template.js", "poststest.glue");
+        String post = codeOf("gen/events/poststest/GoodsIssueLedgerPost.java");
+        assertTrue(post.contains("implements MessageHandler"), "the post is a self-describing message handler");
+        assertTrue(post.contains("-transitioned"), "a status-triggered post listens on the source's -transitioned channel");
+        assertTrue(post.contains("Criteria.create().eq(\"GoodsIssue\", source.Id)"), "the guard asks the back-reference on the target");
+        // Asserted by POSITION, since a save left inside the derivation loop would still "mention
+        // UnitOfWork": every row is mapped in memory first, and the ONE save site sits inside the block.
+        int derived = post.indexOf("rows.add(row)");
+        int unitOfWork = post.indexOf("UnitOfWork.run(() -> {");
+        int save = post.indexOf("targetRepository.save(row)");
+        assertTrue(derived > 0, "the rows must be derived into a list before anything is written");
+        assertTrue(unitOfWork > derived, "the unit of work must open after the derivation, not around the reads");
+        assertTrue(save > unitOfWork, "every row must be saved inside the unit of work");
+        assertEquals(save, post.lastIndexOf("targetRepository.save(row)"),
+                "there must be exactly ONE save site - a second one outside the block would write rows unprotected");
+        assertFalse(post.contains("${"), "the post template must render every placeholder");
+        // #7287: a constant is rendered for the TARGET COLUMN's Java type. A decimal column is a
+        // BigDecimal and a long one a Long in the generated entity, so the bare `-1.5` / `7` this used
+        // to emit did not compile - and neither did a bare identifier for the text.
+        assertTrue(post.contains("row.Factor = new java.math.BigDecimal(\"-1.5\");"),
+                "a decimal column takes a BigDecimal, not a bare double literal: " + post);
+        assertTrue(post.contains("row.Sequence = 7L;"), "a long column takes a long literal, not a bare int: " + post);
+        assertTrue(post.contains("row.Direction = 2;"), "an integer column keeps the bare integer: " + post);
+        assertTrue(post.contains("row.Ledger = \"issued\";"), "a text column takes an escaped string literal: " + post);
+
+        // The single-row mode (no forEach) writes one row through one repository call - a transaction on
+        // its own, so it needs no unit of work and must not pretend to open one.
+        String single = codeOf("gen/events/poststest/GoodsIssueNotePost.java");
+        assertTrue(single.contains("targetRepository.save(row)"), "the single-row post writes its one row");
+        assertFalse(single.contains("UnitOfWork"), "one repository call is already one transaction");
+    }
+
+    @Test
+    void a_post_is_not_rewritten_once_the_created_document_has_left_the_status_it_was_created_in() {
+        // #7071: an amended source (rejected, edited, re-issued) raises the SAME moment again, and the
+        // post it already carries must follow it - but only while nobody has acted on the created
+        // document. Once the entry has moved off the status the posting created it in, someone owns it:
+        // rewriting it behind their back is worse than the divergence, so the handler reports it and
+        // leaves the correction to a reversing entry.
+        writeIntent(POSTING_YAML.replace("""
+                      - { name: Order, kind: manyToOne, to: Order }
+                """, """
+                      - { name: Order, kind: manyToOne, to: Order }
+                      - { name: Status, kind: manyToOne, to: LedgerStatus, function: EntityStatus, init: 1 }
+                  - name: LedgerStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                """));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
+        String posting = codeOf("gen/events/postingtest/OrderLedgerPosting.java");
+        assertTrue(posting.contains("if (!(target.Status != null && target.Status == 1)) {"),
+                "the rewrite must be gated on the created document still holding the status it was created in");
+        assertTrue(posting.contains("was NOT rewritten"), "a refused rewrite must be reported, never silent");
     }
 
     @Test
@@ -2883,6 +3980,87 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void generates_with_items_copies_the_lines_and_the_target_document_resums_its_header() {
+        // A create-from with an `items:` block clones the source's lines into the target and saves each
+        // through the target item repository, so the target document's own line logic fires: every line
+        // save synchronously re-sums the master (reload the header, sum the lines, persist the totals
+        // through the targeted mutation). The header total therefore equals the sum of its lines - which
+        // it did NOT while that recompute ran inside the create-from's unit of work and read its own
+        // just-created header back as null, committing the zeros the header was inserted with (issue
+        // #7096). The runtime end-to-end assertion (published app, POSTs, header total == sum) is
+        // IntentGeneratesItemsIT; this pins the emitted mechanism it depends on.
+        String genYaml = """
+                name: billing
+                entities:
+                  - name: Proforma
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: net,    type: decimal, precision: 18, scale: 2, aggregate: true }
+                  - name: ProformaItem
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: price,    type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "round(Quantity * Price, 2)" }
+                    relations:
+                      - { name: Proforma, kind: manyToOne, to: Proforma, composition: true, required: true }
+                  - name: Invoice
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: net,    type: decimal, precision: 18, scale: 2, aggregate: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: price,    type: decimal, precision: 18, scale: 2, required: true }
+                      - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "round(Quantity * Price, 2)" }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    map:
+                      number: number
+                    items:
+                      from: ProformaItem
+                      to: InvoiceItem
+                      map:
+                        quantity: quantity
+                        price: price
+                """;
+        writeIntent(genYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The create-from clones each source line and saves it through the target's item repository...
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+        String generate = codeOf("gen/events/billing/InvoiceFromProformaGenerate.java");
+        assertTrue(generate.contains("ProformaItemRepository()"), "the create-from must read the source lines from their repository");
+        assertTrue(generate.contains("InvoiceItemRepository().save(item)"),
+                "each cloned line must be saved through the target item repository so its line logic fires");
+
+        // ...and the target item repository re-sums the master on every line save, through the master's
+        // recalculate: reload the header by id and persist ONLY the total columns via the targeted
+        // mutation (super.updateProperties) - the write-then-query-then-targeted-update pattern #7096 is
+        // about.
+        generateFromModel("template-application-dao-java/template/template.js", "billing.model");
+        String itemRepository = codeOf("gen/billing/data/invoice/InvoiceItemRepository.java");
+        assertTrue(itemRepository.contains("new InvoiceRepository().recalculate(saved.Invoice)"),
+                "a line save must re-sum its master document synchronously");
+        String masterRepository = codeOf("gen/billing/data/invoice/InvoiceRepository.java");
+        assertTrue(masterRepository.contains("public InvoiceEntity recalculate(Object id)"),
+                "the master must expose the by-id recalculate the line save calls");
+        assertTrue(masterRepository.contains("findById(id)") && masterRepository.contains("super.updateProperties(id, totals)"),
+                "recalculate must reload the header by id and persist the totals through the targeted mutation");
+    }
+
+    @Test
     void generates_completion_hook_flips_the_source_via_targeted_update() {
         // A create-from with a sourceStatus completion hook: after the Invoice is created, the Proforma
         // flips to status 3 - via a TARGETED single-column write (updateProperty), never a full-row
@@ -2920,16 +4098,21 @@ class IntentEngineIT extends IntegrationTest {
 
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
         String generate = codeOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
-        // The completion hook flips the source status via the targeted single-column primitive...
+        // The completion hook flips the source status via the targeted primitive - and the
+        // "-transitioned" announcement RIDES that very write (#7160), so the flip and its event are
+        // recorded in the outbox by one statement pair inside the unit's own transaction.
         // (the create-from's body is a create(Integer sourceId) method both the button endpoint and an
         // event trigger call - hence sourceId rather than the posted request's id, since #6711.)
-        assertTrue(generate.contains("updateProperty(sourceId, \"Status\", 3)"),
-                "the source status must be flipped with the targeted updateProperty write");
-        // ...and reloads before publishing so the -transitioned payload is the committed row...
-        assertTrue(generate.contains("findById(sourceId)"), "it should reload the source for the -transitioned payload");
-        // Anchored on the sendToTopic ARGUMENT, not the bare word: the explanatory comments around the
-        // flip name "-transitioned" too, and a comment must not stand in for the publish.
-        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should publish the source's -transitioned channel");
+        assertTrue(generate.contains("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),"),
+                "the source status must be flipped with the targeted updateProperties write");
+        // Anchored on the topic ARGUMENT, not the bare word: the explanatory comments around the flip
+        // name "-transitioned" too, and a comment must not stand in for the announcement.
+        assertTrue(generate.contains(TRANSITIONED_PUBLISH), "it should announce the source's -transitioned channel");
+        // The event must not be published on the side, past the write's own transaction: a crash
+        // between the commit and a separate send loses it outright, and EventOutboxRelayJob cannot
+        // recover what was never recorded.
+        assertFalse(generate.contains("Producer.sendToTopicDurable"),
+                "the -transitioned announcement must ride the write into the outbox, not a bare publish");
         // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
@@ -2938,18 +4121,45 @@ class IntentEngineIT extends IntegrationTest {
         // enforces, so a move the graph does not declare must throw with nothing yet created - flipping
         // afterwards left a committed document behind whose source never transitioned, and the guard on
         // the back-reference then made a redelivery return that document instead of repairing the flip.
-        // The publish stays last: the transition is complete only once the document it was about exists.
-        int flip = generate.indexOf("updateProperty(sourceId, \"Status\", 3)");
+        int flip = generate.indexOf("updateProperties(sourceId, java.util.Map.of(\"Status\", 3),");
         int save = generate.indexOf("Repository().save(target)");
-        int publish = generate.indexOf(TRANSITIONED_PUBLISH);
         assertTrue(flip < save, "the source flip must precede the target save, got flip@" + flip + " save@" + save);
-        assertTrue(save < publish, "the -transitioned publish must follow the target save, got save@" + save + " publish@" + publish);
+
+        // #7069: the header, its lines and the flip are ONE transaction, so a line the target refuses
+        // takes the header and the flip with it. Written as separate transactions, a create-from that
+        // failed on a line left a header-only document behind whose source was already marked as
+        // generated-from - and answered 500 while doing it.
+        assertTrue(generate.contains("UnitOfWork.call(() -> {"), "the create-from body must run as one unit of work");
+        int unit = generate.indexOf("UnitOfWork.call(() -> {");
+        assertTrue(unit < flip && unit < save, "the unit of work must open before the flip and the save");
+        // ...and the announcement is recorded INSIDE it (#7160), which is what makes it atomic with the
+        // flip. It still states a COMPLETED transition: a unit's events reach the broker only once the
+        // whole unit has committed, so a target its lines refuse takes the flip and its notice along.
+        int announcement = generate.indexOf(TRANSITIONED_PUBLISH);
+        assertTrue(unit < announcement && announcement < generate.indexOf("\n        });"),
+                "the -transitioned announcement must be recorded inside the unit of work, got announcement@" + announcement);
+
+        // The completion hook also IMPLIES the from-status guard (#7068): a Proforma already standing
+        // at the status the hook writes has been invoiced, so a second click - or a second POST to the
+        // endpoint - is refused with 409 instead of minting a second invoice for the same customer.
+        assertTrue(generate.contains("Calc.eval(\"Status\", guarded, 0).intValue()"),
+                "the run endpoint must read the source's status before creating anything");
+        assertTrue(generate.contains("if (!(currentStatus != 3))"), "the implied guard is the completion hook's own status");
+        assertTrue(generate.contains("Response.setStatus(409)"), "a barred status must be refused with 409");
+        // BEFORE the create: a guard that runs after the document exists is not a guard.
+        assertTrue(generate.indexOf("Response.setStatus(409)") < generate.indexOf("= create(req.id"),
+                "the status guard must be asked before the create-from runs");
 
         // The custom-action BUTTON localizes like every other label: the descriptor carries the
         // model-catalog translation key (the renderer shows T(translation.key, label)), and the
         // label lands in the generated en catalog's actions section - hardcoded-English Void /
         // Save-as-Template buttons on an otherwise translated app were the reported defect.
         String descriptor = contentOf("invoice-from-proforma-generate-action.js");
+        // ...and carries the same guard, so the button stops offering itself on an invoiced Proforma
+        // instead of leading the user into the 409 (#7068).
+        assertTrue(
+                descriptor.contains("\"guard\"") && descriptor.contains("\"property\": \"Status\"") && descriptor.contains("\"blocked\""),
+                "the action descriptor must carry the from-status guard, got: " + descriptor);
         assertTrue(descriptor.contains("\"translation\"") && descriptor.contains(PROJECT + ":proforma-model.actions.invoice-from-proforma"),
                 "the action descriptor must carry the model-catalog translation key, got: " + descriptor);
         generateFromModel("template-application-ui-harmonia-java/template/template.js", "proforma.model");
@@ -3063,10 +4273,234 @@ class IntentEngineIT extends IntegrationTest {
         // its guard still steps over the retired document - which is what mints the replacement once the
         // reopen has re-published the source's transition.
         String onEvent = codeOf("gen/events/reissue/InvoiceFromProformaGenerateOnEvent.java");
-        assertTrue(onEvent.contains("source.Status != 2"), "the trigger still qualifies on the status the source is returned to");
+        assertTrue(onEvent.contains("!(source.Status != null && source.Status == 2)"),
+                "the trigger still qualifies on the status the source is returned to");
         String generate = codeOf("gen/events/reissue/InvoiceFromProformaGenerate.java");
         assertTrue(generate.contains("if (candidate.Status == null || !(candidate.Status == 3 || candidate.Status == 4)) {"),
                 "the at-most-once guard must step over the retired target the reopen reacts to");
+    }
+
+    @Test
+    void generates_when_list_guards_the_listener_by_status_and_trace_field() {
+        // Issue #6957: a status two paths converge on (a resolves: lookup routes to it, an officer's
+        // task sets it manually) is indistinguishable to a bare status guard - the SUCCESS log fires on
+        // both. A `when` LIST is the AND of the status comparison and the lookup's own readOnly
+        // `outcome:` trace field, so the rule fires only on the path that stamped it.
+        String yaml = """
+                name: fineflow
+                entities:
+                  - name: FineStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Fine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                      - { name: resolution, type: string, readOnly: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+                  - name: FineLog
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Fine, kind: manyToOne, to: Fine }
+                generates:
+                  - name: log-identified
+                    from: Fine
+                    to: FineLog
+                    forEntity: Fine
+                    event:
+                      onTransition: Fine
+                      mode: append
+                      when:
+                        - "Status == IDENTIFIED"
+                        - "resolution == found"
+                    map: { Fine: id }
+                seeds:
+                  - name: fine-statuses
+                    entity: FineStatus
+                    rows:
+                      - { id: 1, name: NEW }
+                      - { id: 2, name: IDENTIFIED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "fineflow.glue");
+        String onEvent = codeOf("gen/events/fineflow/LogIdentifiedGenerateOnEvent.java");
+        assertTrue(
+                onEvent.contains(
+                        "!(source.Status != null && source.Status == 2 && java.util.Objects.equals(source.Resolution, \"found\"))"),
+                "every term of the when list must guard the re-loaded source, got: " + onEvent);
+        assertTrue(onEvent.contains("-Fine-transitioned"), "the list form must not change the topic the listener binds");
+    }
+
+    @Test
+    void field_label_and_its_country_variant_reach_the_catalog_and_the_application_configuration() {
+        // Issue #6424: humanizing a name cannot produce an acronym, and a term that follows the
+        // COMPANY's country cannot ride the language catalogs - they are per language and are not even
+        // loaded in the default one. So the label seeds the catalog like any other, while the country
+        // variants are generated into the app's configuration as their own overlay.
+        String yaml = """
+                name: payroll
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - name: nationalId
+                        type: string
+                        label: National ID
+                        countryLabels:
+                          BG: ЕГН
+                      - { name: name, type: string }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "payroll.model");
+
+        String catalog = contentOf("i18n/en-US/payroll.model.json");
+        assertTrue(catalog.contains("\"EMPLOYEE_NATIONAL_ID\": \"National ID\""),
+                "the authored label must seed the property's catalog entry, so it is translated like any other: " + catalog);
+        assertFalse(catalog.contains("National Id"), "and the humanized name must not be what the catalog carries");
+
+        String config = contentOf("gen/payroll/js/config.js");
+        assertTrue(config.contains("countryLabels: {\"BG\":{\"" + PROJECT + ":payroll-model.t.EMPLOYEE_NATIONAL_ID\":\"ЕГН\"}}"),
+                "the overlay must be keyed by the very translation key the views bind, so the runtime needs one exact lookup: " + config);
+    }
+
+    @Test
+    void a_required_value_is_refused_by_name_instead_of_by_the_database() {
+        // #7069: a write that leaves a NOT NULL column empty used to reach the database and come back as
+        // a driver-specific constraint violation - HTTP 500 carrying the physical column name, from which
+        // the caller cannot tell what to fix. It is the same set the schema declares NOT NULL, so nothing
+        // that used to be written is now refused; only the answer changed, to a 400 naming the property.
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+
+        String repository = codeOf("gen/orders/data/customer/CustomerRepository.java");
+        assertTrue(repository.contains("throw new ValidationException(\"Customer.Name is required\");"),
+                "the required field must be refused by name: " + repository);
+        assertFalse(repository.contains("throw new ValidationException(\"Customer.CreditLimit is required\");"),
+                "an optional field must not be refused");
+        // A column carrying a DEFAULT is deliberately NOT in the set - the database supplies its value,
+        // so an empty one is not missing, which is exactly what an intent relation's `init:` opening
+        // status is. `IntentEmissionCoverageIT` covers that at runtime: creating a document without its
+        // defaulted status still answers 200 and echoes the DB-applied default.
+        // It gates the write: everything the repository computes itself (a document number, a uuid, a
+        // calculated field) is assigned above it, and the insert happens below it.
+        assertTrue(repository.indexOf("is required") < repository.indexOf("super.save(entity,"),
+                "the required check must precede the insert");
+    }
+
+    @Test
+    void an_authored_default_is_applied_before_the_create_time_calculations() {
+        // #7104: `defaultValue:` was the column's DB DEFAULT and nothing else on the server, so the
+        // database supplied it at INSERT - after the create-time calculations had already run in Java
+        // and read a null. A purchase-order line posted without VatRate stored VatRate 20 from the
+        // default and Vat 0 from the calculation that reads it, and only a later no-op update (whose
+        // recalculation sees the stored default) put the two in agreement. The generated form hid it,
+        // because the item dialog seeds the same default and posts it explicitly - so it was every REST
+        // caller, import and server-side create that silently got a wrong total.
+        writeIntent(
+                """
+                        name: purchasing
+                        entities:
+                          - name: OrderItem
+                            fields:
+                              - { name: id,       type: integer, primaryKey: true, generated: true }
+                              - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                              - { name: price,    type: decimal, precision: 18, scale: 2 }
+                              - { name: vatRate,  type: decimal, precision: 5,  scale: 2, defaultValue: 20 }
+                              - { name: net,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "Quantity * Price", calculatedOnUpdate: "Quantity * Price" }
+                              - { name: vat,      type: decimal, precision: 18, scale: 2, calculatedOnCreate: "Net * VatRate / 100", calculatedOnUpdate: "Net * VatRate / 100" }
+                              - { name: billable, type: boolean, defaultValue: true }
+                              - { name: stage,    type: string,  length: 20, defaultValue: DRAFT }
+                              - { name: size,     type: string,  length: 20, defaultValue: '6" \\ wide' }
+                        """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-dao-java/template/template.js", "purchasing.model");
+        String repository = codeOf("gen/purchasing/data/orderitem/OrderItemRepository.java");
+
+        // Each authored default is assigned on create, only when the write left the column empty, in a
+        // literal of the property's own type.
+        assertTrue(repository.contains(
+                "if (entity.VatRate == null) {\n" + "            entity.VatRate = new java.math.BigDecimal(\"20\");\n" + "        }"),
+                "the decimal default must be assigned when the write left the column empty: " + repository);
+        assertTrue(repository.contains("entity.Billable = Boolean.TRUE;"), "a boolean default must be a boolean literal");
+        assertTrue(repository.contains("entity.Stage = \"DRAFT\";"), "a string default must be a quoted string literal");
+        // #7154: the literal used to be interpolated unescaped, so an authored inch mark ended it and
+        // failed javac on the whole generated module - the exact blast radius the numeric branch parses
+        // its text to avoid. A malformed default can at worst mis-value this one field.
+        assertTrue(repository.contains("entity.Size = \"6\\\" \\\\ wide\";"),
+                "a string default carrying a quote or a backslash must be escaped into the literal: " + repository);
+
+        // ...and BEFORE the calculation that reads it, which is the whole point.
+        assertTrue(
+                repository.indexOf("entity.VatRate = new java.math.BigDecimal(\"20\")") < repository.indexOf(
+                        "Calc.eval(\"Net * VatRate / 100\""),
+                "the default must be applied before the create-time calculation that reads it: " + repository);
+
+        // An existing row is never re-defaulted: the defaults belong to save() alone, so a value the
+        // user deliberately cleared stays cleared through update().
+        assertEquals(1, occurrencesOf(repository, "entity.VatRate = new java.math.BigDecimal(\"20\")"),
+                "the default must be applied on create only, never re-applied by update(): " + repository);
+    }
+
+    @Test
+    void an_authored_default_carrying_a_quote_keeps_the_schema_parseable() {
+        // #7206: the .schema wrote the authored default into a JSON string verbatim, so an authored inch
+        // mark ended that string and left the whole artefact unparseable - the synchronizer then created
+        // NO table for any entity of the project, not just the one column's. The sibling of #7154 in the
+        // other literal syntax the same value reaches.
+        writeIntent("""
+                name: sizing
+                entities:
+                  - name: Panel
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: size,  type: string, length: 20, defaultValue: '6" \\ wide' }
+                      - { name: stage, type: string, length: 20, defaultValue: DRAFT }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-schema/template/template.js", "sizing.model");
+        String schema = contentOf("gen/sizing/schema/" + PROJECT + ".schema");
+
+        try {
+            assertNotNull(new Gson().fromJson(schema, JsonObject.class));
+        } catch (RuntimeException e) {
+            throw new AssertionError("the emitted schema must be valid JSON: " + schema, e);
+        }
+        // And the DEFAULT the synchronizer reads back is the value as authored - escaping it keeps the
+        // artefact parseable without changing what the column defaults to. A quote in it remains the
+        // author's broken SQL, on that one column.
+        Table table = schemasSynchronizer.parseSchema("/sizing-it/application.schema", schema)
+                                         .getTables()
+                                         .get(0);
+        Map<String, String> defaults = new LinkedHashMap<>();
+        for (TableColumn column : table.getColumns()) {
+            defaults.put(column.getName(), column.getDefaultValue());
+        }
+        assertTrue(defaults.containsValue("6\" \\ wide"), "the authored default must reach the schema intact: " + defaults);
+        assertTrue(defaults.containsValue("DRAFT"), "an ordinary default must be unchanged: " + defaults);
     }
 
     @Test
@@ -3084,6 +4518,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(schema.contains("\"name\": \"Language\""), "the language table should carry the Language column");
         assertTrue(schema.contains("\"name\": \"GUID\""), "the language table should carry the GUID primary key");
         assertFalse(schema.contains("ORDERS_CUSTOMER_LANG"), "a non-multilingual entity must not get a language table");
+        // The language table's columns are named after the PROPERTY (the base table's are the physical
+        // UPPER_SNAKE names), so `Name` and `Code2` here can only be language columns. The label gets
+        // one; the arrival's business key, marked `translatable: false`, must not (#6545) - a
+        // translated key is overlaid on every read and then matches the authored literal never again.
+        assertTrue(schema.contains("\"name\": \"Name\""), "the translatable label should get a language column");
+        assertFalse(schema.contains("\"name\": \"Code2\""),
+                "a field marked translatable: false must get no language column at all: " + schema);
 
         // Java DAO: every read overlays the translations for the caller's Accept-Language.
         String repository = codeOf("gen/orders/data/settings/CountryRepository.java");
@@ -3149,6 +4590,31 @@ class IntentEngineIT extends IntegrationTest {
                 "the report table should align and format cells from the column metadata");
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
+        assertTrue(page.contains("limit: 20"), "an ordinary report should page in twenties");
+
+        // A circular chart is sliced by the dimension, so its values are named by the legend alone -
+        // on whatever the series count - and each legend entry carries the slice's share of the
+        // measure total. The in-slice data label stays off for pie/doughnut: the chart library prints
+        // the raw measure there with a percent sign, which turned a 336-hour sum into "336%".
+        assertTrue(page.contains("chartType: 'doughnut'"), "the chart report page should carry its chart type");
+        assertTrue(page.contains("legend: true") && page.contains("dataLabels: false"),
+                "a doughnut should keep its legend and drop the raw-value-as-percentage slice label");
+        assertTrue(page.contains("shareLabels(labels, data[0])"), "doughnut legend entries should carry the slice share");
+        assertTrue(page.contains("shell.report.true"), "a boolean dimension should read Yes/No in the chart, not true/false");
+
+        // A statement's rows ARE its structure, so its page fetches the whole statement rather than
+        // splitting a balance sheet across pages.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/ide/generate/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrderStatement.report")
+                                                 .then()
+                                                 .statusCode(201));
+        String statementPage = contentOf("gen/OrderStatement/reports/OrderStatement/report.js");
+        assertTrue(statementPage.contains("limit: 500"), "a statement page should fetch the whole line structure at once");
+        assertTrue(statementPage.contains("{ key: 'Code', kind: 'text'") && statementPage.contains("{ key: 'Amount', kind: 'number'"),
+                "the statement page should carry the Code / Label / Amount column metadata");
     }
 
     @Test
@@ -3182,6 +4648,87 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(422)
                                                  .body("issues", hasItem("entity [A] field [x] has unknown type [nosuchtype]")));
     }
+
+    /**
+     * A GENERATION-time refusal leaves the workspace as it found it (dirigible #7227).
+     *
+     * <p>
+     * The generators run in {@code @Order}, so a check in a late one is reached only after the earlier
+     * ones have written into the project - and the 422 goes straight to the caller, past the
+     * stale-output scrub. The reported case is the cross-model {@code relation.field} check at
+     * {@code @Order(350)}, whose whole justification is that skipping the resolver would leave the BPMN
+     * with a {@code Resolve<...>} service task whose handler nothing generated: the {@code .bpmn} is
+     * written at 300 from the lookup-free resolver convention, which yields that task whether or not
+     * the owner declares the field, so the refusal itself used to leave behind exactly the artefact it
+     * was justified by. Nothing is written now - the state a parse-time refusal leaves.
+     */
+    @Test
+    void a_generation_time_refusal_leaves_no_model_files_behind() {
+        // The owner model has to really exist for the check to be reachable at all: an unresolvable
+        // `uses` is a different refusal, one raised before any owner property list is read. It is
+        // written by hand, in a project of its own, rather than generated from a sibling intent - the
+        // shared dependency project is where the bootstrap test needs a model to be ABSENT, and one
+        // test's owner model is the other test's precondition.
+        repository.createResource(OWNER_PROJECT_PATH + "/partners.model", CROSS_MODEL_OWNER_MODEL.getBytes(StandardCharsets.UTF_8));
+        writeIntent(UNKNOWN_CROSS_MODEL_FIELD_INTENT);
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItem(containsString("Mobile"))));
+
+        assertFalse(resource("Send.bpmn").exists(),
+                "the refused pass must leave no .bpmn - the dangling Resolve<...> task is the artefact it exists to prevent");
+        assertFalse(resource("billing.edm").exists(), "nor the .edm an earlier generator had already written");
+        assertFalse(resource("billing.model").exists(), "nor its .model twin");
+        assertFalse(resource("billing.settings").exists(), "nor the settings the pass scaffolded on its way in");
+    }
+
+    /** The owner half as its own project generated it: a Customer with an e-mail and no mobile. */
+    private static final String CROSS_MODEL_OWNER_MODEL = """
+            {
+              "model": {
+                "entities": [
+                  {
+                    "name": "Customer",
+                    "perspectiveName": "Customer",
+                    "dataName": "PARTNERS_CUSTOMER",
+                    "properties": [
+                      { "name": "Id", "dataName": "ID", "dataType": "INTEGER", "dataPrimaryKey": "true" },
+                      { "name": "Name", "dataName": "NAME", "dataType": "VARCHAR" },
+                      { "name": "Email", "dataName": "EMAIL", "dataType": "VARCHAR" }
+                    ]
+                  }
+                ]
+              }
+            }
+            """;
+
+    /** A task form showing a cross-model field the owner model does not declare. */
+    private static final String UNKNOWN_CROSS_MODEL_FIELD_INTENT = """
+            name: billing
+            uses:
+              - { model: partners }
+            entities:
+              - name: Invoice
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 100 }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer, model: partners, required: true }
+            processes:
+              - name: Send
+                trigger: { onCreate: Invoice }
+                steps:
+                  - { name: send, kind: userTask, args: { assignee: clerk, form: SendInvoice } }
+                  - { name: done, kind: end }
+            forms:
+              - name: SendInvoice
+                forEntity: Invoice
+                fields: [number, Customer, Customer.mobile]
+                actions: [send]
+            """;
 
     @Test
     void calculated_field_action_emits_an_imports_backed_callout_in_the_repository() {
@@ -3220,6 +4767,85 @@ class IntentEngineIT extends IntegrationTest {
                 "Beans should be imported for the action call-out");
         assertTrue(repository.contains("entity.Number = Beans.get(InvoiceNumberAction.class).calculate(entity);"),
                 "the calculated field should be assigned by calling the action via Beans");
+    }
+
+    @Test
+    void a_declared_phase_gives_an_enrichment_its_own_channel_a_posting_can_bind() {
+        // #6929: the costing listener computes CostValue from a moving-average pool and writes it back
+        // WITHOUT an event (an enrichment must not re-fire the onUpdate consumers), so a posting bound
+        // to onCreate raced it and could post a journal entry for a null amount with every step green.
+        // The phase is that write's own channel: the listener announces it through the generated
+        // repository, and the posting binds the announcement instead of the insert.
+        writeIntent("""
+                name: inventory
+                entities:
+                  - name: Account
+                    kind: setting
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: CostOfSalesAccount, kind: manyToOne, to: Account }
+                      - { name: InventoryAccount,   kind: manyToOne, to: Account }
+                  - name: StockMovement
+                    phases: [costed]
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: movedOn,   type: date }
+                      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: entryDate, type: date }
+                    relations:
+                      - { name: StockMovement, kind: manyToOne, to: StockMovement }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                      - { name: credit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                      - { name: Account,      kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: cogsPosting
+                    event: { onPhase: StockMovement, phase: costed }
+                    creates: JournalEntry
+                    backReference: StockMovement
+                    map: { entryDate: movedOn }
+                    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+                    items:
+                      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+                      - { Account: rule(inventoryAccount), credit: "CostValue" }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("inventory.model").contains("\"phases\": \"costed\""),
+                "the declared phase must reach the .model - it is what the DAO template turns into announceCosted");
+
+        // The write half: one targeted write carries the enrichment AND the announcement, so the value
+        // and the notice commit together and no consumer can observe one without the other.
+        generateFromModel("template-application-dao-java/template/template.js", "inventory.model");
+        String repository = codeOf("gen/inventory/data/stockmovement/StockMovementRepository.java");
+        assertTrue(repository.contains("public int announceCosted(Object id, java.util.Map<String, Object> values)"),
+                "the repository should expose the declared phase as a method, so a typo is a compile error: " + repository);
+        assertTrue(repository.contains("updateProperties(id, values, \"" + PROJECT + "-StockMovement-StockMovement-costed\")"),
+                "the announcement must ride the enrichment write, on the phase's own topic: " + repository);
+        assertFalse(codeOf("gen/inventory/data/journalentry/JournalEntryRepository.java").contains("announce"),
+                "an entity that declares no phase must generate exactly what it always did");
+
+        // The read half: the posting listens on the phase topic, not on the insert.
+        generateFromModel("template-application-events-java/template/template.js", "inventory.glue");
+        String posting = contentOf("gen/events/inventory/CogsPostingPosting.java");
+        assertTrue(posting.contains("return \"" + PROJECT + "-StockMovement-StockMovement-costed\";"),
+                "the posting must bind the enrichment moment, not the raw insert: " + posting);
     }
 
     @Test
@@ -3319,6 +4945,60 @@ class IntentEngineIT extends IntegrationTest {
         // already-stamped document, and a bare findById(id) would find that guard read instead.
         int reload = stamp.indexOf("stamped = repository.findById(id)");
         assertTrue(write > 0 && write < reload, "the payload must carry the stamped number, so it is re-loaded AFTER the write");
+    }
+
+    @Test
+    void numbering_partitions_the_default_company_by_the_relations_init() {
+        // A per: Company series where Company carries init: 1 (issue #7101). The init is a DATABASE
+        // default the insert applies - AFTER a stampOn: create number is drawn off the entity as the
+        // caller handed it in, so the default company's documents resolved to the series' base row ("")
+        // and the second company's partition, materialized from that base row, started where the default
+        // company left off (VAC0000009 for both). Both stamp paths must resolve a null FK to the init -
+        // the create path by reading a FK the repository has ALREADY defaulted (#7147), the issue path,
+        // whose row comes back from the database, by the descriptor's own fallback.
+        writeIntent("""
+                name: vacations
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Vacation Request, per: Company, stampOn: create } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, init: 1 }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Purchase Invoice, per: Company, stampOn: issue } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, init: 1 }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-dao-java/template/template.js", "vacations.model");
+        generateFromModel("template-application-events-java/template/template.js", "vacations.glue");
+
+        String repository = codeOf("gen/vacations/data/vacationrequest/VacationRequestRepository.java");
+        int defaulted = repository.indexOf("entity.Company = Integer.valueOf(\"1\");");
+        int allocation = repository.indexOf("DocumentNumbers.next(\"Vacation Request\", ");
+        assertTrue(defaulted >= 0, "save() must assign the relation's init default before anything reads the FK: " + repository);
+        assertTrue(allocation > defaulted,
+                "the create-time allocator must partition by a Company the write has already defaulted, never by the base row: "
+                        + repository);
+        assertTrue(
+                repository.contains(
+                        "DocumentNumbers.next(\"Vacation Request\", entity.Company == null ? null : String.valueOf(entity.Company))"),
+                "one mechanism owns the default - the allocator carries no second copy of the init value: " + repository);
+
+        String stamp = codeOf("gen/events/vacations/PurchaseInvoiceNumberStamp.java");
+        assertTrue(stamp.contains("DocumentNumbers.next(\"Purchase Invoice\","), "the stamp must allocate from the declared series");
+        assertTrue(stamp.contains("entity.Company == null ? \"1\" : String.valueOf(entity.Company)"),
+                "the issue-time stamp must resolve the partition exactly as the create-time allocator does: " + stamp);
     }
 
     @Test
@@ -3534,6 +5214,11 @@ class IntentEngineIT extends IntegrationTest {
         return repository.getResource(PROJECT_PATH + "/" + fileName);
     }
 
+    /** A repository-absolute resource - {@link #resource(String)} is relative to the test project. */
+    private IResource resourceOf(String path) {
+        return repository.getResource(path);
+    }
+
     private String contentOf(String fileName) {
         return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
     }
@@ -3623,6 +5308,18 @@ class IntentEngineIT extends IntegrationTest {
         return first;
     }
 
+    /**
+     * How many times a snippet occurs in the generated code - for the assertions whose point is that
+     * something is emitted ONCE (two operands reading through the same relation share one load).
+     */
+    private static int occurrencesOf(String code, String snippet) {
+        int count = 0;
+        for (int at = code.indexOf(snippet); at >= 0; at = code.indexOf(snippet, at + snippet.length())) {
+            count++;
+        }
+        return count;
+    }
+
     /** Run a language template against a generated model through the real generation service. */
     private void generateFromModel(String templateModule, String modelFile) {
         String payload = "{\"template\":\"" + templateModule + "\",\"parameters\":{}}";
@@ -3667,12 +5364,18 @@ class IntentEngineIT extends IntegrationTest {
 
         assertTrue(edmXml.contains("generateDefaultRoles=\"true\""),
                 "entities should carry generateDefaultRoles=\"true\" so the REST template enforces access control");
-        assertTrue(edmXml.contains("roleRead=\"") && edmXml.contains("OrderReadOnly\""),
-                "a secured entity must carry a roleRead (<project>.<perspective>.<Entity>ReadOnly)");
-        assertTrue(edmXml.contains("roleWrite=\"") && edmXml.contains("OrderFullAccess\""),
-                "a secured entity must carry a roleWrite (<project>.<perspective>.<Entity>FullAccess)");
+        // The intent grants `Sales` can [Customer:read, Order:create], so Order and Customer are gated
+        // by the AUTHORED roles - the gate the controller checks is the role the author declared
+        // (#6760). The convention names are neither the gate nor declared for a covered entity.
+        assertTrue(edmXml.contains("roleRead=\"Sales\"") && edmXml.contains("roleWrite=\"Sales\""),
+                "an entity a permissions can: token names must be gated by the authored role");
+        assertFalse(edmXml.contains("OrderFullAccess"), "a covered entity must not fall back to the convention gate no grant mentions");
+        // Country is named by no token, so it keeps the convention gates - and its own domain
+        // perspective, like the codbex convention.
         assertTrue(edmXml.contains(".Country.CountryReadOnly\""),
-                "a setting entity's role must use its own domain perspective (Country), like the codbex convention");
+                "an entity no can: token names must keep the convention roleRead (<project>.<perspective>.<Entity>ReadOnly)");
+        assertTrue(edmXml.contains(".Country.CountryFullAccess\""),
+                "an entity no can: token names must keep the convention roleWrite (<project>.<perspective>.<Entity>FullAccess)");
         assertFalse(edmXml.contains(".Settings.CountryReadOnly\""), "a setting entity's role must NOT use the Settings shell perspective");
 
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
@@ -3686,8 +5389,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resource("orders.model").exists(), "orders.model should be generated");
         String modelBody = contentOf("orders.model");
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
-        assertTrue(modelBody.contains("\"generateDefaultRoles\": \"true\"") && modelBody.contains("OrderFullAccess"),
+        assertTrue(modelBody.contains("\"generateDefaultRoles\": \"true\"") && modelBody.contains("CountryFullAccess"),
                 "the .model JSON (which drives generation) must carry generateDefaultRoles + the role names");
+        assertTrue(modelBody.contains("\"roleWrite\": \"Sales\""),
+                "the .model JSON must carry the authored gate for an entity a permissions can: token names");
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
         // Process glue (triggers, resolvers) is NOT in the EDM model - it lives in the .glue file.
@@ -3757,14 +5462,21 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the orderUpdated notification bound to the -updated topic");
         assertTrue(glue.contains("\"toExpression\": \"\\\"ops@example.com\\\"\""),
                 "glue should carry the notification recipient as a Java string expression");
-        // Schedules: one per declarative schedule, carrying the cron + the typed Criteria expression.
+        // Schedules: one per declarative schedule, carrying the cron + the typed query CLAUSES.
         assertTrue(
                 glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
                 "glue should carry the staleOrders schedule with its cron");
+        // Issue #7406: the tick's filter is DATA here - the operator, the property and the reading of
+        // the value, the relative moment included - and the `Criteria` builder call is rendered from it
+        // by the template layer. The glue is the process description every template reads, Java and
+        // JavaScript alike; a builder call in it is a runtime package and a Java date API nothing but a
+        // Java template can interpret.
         assertTrue(
-                glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now()"
-                        + ".minus(java.time.Period.parse(\\\"P7D\\\")))"),
-                "glue should carry the schedule's typed Criteria expression, the relative moment included");
+                glue.contains("\"criteria\"") && glue.contains("\"op\": \"lt\"") && glue.contains("\"property\": \"OrderDate\"")
+                        && glue.contains("\"kind\": \"moment\"") && glue.contains("\"shape\": \"date\"")
+                        && glue.contains("\"offset\": \"P7D\"") && glue.contains("\"forward\": false"),
+                "glue should carry the schedule's query as typed clauses, the relative moment included");
+        assertFalse(glue.contains("Criteria.create()"), "no builder call belongs in the glue: " + glue);
         // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
         assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
@@ -3802,6 +5514,28 @@ class IntentEngineIT extends IntegrationTest {
         // the multilingual setting entity is flagged
         assertTrue(manifest.contains("\"name\": \"Country\"") && manifest.contains("\"multilingual\": true"),
                 "the multilingual Country entity should be flagged");
+    }
+
+    /**
+     * Every code generation of the project keeps its own {@code .gen} descriptor (#7057).
+     *
+     * <p>
+     * This project is the reproducer's shape: its model and its glue are {@code orders.model} and
+     * {@code orders.glue}, two model files of one project differing only in extension, and one Generate
+     * runs a code generation against each. Named after the base name alone, both descriptors were
+     * written to {@code orders.gen} and the survivor described only the generation that ran last - the
+     * model generation's parameters, the whole perspectives/entities tree, were simply gone from the
+     * record a regeneration reads.
+     */
+    private void assertGenerationDescriptors() {
+        assertTrue(resource("orders.model.gen").exists(), "the model generation should keep its own descriptor");
+        assertTrue(resource("orders.glue.gen").exists(), "the glue generation should keep its own descriptor");
+        assertTrue(contentOf("orders.model.gen").contains("template-application-ui-harmonia-java"),
+                "the model descriptor should record the full-stack template it was generated with");
+        assertTrue(contentOf("orders.model.gen").contains("\"perspectives\""),
+                "the model descriptor should carry the parameter graph a regeneration replays");
+        assertTrue(contentOf("orders.glue.gen").contains("template-application-events-java"),
+                "the glue descriptor should record the glue template it was generated with");
     }
 
     private void assertSettings() {
@@ -3941,6 +5675,58 @@ class IntentEngineIT extends IntegrationTest {
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.
         assertTrue(contentOf("orders.settings").contains("\"generate\": false"),
                 "the edited settings must be preserved across regeneration");
+    }
+
+    /**
+     * The URL-shaped half of the access model. The generated app's web surface had no gate at all -
+     * nothing emitted an {@code .access} - and a hand-authored one at the project root is scrub-owned,
+     * so it survived only under {@code custom/}, which was documented nowhere. Generate now derives the
+     * constraints for the paths the templates publish from the same {@code can:} tokens, opt-in through
+     * the project's {@code .settings} because the paths belong to the stack its recipes name (#6760).
+     */
+    @Test
+    void access_constraints_are_generated_from_the_can_tokens_when_the_settings_ask() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertFalse(resource("orders.access").exists(), "the access artefact must not appear until the settings ask for it");
+
+        writeProjectFile("orders.settings", """
+                {
+                  "access": { "generate": true }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("written", hasItem("orders.access")));
+        String access = contentOf("orders.access");
+        // Order is gated by `Sales` (can: [Order:create]); the constraint covers the controller
+        // subtree and the generated pages, with method * - the read/write split stays in the
+        // controller, which reads through POST .../search.
+        assertTrue(access.contains("/services/java/" + PROJECT + "/gen/orders/api/order/OrderController/**"), access);
+        assertTrue(access.contains("/services/web/" + PROJECT + "/gen/orders/views/Order/Order-*.html"), access);
+        assertTrue(access.contains("\"method\": \"*\""), access);
+        assertTrue(access.contains("\"Sales\""), access);
+        // Country is named by no token, so it keeps the convention gates and gets no constraint.
+        assertFalse(access.contains("CountryController"), access);
+
+        // Turning it back off scrubs the artefact - .access is intent-owned, which is exactly why a
+        // hand-authored one at the project root cannot live here.
+        writeProjectFile("orders.settings", """
+                {
+                  "access": { "generate": false }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("scrubbed", hasItem("orders.access")));
+        assertFalse(resource("orders.access").exists(), "a no-longer-generated access artefact must be scrubbed");
     }
 
     private void assertBpmn() {
@@ -4088,11 +5874,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("SUM(Order.\\\"ORDER_TOTAL\\\")"), "sum(total) should aggregate the quoted, qualified ORDER_TOTAL column");
         assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
         // A bare to-one relation dimension (customer) joins the related table and shows its name field,
-        // grouping by the name - not the raw FK id.
+        // grouping by the name - not the raw FK id. The relation is optional, so the join is LEFT: an
+        // order without a customer stays in the report with the dimension empty (dirigible #7105).
         assertTrue(
                 body.contains(
-                        "INNER JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
-                "a bare relation dimension (customer) should INNER JOIN the related entity with quoted identifiers");
+                        "LEFT JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
+                "a bare optional relation dimension (customer) should LEFT JOIN the related entity with quoted identifiers");
         assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
         // The query is not the only place the structure lives: the report editor's visual builder
@@ -4102,7 +5889,7 @@ class IntentEngineIT extends IntegrationTest {
         // WHERE. The builder-owned model has to say exactly what the query says.
         assertTrue(body.contains("\"joins\": ["), "the resolved joins should be part of the model the report editor edits");
         assertTrue(
-                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"INNER\"")
+                body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"LEFT\"")
                         && body.contains("\"condition\": \"Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
                 "a join row should carry the physical table, the join type and the ON condition");
         assertTrue(monthly.contains(
@@ -4111,11 +5898,12 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(body.contains("\"conditions\""),
                 "an unfiltered report should emit no conditions at all - an empty array makes the editor emit a bare WHERE");
 
-        // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
+        // A relation.field dimension joins the related table; the filter becomes a qualified WHERE. The
+        // order is the line's composition parent - never missing - so that join stays INNER.
         String joined = contentOf("BigOrderItems.report");
         assertTrue(
                 joined.contains("INNER JOIN \\\"ORDERS_ORDER\\\" as Order ON OrderItem.\\\"ORDER_ITEM_ORDER\\\" = Order.\\\"ORDER_ID\\\""),
-                "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
+                "a relation.field dimension over a composition parent (order.orderDate) should INNER JOIN it on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
         assertTrue(
@@ -4136,10 +5924,66 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(balance.contains(
                 "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
                 "the closing debit should sum everything up to and including :toDate");
+
         assertTrue(balance.contains("\"name\": \"fromDate\"") && balance.contains("\"name\": \"toDate\""),
                 "the balance report should declare the two window parameters");
         assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
                 "the window parameters should default to the all-time balance");
+        // correspondence - the counter-side lines of the same document as an extra grouping bucket.
+        // The parameter-free structure is a generated .view artifact (#6938): the self-join and the
+        // allocation live there, and the .report reads the view as its base table.
+        String correspondenceView = contentOf("OrderItemCorrespondenceCorrespondence.view");
+        assertTrue(correspondenceView.contains("\"name\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the correspondence structure should be a named database view");
+        assertTrue(correspondenceView.contains(
+                "LEFT JOIN \\\"ORDERS_ORDER_ITEM\\\" as OrderItemCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderItem.\\\"ORDER_ITEM_ORDER\\\" AND OrderItemCorrespondent.\\\"ORDER_ITEM_ID\\\" <> OrderItem.\\\"ORDER_ITEM_ID\\\""),
+                "the correspondence axis should LEFT self-join the source on the document its lines share, excluding the line itself");
+        assertTrue(
+                correspondenceView.contains(
+                        "as OrderCorrespondent ON OrderItemCorrespondent.\\\"ORDER_ITEM_ORDER\\\" = OrderCorrespondent."),
+                "the bucket path should be resolved against the counter-side line, under its own alias");
+        assertTrue(correspondenceView.contains("as \\\"CORRESPONDENT_ORDER_ORDER_DATE\\\""),
+                "the correspondence bucket should be exposed as a plain view column");
+        assertTrue(
+                correspondenceView.contains("CAST(COALESCE(OrderItem.\\\"ORDER_ITEM_QUANTITY\\\", 0) AS DECIMAL(34,12))")
+                        && correspondenceView.contains("NULLIF((SELECT SUM(COALESCE(OrderItemDocumentTotal."),
+                "each amount should be allocated over the counter-side buckets of its own document, inside the view");
+        String correspondence = contentOf("OrderItemCorrespondence.report");
+        assertTrue(correspondence.contains("\"table\": \"ORDERS_ORDER_ITEM_CORRESPONDENCE_CORRESPONDENCE\""),
+                "the .report should read the generated view as its base table");
+        assertTrue(correspondence.contains(
+                "SUM(CASE WHEN OrderItem.\\\"ENTRY_DATE\\\" >= :fromDate AND OrderItem.\\\"ENTRY_DATE\\\" <= :toDate THEN OrderItem.\\\"ALLOCATED_DEBIT\\\" ELSE 0 END) as \\\"Debit\\\""),
+                "the thin query should window the view's allocated amounts - the named parameters stay on the .report side");
+        assertTrue(correspondence.contains("as \\\"Correspondent Order Order Date\\\""),
+                "the correspondence bucket should still be a grouping column of the report");
+        assertFalse(correspondence.contains("OrderItemCorrespondent"), "the structure must not be re-shipped inside the .report query");
+
+        // kind: statement - the same window, but the rows are the declared lines. The line
+        // classification is a generated .view (#6938); the .report keeps the subquery reducing the
+        // ledger to a balance per account code and a thin join decoding each view row's measure.
+        String statementView = contentOf("OrderStatementLines.view");
+        assertTrue(statementView.contains("\"name\": \"ORDERS_ORDER_STATEMENT_LINES\""),
+                "the statement's line classification should be a named database view");
+        assertTrue(
+                statementView.contains("CAST('A.I' AS VARCHAR(255))") && statementView.contains("CAST('Alpine markets' AS VARCHAR(4000))"),
+                "each line should carry its code and label in the view");
+        assertTrue(statementView.contains("(Country.\\\"COUNTRY_CODE2\\\" = 'AL' OR Country.\\\"COUNTRY_CODE2\\\" = 'AT')"),
+                "a comma-separated selector of exact codes should be an OR of equalities over the account nomenclature");
+        assertTrue(statementView.contains("SUBSTRING(Country.\\\"COUNTRY_CODE2\\\" FROM 1 FOR 1) >= 'B'"),
+                "a range selector should compare equally long code prefixes, not the whole code");
+        String statement = contentOf("OrderStatement.report");
+        assertTrue(statement.contains("\"kind\": \"statement\""), "the statement report should carry its kind");
+        assertTrue(statement.contains("WITH \\\"ACCOUNT_BALANCES\\\" as (") && statement.contains("GROUP BY Country.\\\"COUNTRY_CODE2\\\""),
+                "the statement should reduce the ledger to one balance per account code before its lines read it");
+        assertTrue(statement.contains("FROM \\\"ORDERS_ORDER_STATEMENT_LINES\\\" as \\\"STATEMENT_LINES\\\""),
+                "the thin query should read the generated lines view");
+        assertFalse(statement.contains("Alpine markets"), "the line labels belong to the view, not the .report query");
+        assertTrue(statement.contains("ORDER BY \\\"STATEMENT_LINES\\\".\\\"LINE_ORDINAL\\\""),
+                "the statement should render its lines in the authored order");
+        assertTrue(statement.contains("\"alias\": \"Code\"") && statement.contains("\"alias\": \"Label\"")
+                && statement.contains("\"alias\": \"Amount\""), "a statement's columns are Code / Label / Amount");
+        assertTrue(statement.contains("\"name\": \"fromDate\"") && statement.contains("\"name\": \"toDate\""),
+                "a statement should declare the same window parameters as a balance report");
     }
 
     private void assertRoles() {
@@ -4178,10 +6022,141 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(resource("countries-extra.csv").exists(), "a file seed must not generate a CSV body");
     }
 
+    /**
+     * A MUTUAL cross-model {@code generates} pair has no project to generate first (dirigible #6539):
+     * the opportunities model mints a quotation into the quotations model, which holds a foreign key
+     * back to the opportunity - so a fresh bootstrap used to be impossible without stripping the
+     * create-from by hand, generating, and putting it back. The declared bootstrap pass is the whole
+     * sequence: bootstrap here, generate the dependency, regenerate here.
+     */
+    @Test
+    void mutual_cross_model_generates_bootstraps() {
+        writeIntent(MUTUAL_SOURCE_INTENT);
+        writeDependencyIntent(MUTUAL_TARGET_INTENT);
+
+        // The refusal below is about the ABSENCE of the owner model, in either of the two places
+        // ownerModelExists reads - so state that as a precondition rather than let a leftover from an
+        // earlier test in this class turn the 422 into an unexplained 200 (see removeProject()).
+        assertFalse(resourceOf(DEPENDENCY_PROJECT_PATH + "/quotations.model").exists(),
+                "the workspace copy of the dependency model must be gone before a bootstrap pass is expected");
+        assertFalse(resourceOf(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + DEPENDENCY_PROJECT + "/quotations.model").exists(),
+                "the PUBLISHED copy of the dependency model must be gone too - a Generate publishes, so deleting the workspace"
+                        + " project alone leaves an owner model the bootstrap check legitimately accepts");
+
+        // 1. The default pass refuses - and says the one thing the generic cross-model message cannot,
+        // namely that this pass would succeed if it were allowed to skip the create-from.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("bootstrap", equalTo(true))
+                                                 .body("issues", hasItem(containsString("mutual cross-model cycle"))));
+
+        // 2. The bootstrap pass emits the model and names what it left out.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL + "&bootstrap=true")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", hasItem(containsString("quotation-from-opportunity"))));
+        assertTrue(resource("opportunities.model").exists(),
+                "the bootstrap pass must generate everything the create-from does not depend on");
+        assertFalse(resource("opportunities.glue").exists(),
+                "the skipped create-from was this model's only glue, so no .glue is emitted yet");
+        // Both halves of a create-from make the same decision: a button whose server controller was
+        // left out would be a click that 404s.
+        assertFalse(resource("quotation-from-opportunity-generate-action.extension").exists(),
+                "the client button must be skipped with the controller it calls");
+
+        // 3. The dependency can now be generated: it resolves its foreign key against the model the
+        // bootstrap pass just wrote - the half of the cycle that was unreachable before.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(DEPENDENCY_GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // 4. And the ordinary pass now completes the cycle, with nothing left to warn about.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", not(hasItem(containsString("quotation-from-opportunity")))));
+        String glue = contentOf("opportunities.glue");
+        assertTrue(glue.contains("\"name\": \"quotation-from-opportunity\""),
+                "the create-from must be emitted once its target model exists");
+        assertTrue(glue.contains("\"toModel\": \"quotations\""), "the emitted create-from must point at the owner model");
+        assertTrue(resource("quotation-from-opportunity-generate-action.extension").exists(), "and the button comes back with it");
+    }
+
+    /** The source half of the mutual pair: it mints a document into a model it does not own. */
+    private static final String MUTUAL_SOURCE_INTENT = """
+            name: opportunities
+            uses:
+              - { model: quotations }
+            entities:
+              - name: Opportunity
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string,  length: 200 }
+            generates:
+              - name: quotation-from-opportunity
+                from: Opportunity
+                to: Quotation
+                uses: quotations
+                map:
+                  Subject: subject
+                  Opportunity: id
+            """;
+
+    /** The target half: it holds the foreign key back, which is what closes the cycle. */
+    private static final String MUTUAL_TARGET_INTENT = """
+            name: quotations
+            uses:
+              - { model: opportunities, project: intent-test }
+            entities:
+              - name: Quotation
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string,  length: 200 }
+                relations:
+                  - { name: Opportunity, kind: manyToOne, to: Opportunity, model: opportunities }
+            """;
+
+    private void writeDependencyIntent(String yaml) {
+        String path = DEPENDENCY_PROJECT_PATH + "/app.intent";
+        IResource existing = repository.getResource(path);
+        if (existing.exists()) {
+            existing.setContent(yaml.getBytes(StandardCharsets.UTF_8));
+        } else {
+            repository.createResource(path, yaml.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    /**
+     * Both copies of every project this class writes - the workspace one AND the published one.
+     *
+     * <p>
+     * Deleting the workspace project is not the whole cleanup: a Generate runs the project's
+     * {@code .settings} recipes through {@code ModelGenerationService}, which PUBLISHES the project
+     * once it has written them, so every generating test here leaves a {@code /registry/public/
+     * <project>} copy behind. That copy is a real deployment, not a cache - the IDE draws the same
+     * distinction with its "Delete" and "Delete &amp; Unpublish" buttons - and
+     * {@code CrossModelSupport.ownerModelExists} deliberately accepts a published {@code .model} as the
+     * owner model, it being the only copy a prepackaged module ever has. Left behind, it makes the next
+     * test's cross-model owner resolve against the previous test's output: that is how
+     * {@link #mutual_cross_model_generates_bootstraps()} stopped seeing its bootstrap refusal as soon
+     * as another test in this class generated the shared dependency project.
+     */
     @AfterEach
     void removeProject() {
-        if (repository.hasCollection(PROJECT_PATH)) {
-            repository.removeCollection(PROJECT_PATH);
+        removeProject(PROJECT_PATH, PROJECT);
+        removeProject(DEPENDENCY_PROJECT_PATH, DEPENDENCY_PROJECT);
+        removeProject(OWNER_PROJECT_PATH, OWNER_PROJECT);
+    }
+
+    private void removeProject(String projectPath, String projectName) {
+        if (repository.hasCollection(projectPath)) {
+            repository.removeCollection(projectPath);
         }
+        publisherService.unpublish(projectName);
     }
 }

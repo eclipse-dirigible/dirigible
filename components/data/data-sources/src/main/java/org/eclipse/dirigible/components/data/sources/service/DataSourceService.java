@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.sources.service;
 
 import java.util.List;
+import java.util.Optional;
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.repository.DataSourceRepository;
@@ -48,6 +49,22 @@ public class DataSourceService extends BaseArtefactService<DataSource, Long> {
         DataSource savedDataSource = super.save(datasource);
         dataSourceListeners.forEach(l -> l.onSave(savedDataSource));
         return savedDataSource;
+    }
+
+    /**
+     * Finds a data source by name without throwing when there is none.
+     *
+     * <p>
+     * {@link #findByName(String)} answers a missing artefact with an exception, which is right for a
+     * caller that knows the artefact exists. An upsert does not: "is it there yet" is its normal
+     * question, asked once per call.
+     *
+     * @param name the data source name
+     * @return the data source, or empty
+     */
+    @Transactional(readOnly = true)
+    public Optional<DataSource> findOptionalByName(String name) {
+        return getRepo().findByName(name);
     }
 
     /**

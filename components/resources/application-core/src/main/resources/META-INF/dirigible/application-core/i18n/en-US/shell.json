@@ -19,6 +19,12 @@
       "user": "User",
       "logout": "Log out"
     },
+    "theme": {
+      "title": "Theme",
+      "light": "Light",
+      "dark": "Dark",
+      "auto": "Auto"
+    },
     "actAs": {
       "start": "Act as...",
       "enter": "Enter data as...",
@@ -40,11 +46,15 @@
     "dashboard": {
       "title": "Dashboard",
       "overview": "Overview of your published applications.",
-      "kpis": "Key Indicators"
+      "kpis": "Key Indicators",
+      "viewAll": "View all",
+      "viewAllOf": "Open the {{name}} report"
     },
     "inbox": {
       "refresh": "Refresh",
       "filterTasks": "Filter tasks...",
+      "sortNewestFirst": "Newest first",
+      "sortOldestFirst": "Oldest first",
       "noTasks": "No tasks",
       "noTasksHint": "You have no pending tasks.",
       "claimOpen": "Claim & open",
@@ -114,12 +124,13 @@
       "noData": "No data",
       "noRows": "The {{name}} report returned no rows.",
       "total": "Total",
-      "prev": "Prev",
+      "prev": "Previous",
       "next": "Next",
-      "pageOf": "Page {{page}} / {{total}}",
       "any": "any",
       "yes": "yes",
       "no": "no",
+      "true": "Yes",
+      "false": "No",
       "min": "min",
       "max": "max",
       "contains": "contains..."
@@ -129,6 +140,7 @@
       "hint": "The page you are looking for does not exist."
     },
     "settings": {
+      "title": "Settings",
       "selectSetting": "Select a setting",
       "selectSettingHint": "Choose a configuration entity on the left to manage it here.",
       "configFor": "Configuration & nomenclature for {{name}}.",

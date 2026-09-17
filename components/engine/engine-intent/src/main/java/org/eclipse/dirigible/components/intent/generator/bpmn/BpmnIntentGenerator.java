@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -22,6 +24,7 @@ import java.util.Set;
 
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -43,11 +46,13 @@ import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,14 +176,23 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
+        List<SetFieldSupport.Setter> setters = SetFieldSupport.setters(model);
         Map<String, String> setterByProcessTask = new HashMap<>();
-        for (SetFieldSupport.Setter setter : SetFieldSupport.setters(model)) {
+        for (SetFieldSupport.Setter setter : setters) {
             String key = setter.process() + "/" + setter.step();
             if (setter.relation() && userTaskKeys.contains(key)) {
                 setterByProcessTask.put(key, setter.className());
             }
         }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        // The status writes a checks: gate stands in front of run INSIDE the completing transaction
+        // (no flowable:async), so their rejection reaches the person who acted - see
+        // synchronousNodes.
+        Map<String, Set<String>> synchronousByProcess = synchronousNodes(setters, byName, userTaskKeys, writerByProcessTask);
+        // The authored steps whose status write a gate stands in front of - what render() walks BACK
+        // from, to pull the rest of the completing transaction (the delegates a reaching user task
+        // inserts, the resolvers of the nodes between) in with them.
+        Map<String, Set<String>> gatedStepsByProcess = gatedSteps(setters, byName);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
         String candidateGroupsExtra = String.join(",", context.getSettings()
@@ -187,20 +201,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
                                                     .isBlank()) {
-                LOGGER.warn("Skipping unnamed process in intent [{}]", IntentNaming.baseName(context));
+                LOGGER.warn("Skipping unnamed process in intent [{}]", LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             String fileName = process.getName() + ".bpmn";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", process.getName(),
-                        IntentNaming.baseName(context));
+                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", LoggedValue.of(process.getName()),
+                        LoggedValue.of(IntentNaming.baseName(context)));
                 continue;
             }
             if (!process.getTrigger()
                         .isEmpty()) {
                 LOGGER.info(
                         "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
-                        process.getName());
+                        LoggedValue.of(process.getName()));
             }
             List<Resolver> processResolvers = new ArrayList<>();
             for (Resolver resolver : allResolvers) {
@@ -237,7 +251,128 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
                             processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
                             candidateGroupsExtra, writerByTask, setterByTask,
-                            IntentNaming.processTaskCatalog(context.getProjectName(), context)));
+                            IntentNaming.processTaskCatalog(context.getProjectName(), context),
+                            synchronousByProcess.getOrDefault(process.getName(), Set.of()),
+                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of())));
+        }
+    }
+
+    /**
+     * The BPMN nodes that must run <b>inside the transaction of the action that reached them</b>,
+     * indexed by process - i.e. emitted without {@code flowable:async}.
+     *
+     * <p>
+     * A {@code checks:} gate is enforced by the generated repository when the document is persisted
+     * carrying the gate status, and the whole point of the gate is that the person who moved the
+     * document there is told why it was refused. An asynchronous status-set cannot do that: Flowable
+     * commits the user-task completion, schedules the setter as a detached job, and the
+     * {@code ValidationException} the gate raises then fails <em>that job</em> - it dead-letters as a
+     * process incident, the task is already gone from the Inbox, and the approver sees nothing (issue
+     * #7014). Run in the completing transaction instead, the rejection rolls the completion back and
+     * travels out of {@code POST /services/inbox/tasks/&lt;id&gt;} carrying the authored message.
+     *
+     * <p>
+     * A setter declared on the {@code serviceTask} itself is that one node. A setter declared on a
+     * {@code userTask} is the delegate inserted after the task - and the writer that persists the
+     * reviewer's edits is inserted <em>before</em> it, so that one has to stay in the transaction too
+     * or its own async boundary commits the completion before the gate is ever reached. Everything else
+     * on the chain (number stamping, snapshots, mail) keeps its async boundary - unless it stands
+     * between a completing user task and a gate, which is {@link #completingTransactionNodes}' walk.
+     *
+     * @param setters every validated field setter of the model
+     * @param byName the model's entities, by name
+     * @param userTaskKeys the {@code <process>/<step>} keys of the authored user tasks
+     * @param writerByProcessTask the writer delegate class per {@code <process>/<task>} key
+     * @return the node ids to emit synchronously, per process name
+     */
+    private static Map<String, Set<String>> synchronousNodes(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName,
+            Set<String> userTaskKeys, Map<String, String> writerByProcessTask) {
+        Map<String, Set<String>> byProcess = new HashMap<>();
+        for (SetFieldSupport.Setter setter : setters) {
+            if (!setter.relation() || !gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+                continue;
+            }
+            String key = setter.process() + "/" + setter.step();
+            Set<String> nodes = byProcess.computeIfAbsent(setter.process(), process -> new HashSet<>());
+            if (userTaskKeys.contains(key)) {
+                nodes.add(IntentNaming.camelCase(setter.className()));
+                String writer = writerByProcessTask.get(key);
+                if (writer != null) {
+                    nodes.add(IntentNaming.camelCase(writer));
+                }
+            } else {
+                nodes.add(setter.step());
+            }
+        }
+        return byProcess;
+    }
+
+    /**
+     * The authored steps that carry a check-gated status write, per process name.
+     *
+     * <p>
+     * {@link #synchronousNodes} answers <em>which nodes</em> must lose their async boundary from the
+     * setter's own position; this answers <em>where the gate is</em>, so {@link #render} can walk back
+     * from it to the user task whose completion the refusal has to roll back and take everything in
+     * between along (issue #7063).
+     *
+     * @param setters every validated field setter of the model
+     * @param byName the model's entities, by name
+     * @return the authored step names carrying a gated status write, per process name
+     */
+    private static Map<String, Set<String>> gatedSteps(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byProcess = new HashMap<>();
+        for (SetFieldSupport.Setter setter : setters) {
+            if (setter.relation() && gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+                byProcess.computeIfAbsent(setter.process(), process -> new HashSet<>())
+                         .add(setter.step());
+            }
+        }
+        return byProcess;
+    }
+
+    /**
+     * Whether a setter writes the entity's {@code function: EntityStatus} FK to a status one of its
+     * document-level {@code checks:} gates on - the only writes whose failure a person is waiting for.
+     *
+     * @param entity the trigger entity the setter writes, may be {@code null}
+     * @param field the PascalCase property the setter assigns
+     * @param value the assigned value (a status seed id for a relation setter)
+     * @return {@code true} when the write is gated by a check
+     */
+    private static boolean gatesACheck(EntityIntent entity, String field, String value) {
+        if (entity == null || entity.getChecks() == null) {
+            return false;
+        }
+        RelationIntent status = IntentEntities.entityStatusRelation(entity);
+        if (status == null || !IntentNaming.pascalCase(status.getName())
+                                           .equals(field)) {
+            return false;
+        }
+        Integer target = seedId(value);
+        if (target == null) {
+            return false;
+        }
+        for (CheckIntent check : entity.getChecks()) {
+            // Only the document-level kinds carry a status gate; a guard's own status is its rejection
+            // outcome (setStatus), not a precondition on the write.
+            if (target.equals(check.getStatus())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The setter's value as a status seed id, or {@code null} when it is not an integer. */
+    private static Integer seedId(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (NumberFormatException e) {
+            LOGGER.debug("Setter value [{}] is not a status seed id", LoggedValue.of(value), e);
+            return null;
         }
     }
 
@@ -303,10 +438,244 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return "/services/web/" + projectName + "/gen/" + form + "/forms/" + form + "/index.html";
     }
 
+    /**
+     * Every node that must run <b>inside the transaction of the user action that reaches a
+     * {@code checks:} gate</b> - the setter nodes {@link #synchronousNodes} already found, plus
+     * everything the execution passes through on its way from the completing user task to the gate.
+     *
+     * <p>
+     * #7014 took the async boundary off the gated status set itself, and off the writer when the setter
+     * was declared on the very user task that completes. A gate one hop further down - the shape every
+     * approve/reject flow has, where the user task falls through a {@code decision} into the
+     * {@code serviceTask} that sets the status (BusinessIntents' four billing documents, issue #7063) -
+     * still had a boundary in front of it: the writer that persists the reviewer's edits, a resolver
+     * inserted before the decision, a step-completed emitter. Any one of them commits the user-task
+     * completion, and the gate then fails a detached job: the task is gone from the Inbox, the document
+     * never moved, the refusal shows up as a dead-letter incident in Monitoring, and only an
+     * administrator can retry it. So the walk goes back from the gate to the user tasks that reach it
+     * through routing alone, and every node on the way loses its boundary too.
+     *
+     * <p>
+     * The walk crosses authored service tasks too (issue #7371). A custom {@code delegate:} between the
+     * decision and the setter - {@code base-inventory}'s posting flows are the shape - used to stop it,
+     * on the reasoning that its own completion is what the person waited for; measured, that is not how
+     * it reads to them. Its boundary commits the completion, so the gate refuses a detached job:
+     * {@code 200} with an empty body, the task consumed, the document never moved, and once the job's
+     * retries are exhausted the instance is stranded with no task in anyone's Inbox. So the whole
+     * stretch from the completing task to the gate runs in one transaction, and the step's own work
+     * rolls back with the refusal.
+     *
+     * <p>
+     * The walk still stops at anything the completing transaction cannot span - see
+     * {@link #joinsTheCompletingTransaction}: a second user task or a {@code wait} is its own wait
+     * state, {@code end} is the end, and a step declaring {@code retry:} needs the job its boundary
+     * creates.
+     *
+     * @param process the authored process
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @param nodesByStep the node ids each authored step expands to, in flow order
+     * @param synchronousSetterNodes the setter/writer nodes already resolved from the setter's own
+     *        position
+     * @return every node id to emit without {@code flowable:async}
+     */
+    private static Set<String> completingTransactionNodes(ProcessIntent process, Set<String> gatedSteps,
+            Map<String, List<String>> nodesByStep, Set<String> synchronousSetterNodes) {
+        Set<String> synchronous = new HashSet<>(synchronousSetterNodes);
+        if (gatedSteps.isEmpty()) {
+            return synchronous;
+        }
+        Map<String, StepIntent> byName = new LinkedHashMap<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null && !step.getName()
+                                               .isBlank()) {
+                byName.put(step.getName(), step);
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (!"userTask".equals(step.getKind()) || step.getName() == null) {
+                continue;
+            }
+            // The nodes of the user task itself, minus everything up to and including the wait state: the
+            // delegates inserted BEFORE it ran when the execution arrived, in the previous transaction.
+            List<String> ownNodes = nodesByStep.getOrDefault(step.getName(), List.of(step.getName()));
+            List<String> afterTheWait = ownNodes.subList(Math.min(ownNodes.indexOf(step.getName()) + 1, ownNodes.size()), ownNodes.size());
+            Set<String> onGateRoutes = gateReachingSteps(step, byName, process.getSteps(), gatedSteps, false);
+            warnAboutGatesBehindARetryingStep(process, step, byName, gatedSteps, onGateRoutes);
+            if (onGateRoutes.isEmpty()) {
+                continue;
+            }
+            synchronous.addAll(afterTheWait);
+            for (String node : onGateRoutes) {
+                synchronous.addAll(nodesByStep.getOrDefault(node, List.of(node)));
+            }
+        }
+        return synchronous;
+    }
+
+    /**
+     * The union of the authored steps lying on <b>every</b> route from a user task to a gated step -
+     * the steps strictly between the two, plus the gates themselves. Empty when no gate is reachable
+     * through {@code decision} steps alone.
+     *
+     * <p>
+     * A gate is regularly reachable through more than one decision route (an amount threshold that
+     * short-circuits a rating check, say), and the completing user rides exactly one of them. Each
+     * route carries its own decisions and the resolver / field-loader delegates inserted in front of
+     * them, so the nodes of all of them lose their boundary - not only the ones on the first route
+     * walked, which is what a single visited set across the routes leaves behind (issue #7139). Hence
+     * the two passes: a forward walk collects the decision sub-graph reachable from the task, and a
+     * backward walk from the gates inside it keeps the steps a gate is really reachable from. A
+     * decision route that reaches no gate keeps its async boundary.
+     *
+     * @param userTask the completing user task
+     * @param byName the authored steps by name
+     * @param authored the authored steps, in declaration order
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @return the authored step names on the gate-reaching routes
+     */
+    private static Set<String> gateReachingSteps(StepIntent userTask, Map<String, StepIntent> byName, List<StepIntent> authored,
+            Set<String> gatedSteps, boolean crossRetryingSteps) {
+        Map<String, List<String>> continuationsByStep = new LinkedHashMap<>();
+        Set<String> reachable = new LinkedHashSet<>();
+        Deque<String> forward = new ArrayDeque<>(continuations(userTask, authored));
+        while (!forward.isEmpty()) {
+            String name = forward.poll();
+            if (!reachable.add(name)) {
+                continue; // already collected, through this route or another one
+            }
+            if (gatedSteps.contains(name)) {
+                continue; // the gate is where the completing transaction ends
+            }
+            StepIntent step = byName.get(name);
+            if (step == null || !(joinsTheCompletingTransaction(step) || crossRetryingSteps && "serviceTask".equals(step.getKind()))) {
+                continue; // a wait state, a retrying step, or `end` - the transaction ends here
+            }
+            List<String> targets = continuations(step, authored);
+            continuationsByStep.put(name, targets);
+            forward.addAll(targets);
+        }
+        Map<String, List<String>> predecessors = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> continuation : continuationsByStep.entrySet()) {
+            for (String target : continuation.getValue()) {
+                predecessors.computeIfAbsent(target, name -> new ArrayList<>())
+                            .add(continuation.getKey());
+            }
+        }
+        Deque<String> backward = new ArrayDeque<>();
+        for (String name : reachable) {
+            if (gatedSteps.contains(name)) {
+                backward.add(name);
+            }
+        }
+        Set<String> onGateRoutes = new LinkedHashSet<>();
+        while (!backward.isEmpty()) {
+            String name = backward.poll();
+            if (onGateRoutes.add(name)) {
+                backward.addAll(predecessors.getOrDefault(name, List.of()));
+            }
+        }
+        return onGateRoutes;
+    }
+
+    /**
+     * Log the gates a {@code retry:} step shuts the completing transaction out of - the one shape
+     * {@link #joinsTheCompletingTransaction} cannot repair.
+     *
+     * <p>
+     * Its refusal will reach nobody: the boundary the retry cycle needs commits the completion first,
+     * so the gate fails a detached job and the person who acted gets a {@code 200} with an empty body
+     * (issue #7371). Nothing about that is visible in the generated output, so it is said here, at the
+     * one moment both halves are known. The author's way out is to drop the {@code retry:} (the step
+     * then runs in the completing transaction like any other), or to move the retrying work off the
+     * route between the task and the gate.
+     *
+     * @param process the authored process
+     * @param userTask the completing user task
+     * @param byName the authored steps by name
+     * @param gatedSteps the authored step names carrying a check-gated status write
+     * @param onGateRoutes the steps the completing transaction does reach
+     */
+    private static void warnAboutGatesBehindARetryingStep(ProcessIntent process, StepIntent userTask, Map<String, StepIntent> byName,
+            Set<String> gatedSteps, Set<String> onGateRoutes) {
+        if (!LOGGER.isWarnEnabled()) {
+            return;
+        }
+        Set<String> shutOut = new LinkedHashSet<>(gateReachingSteps(userTask, byName, process.getSteps(), gatedSteps, true));
+        shutOut.retainAll(gatedSteps);
+        shutOut.removeAll(onGateRoutes);
+        for (String gate : shutOut) {
+            LOGGER.warn(
+                    "Process [{}]: the check-gated status write of step [{}] is reachable from user task [{}] only across a step declaring `retry:`,"
+                            + " whose async boundary commits the task completion - a refusal there will dead-letter instead of reaching the person who acted."
+                            + " Drop the `retry:` from that step, or move it off the route between the task and the gate.",
+                    process.getName(), gate, userTask.getName());
+        }
+    }
+
+    /**
+     * Whether the execution can carry the completing transaction <b>through</b> this step on its way to
+     * a gate - i.e. whether the step may lose its {@code flowable:async} boundary.
+     *
+     * <p>
+     * A {@code decision} is pure routing and always can. An authored {@code serviceTask} can too: the
+     * work it does (posting stock movements, stamping a number, sending a mail) belongs to the very
+     * action the gate is about to refuse, and its async boundary commits the user-task completion
+     * before the gate is ever reached - the task is consumed, the refusal fails a detached job, and the
+     * approver gets a 200 with an empty body (issue #7371). Run in the completing transaction, the
+     * step's own work rolls back with the refusal and the 400 carries the authored message out of
+     * {@code POST /services/inbox/tasks/&lt;id&gt;}.
+     *
+     * <p>
+     * The one service task that keeps its boundary is one declaring {@code retry:}: a Flowable
+     * failed-job retry cycle re-runs a <em>job</em>, and there is no job without the boundary, so
+     * crossing it would silently drop the declared re-attempts. (An {@code onError:} route needs no job
+     * - {@code IntentStepResilience} converts a synchronous first-and-final failure to the caught BPMN
+     * error just as it does an exhausted asynchronous one - so a step that only routes its failure is
+     * crossed like any other.) A gate reachable only across a retrying step therefore still refuses
+     * into a dead-letter incident; the generator says so in the log rather than silently.
+     *
+     * <p>
+     * Everything else stops the walk: a second {@code userTask} is its own wait state, a {@code wait}
+     * is one by definition, and {@code end} is where the process stops - nobody's completing action is
+     * waiting on a gate behind them.
+     *
+     * @param step the authored step the route passes through
+     * @return {@code true} when the step may be emitted without its async boundary
+     */
+    private static boolean joinsTheCompletingTransaction(StepIntent step) {
+        if ("decision".equals(step.getKind())) {
+            return true;
+        }
+        return "serviceTask".equals(step.getKind()) && ProcessResilienceSupport.retryCycle(step) == null;
+    }
+
+    /**
+     * The authored steps a step continues into: its declared {@code then} / {@code else} / {@code next}
+     * routing, or - when it declares none - the step that follows it in declaration order, which is
+     * what the linear chain falls through to. A boundary timer's branch and a delegate's
+     * {@code onError} route are deliberately not continuations: they are taken when a wait expires or a
+     * step fails, and nobody's completing action is waiting on the gate behind them.
+     */
+    private static List<String> continuations(StepIntent step, List<StepIntent> authored) {
+        List<String> targets = ProcessParallelSupport.continuationTargets(step);
+        if (!targets.isEmpty()) {
+            return targets;
+        }
+        int index = authored.indexOf(step);
+        for (int i = index + 1; index >= 0 && i < authored.size(); i++) {
+            String name = authored.get(i)
+                                  .getName();
+            if (name != null && !name.isBlank()) {
+                return List.of(name);
+            }
+        }
+        return List.of();
+    }
+
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask, String taskLabelCatalog) {
+            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -321,6 +690,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         AugmentedSteps augmented = augmentWithResolvers(process.getName(), process.getSteps(), eventsPackage, resolvers, fieldLoads,
                 timerLoads, stepEvents, ownFieldPascalCase, writerByTask, setterByTask);
         List<StepIntent> steps = augmented.steps();
+        // The gate's rejection has to roll back the ACTION that reached it, so nothing between the user
+        // task and the gate may commit first - see completingTransactionNodes.
+        Set<String> synchronousNodes = completingTransactionNodes(process, gatedSteps, augmented.nodesByStep(), synchronousSetterNodes);
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
         // serviceTask - pull it out of the main flow (it is emitted inside the event subprocess), and
@@ -447,7 +819,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep,
+                    synchronousNodes);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -596,7 +969,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("      </startEvent>\n");
         String afterStart = endId;
         if (cleanup != null) {
-            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage, clearsFor(cleanup, clearsByStep));
+            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage, clearsFor(cleanup, clearsByStep), true);
             afterStart = cleanup.getName();
         }
         sb.append("      <endEvent id=\"")
@@ -883,7 +1256,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep) {
+            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep,
+            Set<String> synchronousNodes) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
         switch (kind) {
@@ -892,7 +1266,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName, processName, eventsPackage, clears);
+                appendServiceTask(sb, step, projectName, processName, eventsPackage, clears, !synchronousNodes.contains(step.getName()));
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -907,7 +1281,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             case "end":
                 break;
             default:
-                LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
+                LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
+                        LoggedValue.of(step.getName()));
                 appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
                 break;
         }
@@ -986,12 +1361,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage,
-            List<String> clears) {
+            List<String> clears, boolean async) {
+        // `async` is false for every node completingTransactionNodes marked - a check-gated status
+        // write, and everything the completing execution passes through on its way to it, a
+        // `delegate:` step included (#7371). Everything else keeps the async boundary.
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
-        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the <events
-        // pkg>.<Handler>
-        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
+        // - an author-declared serviceTask with a `setField` (or its `clearField` erasure twin) ->
+        // JavaTask bound to the <events pkg>.<Handler>
+        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value,
+        // or clears it);
         // - an author-declared serviceTask with a `setRelationField` -> JavaTask bound to the same
         // <events pkg>.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
         // - an author-declared serviceTask with a `notify` block -> JavaTask bound to the generated
@@ -1006,11 +1385,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // this is how a reusable, parameterized delegate (e.g. a document number generator) is invoked.
         String delegate = stringArg(step, "delegate");
         if (delegate != null && !delegate.isBlank()) {
-            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage), clears);
+            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage), clears, async);
             return;
         }
         String javaHandler = stringArg(step, "javaHandler");
         String setField = stringArg(step, "setField");
+        String clearField = stringArg(step, "clearField");
         String setRelationField = stringArg(step, "setRelationField");
         String call = stringArg(step, "call");
         boolean sends = step.getArgs() != null && step.getArgs()
@@ -1020,7 +1400,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         if (javaHandler != null && !javaHandler.isBlank()) {
             java = true;
             handlerValue = javaHandler;
-        } else if (setField != null && !setField.isBlank() || setRelationField != null && !setRelationField.isBlank()) {
+        } else if (setField != null && !setField.isBlank() || clearField != null && !clearField.isBlank()
+                || setRelationField != null && !setRelationField.isBlank()) {
             java = true;
             handlerValue = eventsPackage + "." + SetFieldSupport.className(processName, step.getName());
         } else if (sends) {
@@ -1039,11 +1420,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
-          .append("\" flowable:async=\"true\" flowable:delegateExpression=\"")
+          .append(async ? "\" flowable:async=\"true\" flowable:delegateExpression=\"" : "\" flowable:delegateExpression=\"")
           .append(java ? "${JavaTask}" : "${JSTask}")
           .append("\">\n");
         boolean hasHandler = handlerValue != null && !handlerValue.isBlank();
-        if (hasHandler || !clears.isEmpty()) {
+        // retry: { count, every } -> the Flowable failed-job retry cycle, exactly as on the
+        // flowable:class path (appendDelegateServiceTask): the cycle is read off the flow element, so it
+        // is implementation-agnostic. It re-runs the failed job only because the task keeps its async
+        // boundary - which it does: completingTransactionNodes never crosses a step declaring retry:
+        // (#7371), and the DSL refuses the key on a setter step for that very reason (dirigible #7056).
+        String retryCycle = ProcessResilienceSupport.retryCycle(step);
+        if (hasHandler || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
             if (hasHandler) {
                 sb.append("        <flowable:field name=\"handler\">\n");
@@ -1051,6 +1438,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                   .append(handlerValue)
                   .append("]]></flowable:string>\n");
                 sb.append("        </flowable:field>\n");
+            }
+            if (retryCycle != null) {
+                sb.append("        <flowable:failedJobRetryTimeCycle>")
+                  .append(escapeXmlAttribute(retryCycle))
+                  .append("</flowable:failedJobRetryTimeCycle>\n");
             }
             appendClearVariableListeners(sb, clears);
             sb.append("      </extensionElements>\n");
@@ -1079,24 +1471,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * Emit a service task bound to an author-named client
      * {@link org.flowable.engine.delegate.JavaDelegate} via {@code flowable:class} (resolved through
      * the client class loader by {@code BpmFlowableConfig}'s {@code ClientAwareClassLoader}). Unlike
-     * the {@code ${JavaTask}} dispatcher - which only forwards the {@code handler} field and
-     * instantiates the target with a no-arg constructor - {@code flowable:class} lets Flowable inject
-     * the declared {@code fields} into the delegate, so a reusable, parameterized delegate can be
-     * configured per step.
+     * the {@code ${JavaTask}} dispatcher - which only forwards the {@code handler} field -
+     * {@code flowable:class} lets Flowable inject the declared {@code fields} into the delegate, so a
+     * reusable, parameterized delegate can be configured per step. (The delegate's own collaborators
+     * are wired by the client bean container on both paths.)
      */
-    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears) {
+    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass, List<String> clears,
+            boolean async) {
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
-          .append("\" flowable:async=\"true\" flowable:class=\"")
+          .append(async ? "\" flowable:async=\"true\" flowable:class=\"" : "\" flowable:class=\"")
           .append(escapeXmlAttribute(delegateClass))
           .append("\">\n");
         Map<String, String> fields = delegateFields(step);
         // retry: { count, every } -> the Flowable failed-job retry cycle (R<count+1>/<every> - the R
-        // number counts TOTAL attempts). The task is already flowable:async, so the cycle re-runs the
-        // failed job with the declared spacing; exhaustion dead-letters (an incident) unless an onError
-        // boundary converts it.
+        // number counts TOTAL attempts). The cycle re-runs the failed JOB with the declared spacing, so
+        // it needs the async boundary - which a retrying step always keeps, since
+        // joinsTheCompletingTransaction refuses to cross one (#7371). Exhaustion dead-letters (an
+        // incident) unless an onError boundary converts it.
         String retryCycle = ProcessResilienceSupport.retryCycle(step);
         if (!fields.isEmpty() || retryCycle != null || !clears.isEmpty()) {
             sb.append("      <extensionElements>\n");
@@ -1251,7 +1645,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             String condition = stringArg(step, "if");
             String thenTarget = stringArg(step, "then");
             if (condition == null || condition.isBlank() || thenTarget == null || thenTarget.isBlank()) {
-                LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", step.getName());
+                LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", LoggedValue.of(step.getName()));
                 continue;
             }
             flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), targets.resolve(thenTarget, targets.regions()

@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import org.springframework.test.annotation.DirtiesContext;
 
 // One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
@@ -61,7 +61,7 @@ public class MessagingFacadeIT extends IntegrationTest {
 
             String actualMessage = MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT_MILLIS);
 
-            assertEquals("Unexpected message", TEST_MESSAGE, actualMessage);
+            assertEquals(TEST_MESSAGE, actualMessage, "Unexpected message");
         }
 
         @Test
@@ -72,8 +72,8 @@ public class MessagingFacadeIT extends IntegrationTest {
             String actualMessage = MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT_MILLIS);
             String actualMessage2 = MessagingFacade.receiveFromQueue(QUEUE, TIMEOUT_MILLIS);
 
-            assertEquals("Unexpected message", TEST_MESSAGE, actualMessage);
-            assertEquals("Unexpected message", TEST_MESSAGE_2, actualMessage2);
+            assertEquals(TEST_MESSAGE, actualMessage, "Unexpected message");
+            assertEquals(TEST_MESSAGE_2, actualMessage2, "Unexpected message");
         }
 
         @Test
@@ -127,8 +127,8 @@ public class MessagingFacadeIT extends IntegrationTest {
                       .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
                       .until(() -> areMessagesReceived(msgReceiver, msgReceiver2));
 
-            assertEquals("Unexpected message", TEST_MESSAGE, msgReceiver.getMessage());
-            assertEquals("Unexpected message", TEST_MESSAGE, msgReceiver2.getMessage());
+            assertEquals(TEST_MESSAGE, msgReceiver.getMessage(), "Unexpected message");
+            assertEquals(TEST_MESSAGE, msgReceiver2.getMessage(), "Unexpected message");
         }
 
         private boolean areMessagesReceived(TopicMessageReciver msgReceiver, TopicMessageReciver msgReceiver2) {

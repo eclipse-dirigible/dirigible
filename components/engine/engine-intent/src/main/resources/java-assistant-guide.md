@@ -95,6 +95,16 @@ Which write to use:
   computed: a full-row write of a snapshot you loaded earlier silently reverts any column somebody
   else changed in between.
 
+- **`announce<Phase>(id, values)`** - present only on an entity whose intent declares
+  `phases: [<name>]`. Use it for an ENRICHMENT the record needs after its insert: a value you compute
+  in an `onCreate` listener and write back. It is a targeted write that also publishes the phase's own
+  topic, in the write's own transaction, so the value and the notice commit together. This is the ONLY
+  correct way to write back a value some declarative consumer (a `postings:` block, a notification, a
+  create-from) reads: a plain `updateWithoutEvent` / `updateProperties` publishes nothing, and a
+  consumer bound to `onCreate` then races your listener - two listeners on one event have no defined
+  order - and may post from a null. If the intent declares no phase for the moment you are enriching,
+  say so: the intent must declare it, the Java cannot invent the channel.
+
 Reserve targeted writes for system/derived columns; user data goes through the normal write path.
 
 A reusable helper that touches a *specific* entity must live in that entity's own project, because
@@ -165,6 +175,12 @@ A BPMN service task that is not one of the declarative shapes binds to a hand-wr
 `Id` variable) - not a snapshot - so load the record through its repository, do the work, and
 persist with a targeted write.
 
+**A delegate takes its collaborators by injection, and is NOT a `@Component`.** The engine creates
+it, so it never becomes a bean - annotating it as one builds a second, fully-injected singleton that
+never runs. Declare a constructor (or `@Inject` fields) and the container wires the instance the
+engine builds, exactly as for a `@Component`; that is also what makes the delegate unit-testable
+with doubles.
+
 ```java
 package custom;
 
@@ -177,6 +193,12 @@ public class IssueInvoice implements JavaDelegate {
 
     private static final Logger LOG = Logging.getLogger("custom.IssueInvoice");
 
+    private final DocumentNumbering numbering;   // a @Component of this or another project
+
+    public IssueInvoice(DocumentNumbering numbering) {
+        this.numbering = numbering;
+    }
+
     @Override
     public void execute(DelegateExecution execution) {
         Object id = execution.getVariable("Id");
@@ -185,9 +207,15 @@ public class IssueInvoice implements JavaDelegate {
 }
 ```
 
+`Beans.get(...)` inside `execute` still works and stays the right tool for a lookup that must be
+lazy, or that is deliberately ambiguous - an unsatisfiable or ambiguous *injected* dependency is
+refused, and the refusal lands on the step (routed by its `retry:` / `onError:`), never at publish.
+A delegate with a plain no-arg constructor and nothing to inject is built exactly as before.
+
 A delegate bound with declared `fields:` receives them as injected delegate fields (a
 `org.flowable.engine.delegate.Expression` field with a setter), which is what lets one delegate
-serve several steps.
+serve several steps. Those are applied after injection, so a `fields:` name and an injected member
+must not collide.
 
 ### A REST endpoint
 
@@ -228,7 +256,7 @@ Import from here rather than from a platform-internal package.
 | Package | What is in it |
 |---|---|
 | `component` | `Component`, `Inject`, `Repository`, `Beans` |
-| `db` | `Entity`, `Table`, `Id`, `GeneratedValue`, `Column`, `Lob`, `Transient`, audit annotations, `CalculatedField`, `Store`, `Database`, `Translator`, `ValidationException` |
+| `db` | `Entity`, `Table`, `Id`, `GeneratedValue`, `Column`, `Lob`, `Transient`, audit annotations, `CalculatedField`, `Store`, `Database` (SQL, sequences, and the user / schema DDL: `createUser`, `setUserPassword`, `dropUser`, `existsUser`, `createSchema`, `dropSchema`, `existsSchema`), `Translator`, `ValidationException` |
 | `http` | `Controller`, `Get`/`Post`/`Put`/`Patch`/`Delete`, `Body`, `PathParam`, `QueryParam`, `Context`, `Request`, `Response`, `Upload`, `HttpClient` |
 | `job` | `Scheduled`, `JobHandler`, `Scheduler` |
 | `messaging` | `Listener`, `ListenerKind`, `MessageHandler`, `Producer`, `Consumer` |

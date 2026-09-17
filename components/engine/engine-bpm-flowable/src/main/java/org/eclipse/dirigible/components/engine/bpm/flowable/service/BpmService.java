@@ -264,18 +264,30 @@ public class BpmService {
      */
     public List<ProcessInstanceData> getProcessInstances(Optional<String> key, Optional<String> businessKey) {
         List<ProcessInstance> processInstances = bpmProviderFlowable.getProcessInstances(key, businessKey);
+        // Resolved for the whole listing at once: per instance it is three statements, and the listing
+        // is unbounded - the Monitoring shell polls it every 30 s with no key (#7250).
+        Map<String, List<String>> activityIds = bpmProviderFlowable.getProcessInstanceActivityIds(processInstances);
+
         return processInstances.stream()
-                               .map(this::mapProcessInstance)
+                               .map(processInstance -> mapProcessInstance(processInstance,
+                                       activityIds.getOrDefault(processInstance.getId(), List.of())))
                                .toList();
     }
 
     /**
      * Map process instance.
      *
+     * <p>
+     * The activity id is resolved rather than read off the instance: Flowable leaves it unset on a root
+     * process-instance execution, which is what every running instance is, so the field was always
+     * null. It stays null while an instance is forked across several activities, the field being
+     * singular; {@code getProcessInstanceActiveActivityIds} answers for a fan-out.
+     *
      * @param processInstance the process instance
+     * @param activityIds the activity ids the instance occupies, already resolved
      * @return the process instance data
      */
-    private ProcessInstanceData mapProcessInstance(ProcessInstance processInstance) {
+    private ProcessInstanceData mapProcessInstance(ProcessInstance processInstance, List<String> activityIds) {
         ProcessInstanceData processInstanceData = new ProcessInstanceData();
         processInstanceData.setBusinessKey(processInstance.getBusinessKey());
         processInstanceData.setBusinessStatus(processInstance.getBusinessStatus());
@@ -291,8 +303,18 @@ public class BpmService {
         processInstanceData.setStartTime(processInstance.getStartTime());
         processInstanceData.setReferenceId(processInstance.getReferenceId());
         processInstanceData.setCallbackId(processInstance.getCallbackId());
-        processInstanceData.setActivityId(processInstance.getActivityId());
+        processInstanceData.setActivityId(singleActivityId(activityIds));
         return processInstanceData;
+    }
+
+    /**
+     * The single activity a process instance sits on, or null when it sits on none or on several.
+     *
+     * @param activityIds the activity ids the instance occupies
+     * @return the activity id, or null
+     */
+    private static String singleActivityId(List<String> activityIds) {
+        return activityIds.size() == 1 ? activityIds.get(0) : null;
     }
 
     /**
@@ -319,7 +341,7 @@ public class BpmService {
      */
     public ProcessInstanceData getProcessInstanceById(String id) {
         ProcessInstance processInstance = bpmProviderFlowable.getProcessInstance(id);
-        return mapProcessInstance(processInstance);
+        return mapProcessInstance(processInstance, bpmProviderFlowable.getProcessInstanceActivityIds(processInstance));
     }
 
     /**
@@ -437,6 +459,30 @@ public class BpmService {
     public List<Task> findTasks(PrincipalType type) {
         return bpmProviderFlowable.getTaskService()
                                   .findTasks(type);
+    }
+
+    /**
+     * The same tasks as {@link #findTasks(String, PrincipalType)}, each carrying its process variables.
+     *
+     * @param processInstanceId the process instance to list the tasks of
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, with their process variables loaded
+     */
+    public List<Task> findTasksWithProcessVariables(String processInstanceId, PrincipalType type) {
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasksWithProcessVariables(processInstanceId, type);
+    }
+
+    /**
+     * The same tasks as {@link #findTasks(PrincipalType)}, each carrying its process variables - for a
+     * listing that reads them, which would otherwise cost one variable query per task (issue #7141).
+     *
+     * @param type the principal the tasks are addressed to
+     * @return the tasks, with their process variables loaded
+     */
+    public List<Task> findTasksWithProcessVariables(PrincipalType type) {
+        return bpmProviderFlowable.getTaskService()
+                                  .findTasksWithProcessVariables(type);
     }
 
     public long countTasksByAssignee(String assignee) {

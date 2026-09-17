@@ -214,4 +214,30 @@ public class PostgresSqlDialect extends
         return resultSet.next();
     }
 
+    /**
+     * Exists user.
+     *
+     * <p>
+     * {@code pg_roles} rather than {@code pg_user}: PostgreSQL merged users and groups into roles, and
+     * a role created without LOGIN is absent from {@code pg_user} while still occupying the name.
+     *
+     * @param connection the connection
+     * @param userId the user id
+     * @return true, if successful
+     * @throws SQLException the SQL exception
+     */
+    @Override
+    public boolean existsUser(Connection connection, String userId) throws SQLException {
+        String sql = new SelectBuilder(this).column("*")
+                                            .from("pg_roles")
+                                            .where("rolname = ?")
+                                            .build();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, userId);
+            try (ResultSet resultSet = statement.executeQuery()) {
+                return resultSet.next();
+            }
+        }
+    }
+
 }

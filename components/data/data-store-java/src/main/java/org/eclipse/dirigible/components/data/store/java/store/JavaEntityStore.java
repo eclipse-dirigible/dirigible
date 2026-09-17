@@ -16,7 +16,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
@@ -28,6 +31,10 @@ import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+import org.hibernate.engine.spi.EntityHolder;
+import org.hibernate.engine.spi.EntityKey;
+import org.hibernate.engine.spi.PersistenceContext;
+import org.hibernate.engine.spi.SharedSessionContractImplementor;
 import org.hibernate.query.MutationQuery;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
@@ -69,6 +76,64 @@ public class JavaEntityStore {
     }
 
     /**
+     * Runs a block of entity work as ONE unit: every write and read this thread makes through the store
+     * inside it joins a single session and a single transaction, which commits when the block returns
+     * and rolls back whole when it throws — for any failure the block raises, an {@link Error}
+     * included.
+     *
+     * <p>
+     * Without it each store call is its own transaction, so a multi-write operation that fails halfway
+     * leaves the writes that already succeeded behind — a document minted with no lines, its source
+     * already marked as billed. Reads inside the block go through the same session, so the block sees
+     * its own uncommitted writes (the status a create-from just flipped, the master a line was just
+     * attached to).
+     *
+     * <p>
+     * The events those writes record ride the same transaction, as they always did, and are handed to
+     * the broker only once the whole unit has committed — never for work that was rolled back. Calls
+     * nest: an inner {@code inUnitOfWork} joins the outer one, which alone owns the commit.
+     *
+     * <p>
+     * What is deliberately NOT in the unit: the change history ({@code History}), document-number
+     * allocation and the outbox table's own DDL each run on their own connection, so a rolled-back unit
+     * can leave a history row or consume a number. Both are append-only records of an attempt, not
+     * business state.
+     *
+     * @param <R> the block's result type
+     * @param work the block to run
+     * @return whatever the block returned
+     */
+    public <R> R inUnitOfWork(Supplier<R> work) {
+        UnitOfWork joined = UNIT_OF_WORK.get();
+        if (joined != null) {
+            return work.get();
+        }
+        UnitOfWork unit = new UnitOfWork(entityManager.getSessionFactory()
+                                                      .openSession());
+        UNIT_OF_WORK.set(unit);
+        try {
+            R result;
+            try {
+                result = work.get();
+                unit.transaction.commit();
+            } catch (Throwable ex) {
+                // Throwable, not RuntimeException: an Error — an assertion, a StackOverflow from a
+                // handler that recursed, an OOME — is exactly the failure that must not leave the
+                // unit's writes behind, and it would otherwise reach the finally below and close the
+                // session with the transaction still active, making the outcome depend on what the
+                // pool does with such a connection rather than on an explicit rollback.
+                rollback(unit.transaction, ex);
+                throw ex;
+            }
+            unit.dispatch();
+            return result;
+        } finally {
+            UNIT_OF_WORK.remove();
+            unit.session.close();
+        }
+    }
+
+    /**
      * Insert a new entity. The id field is back-filled when a generator produced it.
      *
      * @param <T> the entity type
@@ -96,8 +161,7 @@ public class JavaEntityStore {
 
     /**
      * Insert a new entity, publishing it on the given topic plus any further events the write emits
-     * about other rows — e.g. a create-from announcing its source's completed transition only once the
-     * document that transition was about exists. All of them share the insert's transaction.
+     * about other rows. All of them share the insert's transaction.
      *
      * @param <T> the entity type
      * @param entity the entity to insert
@@ -110,32 +174,21 @@ public class JavaEntityStore {
         applyCreateAudit(entity, meta);
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
         prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
-
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
-            EventOutbox.Batch events;
-            try {
-                // Hibernate 7 removed the legacy save(...) overloads. persist() returns void; for
-                // dynamic-map entities the generator-produced id is populated into `data` under the
-                // id property's key. Read it back to mirror it onto the caller's typed bean.
-                session.persist(meta.entityName(), data);
-                Object generatedId = data.get(meta.idField()
-                                                  .getName());
-                if (generatedId != null) {
-                    // Back-filled before the event is recorded: the payload must carry the identifier
-                    // the row was actually inserted with.
-                    writeId(entity, meta, generatedId);
-                }
-                events = outbox.record(session, eventsOf(eventTopic, entity, additionalEvents));
-                tx.commit();
-            } catch (RuntimeException ex) {
-                rollback(tx, ex);
-                throw ex;
+        return write((session, events) -> {
+            // Hibernate 7 removed the legacy save(...) overloads. persist() returns void; for
+            // dynamic-map entities the generator-produced id is populated into `data` under the
+            // id property's key. Read it back to mirror it onto the caller's typed bean.
+            session.persist(meta.entityName(), data);
+            Object generatedId = data.get(meta.idField()
+                                              .getName());
+            if (generatedId != null) {
+                // Back-filled before the event is recorded: the payload must carry the identifier
+                // the row was actually inserted with.
+                writeId(entity, meta, generatedId);
             }
-            events.dispatch();
+            events.add(outbox.record(session, eventsOf(eventTopic, entity, additionalEvents)));
             return entity;
-        }
+        });
     }
 
     /**
@@ -178,23 +231,13 @@ public class JavaEntityStore {
         applyUpdateAudit(entity, meta);
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
         prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
-            EventOutbox.Batch events;
-            try {
-                // Hibernate 7: update(entityName, ...) is gone. merge() is the standardized
-                // replacement — copies state from the detached map onto the managed instance.
-                session.merge(meta.entityName(), data);
-                events = outbox.record(session, eventsOf(eventTopic, entity, additionalEvents));
-                tx.commit();
-            } catch (RuntimeException ex) {
-                rollback(tx, ex);
-                throw ex;
-            }
-            events.dispatch();
-        }
-        return entity;
+        return write((session, events) -> {
+            // Hibernate 7: update(entityName, ...) is gone. merge() is the standardized
+            // replacement — copies state from the detached map onto the managed instance.
+            session.merge(meta.entityName(), data);
+            events.add(outbox.record(session, eventsOf(eventTopic, entity, additionalEvents)));
+            return entity;
+        });
     }
 
     /**
@@ -220,18 +263,17 @@ public class JavaEntityStore {
         RegisteredEntity meta = resolve(type);
         String idProperty = meta.idField()
                                 .getName();
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
+        return write((session, events) -> {
+            flushBeforeMutation(session);
             int updated = session
                                  .createMutationQuery(
                                          "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
                                  .setParameter("value", value)
                                  .setParameter("id", id)
                                  .executeUpdate();
-            tx.commit();
+            evictAfterMutation(session, meta, id);
             return updated;
-        }
+        });
     }
 
     /**
@@ -314,30 +356,21 @@ public class JavaEntityStore {
         String idProperty = meta.idField()
                                 .getName();
         prepareOutbox(eventTopic != null || !additionalEvents.isEmpty());
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
-            int updated;
-            EventOutbox.Batch events;
-            try {
-                MutationQuery query = session.createMutationQuery(
-                        "update " + meta.entityName() + " set " + assignments + " where " + idProperty + " = :id");
-                index = 0;
-                for (Object value : values.values()) {
-                    query.setParameter("value" + index++, value);
-                }
-                updated = query.setParameter("id", id)
-                               .executeUpdate();
-                events = outbox.record(session, updated == 0 ? List.of()
-                        : eventsOf(eventTopic, eventTopic == null ? null : readInTransaction(session, type, meta, id), additionalEvents));
-                tx.commit();
-            } catch (RuntimeException ex) {
-                rollback(tx, ex);
-                throw ex;
+        return write((session, events) -> {
+            flushBeforeMutation(session);
+            MutationQuery query =
+                    session.createMutationQuery("update " + meta.entityName() + " set " + assignments + " where " + idProperty + " = :id");
+            int parameter = 0;
+            for (Object value : values.values()) {
+                query.setParameter("value" + parameter++, value);
             }
-            events.dispatch();
+            int updated = query.setParameter("id", id)
+                               .executeUpdate();
+            evictAfterMutation(session, meta, id);
+            events.add(outbox.record(session, updated == 0 ? List.of()
+                    : eventsOf(eventTopic, eventTopic == null ? null : readInTransaction(session, type, meta, id), additionalEvents)));
             return updated;
-        }
+        });
     }
 
     /** Property names must be plain identifiers so nothing can be injected into the mutation HQL. */
@@ -367,16 +400,50 @@ public class JavaEntityStore {
      */
     public <T> Optional<T> findOne(Class<T> type, Object id) {
         RegisteredEntity meta = resolve(type);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            // Hibernate 7: get(entityName, ...) is deprecated-for-removal in favour of find(...).
-            @SuppressWarnings("unchecked")
-            Map<String, Object> data = (Map<String, Object>) session.find(meta.entityName(), id);
+        return read(session -> {
+            Map<String, Object> data = mapById(session, meta, id);
             if (data == null) {
                 return Optional.empty();
             }
             return Optional.of(EntityBeanMapper.fromMap(type, data, meta));
+        });
+    }
+
+    /**
+     * Loads one row as its dynamic-map by id, seeing the caller's own uncommitted writes.
+     *
+     * <p>
+     * Outside a unit of work each store call is its own session and the row is already committed, so a
+     * plain {@code session.find} serves it (Hibernate 7: {@code get(entityName, ...)} is
+     * deprecated-for-removal in favour of {@code find}). Inside a unit the row may have been persisted
+     * earlier in the SAME session, and there {@code find} by id does NOT return it: an
+     * {@code IDENTITY}-generated dynamic-map entity that has been flushed once (as it is the moment any
+     * later write in the block flushes the session) is not served back by a subsequent {@code find} on
+     * its id — it returns {@code null}. That is what made a generated document's synchronous total
+     * recompute reload its own just-created header as {@code null} and give up before summing a single
+     * line, so the header committed with the zeros it was inserted with while the identical line
+     * recomputed correctly when POSTed on its own connection (issue #7096). An HQL query by id, run
+     * after a flush, reads through to the row the block wrote — the read-your-own-writes guarantee the
+     * unit makes — so inside a unit that is the path taken.
+     */
+    private static Map<String, Object> mapById(Session session, RegisteredEntity meta, Object id) {
+        if (UNIT_OF_WORK.get() == null) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> found = (Map<String, Object>) session.find(meta.entityName(), id);
+            return found;
         }
+        session.flush();
+        List<Map> rows = session.createQuery("from " + meta.entityName() + " where " + meta.idField()
+                                                                                           .getName()
+                + " = :id", Map.class)
+                                .setParameter("id", id)
+                                .getResultList();
+        if (rows.isEmpty()) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) rows.get(0);
+        return data;
     }
 
     /**
@@ -397,8 +464,7 @@ public class JavaEntityStore {
      */
     public <T> List<T> findAll(Class<T> type, int limit, int offset) {
         RegisteredEntity meta = resolve(type);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
+        return read(session -> {
             Query<Map> query = session.createQuery("from " + meta.entityName(), Map.class);
             if (limit > 0) {
                 query.setMaxResults(limit);
@@ -407,7 +473,7 @@ public class JavaEntityStore {
                 query.setFirstResult(offset);
             }
             return mapRows(type, meta, query.getResultList());
-        }
+        });
     }
 
     /**
@@ -422,11 +488,16 @@ public class JavaEntityStore {
 
     /**
      * Delete an entity instance and publish it on the given topic, atomically — see
-     * {@link #save(Object, String)} for what that buys.
+     * {@link #save(Object, String)} for what that buys. The payload is the row as it was read inside
+     * the deleting transaction, not the caller's instance: a caller legitimately holds a partial
+     * snapshot — an id and the couple of fields their code cares about — and publishing that hands
+     * every delete reaction a payload whose unset columns are null. The abort listener that stops a
+     * record's running process reads {@code ProcessIds} off it and would silently no-op, leaving the
+     * process alive after its record. Before the removal the row is still there to be read, so it is.
      *
      * @param <T> the entity type
      * @param entity the entity to delete
-     * @param eventTopic the topic to publish the deleted entity on; {@code null} publishes nothing
+     * @param eventTopic the topic to publish the deleted row on; {@code null} publishes nothing
      */
     public <T> void delete(T entity, String eventTopic) {
         RegisteredEntity meta = resolve(entity.getClass());
@@ -436,9 +507,7 @@ public class JavaEntityStore {
         if (id == null) {
             return;
         }
-        // The payload is the caller's instance: it is what they asked to delete, and after the delete
-        // there is no row left to read it from.
-        removeById(entity.getClass(), meta, id, eventTopic, entity);
+        removeById(entity.getClass(), meta, id, eventTopic);
     }
 
     /**
@@ -463,7 +532,7 @@ public class JavaEntityStore {
      * @param eventTopic the topic to publish the deleted row on; {@code null} publishes nothing
      */
     public <T> void deleteById(Class<T> type, Object id, String eventTopic) {
-        removeById(type, resolve(type), id, eventTopic, null);
+        removeById(type, resolve(type), id, eventTopic);
     }
 
     /**
@@ -471,29 +540,21 @@ public class JavaEntityStore {
      * managed instance first and then call {@link Session#remove(Object)} on it — Hibernate routes to
      * the correct entity type via the persistence-context state of the loaded {@link Map}.
      *
-     * @param payload the event payload when the caller already holds the row; {@code null} reads it
-     *        from the transaction before removing it
+     * <p>
+     * The instance loaded here is also the event payload, so a delete describes exactly what was
+     * removed however the caller addressed it.
      */
-    private void removeById(Class<?> type, RegisteredEntity meta, Object id, String eventTopic, Object payload) {
+    private void removeById(Class<?> type, RegisteredEntity meta, Object id, String eventTopic) {
         prepareOutbox(eventTopic != null);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
-            Transaction tx = session.beginTransaction();
-            EventOutbox.Batch events;
-            try {
-                Object managed = session.find(meta.entityName(), id);
-                Object deleted = payload != null ? payload : toBean(type, meta, managed);
-                if (managed != null) {
-                    session.remove(managed);
-                }
-                events = outbox.record(session, eventsOf(eventTopic, deleted, List.of()));
-                tx.commit();
-            } catch (RuntimeException ex) {
-                rollback(tx, ex);
-                throw ex;
+        write((session, events) -> {
+            Object managed = session.find(meta.entityName(), id);
+            Object deleted = eventTopic == null ? null : toBean(type, meta, managed);
+            if (managed != null) {
+                session.remove(managed);
             }
-            events.dispatch();
-        }
+            events.add(outbox.record(session, eventsOf(eventTopic, deleted, List.of())));
+            return null;
+        });
     }
 
     /**
@@ -503,12 +564,11 @@ public class JavaEntityStore {
      */
     public <T> long count(Class<T> type) {
         RegisteredEntity meta = resolve(type);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
+        return read(session -> {
             Long result = session.createQuery("select count(*) from " + meta.entityName(), Long.class)
                                  .getSingleResult();
             return result == null ? 0L : result;
-        }
+        });
     }
 
     /**
@@ -524,14 +584,13 @@ public class JavaEntityStore {
      */
     public <T> List<T> query(Class<T> type, String hql, Map<String, Object> parameters) {
         RegisteredEntity meta = resolve(type);
-        try (Session session = entityManager.getSessionFactory()
-                                            .openSession()) {
+        return read(session -> {
             Query<Map> q = session.createQuery(hql, Map.class);
             if (parameters != null) {
                 parameters.forEach(q::setParameter);
             }
             return mapRows(type, meta, q.getResultList());
-        }
+        });
     }
 
     /**
@@ -589,10 +648,11 @@ public class JavaEntityStore {
 
     /**
      * Reads a row on the given session — inside the caller's open transaction, so it sees that
-     * transaction's own uncommitted changes.
+     * transaction's own uncommitted changes (the just-written row a targeted update publishes on its
+     * topic). Goes through {@link #mapById} so a row written earlier in the same unit is seen here too.
      */
     private static <T> T readInTransaction(Session session, Class<T> type, RegisteredEntity meta, Object id) {
-        return toBean(type, meta, session.find(meta.entityName(), id));
+        return toBean(type, meta, mapById(session, meta, id));
     }
 
     @SuppressWarnings("unchecked")
@@ -601,10 +661,159 @@ public class JavaEntityStore {
     }
 
     /**
-     * Rolls back a transaction whose work failed, keeping the original failure as the one the caller
-     * sees.
+     * Flushes the session's pending writes before a bulk mutation query runs inside a unit of work. A
+     * targeted update is an {@code update … where id = :id} executed straight against the connection;
+     * Hibernate does not first flush the block's still-in-memory {@code persist}s, so without this the
+     * statement would run ahead of the very rows it depends on — the master a line was just attached
+     * to, a header just created. Outside a unit there is nothing pending on this session, so it no-ops.
      */
-    private static void rollback(Transaction tx, RuntimeException cause) {
+    private static void flushBeforeMutation(Session session) {
+        if (UNIT_OF_WORK.get() != null) {
+            session.flush();
+        }
+    }
+
+    /**
+     * Drops the session's cached copy of the row a bulk mutation query just wrote, inside a unit of
+     * work — the symmetric half of {@link #flushBeforeMutation(Session)}. A targeted update executes
+     * straight against the connection and never touches the persistence context, so the instance the
+     * session is holding for that id still carries the PRE-mutation values; and an HQL entity query by
+     * id resolves to the already-managed instance rather than to the row it just read, so the follow-up
+     * read hands back exactly those stale values. That made a topic-bearing
+     * {@link #updateProperties(Class, Object, Map, String)} publish the OLD totals from inside a unit
+     * (a create-from copying lines and then re-summing the header), and a generated repository's
+     * {@code history} trail record {@code before == after} — an entry saying the write happened with
+     * nothing moved (issue #7135). Evicting after the mutation makes the next read reload the row, so
+     * the payload really is the row as the statement left it. It runs after
+     * {@link #flushBeforeMutation} and the mutation itself, so there is nothing pending on the instance
+     * to lose. Outside a unit each call has its own session with no cached instance, so it no-ops.
+     */
+    private static void evictAfterMutation(Session session, RegisteredEntity meta, Object id) {
+        if (UNIT_OF_WORK.get() == null) {
+            return;
+        }
+        PersistenceContext context = session.unwrap(SharedSessionContractImplementor.class)
+                                            .getPersistenceContextInternal();
+        for (Map.Entry<EntityKey, EntityHolder> held : new ArrayList<>(context.getEntityHoldersByKey()
+                                                                              .entrySet())) {
+            if (!meta.entityName()
+                     .equals(held.getKey()
+                                 .getEntityName())
+                    || !sameId(held.getKey()
+                                   .getIdentifier(),
+                            id)) {
+                continue;
+            }
+            Object managed = held.getValue()
+                                 .getEntity();
+            if (managed != null) {
+                session.evict(managed);
+            }
+        }
+    }
+
+    /**
+     * Whether a key the session filed the row under is the id this mutation wrote. The store's ids
+     * arrive as whatever the caller had — an {@code Integer} literal from a path parameter, a
+     * {@code String} from a query — while the session keys the row under the mapped identifier type, so
+     * the two can denote one row and still not be {@code equals}. Their textual forms decide it then,
+     * which is exact for the integral and string keys an entity id is.
+     */
+    private static boolean sameId(Object key, Object id) {
+        if (Objects.equals(key, id)) {
+            return true;
+        }
+        return key != null && id != null && String.valueOf(key)
+                                                  .equals(String.valueOf(id));
+    }
+
+    /**
+     * Runs a write on the thread's open unit of work when there is one — its transaction commits it,
+     * and its collector dispatches the events afterwards — otherwise in a transaction of its own.
+     */
+    private <R> R write(Write<R> work) {
+        UnitOfWork joined = UNIT_OF_WORK.get();
+        if (joined != null) {
+            return work.apply(joined.session, joined.events);
+        }
+        try (Session session = entityManager.getSessionFactory()
+                                            .openSession()) {
+            Transaction tx = session.beginTransaction();
+            List<EventOutbox.Batch> events = new ArrayList<>(1);
+            R result;
+            try {
+                result = work.apply(session, events);
+                tx.commit();
+            } catch (Throwable ex) {
+                // Throwable for the same reason as in inUnitOfWork: an Error must roll this write
+                // back rather than ride out on the try-with-resources close.
+                rollback(tx, ex);
+                throw ex;
+            }
+            dispatch(events);
+            return result;
+        }
+    }
+
+    /**
+     * Runs a read on the thread's open unit of work when there is one — so it sees that unit's own
+     * uncommitted writes — otherwise on a session of its own.
+     */
+    private <R> R read(Function<Session, R> work) {
+        UnitOfWork joined = UNIT_OF_WORK.get();
+        if (joined != null) {
+            return work.apply(joined.session);
+        }
+        try (Session session = entityManager.getSessionFactory()
+                                            .openSession()) {
+            return work.apply(session);
+        }
+    }
+
+    private static void dispatch(List<EventOutbox.Batch> events) {
+        for (EventOutbox.Batch batch : events) {
+            batch.dispatch();
+        }
+    }
+
+    /** A store write: the session to write on, and where to collect the events it recorded. */
+    @FunctionalInterface
+    private interface Write<R> {
+
+        R apply(Session session, List<EventOutbox.Batch> events);
+    }
+
+    /** The session, transaction and pending event batches of an open {@link #inUnitOfWork} block. */
+    private static final class UnitOfWork {
+
+        private final Session session;
+
+        private final Transaction transaction;
+
+        private final List<EventOutbox.Batch> events = new ArrayList<>();
+
+        private UnitOfWork(Session session) {
+            this.session = session;
+            this.transaction = session.beginTransaction();
+        }
+
+        private void dispatch() {
+            JavaEntityStore.dispatch(events);
+        }
+    }
+
+    /**
+     * The unit of work the current thread has open, if any. Thread-bound rather than passed around
+     * because the writers that must join it — a generated repository, a calculated-field action — are
+     * reached through their own objects and never see the caller's session.
+     */
+    private static final ThreadLocal<UnitOfWork> UNIT_OF_WORK = new ThreadLocal<>();
+
+    /**
+     * Rolls back a transaction whose work failed, keeping the original failure as the one the caller
+     * sees. A rollback that itself fails is attached to it as suppressed rather than replacing it.
+     */
+    private static void rollback(Transaction tx, Throwable cause) {
         try {
             if (tx.isActive()) {
                 tx.rollback();

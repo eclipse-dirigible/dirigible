@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextClosedEvent;
@@ -40,6 +42,9 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(CloseActiveMQResourcesApplicationListener.class);
 
+    /** The name of the connection bean, which against a shared message store attaches on first use. */
+    private static final String CONNECTION_BEAN = "ActiveMQConnection";
+
     /** The broker, absent when the deployment uses an external broker. */
     private final ObjectProvider<BrokerService> brokerProvider;
 
@@ -52,23 +57,28 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     /** The listeners manager. */
     private final ListenersManager listenersManager;
 
+    /** The bean factory, asked whether the messaging ever attached. */
+    private final ConfigurableListableBeanFactory beanFactory;
+
     /**
      * Instantiates a new close active MQ resources application listener.
      *
      * @param brokerProvider provides the embedded broker, which an external-broker deployment does not
      *        have
-     * @param connection the connection
-     * @param session the session
+     * @param connection the connection, resolved on first use
+     * @param session the session, resolved on first use
      * @param listenersManager the listeners manager
+     * @param beanFactory the bean factory, which knows whether the connection was ever resolved
      */
     @Autowired
     CloseActiveMQResourcesApplicationListener(ObjectProvider<BrokerService> brokerProvider,
-            @Qualifier("ActiveMQConnection") Connection connection, @Qualifier("ActiveMQSession") Session session,
-            ListenersManager listenersManager) {
+            @Lazy @Qualifier("ActiveMQConnection") Connection connection, @Lazy @Qualifier("ActiveMQSession") Session session,
+            ListenersManager listenersManager, ConfigurableListableBeanFactory beanFactory) {
         this.brokerProvider = brokerProvider;
         this.connection = connection;
         this.session = session;
         this.listenersManager = listenersManager;
+        this.beanFactory = beanFactory;
     }
 
     /**
@@ -101,9 +111,23 @@ class CloseActiveMQResourcesApplicationListener implements ApplicationListener<A
     private void closeResources(ApplicationEvent event) {
         LOGGER.info("Closing ActiveMQ resources due to event {}", event);
         stopListeners();
-        closeSession();
-        closeConnection();
+        if (isAttached()) {
+            closeSession();
+            closeConnection();
+        }
         stopBroker();
+    }
+
+    /**
+     * Whether the messaging ever attached. Against a shared message store the connection and the
+     * session are opened on first use, so an instance that spent its life waiting for the lease has
+     * none to close - and resolving them here would open a connection purely to close it, or hang the
+     * shutdown against a broker that is still not the master.
+     *
+     * @return true, if the connection was resolved
+     */
+    private boolean isAttached() {
+        return beanFactory.containsSingleton(CONNECTION_BEAN);
     }
 
     /**

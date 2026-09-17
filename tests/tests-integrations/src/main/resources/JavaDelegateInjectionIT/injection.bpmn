@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:flowable="http://flowable.org/bpmn"
+             targetNamespace="http://www.flowable.org/processdef">
+  <process id="java-delegate-injection" name="Java delegate injection" isExecutable="true">
+    <startEvent id="start"/>
+    <sequenceFlow id="f1" sourceRef="start" targetRef="ctor-task"/>
+
+    <!-- Constructor injection through flowable:class. -->
+    <serviceTask id="ctor-task" name="Constructor injected" flowable:class="delegateinjection.CtorInjectedDelegate"/>
+    <sequenceFlow id="f2" sourceRef="ctor-task" targetRef="field-task"/>
+
+    <!-- Field injection through the ${JavaTask} dispatcher. -->
+    <serviceTask id="field-task" name="Field injected" flowable:delegateExpression="${JavaTask}">
+      <extensionElements>
+        <flowable:field name="handler">
+          <flowable:string><![CDATA[delegateinjection.FieldInjectedHandler]]></flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f3" sourceRef="field-task" targetRef="collection-task"/>
+
+    <!-- Collection injection over the Rule extension point. -->
+    <serviceTask id="collection-task" name="Collection injected" flowable:class="delegateinjection.CollectionDelegate"/>
+    <sequenceFlow id="f4" sourceRef="collection-task" targetRef="plain-class-task"/>
+
+    <!-- No injection point: Flowable's own reflective instantiation, on both paths. -->
+    <serviceTask id="plain-class-task" name="Plain class delegate" flowable:class="delegateinjection.PlainClassDelegate"/>
+    <sequenceFlow id="f5" sourceRef="plain-class-task" targetRef="plain-task-task"/>
+    <serviceTask id="plain-task-task" name="Plain JavaTask delegate" flowable:delegateExpression="${JavaTask}">
+      <extensionElements>
+        <flowable:field name="handler">
+          <flowable:string><![CDATA[delegateinjection.PlainTaskDelegate]]></flowable:string>
+        </flowable:field>
+      </extensionElements>
+    </serviceTask>
+    <sequenceFlow id="f6" sourceRef="plain-task-task" targetRef="post-construct-task"/>
+
+    <serviceTask id="post-construct-task" name="Post construct" flowable:class="delegateinjection.PostConstructDelegate"/>
+    <sequenceFlow id="f7" sourceRef="post-construct-task" targetRef="end"/>
+    <endEvent id="end"/>
+  </process>
+</definitions>

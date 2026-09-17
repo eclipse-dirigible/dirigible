@@ -34,17 +34,20 @@ public final class TriggerSupport {
 
     /**
      * The lifecycle event kind the process triggers on
-     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}), or null.
+     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}/{@code onTransition}/{@code onNotifyFailed}),
+     * or null.
      */
     public static String triggerKind(ProcessIntent process) {
         return EventBinding.kind(process.getTrigger());
     }
 
-    /** The optional {@code when} guard expression on the trigger, or null. */
-    public static String triggerWhen(ProcessIntent process) {
-        Object value = process.getTrigger()
-                              .get("when");
-        return value == null ? null : value.toString();
+    /**
+     * The optional {@code when} guard on the trigger, or null - a comparison string, or a list of them
+     * meaning their AND (dirigible #6957); {@code NotificationSupport.guard(Object)} renders either.
+     */
+    public static Object triggerWhen(ProcessIntent process) {
+        return process.getTrigger()
+                      .get("when");
     }
 
     /**

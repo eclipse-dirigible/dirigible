@@ -62,6 +62,11 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
  * assembles the { document, items } payload and sdk.print.Print renders it) and the same bytes go out
  * with every message. A render failure therefore fails the step before anything is mailed, which is
  * safe to retry: nobody has received a copy yet.
+#elseif($attach == "report")
+ *
+ * The ${attachReport} report rides along as a PDF attachment, run per recipient with its declared
+ * parameters bound from the record this message is about - so what each one receives is their own rows
+ * (a statement), not a record's own document. The layout is the report's own .print template in the CMS.
 #end
  *
  * A row with no recipient is a no-op (log + skip): it simply has nobody to mail, which must not stall
@@ -70,9 +75,14 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
  * A delivery failure is logged per row and the step still completes - deliberately. Failing the task
  * would have the engine retry the WHOLE fan-out and mail every recipient that already received their
  * message a second time; a partial send is not idempotent, so the summary in the log is the report.
+ * That is also why a fan-out send may declare neither `retry:` nor `onError:` - the step never fails,
+ * so neither could ever fire; its outcome is observed with `outcome:` and an `onNotifyFailed` consumer.
 #else
- * A real delivery failure DOES fail the task, so the process engine's retry applies - unlike a
- * transition's notify, a send step's whole purpose is the message.
+ * A real delivery failure DOES fail the task - unlike a transition's notify, a send step's whole
+ * purpose is the message. So the step's declared resilience applies: a `retry:` cycle re-attempts the
+ * send with the declared spacing, and an `onError:` route takes the exhausted failure (with this
+ * message readable as `{error}`) instead of a dead-letter incident. Declaring neither leaves the
+ * failure to the engine default, which ends as an incident on the job rather than on the record.
 #end
  */
 public class ${className} implements JavaDelegate {
@@ -130,12 +140,23 @@ public class ${className} implements JavaDelegate {
         ${attachLanguageTargetEntity}Entity attachLanguageSource = source.${attachLanguageFkProperty} == null ? null
                 : new ${attachLanguageTargetEntity}Repository().findById(source.${attachLanguageFkProperty});
 #end
+        String language = ${attachLanguageExpression};
         Map document = new HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
         document.put("fileName", ${attachFileNameExpression});
-        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty})));
+        // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+        // values in the SAME language as the template - there is no request here to carry Accept-Language
+        // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+        byte[] data;
+        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+        try {
+            data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
+                    new ${attachEntity}PrintFeeder().feed(source.${attachKeyProperty}));
+        } finally {
+            org.eclipse.dirigible.sdk.security.User.clearLanguage();
+        }
+        document.put("data", data);
         return document;
     }
 #end
@@ -168,6 +189,9 @@ public class ${className} implements JavaDelegate {
 #end
         String to = ${notifyToExpression};
         if (to == null || to.isBlank()) {
+#if($notifyOutcomeProperty != "")
+            stampNotifySkipped(entity.${notifyOutcomeKeyProperty});
+#end
 #if($forEach != "")
             return false;
 #else
@@ -186,22 +210,75 @@ public class ${className} implements JavaDelegate {
         ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
                 : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
+        String language = ${attachLanguageExpression};
         Map document = new HashMap();
         document.put("type", "attachment");
         document.put("contentType", "application/pdf");
         document.put("fileName", ${attachFileNameExpression});
-        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+        // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+        // values in the SAME language as the template - there is no request here to carry Accept-Language
+        // (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+        byte[] data;
+        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+        try {
+            data = org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", language,
+                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty}));
+        } finally {
+            org.eclipse.dirigible.sdk.security.User.clearLanguage();
+        }
+        document.put("data", data);
         parts.add(document);
 #elseif($attach == "recordPrint")
         // The record's document, rendered once for every recipient of this fan-out.
+        parts.add(document);
+#elseif($attach == "report")
+        // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+        // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+        // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+        ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
+        String language = ${attachLanguageExpression};
+        Map<String, Object> reportFilter = new HashMap<>();
+#foreach($binding in $attachReportBindings)
+        reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+        Map document = new HashMap();
+        document.put("type", "attachment");
+        document.put("contentType", "application/pdf");
+        document.put("fileName", ${attachFileNameExpression});
+        // Bind the render language to the thread so the report query's :language overlay resolves the
+        // translatable dimensions in the SAME language as the template - there is no request here to carry
+        // Accept-Language (dirigible #6947). Cleared in the finally so the pooled worker thread never leaks it.
+        byte[] data;
+        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+        try {
+            Map<String, Object> reportData = new HashMap<>();
+            // The bound values double as the rendered header, so the PDF states which slice it is - a
+            // table of rows never does.
+            reportData.put("document", reportFilter);
+            reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                    .findAll(null, null, reportFilter));
+            data = org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", language,
+                    org.eclipse.dirigible.sdk.utils.Json.stringify(reportData));
+        } finally {
+            org.eclipse.dirigible.sdk.security.User.clearLanguage();
+        }
+        document.put("data", data);
         parts.add(document);
 #end
         String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
 #if($forEach != "")
         try {
             Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
+#end
         } catch (Exception ex) {
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
             // Rethrown for the per-row counter above; the fan-out never fails the task (see the note).
             throw new RuntimeException(ex.getMessage(), ex);
         }
@@ -209,9 +286,101 @@ public class ${className} implements JavaDelegate {
 #else
         try {
             Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+#if($notifyOutcomeProperty != "")
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
+#end
         } catch (Exception ex) {
-            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process", ex);
+#if($notifyOutcomeProperty != "")
+            // Stamped BEFORE the rethrow: a sending step FAILS the task on purpose (the message is its
+            // whole work, so the engine retries it), and the record must carry the reason meanwhile -
+            // a retry that finally succeeds overwrites it with `sent`.
+            stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
+            // The message is what an `onError:` route records through {error}, so it names the cause: a
+            // fixed sentence would put "the mail failed" on the record and nothing an operator can act on.
+            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process: " + ex.getMessage(), ex);
         }
 #end
     }
+#if($attach == "report")
+
+    /**
+     * A bound report parameter as the generated report repository reads one - a String, because the
+     * value is JSON-encoded for the named-parameter binder and only a JSON primitive is accepted
+     * there (a date arrives as its ISO text). Null is deliberate rather than defensive: an absent
+     * value is what makes the repository fall back to the parameter's declared initial, so a
+     * nullable source column widens the report instead of emptying it.
+     */
+    private static String reportValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+#end
+#if($notifyOutcomeProperty != "")
+
+    /**
+     * Record what this delivery attempt did, on the record the message was about - the notify block's
+     * `outcome: ${notifyOutcomeProperty}` field.
+     *
+     * A notify block is FAIL-SOFT: the transition, the schedule tick or the process step must not break
+     * because a mailbox is unreachable. Until this stamp existed the only trace of a mail that never
+     * left was a server log line - the document sat in its sent status, the person who asked for it saw
+     * success, and nothing downstream could react. The stamp is that missing trace.
+     *
+     * It is a TARGETED write, so no "-updated" re-fires and a concurrent edit to any other column of the
+     * row cannot be reverted. A FAILURE additionally carries the "-notifyFailed" topic into the outbox
+     * with the write, so the trace and its announcement commit together and glue bound to
+     * `event: { onNotifyFailed: ${notifyOutcomeEntity} }` observes exactly what the record shows. A
+     * delivery that WORKED announces nothing: it is the normal path, and a channel for it would only
+     * give every reaction a second copy of an event it already has.
+     *
+     * The stamp itself never throws. It is a record OF an outcome, so letting it fail would turn a
+     * diagnostic into a second and louder failure - and on the per-row paths it would abort the rows
+     * still to send. A `checks:` gate refusing the write is exactly such a case: an unbalanced document
+     * refuses every authored write, and it must not also lose the reason its mail did not go out.
+     */
+    private static void stampNotifyOutcome(Object id, Exception failure) {
+        writeNotifyOutcome(id, failure == null ? "sent" : "failed: " + notifyFailureReason(failure),
+                failure == null ? null : "${projectName}-${notifyOutcomePerspective}-${notifyOutcomeEntity}-notifyFailed");
+    }
+
+    /**
+     * Record that this delivery had nobody to mail - the notify block's `outcome: ${notifyOutcomeProperty}`
+     * field. `skipped` is its own value, distinct from `failed`: a record with no recipient is a data
+     * problem to surface (a customer row with no e-mail address), not a delivery that broke, so it fires
+     * no "-notifyFailed" event - only the stamp a list filter reads. Without it the field stays empty,
+     * indistinguishable from a record the handler never ran for - the very state the outcome field exists
+     * to remove (#7369).
+     */
+    private static void stampNotifySkipped(Object id) {
+        writeNotifyOutcome(id, "skipped", null);
+    }
+
+    private static void writeNotifyOutcome(Object id, String value, String eventTopic) {
+        if (id == null) {
+            return;
+        }
+        // Truncated HERE, to the length the parser holds the field to: a column that truncates does it
+        // in the database, where nothing reports what was cut.
+        if (value.length() > ${notifyOutcomeLength}) {
+            value = value.substring(0, ${notifyOutcomeLength});
+        }
+        try {
+            new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value), eventTopic);
+        } catch (Exception ex) {
+            LOG.error("Could not record the delivery outcome [{}] on ${notifyOutcomeEntity} [{}]", value, id, ex);
+        }
+    }
+
+    /**
+     * What to tell a person about a failed delivery. An exception with no message (an NPE, a socket
+     * closed without one) still has to say something actionable, so its class name stands in rather
+     * than the literal "null".
+     */
+    private static String notifyFailureReason(Exception failure) {
+        String message = failure == null ? null : failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass()
+                                                             .getSimpleName()
+                : message;
+    }
+#end
 }

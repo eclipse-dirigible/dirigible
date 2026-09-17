@@ -11,9 +11,21 @@
  * its own minimal fetch client so the page is self-contained (not part of the SPA shell).
  */
 const reportHttp = {
+  // A failure carries the status and the server's text the way the shell's ApiError does, so the
+  // shared apiErrors gate decides what the page may show: a 400/409 refusal (a parameter the report
+  // controller rejected) is quoted, anything else keeps the neutral fallback (#7151, #7263).
+  async failure(r) {
+    const text = await r.text().catch(() => '');
+    let reason = text;
+    try { const j = JSON.parse(text); reason = j.errorMessage || j.message || text; } catch (_) { /* non-JSON */ }
+    const err = new Error('HTTP ' + r.status);
+    err.httpStatus = r.status;
+    err.errorMessage = reason;
+    return err;
+  },
   async get(url) {
     const r = await fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw await this.failure(r);
     const t = await r.text();
     return t ? JSON.parse(t) : null;
   },
@@ -24,7 +36,7 @@ const reportHttp = {
       body: JSON.stringify(body || {}),
       credentials: 'same-origin',
     });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (!r.ok) throw await this.failure(r);
     const t = await r.text();
     return t ? JSON.parse(t) : null;
   },
@@ -60,7 +72,14 @@ document.addEventListener('alpine:init', () => {
     state: 'loading',   // loading | error | empty | default
     error: null,
     page: 1,
+#if($kind == 'statement')
+    // A statement's rows ARE its structure - a balance sheet split across pages stops being one, and
+    // its line count is bounded by the definition rather than by the data. So the whole statement is
+    // fetched at once; the pagination controls stay for the (unexpected) longer definition.
+    limit: 500,
+#else
     limit: 20,
+#end
     count: 0,
     // Preview mode (dashboard tile): only the first few rows, no toolbar / pagination. Driven by
     // the ?preview=1 query param the dashboard tile passes when it embeds this page in an iframe.
@@ -176,7 +195,7 @@ document.addEventListener('alpine:init', () => {
         if (!this.count) this.count = this.rows.length;
         this.state = this.rows.length ? 'default' : 'empty';
       } catch (e) {
-        this.error = (e && e.message) || 'Could not run the ${name} report.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not run the ${name} report.');
         this.state = 'error';
       }
       this.refreshIcons();
@@ -198,16 +217,47 @@ document.addEventListener('alpine:init', () => {
       const category = this.reportColumns.find(c => c.agg === 'NONE') || this.reportColumns[0];
       let series = this.reportColumns.filter(c => c.agg && c.agg !== 'NONE');
       if (!series.length) series = this.reportColumns.filter(c => c !== category);
-      const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : ''));
-      return {
-        labels,
-        series: series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) })),
-        legend: series.length > 1,
-      };
+      const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : '', category));
+      const data = series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) }));
+      // A circular chart slices the FIRST measure by the dimension, so the dimension values are named
+      // by the legend alone - it stays on whatever the series count - and each legend entry carries
+      // the slice's share of the measure total. Pie and doughnut additionally suppress the in-slice
+      // data label: the chart library prints the raw measure there with a percent sign, so a 336-hour
+      // sum reads "336%" (codbex/harmonia#113, fixed after 2.14.2). The share belongs in the legend
+      // either way.
+      if (this.chartType === 'pie' || this.chartType === 'doughnut') {
+        return { labels: this.shareLabels(labels, data[0]), series: data, legend: true, dataLabels: false };
+      }
+      if (this.chartType === 'polarArea') {
+        return { labels: this.shareLabels(labels, data[0]), series: data, legend: true };
+      }
+      return { labels, series: data, legend: data.length > 1 };
     },
 
-    // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07".
-    axisLabel(v) {
+    // "Billable" -> "Billable - 62%": a slice label with its share of the measure total, so a circular
+    // chart's legend reads as a split. Left untouched when there is no positive total to share, and
+    // when the fetched rows are only a window on the result (the dashboard tile fetches a few) - a
+    // page-local share is not the report's, the same rule the table footer applies to its totals.
+    shareLabels(labels, measure) {
+      if (this.count > this.rows.length) return labels;
+      const values = (measure && measure.data) || [];
+      const total = values.reduce((sum, v) => sum + (v > 0 ? v : 0), 0);
+      if (!(total > 0)) return labels;
+      return labels.map((label, i) => {
+        const v = values[i];
+        if (!(v > 0)) return label;
+        const pct = (v / total) * 100;
+        return label + ' - ' + (pct < 10 ? pct.toFixed(1) : String(Math.round(pct))) + '%';
+      });
+    },
+
+    // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07"; a boolean
+    // dimension reads as Yes/No, never as the raw true/false.
+    axisLabel(v, meta) {
+      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) {
+        const yes = v === true || v === 'true' || v === 1;
+        return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
+      }
       const n = Number(v);
       if (Number.isInteger(n) && n >= 190001 && n <= 999912 && (n % 100) >= 1 && (n % 100) <= 12) {
         return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0');
@@ -256,8 +306,26 @@ document.addEventListener('alpine:init', () => {
     },
 
     get totalPages() { return Math.max(1, Math.ceil(this.count / this.limit)); },
-    next() { if (this.page < this.totalPages) { this.page++; this.load(); } },
-    prev() { if (this.page > 1) { this.page--; this.load(); } },
+    // Server-side paging: a page change re-queries; the clamp keeps a stale pager click in range.
+    goPage(n) {
+      const page = Math.max(1, Math.min(n, this.totalPages));
+      if (page === this.page) return;
+      this.page = page;
+      this.load();
+    },
+    // The page numbers the pager shows: first, last and the current page's neighbours, '...' over
+    // each gap - at most 7 entries, so a long report never renders a link per page.
+    pageWindow() {
+      const total = this.totalPages, current = this.page;
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      const start = Math.max(2, current - 1), end = Math.min(total - 1, current + 1);
+      const pages = [1];
+      if (start > 2) pages.push('...');
+      for (let p = start; p <= end; p++) pages.push(p);
+      if (end < total - 1) pages.push('...');
+      pages.push(total);
+      return pages;
+    },
 
     // Export the FULL result set (POST /export returns all rows) as CSV.
     async exportCsv() {
@@ -277,7 +345,7 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.error = (e && e.message) || 'Export failed.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Export failed.');
       }
     },
 
@@ -292,15 +360,18 @@ document.addEventListener('alpine:init', () => {
         const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const th = cols.map(c => '<th class="' + this.alignClass(c) + '">' + esc(c) + '</th>').join('');
         const body = rows.map(r => '<tr>' + cols.map(c => '<td class="' + this.alignClass(c) + '">' + esc(this.cellText(c, r)) + '</td>').join('') + '</tr>').join('');
+        // Fixed table layout + column-count font scaling so a wide table fits the page instead of
+        // being clipped at the right edge (mirrors the server-side XslFoRenderer PDF path).
+        const fontSize = Math.max(6, 10 - Math.max(0, cols.length - 3));
         const html = '<!doctype html><html><head><title>' + esc(this.displayName) + '</title><style>'
           + 'body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}'
           + 'h1{font-size:18px;margin:0 0 4px}'
           + '.meta{font-size:11px;color:#555;margin:0 0 16px}'
-          + 'table{border-collapse:collapse;width:100%;font-size:12px}'
-          + 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
+          + 'table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:' + fontSize + 'pt}'
+          + 'th,td{border:1px solid #999;padding:2pt;text-align:left;overflow-wrap:anywhere;word-break:break-word}'
           + 'th{background:#eee}.text-right{text-align:right}'
           + '</style></head><body><h1>' + esc(this.displayName) + '</h1>'
-          + '<p class="meta">' + rows.length + ' rows' + (this.activeFilterCount ? ' (filtered)' : '') + ' - ' + esc(new Date().toLocaleString()) + '</p>'
+          + '<p class="meta">' + rows.length + ' rows' + (this.activeFilterCount ? ' (filtered)' : '') + ' - ' + esc(HarmoniaFormat.value(new Date(), true)) + '</p>'
           + '<table><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></body></html>';
         const w = window.open('', '_blank');
         if (!w) return;
@@ -309,7 +380,7 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.error = (e && e.message) || 'Print failed.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Print failed.');
       }
     },
 

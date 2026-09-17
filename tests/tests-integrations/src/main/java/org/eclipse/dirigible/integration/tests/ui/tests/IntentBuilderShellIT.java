@@ -14,7 +14,6 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 
 import org.awaitility.Awaitility;
@@ -34,6 +33,7 @@ import org.springframework.test.annotation.DirtiesContext;
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
@@ -79,6 +79,9 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
                   - { name: amount,      type: decimal, precision: 12, scale: 2 }
             """;
 
+    /** How wide each streamed fragment of the proposal is - narrow, so there are many of them. */
+    private static final int FRAGMENT_WIDTH = 23;
+
     /** The project the shell derives from the intent's name - the user never types or sees it. */
     private static final String PROJECT = "expenses";
     private static final String WORKSPACE_PROJECT = IRepositoryStructure.PATH_USERS + "/admin/workspace/" + PROJECT;
@@ -108,17 +111,49 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
         }
     }
 
-    /** The Messages API shape the agent service parses: one {@code propose_intent} tool-use block. */
+    /**
+     * The Messages API shape the agent service parses: one {@code propose_intent} tool-use block,
+     * delivered as the server-sent event stream the client asks for ({@code "stream": true}).
+     *
+     * <p>
+     * The tool input is split across several {@code input_json_delta} fragments on purpose - a stub
+     * that sent it in one piece would pass even if the client only ever read the first fragment, which
+     * is exactly the assembly this journey is meant to exercise end to end.
+     */
     private void respondWithProposal(HttpExchange exchange) throws IOException {
-        String body = new Gson().toJson(Map.of("content", List.of(Map.of("type", "tool_use", "name", "propose_intent", "input",
-                Map.of("explanation", "Added an Expense entity with a description and an amount.", "yaml", PROPOSED_INTENT)))));
-        byte[] payload = body.getBytes(StandardCharsets.UTF_8);
+        String toolInput = new Gson().toJson(
+                Map.of("explanation", "Added an Expense entity with a description and an amount.", "yaml", PROPOSED_INTENT));
+        StringBuilder stream = new StringBuilder();
+        stream.append(event("message_start", "{\"type\":\"message_start\",\"message\":{\"id\":\"msg_stub\",\"content\":[]}}"));
+        stream.append(event("content_block_start", "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":"
+                + "{\"type\":\"tool_use\",\"id\":\"toolu_stub\",\"name\":\"propose_intent\",\"input\":{}}}"));
+        for (int start = 0; start < toolInput.length(); start += FRAGMENT_WIDTH) {
+            JsonObject delta = new JsonObject();
+            delta.addProperty("type", "input_json_delta");
+            delta.addProperty("partial_json", toolInput.substring(start, Math.min(start + FRAGMENT_WIDTH, toolInput.length())));
+            JsonObject payload = new JsonObject();
+            payload.addProperty("type", "content_block_delta");
+            payload.addProperty("index", 0);
+            payload.add("delta", delta);
+            stream.append(event("content_block_delta", payload.toString()));
+        }
+        stream.append(event("content_block_stop", "{\"type\":\"content_block_stop\",\"index\":0}"));
+        stream.append(event("message_delta", "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\"}}"));
+        stream.append(event("message_stop", "{\"type\":\"message_stop\"}"));
+
+        byte[] payload = stream.toString()
+                               .getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders()
-                .set("Content-Type", "application/json");
+                .set("Content-Type", "text/event-stream");
         exchange.sendResponseHeaders(200, payload.length);
         try (OutputStream out = exchange.getResponseBody()) {
             out.write(payload);
         }
+    }
+
+    /** One server-sent event: the {@code event:} name line, then its single-line JSON data line. */
+    private static String event(String type, String data) {
+        return "event: " + type + "\ndata: " + data + "\n\n";
     }
 
     @Test

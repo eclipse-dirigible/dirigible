@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.LoggedValue;
+import org.eclipse.dirigible.components.intent.generator.GeneratesBootstrap;
+import org.eclipse.dirigible.components.intent.generator.GeneratesGuardSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -72,11 +75,19 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Skipping generates action with no name");
                 continue;
             }
+            if (GeneratesBootstrap.skipped(g, model, context)) {
+                // The bootstrap pass of a mutual cross-model cycle (dirigible #6539) left the server
+                // controller out, so the button must go with it: a descriptor whose endpoint does not
+                // exist is a click that 404s. The glue generator already reported the skip.
+                LOGGER.debug("Generates action [{}] is skipped by the bootstrap pass - contributing no client action",
+                        LoggedValue.of(name));
+                continue;
+            }
             if (!g.hasButton()) {
                 // Event-driven only (issue #6711): the create-from runs by itself, so there is no button
                 // to contribute - and contributing one anyway would offer the user a click that only
                 // re-reads the document the event already created.
-                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", name);
+                LOGGER.debug("Generates action [{}] is event-driven with no button - contributing no client action", LoggedValue.of(name));
                 continue;
             }
             String fileBase = name + "-generate-action";
@@ -88,8 +99,10 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             // lives in this project; only the point it registers on belongs to the owner.
             String actionPoint = g.isCrossModelSource() ? resolveProject(model, g.getFromUses()) : project;
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, actionPoint, modulePath, g));
-            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), g,
-                    IntentNaming.customActionTranslationKey(project, context, name)));
+            context.writeModelFile(fileBase + ".js",
+                    buildDescriptorModule(project, IntentNaming.javaModule(context), g,
+                            IntentNaming.customActionTranslationKey(project, context, name),
+                            GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context))));
         }
     }
 
@@ -112,7 +125,8 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, String javaModule, GeneratesIntent g, String translationKey) {
+    private static String buildDescriptorModule(String project, String javaModule, GeneratesIntent g, String translationKey,
+            GeneratesGuardSupport.Guard guard) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + g.getForEntity() + "-" + g.getName());
         String label = IntentNaming.customActionLabel(g.getName(), g.getLabel());
@@ -130,6 +144,22 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         }
         if (g.getOrder() != null) {
             view.put("order", g.getOrder());
+        }
+        if (guard != null) {
+            // The from-status guard (issue #7068): the button stops offering itself on a record the
+            // action would refuse - a proforma already INVOICED must not carry a live "Generate
+            // Invoice". The descriptor carries the source's status FK and the ids, so the shared
+            // customActions store decides it from the record it already has, with no extra request;
+            // the generated controller's 409 stays the contract for every other caller.
+            Map<String, Object> gate = new LinkedHashMap<>();
+            gate.put("property", guard.statusProperty());
+            if (!guard.allowed()
+                      .isEmpty()) {
+                gate.put("allowed", guard.allowed());
+            } else {
+                gate.put("blocked", guard.blocked());
+            }
+            view.put("guard", gate);
         }
         if (g.hasPrompt()) {
             // Declared input form (issue #6685): the customActions store opens a dialog instead of the

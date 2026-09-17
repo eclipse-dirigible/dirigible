@@ -53,25 +53,35 @@ public final class Criteria {
     }
 
     /**
-     * Equals ({@code property = value}).
+     * Equals ({@code property = value}); NULL-SAFE - a null value renders {@code property is null}.
+     *
+     * <p>
+     * SQL three-valued logic makes {@code property = :p} with a null bind never true, not even for a
+     * null column, so a lookup built from values that may be null used to match NOTHING rather than the
+     * rows it names. That is silent by construction: an idempotency guard keyed on a nullable property
+     * (dirigible #7134 - a generated schedule's {@code generate.unique:}) found nothing on every re-run
+     * and created a duplicate, while its own summary reported "already existed [0]". A caller that
+     * means "this property equals this value, which happens to be absent" means {@code is null}, which
+     * is what this renders - and no caller means a condition that no row can ever satisfy.
      *
      * @param property the entity property name
-     * @param value the value to match
+     * @param value the value to match; null matches rows whose property is null
      * @return this criteria
      */
     public Criteria eq(String property, Object value) {
-        return binary(property, "=", value);
+        return value == null ? isNull(property) : binary(property, "=", value);
     }
 
     /**
-     * Not equals ({@code property <> value}).
+     * Not equals ({@code property <> value}); NULL-SAFE - a null value renders
+     * {@code property is not null}, the complement of {@link #eq(String, Object)}'s null form.
      *
      * @param property the entity property name
-     * @param value the value to exclude
+     * @param value the value to exclude; null keeps rows whose property is not null
      * @return this criteria
      */
     public Criteria ne(String property, Object value) {
-        return binary(property, "<>", value);
+        return value == null ? isNotNull(property) : binary(property, "<>", value);
     }
 
     /**

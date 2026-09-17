@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Date;
+import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -24,6 +25,7 @@ import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.domain.JobStatus;
 import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
 import org.eclipse.dirigible.components.jobs.repository.JobLogRepository;
+import org.eclipse.dirigible.components.jobs.repository.JobRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -150,7 +152,7 @@ public class JobLogServiceTest {
     public void logsFallBackToDefaultTenantWhenContextUninitialized() {
         TenantContext tenantContext = mock(TenantContext.class);
         when(tenantContext.isNotInitialized()).thenReturn(true);
-        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobService.class), tenantContext,
+        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobRepository.class), tenantContext,
                 mockTenant(DEFAULT_TENANT_ID));
 
         JobLog log = service.jobLogged("job", "handler.js", "msg");
@@ -167,9 +169,9 @@ public class JobLogServiceTest {
     public void jobFinishedPersistsFinishedLogAndUpdatesJob() {
         Job job = mock(Job.class);
         when(job.getStatus()).thenReturn(JobStatus.TRIGGRED);
-        JobService jobService = mock(JobService.class);
-        when(jobService.findByName("job")).thenReturn(job);
-        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), jobService,
+        JobRepository jobRepository = mock(JobRepository.class);
+        when(jobRepository.findByName("job")).thenReturn(Optional.of(job));
+        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), jobRepository,
                 initializedContext("tenant-a"), mockTenant(DEFAULT_TENANT_ID));
 
         JobLog log = service.jobFinished("job", "handler.js", 5L, new Date());
@@ -178,6 +180,8 @@ public class JobLogServiceTest {
         assertEquals(5L, log.getTriggeredId());
         assertNotNull(log.getFinishedAt());
         verify(job).setStatus(JobStatus.FINISHED);
+        verify(job).setExecutedAt(log.getFinishedAt());
+        verify(jobRepository).saveAndFlush(job);
         assertEquals(1, service.findByJob("job")
                                .size());
     }
@@ -190,9 +194,9 @@ public class JobLogServiceTest {
     public void jobFailedPersistsFailedLogAndUpdatesJob() {
         Job job = mock(Job.class);
         when(job.getStatus()).thenReturn(JobStatus.TRIGGRED);
-        JobService jobService = mock(JobService.class);
-        when(jobService.findByName("job")).thenReturn(job);
-        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), jobService,
+        JobRepository jobRepository = mock(JobRepository.class);
+        when(jobRepository.findByName("job")).thenReturn(Optional.of(job));
+        JobLogService service = new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), jobRepository,
                 initializedContext("tenant-a"), mockTenant(DEFAULT_TENANT_ID));
 
         JobLog log = service.jobFailed("job", "handler.js", 7L, new Date(), "boom");
@@ -202,6 +206,8 @@ public class JobLogServiceTest {
         assertEquals(7L, log.getTriggeredId());
         assertNotNull(log.getFinishedAt());
         verify(job).setStatus(JobStatus.FAILED);
+        verify(job).setExecutedAt(log.getFinishedAt());
+        verify(jobRepository).saveAndFlush(job);
         assertEquals(1, service.findByJob("job")
                                .size());
     }
@@ -218,7 +224,7 @@ public class JobLogServiceTest {
         Tenant tenantA = mockTenant("tenant-a");
         Tenant tenantB = mockTenant("tenant-b");
         JobLogService service =
-                new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobService.class), tenantContext, defaultTenant);
+                new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobRepository.class), tenantContext, defaultTenant);
 
         // two logs for the same job under tenant A
         when(tenantContext.getCurrentTenant()).thenReturn(tenantA);
@@ -253,7 +259,7 @@ public class JobLogServiceTest {
      * @return the job log service
      */
     private JobLogService serviceForTenant(String tenantId) {
-        return new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobService.class), initializedContext(tenantId),
+        return new JobLogService(jobLogRepository, mock(JobEmailProcessor.class), mock(JobRepository.class), initializedContext(tenantId),
                 mockTenant(DEFAULT_TENANT_ID));
     }
 

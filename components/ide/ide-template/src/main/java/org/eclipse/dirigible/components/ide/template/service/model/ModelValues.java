@@ -108,16 +108,27 @@ final class ModelValues {
     }
 
     /**
-     * Tests a key for the string {@code "true"} - the model persists its flags as strings, and the
-     * derivation pass coerces them.
+     * Reads a boolean flag the model persists as a string - the single reader for every {@code .edm}
+     * flag. Unlike {@link #truthy(Map, String)} - which any non-empty string satisfies, so a
+     * written-out {@code "false"} would read as true - this parses the value: only {@code true} in any
+     * case (trimmed) is true, and everything else, including an absent key, is false.
+     *
+     * <p>
+     * Because it parses rather than presence-tests, a flag a hand-authored or tool-produced
+     * {@code .edm} spells out in full is read the same way the generators - which only ever emit the
+     * flag when it holds - write it.
      *
      * @param map the node
      * @param key the key
-     * @return true when the value is the string or boolean true
+     * @return the value as a boolean
      */
     static boolean isTrue(Map<String, Object> map, String key) {
         Object value = map == null ? null : map.get(key);
-        return Boolean.TRUE.equals(value) || "true".equals(value);
+        if (value instanceof Boolean flag) {
+            return flag;
+        }
+        return value != null && Boolean.parseBoolean(value.toString()
+                                                          .trim());
     }
 
     /**

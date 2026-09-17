@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceCompiler.BatchResult;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceCompiler.SourceUnit;
@@ -101,6 +102,69 @@ class JavaSourceCompilerTest {
                          .isEmpty());
         assertTrue(result.diagnostics()
                          .isEmpty());
+    }
+
+    /**
+     * javac emits no class file at all for a batch that holds an error, so before the salvage rounds a
+     * single dangling import took every other unit's output down with it - and on a first publish there
+     * is no last-good bytecode for {@code JavaLoader} to fall back on, which is how a project ended up
+     * with no controllers, no repositories and no listeners at all (#7192).
+     */
+    @Test
+    void an_unresolvable_import_in_one_unit_does_not_zero_the_batch() {
+        BatchResult result = compiler.compileBatch(List.of(new SourceUnit("com.example.Broken", """
+                package com.example;
+                import com.example.missing.Absent;
+                public class Broken {
+                    public Absent get() { return null; }
+                }
+                """), new SourceUnit("com.example.Independent", """
+                package com.example;
+                public class Independent {
+                    public String greet() { return "hello"; }
+                }
+                """)));
+
+        assertEquals(Set.of("com.example.Broken"), result.failures()
+                                                         .keySet());
+        assertNotNull(result.bytecode()
+                            .get("com.example.Independent"));
+        assertFalse(result.bytecode()
+                          .containsKey("com.example.Broken"));
+        assertFalse(result.diagnostics()
+                          .get("com.example.Broken")
+                          .isEmpty());
+    }
+
+    @Test
+    void a_dependent_of_a_broken_unit_fails_with_it_and_the_rest_still_compiles() {
+        BatchResult result = compiler.compileBatch(List.of(new SourceUnit("com.example.Broken", """
+                package com.example;
+                import com.example.missing.Absent;
+                public class Broken {
+                    public Absent get() { return null; }
+                }
+                """), new SourceUnit("com.example.Dependent", """
+                package com.example;
+                public class Dependent {
+                    private final Broken broken = new Broken();
+                    public Broken get() { return broken; }
+                }
+                """), new SourceUnit("com.example.Independent", """
+                package com.example;
+                public class Independent {
+                    public String greet() { return "hello"; }
+                }
+                """)));
+
+        assertEquals(Set.of("com.example.Broken", "com.example.Dependent"), result.failures()
+                                                                                  .keySet());
+        assertNotNull(result.bytecode()
+                            .get("com.example.Independent"));
+        // the dependent is reported with its own diagnostic, not with the generic "no class file"
+        assertTrue(result.failures()
+                         .get("com.example.Dependent")
+                         .contains("cannot find symbol"));
     }
 
 }

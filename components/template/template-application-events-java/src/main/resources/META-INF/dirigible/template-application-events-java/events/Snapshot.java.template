@@ -57,7 +57,17 @@ public class ${master}SnapshotGenerator implements JavaDelegate {
         String language = ${languageExpression};
 
         // Assemble the { document, items } payload the print template binds, then render server-side.
-        String payload = new ${master}PrintFeeder().feed(id);
+        // Bind the render language to the thread so the feeder's multilingual overlay resolves nomenclature
+        // values (Status, Payment Method, ...) in the SAME language as the template - there is no request
+        // here, so Accept-Language cannot carry it (dirigible #6947). Cleared in the finally so the pooled
+        // BPM worker thread never leaks it.
+        String payload;
+        org.eclipse.dirigible.sdk.security.User.setLanguage(language);
+        try {
+            payload = new ${master}PrintFeeder().feed(id);
+        } finally {
+            org.eclipse.dirigible.sdk.security.User.clearLanguage();
+        }
         byte[] pdf = org.eclipse.dirigible.sdk.print.Print.render("${master}", language, payload);
 
         ${snapshotEntity}Repository repository = new ${snapshotEntity}Repository();

@@ -14,26 +14,35 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 
 /**
- * Singleton owner of the current {@link ClientBeanResolver}.
+ * Singleton owner of the current {@link ClientBeanFactory}.
  *
  * <p>
  * Mirrors {@link ClientClassLoaderHolder}: the engine's component container publishes itself here
  * on every rebuild (synchronization thread); the SDK facade
- * {@code org.eclipse.dirigible.sdk.component.Beans} reads it on every client call.
+ * {@code org.eclipse.dirigible.sdk.component.Beans} reads it on every client call, as does the BPM
+ * engine when it has to wire a client {@code JavaDelegate} Flowable instantiated itself.
  * {@link AtomicReference} gives lock-free reads and linearizable swaps.
  */
 @Component
 public class ClientBeansHolder {
 
-    private final AtomicReference<ClientBeanResolver> ref = new AtomicReference<>();
+    private final AtomicReference<ClientBeanFactory> ref = new AtomicReference<>();
 
-    /** The currently-active client bean resolver, or {@code null} before the first rebuild. */
-    public ClientBeanResolver current() {
+    /**
+     * The currently-active client bean container, or {@code null} before the first rebuild.
+     *
+     * @return the active container, or {@code null}
+     */
+    public ClientBeanFactory current() {
         return ref.get();
     }
 
-    /** Replace the active client bean resolver. */
-    public void swap(ClientBeanResolver next) {
+    /**
+     * Replace the active client bean container.
+     *
+     * @param next the container of the new generation
+     */
+    public void swap(ClientBeanFactory next) {
         ref.set(next);
     }
 

@@ -89,7 +89,7 @@ class JavaAssistServiceTest {
         // assistant sees a compile error and asks for a correction. This is what makes batching
         // load-bearing rather than incidental - a custom class exists to use the generated ones.
         ScriptedAssistService alone = new ScriptedAssistService(proposal("Uses the rate.", COMPILES), proposal("Still uses it.", COMPILES),
-                proposal("And again.", COMPILES));
+                proposal("And again.", COMPILES), proposal("Once more.", COMPILES), proposal("Final try.", COMPILES));
         AssistContext lonely = new AssistContext("orders", "custom/Fees.java", "", null, List.of());
 
         AssistReply reply = alone.chat(lonely, "Use the base rate", List.of());
@@ -124,12 +124,14 @@ class JavaAssistServiceTest {
 
     @Test
     void repairRoundsAreBoundedAndTheOutstandingErrorsAreSurfaced() {
-        ScriptedAssistService service = new ScriptedAssistService(proposal("Try 1.", DOES_NOT_COMPILE),
-                proposal("Try 2.", DOES_NOT_COMPILE), proposal("Try 3.", DOES_NOT_COMPILE));
+        ScriptedAssistService service =
+                new ScriptedAssistService(proposal("Try 1.", DOES_NOT_COMPILE), proposal("Try 2.", DOES_NOT_COMPILE),
+                        proposal("Try 3.", DOES_NOT_COMPILE), proposal("Try 4.", DOES_NOT_COMPILE), proposal("Try 5.", DOES_NOT_COMPILE));
 
         AssistReply reply = service.chat(context(), "Charge twice the base rate", List.of());
 
-        assertEquals(3, service.calls.size(), "one initial call plus exactly two repair rounds");
+        assertEquals(1 + org.eclipse.dirigible.components.intent.ai.ProposalRepairLoop.MAX_REPAIR_ROUNDS, service.calls.size(),
+                "one initial call plus exactly the bounded repair rounds");
         assertEquals(DOES_NOT_COMPILE, reply.proposedSource(), "the last proposal is still returned for the developer to judge");
         assertFalse(reply.diagnostics()
                          .isEmpty());

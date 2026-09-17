@@ -17,5 +17,18 @@ public enum TenantStatus {
     /** The initial. */
     INITIAL,
     /** The provisioned. */
-    PROVISIONED
+    PROVISIONED,
+    /**
+     * Registered by an external provisioner, which owns the tenant's database user, schema and data
+     * source; the platform must not act on the tenant until that provisioner activates it.
+     *
+     * <p>
+     * The state is deliberately invisible to both halves of the built-in flow: the provisioner queries
+     * {@link #INITIAL} only, so it never races the external one by creating a user and a schema of its
+     * own, and {@code executeForEachTenant} queries {@link #PROVISIONED} only, so no synchronizer, job
+     * or listener reaches a tenant whose data source does not exist yet. Activation moves it to
+     * {@link #PROVISIONED}; until then it can also be deleted, which is the rollback path when
+     * provisioning is abandoned.
+     */
+    PENDING_ACTIVATION
 }

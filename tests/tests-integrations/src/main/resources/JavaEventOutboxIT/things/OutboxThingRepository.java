@@ -22,6 +22,8 @@ public class OutboxThingRepository extends JavaRepository<OutboxThing> {
 
     public static final String CREATED_TOPIC = "event-outbox-it-thing";
 
+    public static final String DELETED_TOPIC = "event-outbox-it-thing-deleted";
+
     public OutboxThingRepository() {
         super(OutboxThing.class);
     }
@@ -38,5 +40,13 @@ public class OutboxThingRepository extends JavaRepository<OutboxThing> {
     public int move(Object id) {
         return super.updateProperties(id, java.util.Map.of("name", "moved"), CREATED_TOPIC,
                 java.util.List.of(new DomainEvent(CREATED_TOPIC, "{\"name\":\"previous\"}")));
+    }
+
+    /**
+     * Deletes through the instance the caller holds — which is a partial snapshot in the controller
+     * below. The announced payload must still be the whole stored row.
+     */
+    public void remove(OutboxThing thing) {
+        super.delete(thing, DELETED_TOPIC);
     }
 }

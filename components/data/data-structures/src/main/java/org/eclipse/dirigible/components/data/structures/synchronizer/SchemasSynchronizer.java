@@ -548,13 +548,9 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                 logger.error(e.getMessage(), e);
             }
 
-            if (dataSource == null) {
-                if (ArtefactLifecycle.FAILED.equals(schema.getLifecycle())) {
-                    callback.addError(e.getMessage());
-                    callback.registerState(this, wrapper, ArtefactLifecycle.FATAL, e);
-                    return true;
-                }
-            }
+            // FAILED and retried, never FATAL (#7248): the data source a schema names may be an
+            // artefact of a project published on a later pass, and FATAL stripped the schema from
+            // every later pass until its file's bytes changed.
             callback.addError(e.getMessage());
             callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
             return false;

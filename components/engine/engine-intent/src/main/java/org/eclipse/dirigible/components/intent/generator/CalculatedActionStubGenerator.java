@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -87,20 +88,22 @@ public class CalculatedActionStubGenerator implements IntentTargetGenerator {
         }
         String fileName = targetFile(entity, action);
         if (fileName == null) {
-            LOGGER.debug("Calculated action [{}] is not this project's to write - not scaffolding it", action);
+            LOGGER.debug("Calculated action [{}] is not this project's to write - not scaffolding it", LoggedValue.of(action));
             return;
         }
-        String path = context.getProjectRoot() + "/" + fileName;
-        if (context.getRepository()
-                   .getResource(path)
-                   .exists()) {
+        // No repository/project to look into (a dry run over an unsaved proposal): nothing can exist,
+        // so the stub "is produced" - and the dry-run context then discards the write.
+        boolean canLookUp = context.getRepository() != null && context.getProjectRoot() != null;
+        if (canLookUp && context.getRepository()
+                                .getResource(context.getProjectRoot() + "/" + fileName)
+                                .exists()) {
             return; // preserve the developer's implementation
         }
         String packageName = fileName.substring(0, fileName.lastIndexOf('/'))
                                      .replace('/', '.');
         String simpleName = action.substring(action.lastIndexOf('.') + 1);
         context.writeModelFile(fileName, stub(packageName, simpleName, entity.getName(), property, valueType));
-        LOGGER.info("Scaffolded calculated-field action stub [{}] (implement it - it will not be regenerated)", fileName);
+        LOGGER.info("Scaffolded calculated-field action stub [{}] (implement it - it will not be regenerated)", LoggedValue.of(fileName));
     }
 
     /**

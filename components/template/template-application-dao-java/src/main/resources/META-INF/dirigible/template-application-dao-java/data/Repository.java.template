@@ -1,6 +1,7 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
+#set($reportedOnUpdate = [])
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
@@ -20,6 +21,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if($property.widgetType == "MULTISELECT")
         #set($haveSubsets = "true")
     #end
+    #if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue)
+        #set($haveRequired = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -33,7 +37,27 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## flag, so a user's edit of it is respected.
     #if(!$property.dataPrimaryKey && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
         #set($ignore = $preservedOnUpdate.add($property))
+## ...and the subset of those whose discard is REPORTED when the payload carried a different value
+## (#6937). A date is deliberately not reported: the form's own round-trip is lossy (the widget shapes
+## a timestamp to whole minutes, a date to midnight), so a differing date says nothing about who wrote
+## it - while a number, a text or a foreign key round-trips exactly, which is what makes the report a
+## signal. Those are also the columns a system writer computes: the roll-up and aggregate targets, the
+## document number, uuid, ProcessId.
+        #if(!$property.isDateType)
+            #set($ignore = $reportedOnUpdate.add($property))
+        #end
     #end
+#end
+## Does any owned child REFUSE the master's delete (whenMasterDeleted: refuse)? Those checks are
+## emitted as a block before the first cascade, so the refusal cannot arrive after a sibling's rows
+## are already deleted - see deleteOwnedChildren.
+#set($haveRefusingChild = false)
+#if($compositionChildren)
+#foreach($owned in $compositionChildren)
+#if($owned.refuse == "true")
+#set($haveRefusingChild = true)
+#end
+#end
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
 #macro(calcScale $property)#if($property.dataScale)${property.dataScale}#elseif($property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float")2#{else}0#end#end
@@ -66,10 +90,17 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Capacity guard: reject a create/update that would drive the parent's balance negative. Derived from a
 ## capacity-bearing roll-up (child -> parent via FK; parent.capacity vs sum of the children's `of` field).
 ## Recomputed synchronously from the store (not the async-maintained balance field), excluding this row.
+## A parent owned by ANOTHER model is addressed by its fully-qualified generated type rather than
+## imported, so nothing this DAO imports can collide with it; a local parent keeps its plain name.
 #macro(rollupGuardCheck)
 #if($rollupGuard)
+#if($rollupGuard.parentGenFolder && $rollupGuard.parentGenFolder != "")
+#set($guardParentType = "gen.${rollupGuard.parentGenFolder}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}")
+#else
+#set($guardParentType = "${rollupGuard.parentEntity}")
+#end
         if (entity.${rollupGuard.fkProperty} != null) {
-            ${rollupGuard.parentEntity}Entity guardParent = new ${rollupGuard.parentEntity}Repository().findById(entity.${rollupGuard.fkProperty});
+            ${guardParentType}Entity guardParent = new ${guardParentType}Repository().findById(entity.${rollupGuard.fkProperty});
             if (guardParent != null && guardParent.${rollupGuard.capacityField} != null) {
                 java.math.BigDecimal guardConsumed = java.math.BigDecimal.ZERO;
                 for (${name}Entity guardRow : findAll(Criteria.create().eq("${rollupGuard.fkProperty}", entity.${rollupGuard.fkProperty}))) {
@@ -103,10 +134,59 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## Authored field defaults (intent `defaultValue:`, a to-one relation's `init:`): apply the default to a
+## column the write left empty, BEFORE anything the repository computes from it. The default is also the
+## column's DB DEFAULT, but the database supplies it at INSERT - which is after the create-time
+## calculations have already run in Java and read a null (dirigible #7104): a purchase-order line posted
+## without VatRate stored VatRate 20 from the DB default and Vat 0 from the calculation, and only a
+## subsequent no-op update put the two in agreement. The generated form never showed it, because it
+## seeds the same default into a new line and posts it explicitly - so it was every REST caller, import
+## and server-side create that silently got a wrong total. Applying it here makes the guarantee the one
+## the intent guide states ("a row inserted without the column gets it") hold for the value the
+## calculations, guards and checks see, not just for the value that lands in the column.
+## Only create() defaults: an existing row is never re-defaulted, so a value the user deliberately
+## cleared stays cleared.
+## A date/time or binary column is excluded: its DEFAULT is emitted verbatim into the DDL and is
+## typically a SQL expression (CURRENT_DATE, now()), which has no Java literal to stand in for it.
+## The literal itself is resolved in Java (ModelParameterProcessor / JavaLiterals) and is present only
+## on a property that has one, so the type list lives in one place - and an authored value carrying a
+## quote or a backslash is escaped rather than ending the literal it is written into and failing the
+## compile of the whole generated module (dirigible #7154).
+#macro(applyDefaults)
+#foreach($property in $properties)
+#if($property.dataDefaultValueJavaLiteral)
+        if (entity.${property.name} == null) {
+            entity.${property.name} = ${property.dataDefaultValueJavaLiteral};
+        }
+#end
+#end
+#end
+## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
+## letting the statement reach the database and come back as a driver-specific constraint violation - an
+## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which
+## the caller cannot tell what to fix (dirigible #7069). It is the same set the schema declares NOT NULL,
+## so nothing that used to be written still is refused: an insert of null into such a column never had
+## another ending. Everything the repository computes itself - a uuid, a calculated field, a document's
+## totals - is assigned above this point, so what is still null here is genuinely missing from the
+## write. A `number: { stampOn: create }` column is the exception and is excluded: it is filled just
+## BELOW this check, deliberately, so a refusal cannot burn a number (#7099) - it is never the caller's
+## omission. A column carrying a DEFAULT is excluded: the database supplies its value, so
+## an empty one is not missing - an intent relation with `init:` is exactly that, and refusing it would
+## reject every create that leaves the opening status to the model.
+#macro(requiredCheck)
+#foreach($property in $properties)
+#if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue && !$property.numberStampOnCreate)
+        if (entity.${property.name} == null) {
+            throw new ValidationException("${name}.${property.name} is required");
+        }
+#end
+#end
+#end
 ## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
 ## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
 ## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
-## excluding this row on update, then adding the incoming value. Optionally gated by a config key.
+## excluding this row on update, then adding the incoming value. Optionally gated by a config key. A row
+## with any grouping key null belongs to no key-tuple and is not guarded at all (#7180).
 #macro(aggregateGuardCheck)
 #if($guardChecks && $guardChecks.size() > 0)
 #foreach($guard in $guardChecks)
@@ -114,17 +194,32 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         if ("true".equalsIgnoreCase(org.eclipse.dirigible.sdk.core.Configurations.get("${guard.enabledBy}", ""))) {
 #end
         {
-            java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
-            for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
-                if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
-                    continue;
+            // A row with any grouping key null belongs to NO key-tuple, and the aggregate this guards
+            // ignores it for exactly that reason (the generated aggregate handler's own contract), so
+            // it contributes to no sum and can breach no minimum: there is nothing to guard and the
+            // row passes. Said explicitly, because the lookup below no longer says it by accident -
+            // Criteria.eq is NULL-SAFE (#7134), so a null key that used to match no row now matches
+            // the null group, weighing the write against a pool of tuple-less rows that no aggregate
+            // row materialises (#7180). The sibling roll-up capacity guard skips on a null FK the
+            // same way.
+            boolean guardKeyed = #foreach($k in $guard.keys)#if($foreach.first)entity.${k.key} != null#else && entity.${k.key} != null#end#end;
+            boolean guardWithin = true;
+            if (guardKeyed) {
+                java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
+                for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
+                    if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
+                        continue;
+                    }
+                    if (aggRow.${guard.sumField} != null) {
+                        guardSum = guardSum.add(aggRow.${guard.sumField});
+                    }
                 }
-                if (aggRow.${guard.sumField} != null) {
-                    guardSum = guardSum.add(aggRow.${guard.sumField});
-                }
+                java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
+                guardWithin = guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) >= 0;
+            } else {
+                LOG.debug("Aggregate guard [${guard.aggregate}] skipped for a ${name} with a null grouping key"
+                        + " - the row belongs to no key-tuple of the aggregate and contributes to no sum");
             }
-            java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
-            boolean guardWithin = guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) >= 0;
 #if($guard.outcome == "task")
             // outcome: task - do NOT fail the write. Stamp the marker so this entity's process decision
             // can route the record to a hold/review step (the order is accepted, then parked).
@@ -136,13 +231,23 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
             }
 #else
             if (!guardWithin) {
-                throw new ValidationException("${guard.message}");
+                throw new ValidationException("${guard.messageJavaLiteral}");
             }
 #end
         }
 #if($guard.enabledBy && $guard.enabledBy != "")
         }
 #end
+#end
+#end
+#end
+## Whether any document check counts the document's ITEMS - the kinds that need a Criteria query. A
+## gated requiredWhen is a document check too but reads only the row, so the import stays out of a
+## model that declares nothing else.
+#if($documentChecks)
+#foreach($check in $documentChecks)
+#if($check.kind == "itemsSumEqual" || $check.kind == "itemsMin")
+#set($haveItemChecks = "true")
 #end
 #end
 #end
@@ -155,7 +260,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets)
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -176,6 +281,10 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 #if($haveCalculatedPropertyAction)
 import org.eclipse.dirigible.sdk.component.Beans;
 #end
+#if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 #if($documentMaster)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import java.math.BigDecimal;
@@ -186,16 +295,23 @@ import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${do
 #if(!$documentMaster && $multilingual != "true")
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
+#if(!$rollupGuard.parentGenFolder || $rollupGuard.parentGenFolder == "")
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Entity;
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Repository;
 #end
-#if($documentChecks && $documentChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard)
-## Document checks need Criteria to load the items; deduped against the other importers above.
+#end
+#if($haveItemChecks && $multilingual != "true" && !$documentMaster && !$rollupGuard)
+## The item-counting document checks need Criteria to load the items; deduped against the other
+## importers above. A gated requiredWhen reads the row (and at most a related row by id), so a model
+## whose only document check is one of those must not import it unused.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
-#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !($documentChecks && $documentChecks.size() > 0))
+#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !$haveItemChecks)
 ## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
+#if($compositionChildren && $compositionChildren.size() > 0)
+import org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork;
 #end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
@@ -214,6 +330,14 @@ ${importsCode}
 @Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
+#if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
+    /**
+     * Reports a system-owned column a full-row update() carried a different value for - see update() -
+     * and an aggregate guard skipped for a row that belongs to no key-tuple - see save().
+     */
+    private static final Logger LOG = Logging.getLogger("gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository");
+
+#end
 #if($history == "true")
     /** The base table whose shadow ${tablePrefix}${dataName}_HISTORY table carries the change trail. */
     private static final String HISTORY_TABLE = "${tablePrefix}${dataName}";
@@ -233,6 +357,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#applyDefaults()
 #normalizeSubsets()
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
@@ -261,27 +386,41 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
 #end
 #end
-## First-class numbering, stampOn:create: allocate the real document number on insert (when empty)
-## from the tenant's series. The number's SHAPE is not here - prefix and width live in the series
-## configuration (the module's .numbers artefact, then per-tenant settings), so a deployment can change
-## it without touching this model. `per` selects WHICH sequence: each value of that relation (typically
-## Company - a separate legal entity owes its own range) has its own counter.
-#foreach ($property in $properties)
-#if($property.numberStampOnCreate)
-        if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
-#if($property.numberPer && $property.numberPer != "")
-            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
-#else
-            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}");
-#end
-        }
-#end
-#end
 #if($documentMaster)
         recalculate(entity);
 #end
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
+#end
+#requiredCheck()
+## Allocated LAST, once every guard that can refuse this create has passed: the counter is a SEQUENCE,
+## incremented in its own transaction so concurrent creates never serialize on it, which means an
+## allocation cannot be rolled back with the insert - whatever it hands out is spent. A number consumed
+## by a write that then failed leaves a permanent hole in a series a jurisdiction requires to be
+## gap-free, so the allocation must be the last thing that happens before the statement, not the first
+## (dirigible #7099). A failure of the INSERT itself can still spend one; nothing short of allocating
+## inside the insert's transaction closes that, and doing so would serialize every create in the tenant.
+## First-class numbering, stampOn:create: allocate the real document number on insert (when empty)
+## from the tenant's series. The number's SHAPE is not here - prefix and width live in the series
+## configuration (the module's .numbers artefact, then per-tenant settings), so a deployment can change
+## it without touching this model. `per` selects WHICH sequence: each value of that relation (typically
+## Company - a separate legal entity owes its own range) has its own counter. The partition is read off
+## the entity, which by this point carries the relation's init: default: the applyDefaults macro
+## assigned it as the FIRST statement of save() (dirigible #7104), so the FK the allocator sees is the
+## value the row WILL carry and the default company gets ITS partition instead of the series' base row
+## (#7101) - the guarantee lives in that one mechanism, not in a second copy of the init value here
+## (#7147). A null FK therefore means a relation that declares no init: at all: the tenant-wide
+## base row, as before.
+#foreach ($property in $properties)
+#if($property.numberStampOnCreate)
+        if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
+#if($property.numberPer && $property.numberPer != "")
+            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeriesJavaLiteral}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
+#else
+            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeriesJavaLiteral}");
+#end
+        }
+#end
 #end
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
@@ -318,8 +457,31 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // updateProperties / updateDerived), so this preservation cannot fight a workflow write.
         ${name}Entity existingRow = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
         if (existingRow != null) {
+#if($reportedOnUpdate.size() > 0)
+            // ...but a caller that computed a DIFFERENT value for one of them is not sending a partial
+            // payload - it is a system writer on the wrong path, and its work is being thrown away.
+            // Preserving silently made that indistinguishable from success: a hand-written listener
+            // maintaining a pool via full-row update() kept returning 200 while the column stayed at
+            // its created value forever (#6937). So the discard is reported, once per write, naming
+            // what was dropped; a payload that carries the stored value back - every ordinary form
+            // round-trip - says nothing.
+            java.util.List<String> discarded = new java.util.ArrayList<>();
+#end
 #foreach($property in $preservedOnUpdate)
+#if(!$property.isDateType)
+            if (isDiscardedByPreservation(entity.${property.name}, existingRow.${property.name})) {
+                discarded.add("${property.name}=" + entity.${property.name});
+            }
+#end
             entity.${property.name} = existingRow.${property.name};
+#end
+#if($reportedOnUpdate.size() > 0)
+            if (!discarded.isEmpty()) {
+                LOG.warn("A full-row update of ${name} {} carried system-owned {} - discarded, the stored"
+                        + " values were kept. update() never writes these columns; a writer that computes"
+                        + " them must use the targeted updateProperty / updateProperties / updateDerived.",
+                        entity.${pkPropertyName}, discarded);
+            }
 #end
         }
 #end
@@ -356,6 +518,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
+#requiredCheck()
 #if($documentItem)
         // The document this line belongs to BEFORE the write: a full-row update may re-point the
         // line's FK to another document, and the one it leaves has no write of its own to resum it -
@@ -423,6 +586,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // the gate check makes an unbalanced document fail the transition, not silently post.
         enforceChecks(entity);
 #end
+#requiredCheck()
 #if($documentItem)
         // The document this line belongs to BEFORE the write - a system write can re-point the FK
         // exactly as a user edit does, and the vacated document has no write of its own to resum it.
@@ -649,6 +813,41 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // connection, before its commit, and recorded in the event outbox alongside it.
         return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
     }
+#if($phases && $phases != "")
+#foreach($phase in $phases.split(","))
+#set($Phase = "${phase.substring(0,1).toUpperCase()}${phase.substring(1)}")
+
+    /**
+     * Apply an enrichment and announce the "${phase}" phase of the row - the intent
+     * phases: [${phase}] declaration of this entity. Bind it with
+     * event: { onPhase: ${name}, phase: ${phase} }.
+     *
+     * <p>
+     * An enrichment a listener computes on create - a costing pool, a snapshot column, an external
+     * lookup - has to be written back without re-firing the onUpdate consumers, so it publishes nothing
+     * at all; a declarative consumer of the enriched value therefore had no moment to bind to. It could
+     * only bind the create, where the order of two listeners is undefined and the value may not be
+     * written yet, and the result was a plausible-looking record computed from a null with every step
+     * green. A phase is that write's own channel: the values and the notice travel in ONE targeted
+     * write, so they commit together and no consumer can observe one without the other.
+     *
+     * <p>
+     * Routed through {@link #updateProperties} like every other targeted write, so the checks gate, the
+     * stored display name, the change history and a document line's resum all still run.
+     *
+     * @param id the primary key of the row being enriched
+     * @param values the columns this phase completes; never empty - the write IS the announcement, and
+     *        a phase nothing wrote is a moment that did not happen
+     * @return the number of rows written
+     */
+    public int announce${Phase}(Object id, java.util.Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            throw new IllegalArgumentException("announce${Phase} requires the enriched values - the write carries the announcement");
+        }
+        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-${phase}");
+    }
+#end
+#end
 #if($haveSubsets)
 
     /**
@@ -699,6 +898,34 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         return normalized.toString();
     }
 #end
+#if($reportedOnUpdate.size() > 0)
+
+    /**
+     * Whether the preservation of a system-owned column is DISCARDING work: the payload carried a
+     * value of its own and it is not the stored one.
+     *
+     * <p>
+     * An absent value is the ordinary case the preservation exists for - a form PUTs only the fields it
+     * edits - and is never reported. A numeric value is compared by amount, not by representation:
+     * {@code 120.00} and {@code 120} are the same total, and a JSON round-trip through the browser's
+     * number type routinely changes the scale. Everything else is compared by value, arrays included
+     * (a BLOB column's identity would differ on every round-trip).
+     *
+     * @param payloadValue the value the caller sent, may be null
+     * @param storedValue the value the stored row holds, may be null
+     * @return true when the payload value is present and differs from the stored one
+     */
+    private static boolean isDiscardedByPreservation(Object payloadValue, Object storedValue) {
+        if (payloadValue == null || java.util.Objects.deepEquals(payloadValue, storedValue)) {
+            return false;
+        }
+        if (payloadValue instanceof Number payloadNumber && storedValue instanceof Number storedNumber) {
+            return new java.math.BigDecimal(String.valueOf(payloadNumber))
+                    .compareTo(new java.math.BigDecimal(String.valueOf(storedNumber))) != 0;
+        }
+        return true;
+    }
+#end
 #if($lifecycleEdges)
 
     /**
@@ -720,13 +947,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     private static java.util.Map<String, String> lifecycleStatusNames() {
         java.util.Map<String, String> names = new java.util.HashMap<>();
-#if($lifecycleStatusNames)
-        for (String seeded : "${lifecycleStatusNames}".split(",")) {
-            int separator = seeded.indexOf('=');
-            if (separator > 0) {
-                names.put(seeded.substring(0, separator), seeded.substring(separator + 1));
-            }
-        }
+#foreach($seeded in $lifecycleStatusNameEntries)
+        names.put("${seeded.idJavaLiteral}", "${seeded.nameJavaLiteral}");
 #end
         return names;
     }
@@ -821,7 +1043,54 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     private void enforceChecks(${name}Entity entity) {
 #foreach($check in $documentChecks)
         if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
-#if($check.kind == "itemsSumEqual")
+#if($check.kind == "requiredWhen")
+            // A value required only under a condition (intent `checks: requiredWhen`), gated on the
+            // status at which it is finally needed - the transition that sends the document, not the
+            // drafting before it. ${check.label} must carry a value while the condition holds.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object requiredValue = ${check.valueExpression};
+            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#elseif($check.kind == "forbidWhen")
+            // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at
+            // which the write is refused - a child may test its parent one hop away (loaded by FK
+            // first). On the synchronous #7014/#7063 path, so the refusal reaches the person who acted.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guardJavaExpression}) {
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#elseif($check.kind == "compare")
+            // A value of the row compared with a second one (intent `checks: compare`) - another field
+            // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:
+            // "days > 0 before SUBMITTED" refuses the transition, not the draft still being filled in.
+            // An absent left operand is not a violation here either; requiredness is its own declaration.
+#if($check.literalJavaExpression)
+            if (entity.${check.field} != null
+#if($check.numeric == "true")
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#else
+                    && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#end
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#else
+            if (entity.${check.field} != null && entity.${check.than} != null
+#if($check.numeric == "true")
+                    && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
+#else
+                    && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
+#end
+                throw new ValidationException("${check.messageJavaLiteral}");
+            }
+#end
+#elseif($check.kind == "itemsSumEqual")
             java.math.BigDecimal sum${check.overA} = java.math.BigDecimal.ZERO;
             java.math.BigDecimal sum${check.overB} = java.math.BigDecimal.ZERO;
             for (${check.itemsEntity}Entity checkItem : new ${check.itemsEntity}Repository().findAll(
@@ -834,12 +1103,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (sum${check.overA}.compareTo(sum${check.overB}) != 0) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #else
             if (new ${check.itemsEntity}Repository().findAll(
                     Criteria.create().eq("${check.itemsFk}", entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end)).size() < ${check.count}) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #end
         }
@@ -849,6 +1118,27 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
+#if($compositionChildren && $compositionChildren.size() > 0)
+        // The record and the children it owns leave together or not at all: a repository call is
+        // otherwise its own transaction, so a failure half-way through the cascade would commit some of
+        // the children and keep the record - the orphan state this cascade exists to prevent.
+        UnitOfWork.run(() -> deleteWithOwnedChildren(entity));
+    }
+
+    /** The delete of this ${name} itself, running inside the unit of work above. */
+    private void deleteWithOwnedChildren(${name}Entity entity) {
+#if($documentMaster)
+        String deletingMaster = String.valueOf(entity.${pkPropertyName});
+        DELETING_IDS.get().add(deletingMaster);
+        try {
+            deleteOwnedChildren(entity.${pkPropertyName});
+        } finally {
+            DELETING_IDS.get().remove(deletingMaster);
+        }
+#else
+        deleteOwnedChildren(entity.${pkPropertyName});
+#end
+#end
 #if($history == "true")
         // The caller's argument may be a partial snapshot; the trail must carry what was actually
         // stored, so read the row (untranslated) before it is gone.
@@ -868,6 +1158,25 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
+#if($compositionChildren && $compositionChildren.size() > 0)
+        // One transaction for the record and the children it owns - see delete(entity).
+        UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
+    }
+
+    /** The delete of this ${name} itself, running inside the unit of work above. */
+    private void deleteByIdWithOwnedChildren(Object id) {
+#if($documentMaster)
+        String deletingMaster = String.valueOf(id);
+        DELETING_IDS.get().add(deletingMaster);
+        try {
+            deleteOwnedChildren(id);
+        } finally {
+            DELETING_IDS.get().remove(deletingMaster);
+        }
+#else
+        deleteOwnedChildren(id);
+#end
+#end
 #if($documentItem)
         ${name}Entity entity = findById(id);
 #end
@@ -887,6 +1196,55 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
 #end
     }
+#if($compositionChildren && $compositionChildren.size() > 0)
+
+    /**
+     * Deletes the children this ${name} OWNS - the composition relations authored on those children,
+     * which is what makes them details of this record rather than independent rows - as the first step
+     * of deleting it.
+     *
+     * <p>
+     * They go in this same transaction and through their own repository, so each child's
+     * {@code -deleted} event is recorded in the outbox beside the delete, its own history and cascade
+     * run, and every roll-up over the child relinquishes what it counted. A child whose relation
+     * declares {@code whenMasterDeleted: refuse} is the author's alternative: it REFUSES this delete
+     * while any of its rows exist, rather than being swept away with the record. Either way nothing is
+     * left pointing at a ${name} that is gone - an orphan is invisible in the UI, since no parent page
+     * renders it, and still counted by every report and roll-up over the child.
+     */
+    private void deleteOwnedChildren(Object id) {
+        if (id == null) {
+            return;
+        }
+#if($haveRefusingChild)
+        // EVERY refusal is decided before the FIRST cascade. Checked per child in model order instead,
+        // a refusing child declared after a cascading one only spoke up once the earlier child's rows
+        // were already deleted: the unit of work rolls those rows back, but the change history is
+        // written on its own connection by design - so the trail permanently recorded deletes of lines
+        // that still exist (#7143).
+#foreach($owned in $compositionChildren)
+#if($owned.refuse == "true")
+        if (!new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository()
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))
+                .isEmpty()) {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                    "This ${entityLabel} still has ${owned.childLabel} records - delete those first");
+        }
+#end
+#end
+#end
+#foreach($owned in $compositionChildren)
+#if($owned.refuse != "true")
+        gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository ${owned.childEntity}Owner =
+                new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository();
+        for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
+            ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
+        }
+#end
+#end
+    }
+#end
 #if($multilingual == "true")
 
     // ${name} is multilingual: every read overlays the translated property values from the
@@ -929,6 +1287,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentMaster)
 
     /**
+     * The ${name} rows whose own delete is in progress on this thread. Their lines are being cascaded
+     * away with them, so the totals write-back each line delete would trigger has nothing left to keep
+     * consistent - see recalculate(Object) and deleteOwnedChildren (#7143). Keyed by the id's string
+     * form: the master reads it off its own row and the line off its foreign key, which need not be
+     * the same box type.
+     */
+    private static final ThreadLocal<java.util.Set<String>> DELETING_IDS = ThreadLocal.withInitial(java.util.HashSet::new);
+
+    /**
      * Document totals: each aggregate field is the sum of the line items' same-named field. Recomputed
      * synchronously (in the same request) so the document stays consistent - NOT via async roll-up
      * listeners. Called on the master's own save/update, and by ${documentMaster.childEntity}Repository
@@ -966,6 +1333,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * still being assembled line by line, and a half-built document must not fail its posting gate.
      */
     public ${name}Entity recalculate(Object id) {
+        if (DELETING_IDS.get().contains(String.valueOf(id))) {
+            // This master is itself being deleted and the call is one of its own lines reporting its
+            // removal on the way out. There is nothing left to keep consistent, and doing it anyway
+            // cost a read, a targeted update and a SYSTEM "totals changed" history row PER LINE against
+            // a row that is gone microseconds later (#7143).
+            return null;
+        }
         ${name}Entity entity = findById(id);
         if (entity == null) {
             return null;
@@ -1018,16 +1392,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         StringBuilder label = new StringBuilder();
 #foreach($part in $labelParts)
 #if($part.kind == "literal")
-        label.append("${part.text}");
+        label.append("${part.textJavaLiteral}");
 #elseif($part.kind == "field")
-        label.append(formatLabelValue(entity.${part.property}, #if($part.format)"${part.format}"#{else}null#end));
+        label.append(formatLabelValue(entity.${part.property}, #if($part.format)"${part.formatJavaLiteral}"#{else}null#end));
 #else
         {
             var related = entity.${part.relation} == null ? null
                     : new ${part.repositoryClass}().findOne(entity.${part.relation})
                                                    .orElse(null);
             label.append(formatLabelValue(related == null ? null : related.${part.property},
-                    #if($part.format)"${part.format}"#{else}null#end));
+                    #if($part.format)"${part.formatJavaLiteral}"#{else}null#end));
         }
 #end
 #end

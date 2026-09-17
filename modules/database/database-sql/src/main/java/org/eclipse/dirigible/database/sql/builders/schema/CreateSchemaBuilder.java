@@ -114,9 +114,7 @@ public class CreateSchemaBuilder extends AbstractCreateSqlBuilder {
         sql.append(SPACE)
            .append(AUTHORIZATION_KEYWORD)
            .append(SPACE)
-           .append(getEscapeSymbol())
-           .append(authorization)
-           .append(getEscapeSymbol());
+           .append(encapsulateIdentifier(authorization));
 
     }
 }

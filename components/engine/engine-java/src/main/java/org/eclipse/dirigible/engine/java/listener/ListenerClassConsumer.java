@@ -13,10 +13,13 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
@@ -87,6 +90,19 @@ import jakarta.jms.Topic;
  * tenant provisioned after the last client-Java rebuild is topped up without disturbing the
  * subscriptions already open. A tenant that goes away leaves its subscriptions behind until the
  * next rebuild — inert, because nothing publishes to a removed tenant's destinations.
+ *
+ * <p>
+ * <b>A subscription the broker refuses is retried, indefinitely.</b> The attempt races the embedded
+ * broker on every boot — the {@code vm://localhost} transport may not be accepting yet, and against
+ * a shared message store the broker may not hold the lease for much longer than that — and a topic
+ * discards whatever it delivers to nobody, so an unsubscribed handler loses every event silently.
+ * Neither of the two triggers this consumer used to rely on ever arrives on a steady-state
+ * instance: a generation is rebuilt only on publish, and {@link #execute()} runs only when a tenant
+ * was actually provisioned. So whatever could not be opened is remembered and re-attempted by
+ * {@link #reconcile()}, which the JVM-local {@code JavaConsumersReconciler} calls on a timer (issue
+ * #7217). Retrying is safe because a partial attempt is undone: a tenant is recorded only once all
+ * of its subscriptions are open, and what did open in a failed attempt is closed again, so a retry
+ * can never end up with two consumers competing on the same destination.
  */
 @Component
 @Order(500)
@@ -107,6 +123,17 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
 
     /** fqn → what the loaded class declared, and the connections open for it per tenant. */
     private final ConcurrentMap<String, Registration> registrations = new ConcurrentHashMap<>();
+
+    /** Set while anything this consumer declared is not subscribed; drives {@link #reconcile()}. */
+    private final AtomicBoolean subscriptionsIncomplete = new AtomicBoolean();
+
+    /**
+     * The {@code label|scope} pairs already reported as failing. A retry runs on a timer, so without
+     * this a permanently refused subscription would log one WARN per tenant per tick forever - and the
+     * refusal is not hypothetical: every node of a deployment derives the same durable subscription id,
+     * so the second one to attach is turned away for good.
+     */
+    private final Set<String> reportedFailures = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public ListenerClassConsumer(ComponentContainer componentContainer, ActiveMQConnectionArtifactsFactory connectionFactory,
@@ -182,14 +209,30 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
     }
 
     /**
-     * Top up the tenants that have no subscription yet for the classes already loaded. Called once a
-     * tenant provisioning round completes: the client-Java generation is JVM-wide and is only rebuilt
-     * on publish, so a tenant created afterwards would otherwise stay unsubscribed until the next
-     * rebuild.
+     * Top up whatever the classes already loaded have not subscribed yet. Called once a tenant
+     * provisioning round completes: the client-Java generation is JVM-wide and is only rebuilt on
+     * publish, so a tenant created afterwards would otherwise stay unsubscribed until the next rebuild.
      */
     @Override
     public void execute() {
-        registrations.forEach(this::subscribeMissingTenants);
+        topUp();
+    }
+
+    /**
+     * Re-attempt whatever is still not subscribed, on the reconciliation timer. Gated on the flag so an
+     * instance whose subscriptions are all open pays nothing per tick - not even the tenant lookup the
+     * fan-out below performs.
+     *
+     * <p>
+     * The flag is cleared <b>before</b> the pass, never after: a failure the pass itself records has to
+     * survive it, or the very subscription that just failed would never be retried again.
+     */
+    @Override
+    public void reconcile() {
+        if (!subscriptionsIncomplete.compareAndSet(true, false)) {
+            return;
+        }
+        topUp();
     }
 
     /** Replace whatever this class had subscribed with the subscriptions it declares now. */
@@ -197,62 +240,137 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         stopExisting(fqn);
         Registration registration = new Registration(subscriptions);
         registrations.put(fqn, registration);
-        subscribeGlobal(registration);
+        subscribeGlobal(fqn, registration);
         subscribeMissingTenants(fqn, registration);
+    }
+
+    /**
+     * One reconciliation pass over everything loaded: the global destinations first, then the tenant
+     * ones. The tenant fan-out happens <b>once for the pass</b> rather than once per class, because
+     * {@link TenantContext#executeForEachTenant} reads the provisioned tenants from the database and a
+     * per-class fan-out would turn one tick into one query per registered listener.
+     */
+    private void topUp() {
+        registrations.forEach(this::subscribeGlobal);
+        try {
+            tenantContext.executeForEachTenant(() -> {
+                String tenantId = tenantContext.getCurrentTenant()
+                                               .getId();
+                registrations.forEach((fqn, registration) -> subscribeTenant(fqn, registration, tenantId));
+                return null;
+            });
+        } catch (Exception e) {
+            markIncomplete();
+            LOGGER.error("Failed to top up the client-Java listener subscriptions of the provisioned tenants: {}", e.getMessage(), e);
+        }
+        reportIncomplete();
     }
 
     /**
      * Open this class's global subscriptions - once for the deployment, not once per tenant. Runs on
      * the loading thread, which has no tenant of its own, and needs none: a global destination resolves
      * to the same physical name everywhere.
+     *
+     * <p>
+     * All or nothing, and idempotent, for the same reason the per-tenant branch is: a retry must not be
+     * able to open a second consumer beside one that is already live.
      */
-    private void subscribeGlobal(Registration registration) {
+    private synchronized void subscribeGlobal(String fqn, Registration registration) {
+        if (isSuperseded(fqn, registration) || registration.isGlobalSubscribed()) {
+            return;
+        }
         List<Connection> opened = new ArrayList<>();
+        boolean complete = true;
         for (Subscription subscription : registration.globalSubscriptions()) {
             Connection connection = subscribe(subscription, "all tenants (global destination)");
-            if (connection != null) {
+            if (connection == null) {
+                complete = false;
+            } else {
                 opened.add(connection);
             }
         }
-        registration.globalSubscribed(opened);
+        if (complete) {
+            registration.globalSubscribed(opened);
+        } else {
+            // Leave the connections unrecorded before closing them, or a later teardown would close
+            // them a second time and openConnections() would report handles that are already gone.
+            closeAll(fqn, opened);
+            markIncomplete();
+        }
     }
 
     /**
-     * Open this class's subscriptions in every provisioned tenant that does not have them yet. Additive
-     * on purpose — an already-subscribed tenant is left alone, so topping up after a provisioning round
-     * never drops a message in flight.
+     * Open one class's subscriptions in every provisioned tenant that does not have them yet. Additive
+     * on purpose — an already-subscribed tenant is left alone, so topping up never drops a message in
+     * flight.
      */
-    private synchronized void subscribeMissingTenants(String fqn, Registration registration) {
+    private void subscribeMissingTenants(String fqn, Registration registration) {
         try {
             tenantContext.executeForEachTenant(() -> {
-                String tenantId = tenantContext.getCurrentTenant()
-                                               .getId();
-                if (registration.isSubscribed(tenantId)) {
-                    return null;
-                }
-                List<Connection> opened = new ArrayList<>();
-                boolean complete = true;
-                for (Subscription subscription : registration.tenantSubscriptions()) {
-                    Connection connection = subscribe(subscription, "tenant [" + tenantId + "]");
-                    if (connection == null) {
-                        complete = false;
-                    } else {
-                        opened.add(connection);
-                    }
-                }
-                if (complete) {
-                    registration.subscribed(tenantId, opened);
-                } else {
-                    // All or nothing per tenant: leave the tenant unrecorded so the next load or
-                    // provisioning round retries it cleanly, and close what did open so that retry
-                    // cannot end up with two consumers competing on the same destination.
-                    closeAll(fqn, opened);
-                }
+                subscribeTenant(fqn, registration, tenantContext.getCurrentTenant()
+                                                                .getId());
                 return null;
             });
         } catch (Exception e) {
+            markIncomplete();
             LOGGER.error("Failed to subscribe listener [{}] for the provisioned tenants: {}", fqn, e.getMessage(), e);
         }
+    }
+
+    /** Open one class's tenant-scoped subscriptions in the tenant whose context is currently active. */
+    private synchronized void subscribeTenant(String fqn, Registration registration, String tenantId) {
+        if (isSuperseded(fqn, registration) || registration.isSubscribed(tenantId)) {
+            return;
+        }
+        List<Connection> opened = new ArrayList<>();
+        boolean complete = true;
+        for (Subscription subscription : registration.tenantSubscriptions()) {
+            Connection connection = subscribe(subscription, "tenant [" + tenantId + "]");
+            if (connection == null) {
+                complete = false;
+            } else {
+                opened.add(connection);
+            }
+        }
+        if (complete) {
+            registration.subscribed(tenantId, opened);
+        } else {
+            // All or nothing per tenant: leave the tenant unrecorded so the reconciliation timer
+            // retries it cleanly, and close what did open so that retry cannot end up with two
+            // consumers competing on the same destination.
+            closeAll(fqn, opened);
+            markIncomplete();
+        }
+    }
+
+    /**
+     * Whether this registration has been replaced or unloaded since the caller picked it up. A pass
+     * iterates a weakly consistent map, so a republish can install a new registration for the same
+     * class in between - and subscribing the old one would open connections nothing holds a reference
+     * to, live on the destination its replacement is also consuming, and impossible to ever close.
+     */
+    private boolean isSuperseded(String fqn, Registration registration) {
+        return registrations.get(fqn) != registration;
+    }
+
+    private void markIncomplete() {
+        subscriptionsIncomplete.set(true);
+    }
+
+    /**
+     * One line per pass while anything is still down. The per-attempt log falls to DEBUG after the
+     * first failure, so this summary is what keeps a lasting outage visible instead of scrolling past
+     * once at boot - which is how an unsubscribed handler went unnoticed in the first place.
+     */
+    private void reportIncomplete() {
+        if (!subscriptionsIncomplete.get() || reportedFailures.isEmpty()) {
+            // An empty set means the fan-out itself failed, which the outer catch has already reported.
+            return;
+        }
+        LOGGER.warn(
+                "[{}] client-Java listener subscription(s) are still not open, so messages published to their destinations are"
+                        + " not handled: {}. Retrying on the next reconciliation pass.",
+                reportedFailures.size(), new LinkedHashSet<>(reportedFailures));
     }
 
     /**
@@ -266,14 +384,24 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
      */
     private Connection subscribe(Subscription subscription, String scope) {
         String label = subscription.label();
-        String destinationName = destinationNameManager.toTenantName(subscription.destination());
         // A queue holds its messages until something consumes them; a topic drops whatever it delivers
         // to nobody. So only a topic subscription needs to be durable - and a durable one needs the
         // connection to carry an id, which is how the broker recognises it across a reconnect.
         boolean topic = subscription.kind() == ListenerKind.TOPIC;
-        String subscriptionId = topic ? durableSubscriptionId(label, destinationName) : null;
+        // Resolving the physical name is inside the try with the attach it belongs to: anything thrown
+        // between here and the consumer must stay this subscription's problem, or it escapes the
+        // per-tenant fan-out and skips every tenant behind this one.
+        // The connection is held outside the try because the factory START()s it before returning: every
+        // step after that - the session, the destination, the redelivery policy, the consumer - can be
+        // refused by the broker with a live transport socket and its thread already in existence. A
+        // refusal that is permanent (a destination the broker's authorization refuses) is retried on
+        // every reconciliation pass, so an attempt that walked away from its connection would orphan one
+        // per subscription per tenant per tick until the process ran out of file descriptors.
+        Connection connection = null;
         try {
-            Connection connection = connectionFactory.createConnection(
+            String destinationName = destinationNameManager.toTenantName(subscription.destination());
+            String subscriptionId = topic ? durableSubscriptionId(label, destinationName) : null;
+            connection = connectionFactory.createConnection(
                     ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", label, ex.getMessage(), ex), subscriptionId);
             Session session = connectionFactory.createSession(connection);
             Destination destination = topic ? session.createTopic(destinationName) : session.createQueue(destinationName);
@@ -289,12 +417,54 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             MessageConsumer consumer =
                     topic ? session.createDurableSubscriber((Topic) destination, subscriptionId) : session.createConsumer(destination);
             consumer.setMessageListener(msg -> dispatch(msg, subscription.dispatcher(), label));
+            reportedFailures.remove(failureKey(label, scope));
             LOGGER.info("Java @Listener [{}] connected to {} '{}' for {}.", label, subscription.kind(), destinationName, scope);
             return connection;
-        } catch (JMSException e) {
-            LOGGER.error("Failed to start listener for [{}] for {}: {}", label, scope, e.getMessage(), e);
+        } catch (JMSException | RuntimeException e) {
+            // RuntimeException is not defensive padding: the connection factory reports a broker that is
+            // not accepting yet by wrapping the JMSException in an IllegalStateException, which is
+            // exactly the failure this whole retry exists for. Left uncaught it escaped the per-tenant
+            // fan-out, skipping every remaining tenant and leaking the connections already opened.
+            reportFailure(label, scope, e);
+            closeQuietly(label, connection);
             return null;
         }
+    }
+
+    /**
+     * Close a connection nothing will ever hold a reference to. The failure that brought us here is
+     * already reported, and a broker that just refused the subscription is likely to refuse the close
+     * too, so this one is DEBUG - it must not add a second line per tick to a lasting outage.
+     */
+    private static void closeQuietly(String label, Connection connection) {
+        if (connection == null) {
+            return;
+        }
+        try {
+            connection.close();
+        } catch (JMSException | RuntimeException e) {
+            LOGGER.debug("Failed to close the JMS connection of the refused subscription [{}]: {}", label, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Report a refused subscription once, then quietly. It is a WARN and not an ERROR because it is now
+     * transient by construction - the reconciliation timer retries it - and the repeats fall to DEBUG
+     * because that timer would otherwise emit one line per subscription per tenant, forever, for a
+     * destination that can never be opened.
+     */
+    private void reportFailure(String label, String scope, Exception cause) {
+        String consequence = "Failed to start listener [" + label + "] for " + scope
+                + " - messages published to its destination are not handled until it connects; retrying on the next pass.";
+        if (reportedFailures.add(failureKey(label, scope))) {
+            LOGGER.warn("{} {}", consequence, cause.getMessage(), cause);
+        } else {
+            LOGGER.debug("{} {}", consequence, cause.getMessage(), cause);
+        }
+    }
+
+    private static String failureKey(String label, String scope) {
+        return label + "|" + scope;
     }
 
     /**
@@ -320,6 +490,7 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
 
     private synchronized void stopExisting(String fqn) {
         Registration old = registrations.remove(fqn);
+        reportedFailures.removeIf(key -> key.startsWith(fqn + "|") || key.startsWith(fqn + "#"));
         if (old != null) {
             closeAll(fqn, old.openConnections());
         }
@@ -431,6 +602,9 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         /** The JMS connections open for this class's global destinations. */
         private List<Connection> globalConnections = List.of();
 
+        /** Whether every global destination this class declares is subscribed. */
+        private boolean globalSubscribed;
+
         Registration(List<Subscription> subscriptions) {
             this.tenantSubscriptions = subscriptions.stream()
                                                     .filter(subscription -> !DestinationNameManager.isGlobal(subscription.destination()))
@@ -438,6 +612,8 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             this.globalSubscriptions = subscriptions.stream()
                                                     .filter(subscription -> DestinationNameManager.isGlobal(subscription.destination()))
                                                     .toList();
+            // A class declaring no global destination has nothing outstanding on that side, ever.
+            this.globalSubscribed = this.globalSubscriptions.isEmpty();
         }
 
         List<Subscription> tenantSubscriptions() {
@@ -448,8 +624,13 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             return globalSubscriptions;
         }
 
+        boolean isGlobalSubscribed() {
+            return globalSubscribed;
+        }
+
         void globalSubscribed(List<Connection> connections) {
             this.globalConnections = List.copyOf(connections);
+            this.globalSubscribed = true;
         }
 
         boolean isSubscribed(String tenantId) {

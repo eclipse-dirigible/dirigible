@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
@@ -20,11 +21,12 @@ import org.springframework.stereotype.Component;
 /**
  * Scaffolds a Java {@code JavaDelegate} stub under {@code custom/} for every author-declared
  * service task with <b>no built-in handler</b> - i.e. one that is NOT a {@code call} (TS handler),
- * NOT a {@code setField} / {@code setRelationField} / {@code notify} (which the BPMN binds to the
- * generated {@code gen.events.<Process><Step>} delegate), and NOT a {@code delegate} (an
- * author-named client {@code JavaDelegate} the BPMN binds via {@code flowable:class}). The BPMN
- * binds such a bare task to {@code ${JavaTask}} -> {@code custom.<Step>}; this writes
- * {@code custom/<Step>.java} as a minimal logging stub for the developer to implement.
+ * NOT a {@code setField} / {@code clearField} / {@code setRelationField} / {@code notify} (which
+ * the BPMN binds to the generated {@code gen.events.<Process><Step>} delegate), and NOT a
+ * {@code delegate} (an author-named client {@code JavaDelegate} the BPMN binds via
+ * {@code flowable:class}). The BPMN binds such a bare task to {@code ${JavaTask}} ->
+ * {@code custom.<Step>}; this writes {@code custom/<Step>.java} as a minimal logging stub for the
+ * developer to implement.
  * <p>
  * <b>Generate-once, never overwritten.</b> {@code custom/} is the escape-hatch tier the intent
  * layer does not own, so the stub is written only when the file is absent (the developer's edits
@@ -73,15 +75,19 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                                                  .isBlank()) {
                     continue;
                 }
-                // A setField / setRelationField service task is bound by the BPMN to the GENERATED
-                // gen.events.<Process><Step> delegate (SetFieldSupport -> setters glue), not a custom stub -
-                // scaffolding one here produces an orphaned, never-invoked custom/<Step>.java.
+                // A setField / clearField / setRelationField service task is bound by the BPMN to the
+                // GENERATED gen.events.<Process><Step> delegate (SetFieldSupport -> setters glue), not a custom
+                // stub - scaffolding one here produces an orphaned, never-invoked custom/<Step>.java.
                 Object setField = step.getArgs()
                                       .get("setField");
+                Object clearField = step.getArgs()
+                                        .get("clearField");
                 Object setRelationField = step.getArgs()
                                               .get("setRelationField");
                 if ((setField != null && !setField.toString()
                                                   .isBlank())
+                        || (clearField != null && !clearField.toString()
+                                                             .isBlank())
                         || (setRelationField != null && !setRelationField.toString()
                                                                          .isBlank())) {
                     continue;
@@ -93,13 +99,17 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                 }
                 String handler = IntentNaming.pascalCase(step.getName());
                 String fileName = "custom/" + handler + ".java";
-                if (context.getRepository()
-                           .getResource(context.getProjectRoot() + "/" + fileName)
-                           .exists()) {
+                // No repository/project to look into (a dry run over an unsaved proposal): nothing can
+                // exist, so the stub "is produced" - and the dry-run context then discards the write.
+                boolean canLookUp = context.getRepository() != null && context.getProjectRoot() != null;
+                if (canLookUp && context.getRepository()
+                                        .getResource(context.getProjectRoot() + "/" + fileName)
+                                        .exists()) {
                     continue; // preserve the developer's implementation
                 }
                 context.writeModelFile(fileName, stub(process.getName(), step.getName(), handler));
-                LOGGER.info("Scaffolded service-task handler stub [{}] (implement it - it will not be regenerated)", fileName);
+                LOGGER.info("Scaffolded service-task handler stub [{}] (implement it - it will not be regenerated)",
+                        LoggedValue.of(fileName));
             }
         }
     }
@@ -118,6 +128,10 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                  *
                  * Scaffolded once under custom/ - it is yours: implement the real logic here, it is never
                  * regenerated or overwritten.
+                 *
+                 * Collaborators arrive by injection: declare a constructor taking the @Component beans this
+                 * step needs. Do NOT annotate the delegate itself @Component - the engine creates it, so an
+                 * annotated one would build a second, fully-injected instance that never runs.
                  */
                 public class %s implements JavaDelegate {
 

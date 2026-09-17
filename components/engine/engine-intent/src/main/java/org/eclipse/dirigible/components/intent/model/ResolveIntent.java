@@ -43,6 +43,21 @@ import java.util.Map;
  * is worse than none, so the record is left unresolved and flagged for a human. The attempt is
  * observable through the {@link #outcome} field (queryable, and readable by a process decision) and
  * through the handler's log line, which names the keys and the date that were checked.
+ *
+ * <p>
+ * A {@code match} value and {@code between.value} may be a <b>to-one path off the record</b>
+ * ({@code SalesInvoice.Customer.PriceList}), not only a column of the record itself: the key a line
+ * is priced by belongs to the document header, and copying it down onto every line is a UI-time
+ * copy that never happens on a REST create, a {@code generates:} create-from or a schedule fan-out
+ * - exactly the paths whose rows would then stay unresolved. Each hop is loaded through the
+ * generated repositories, a cross-model owner included, and the terminal segment may itself be a
+ * to-one, whose foreign key is what the register column is matched against.
+ *
+ * <p>
+ * {@code copy} copies scalars of the found row onto fields of the record - the price the price-list
+ * row names, the rate a contract names. Only the single covering row is copied from, and only into
+ * a field the record does not already carry a value in: the same never-overwrite rule the resolved
+ * relation has, so a manual correction stands.
  */
 public class ResolveIntent {
 
@@ -62,7 +77,11 @@ public class ResolveIntent {
     /** The register entity queried for the covering row. */
     private String from;
 
-    /** Equality keys: a register property to the record property it must equal. */
+    /**
+     * Equality keys: a register property to the record property it must equal. The right-hand side may
+     * be a to-one <b>path</b> off the record ({@code SalesInvoice.Customer.PriceList}), whose terminal
+     * segment is a field or a to-one whose foreign key is compared.
+     */
     private Map<String, String> match = new LinkedHashMap<>();
 
     /**
@@ -85,8 +104,17 @@ public class ResolveIntent {
      * The validity period: {@code start} / {@code end} name the register's period bounds and
      * {@code value} the record's date the period must cover. An absent bound on a register row is
      * open-ended (still valid); {@code end} is inclusive, and a date-only bound covers its whole day.
+     * {@code value} may be a to-one path off the record, like a {@code match} value.
      */
     private Map<String, String> between = new LinkedHashMap<>();
+
+    /**
+     * Optional scalar copies from the single covering row: {@code <register field>: <record field>}.
+     * Written only on {@code found}, and only into a record field that is still empty - the
+     * never-overwrite rule the resolved relation has. The resolved relation itself is {@link #set};
+     * this is for the values that hang off the found row rather than point at it.
+     */
+    private Map<String, String> copy = new LinkedHashMap<>();
 
     /**
      * Optional string field of the record stamped with {@code found} / {@code notFound} /
@@ -149,6 +177,14 @@ public class ResolveIntent {
 
     public void setWhere(Map<String, Object> where) {
         this.where = where == null ? new LinkedHashMap<>() : where;
+    }
+
+    public Map<String, String> getCopy() {
+        return copy;
+    }
+
+    public void setCopy(Map<String, String> copy) {
+        this.copy = copy == null ? new LinkedHashMap<>() : copy;
     }
 
     public Map<String, String> getBetween() {

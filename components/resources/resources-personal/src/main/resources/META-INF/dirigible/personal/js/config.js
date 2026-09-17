@@ -13,6 +13,9 @@ App.config = {
   basePath: '/services/web/personal',
   // No own entities; the built-in stores (inbox/documents) call platform services directly.
   restBase: '',
+  // Strictly this person's own work: the Inbox lists the tasks ASSIGNED to them, never the back-office
+  // group queues their roles also make them a candidate for - those belong to the back-office shell.
+  taskScope: 'assignee',
   // The Personal shell is a personal-surfaces shell - it does not aggregate reports across apps.
   aggregateReports: false
 };

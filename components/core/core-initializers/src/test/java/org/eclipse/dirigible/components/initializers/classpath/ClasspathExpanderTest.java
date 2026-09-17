@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -47,7 +48,7 @@ class ClasspathExpanderTest {
     }
 
     @Test
-    void expands_a_single_jar_into_the_registry_and_removes_its_project() throws IOException {
+    void expands_a_single_jar_into_the_registry_and_removes_its_entries() throws IOException {
         Path jar = jarWithEntries("module.jar",
                 Map.of("META-INF/dirigible/my-module/hello.txt", "payload", "META-INF/dirigible/my-module/sub/nested.txt", "nested"));
 
@@ -56,11 +57,29 @@ class ClasspathExpanderTest {
         assertThat(resourceContent("/my-module/hello.txt")).isEqualTo("payload");
         assertThat(resourceContent("/my-module/sub/nested.txt")).isEqualTo("nested");
 
-        expander.remove("my-module");
+        List<String> entries = List.of("/my-module/hello.txt", "/my-module/sub/nested.txt");
+        expander.remove(entries);
 
+        // the entries are gone and the collections they left empty are pruned
         assertThat(repository.hasCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/my-module")).isFalse();
-        // removing an absent project is a no-op, not an error
-        expander.remove("my-module");
+        // removing absent entries is a no-op, not an error
+        expander.remove(entries);
+    }
+
+    @Test
+    void removing_a_jars_entries_keeps_the_rest_of_the_project() throws IOException {
+        Path jar = jarWithEntries("module.jar", Map.of("META-INF/dirigible/my-module/hello.txt", "payload"));
+        expander.expand(jar);
+        // something else published into the same project folder - a customization, an extension, or
+        // simply a developer's own file. An upgrade removes and re-expands the module, so a
+        // project-wide removal would destroy it.
+        repository.createResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/my-module/mine.txt",
+                "mine".getBytes(StandardCharsets.UTF_8));
+
+        expander.remove(List.of("/my-module/hello.txt"));
+
+        assertThat(repository.hasResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/my-module/hello.txt")).isFalse();
+        assertThat(resourceContent("/my-module/mine.txt")).isEqualTo("mine");
     }
 
     @Test

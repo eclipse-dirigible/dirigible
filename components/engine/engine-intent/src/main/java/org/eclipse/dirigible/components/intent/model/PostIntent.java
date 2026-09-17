@@ -32,10 +32,14 @@ import java.util.Map;
  *     guard: negativeStock     # optional precondition; a violation aborts the event
  *     set:
  *       Product:  item.Product     # item.&lt;field&gt;
- *       Store:    Receipt.Store     # &lt;Master&gt;.&lt;field&gt;
- *       Quantity: item.Quantity     # or a Calc expression (e.g. -item.Quantity)
- *       GoodsReceipt: Receipt.Id    # the back-reference (matches idempotentBy)
+ *       Store:    source.Store     # source.&lt;field&gt; - a field of the master record
+ *       Quantity: -item.Quantity   # the null-safe negation of a per-item copy
+ *       Note:     issued           # a plain constant, rendered as a string literal
  * </pre>
+ *
+ * <p>
+ * The back-reference named by {@code idempotentBy} is written by the generated handler itself and
+ * is not authored here.
  */
 public class PostIntent {
 
@@ -71,8 +75,10 @@ public class PostIntent {
     private String guard;
 
     /**
-     * Field map for each emitted row: target field -> value (a constant, {@code Master.field},
-     * {@code item.field}, or a Calc expression).
+     * Field map for each emitted row: target field to value. The vocabulary is closed -
+     * {@code item.<Field>}, {@code -item.<Field>}, {@code source.<Field>}, a number, a boolean,
+     * {@code null}, or a plain constant (rendered as a string literal) - and anything else that reads
+     * as an expression is refused at parse time rather than rendered into code that cannot compile.
      */
     private Map<String, String> set = new LinkedHashMap<>();
 

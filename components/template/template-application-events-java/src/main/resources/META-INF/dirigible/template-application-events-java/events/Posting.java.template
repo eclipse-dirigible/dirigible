@@ -10,24 +10,29 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
- * Posting ${name}: when a ${sourceEntity}#if($isCreate) is created#{else} transitions into status ${guardValue}#end, create one
+ * Posting ${name}: when a ${sourceEntity} ${moment}, create one
  * ${targetEntity} with its ${itemsEntity} rows computed from the source's totals per the resolved
  * rule row. Generated from the intent postings block - do not edit; it is re-generated with the
  * application.
  *
  * Contract (the accounting posting semantics, generalized):
- * - binds the #if($isCreate)source's create topic (the bare entity topic - the platform publishes
- *   creates unsuffixed; the source has no status lifecycle, its insert IS the posting event)#{else}-transitioned topic (workflow status writes publish it; -updated reactions never see
- *   it, so no loops)#end and RE-LOADS the source by id - the payload is as-of the event and lacks
- *   later-step data such as a stamped document number;
- * - idempotent + resumable via the ${backRefProperty} back-reference: a redelivery of a complete post
- *   is a no-op, and a redelivery of a half-post (an item write failed after the target was saved)
- *   rebuilds the items so the post completes - so it never throws or leaves a half-post. Concurrent
+ * - binds the topic the source's own publisher raises when it ${moment} (see destination() below)
+ *   and RE-LOADS the source by id - the payload is as-of the event and lacks later-step data such as
+ *   a stamped document number;
+ * - idempotent + resumable + amendable via the ${backRefProperty} back-reference: the derived content
+ *   is compared with what the existing post carries, so a redelivery of a complete post is a no-op,
+ *   a half-post (an item write failed after the target was saved) is completed, and a source that was
+ *   AMENDED and reached the moment again (rejected, edited, re-issued) has its post REWRITTEN to what
+ *   it says now - never a second post, never a stale one. The rewrite stops at the created document's
+ *   own lifecycle: once it has left the status this handler created it in, someone has acted on it,
+ *   so the divergence is logged and the document is left to a correcting entry. Concurrent
  *   de-duplication is best-effort until a UNIQUE back-reference key lands with schema constraints; a
  *   genuinely failed post is undone by a compensation action, not this handler;
  * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
  *   unposted worklist - final-status documents with no back-referencing ${targetEntity});
- * - all writes go through the generated repositories (numbering, status init, validations, checks);
+ * - all writes go through the generated repositories (numbering, status init, validations, checks),
+ *   and the whole post - the stale rows a rewrite replaces, the header, every derived line - is ONE
+ *   transaction, so a refused line leaves the previous post standing rather than a partial one;
  * - REVERSAL mode (intent reverses:): the handler locates the ORIGINAL document (back-reference set,
  *   storno link empty), skips fail-soft when none exists, and creates the negated copy (same sides,
  *   negative amounts - red storno) with the storno link stamped; its idempotency guard counts only
@@ -41,7 +46,7 @@ public class ${className}Posting implements MessageHandler {
 
     @Override
     public String destination() {
-        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}#if(!$isCreate)-transitioned#end";
+        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}${topicSuffix}";
     }
 
     @Override
@@ -71,6 +76,9 @@ public class ${className}Posting implements MessageHandler {
 #if($hasRule)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.
+        // The match value is the AUTHORED literal of rule.match, not a value read off the source, so it
+        // is never null here and the NULL-SAFE Criteria.eq (#7134) cannot turn this lookup into a match
+        // on the rule table's null group; an empty authored literal is refused at parse (#7180).
         java.util.List<gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity> ruleRows =
                 new gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Repository().findAll(
                         Criteria.create().eq("${ruleMatchProperty}", ${ruleMatchValueJava}));
@@ -89,24 +97,36 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
-        // Idempotent + resumable posting (cloud-native: no cross-step transaction). The back-reference
-        // identifies an existing post: a fresh source posts a new target + items; a redelivery of a
-        // COMPLETE post is a no-op; a redelivery of a HALF-post (an item write failed after the target
-        // was saved) rebuilds the items so the post completes. Concurrent-redelivery de-duplication is
-        // best-effort until a UNIQUE key on the back-reference lands with schema constraint emission; a
-        // genuinely failed post is reversed by a compensation action, not by this handler.
+        // Idempotent + resumable + amendable posting. The back-reference identifies an existing post;
+        // comparing it with the freshly derived content is what tells the three cases apart:
+        // identical -> a redelivery, nothing to do; different ->
+        // either a HALF-post to complete or an AMENDED source to rewrite the post from (#7071).
+        // Concurrent-redelivery de-duplication is best-effort until a UNIQUE key on the back-reference
+        // lands with schema constraint emission; a genuinely failed post is reversed by a compensation
+        // action, not by this handler.
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository targetRepository =
                 new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository();
         gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository itemsRepository =
                 new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository();
-        int expectedItems = 0;
+        // The FULL derived item set, built up front: the same list is written for a fresh post and
+        // compared against an existing one, so an amended source (rejected, edited, re-issued) can
+        // never leave a post carrying the previous issue's content.
+        java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> derivedItems =
+                new java.util.ArrayList<>();
 #foreach($row in $itemRows)
 #if($row.guard != "")
         if (${row.guard}) {
-            expectedItems++;
+#end
+        {
+            gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item =
+                    new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity();
+#foreach($a in $row.assigns)
+            item.${a.targetProp} = ${a.expr};
+#end
+            derivedItems.add(item);
         }
-#else
-        expectedItems++;
+#if($row.guard != "")
+        }
 #end
 #end
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
@@ -143,47 +163,165 @@ public class ${className}Posting implements MessageHandler {
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
                 relatedTargets;
 #end
-        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved;
-        if (!existingTargets.isEmpty()) {
-            saved = existingTargets.get(0);
-            java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems =
-                    itemsRepository.findAll(Criteria.create().eq("${itemsFk}", saved.${targetPk}));
-            if (currentItems.size() >= expectedItems) {
-                return; // already fully posted - nothing to do
-            }
-            // Half-post: clear the partial items and recreate the full derived set below.
-            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
-                itemsRepository.delete(stale);
-            }
-        } else {
-            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target =
-                    new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
-#foreach($a in $headerAssignments)
-            target.${a.targetProp} = ${a.expr};
+#if($hoistsHeaderValues)
+        // The header values, evaluated ONCE. The comparison below and the assignment further down must
+        // see the SAME value: an expression read twice - anything reading the clock - would differ
+        // between the two reads and make every redelivery look like an amendment (#7131). Evaluated
+        // HERE, once a write is actually possible: every return above this point - a source the guard
+        // rejects, a missing rule row, a reversal with nothing to reverse - leaves without writing, and
+        // an expression with a cost or a side effect must not run for those (#7177).
 #end
+#foreach($a in $headerAssignments)
+#if($a.hoisted)
+        var ${a.local} = ${a.expr};
+#end
+#end
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
+        boolean refresh = !existingTargets.isEmpty();
+        // The rows the post carries today: the ones a rewrite replaces, empty for a fresh post. Both
+        // branches assign it exactly once so the write block below can close over it.
+        java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems;
+        if (refresh) {
+            target = existingTargets.get(0);
+            currentItems = itemsRepository.findAll(Criteria.create().eq("${itemsFk}", target.${targetPk}));
+            boolean unchanged = currentItems.size() == derivedItems.size();
+#foreach($a in $headerAssignments)
+#if($a.overwrittenOnSave)
+            // ${a.targetProp} is not compared: the write fills it itself (#7177, #7234).
+#elseif($a.compareOnlyWhenDerived)
+            unchanged = unchanged && sameUnlessDerivedIsEmpty(target.${a.targetProp}, ${a.value});
+#elseif($a.derivedDefault != "")
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.value}, ${a.derivedDefault});
+#else
+            unchanged = unchanged && same(target.${a.targetProp}, ${a.value});
+#end
+#end
+            // Row order is not guaranteed by the query, so each derived row is matched against an
+            // unclaimed stored one rather than by position.
+            java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> unmatched =
+                    new java.util.ArrayList<>(currentItems);
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity derived : derivedItems) {
+                if (!unchanged) {
+                    break;
+                }
+                unchanged = false;
+                for (java.util.Iterator<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> stored =
+                        unmatched.iterator(); stored.hasNext();) {
+                    if (sameItem(stored.next(), derived)) {
+                        stored.remove();
+                        unchanged = true;
+                        break;
+                    }
+                }
+            }
+            if (unchanged) {
+                return; // the post already says exactly what the source derives now - a redelivery
+            }
+#if($amendableGuard != "")
+            if (!(${amendableGuard})) {
+                LOG.error("Posting ${name}: ${sourceEntity} [{}] changed after ${targetEntity} [{}] left the status it was"
+                        + " created in - the posted content no longer matches the document and was NOT rewritten;"
+                        + " correct it with a reversing entry.", source.${sourceKeyField}, target.${targetPk});
+                return;
+            }
+#end
+        } else {
+            target = new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
             target.${backRefProperty} = source.${sourceKeyField};
 #if($stornoProperty != "")
             target.${stornoProperty} = original.${targetPk};
 #end
-            saved = targetRepository.save(target);
+            currentItems = java.util.List.of();
         }
-#foreach($row in $itemRows)
-#if($row.guard != "")
-        if (${row.guard}) {
+#foreach($a in $headerAssignments)
+        target.${a.targetProp} = ${a.value};
 #end
-        {
-            gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item =
-                    new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity();
-#foreach($a in $row.assigns)
-            item.${a.targetProp} = ${a.expr};
+        // ONE transaction for the whole post: the stale rows a rewrite replaces, the header and every
+        // derived line either all become durable or none of them does. Written as separate
+        // transactions, a line the item repository refuses (a validation, a constraint) left the
+        // journal entry with a header and a PARTIAL set of lines - and unlike the half-post case there
+        // is no second event to self-heal from, so the ledger ended up worse than the stale but
+        // balanced state the rewrite set out to fix (dirigible #7132). A rewrite therefore deletes the
+        // rows it replaces inside the same unit: either the post says what the source derives now, or
+        // it still says what it said before.
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+            // Either a HALF-post (an item write failed after the target was saved) or an AMENDMENT
+            // (the source was re-issued with different content): both converge on rewriting the post
+            // to what the source derives now. Empty for a fresh post, so no branch is needed.
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
+                itemsRepository.delete(stale);
+            }
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
+                    refresh ? targetRepository.update(target) : targetRepository.save(target);
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
+                item.${itemsFk} = saved.${targetPk};
+                itemsRepository.save(item);
+            }
+        });
+    }
+
+    /**
+     * Whether a stored item row still carries what the source derives for it now - compared over the
+     * values as they will be STORED, so a column the row's own rule leaves unassigned is compared
+     * against the default the insert would fill it with rather than against the raw null (#7131).
+     */
+    private static boolean sameItem(gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stored,
+            gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity derived) {
+        return
+#foreach($p in $itemComparedProps)
+#if($p.overwrittenOnSave)
+                // ${p.name} is not compared: the write fills it itself (#7177, #7234).
+#elseif($p.compareOnlyWhenDerived)
+                sameUnlessDerivedIsEmpty(stored.${p.name}, derived.${p.name}) &&
+#elseif($p.derivedDefault != "")
+                same(stored.${p.name}, derived.${p.name}, ${p.derivedDefault}) &&
+#else
+                same(stored.${p.name}, derived.${p.name}) &&
 #end
-            item.${itemsFk} = saved.${targetPk};
-            itemsRepository.save(item);
+#end
+                true;
+    }
+#if($comparesAgainstDefaults)
+
+    /**
+     * Value equality against a DERIVED value that is not yet saved: a null one does not stay null in
+     * the column - the generated repository applies the authored default before the insert (#7104,
+     * #7115), so the stored row reads that default back and comparing it against the raw null would
+     * read every redelivery as an amendment (#7131). One row of a journal posting assigning Debit and
+     * the other Credit, both columns `default: 0`, is exactly that shape.
+     */
+    private static boolean same(Object stored, Object derived, Object derivedDefault) {
+        return same(stored, derived == null ? derivedDefault : derived);
+    }
+#end
+#if($comparesUnlessDerivedIsEmpty)
+
+    /**
+     * Value equality an EMPTY derived value simply does not assert, because something other than this
+     * handler fills the column: a default only the DATABASE can apply (its {@code DEFAULT} is a SQL
+     * expression such as {@code CURRENT_DATE}, which has no Java stand-in, so the generated repository
+     * leaves it alone - #7131), or a value the write itself supplies for an empty column - a uuid, the
+     * next number in a series (#7177). What the stored row holds therefore cannot be derived, and only
+     * a value the source does derive can disagree with the post. Blank counts as empty: that is the
+     * test the repository's own fill makes.
+     */
+    private static boolean sameUnlessDerivedIsEmpty(Object stored, Object derived) {
+        if (derived == null || (derived instanceof CharSequence && derived.toString().isBlank())) {
+            return true;
         }
-#if($row.guard != "")
+        return same(stored, derived);
+    }
+#end
+
+    /**
+     * Null-safe value equality. Numbers compare by VALUE, so a stored amount the database handed back
+     * at another scale (1200 vs 1200.00) is not read as a change.
+     */
+    private static boolean same(Object stored, Object derived) {
+        if (stored instanceof Number && derived instanceof Number) {
+            return new java.math.BigDecimal(stored.toString()).compareTo(new java.math.BigDecimal(derived.toString())) == 0;
         }
-#end
-#end
+        return java.util.Objects.equals(stored, derived);
     }
 
     @Override

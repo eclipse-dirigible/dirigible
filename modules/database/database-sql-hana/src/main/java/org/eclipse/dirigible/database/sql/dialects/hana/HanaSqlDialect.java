@@ -23,6 +23,8 @@ import java.sql.*;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -315,6 +317,40 @@ public class HanaSqlDialect extends
             logger.debug("Assuming artifact [{}] in schema  [{}] of type [{}] does not exist", artefact, schema, type, ex);
             return false;
         }
+    }
+
+    /**
+     * HANA has no INFORMATION_SCHEMA; {@code SYS.CONSTRAINTS} lists every key column with the flags
+     * that tell a unique key from the primary key.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return constraint name to ordered columns
+     * @throws SQLException when the catalog read fails
+     */
+    @Override
+    public Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException {
+        String schema = connection.getSchema();
+        try (PreparedStatement statement = connection.prepareStatement(uniqueConstraintsQuery(schema != null))) {
+            statement.setString(1, table);
+            if (schema != null) {
+                statement.setString(2, schema);
+            }
+            return readUniqueConstraints(statement);
+        }
+    }
+
+    /**
+     * The catalog query behind {@link #uniqueConstraints}; the current schema when the driver reports
+     * none.
+     *
+     * @param withSchema whether a schema parameter is bound
+     * @return the SQL
+     */
+    static String uniqueConstraintsQuery(boolean withSchema) {
+        return "SELECT CONSTRAINT_NAME, COLUMN_NAME FROM SYS.CONSTRAINTS WHERE TABLE_NAME = ? AND SCHEMA_NAME = "
+                + (withSchema ? "?" : "CURRENT_SCHEMA") + " AND IS_UNIQUE_KEY = 'TRUE' AND IS_PRIMARY_KEY = 'FALSE'"
+                + " ORDER BY CONSTRAINT_NAME, POSITION";
     }
 
     /**

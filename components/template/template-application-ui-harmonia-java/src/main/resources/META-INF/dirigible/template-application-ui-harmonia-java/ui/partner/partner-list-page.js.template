@@ -55,7 +55,7 @@ document.addEventListener('alpine:init', () => {
         this.items = await App.services.api.get(this.apiPath) || [];
         this.state = this.items.length ? 'default' : 'empty';
       } catch (e) {
-        this.error = (e && e.message) || 'Could not load your ${menuLabel}.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
         this.state = 'error';
       }
     },
@@ -87,8 +87,8 @@ document.addEventListener('alpine:init', () => {
 
     columns: [
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{partnerProperty}" && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{partnerProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

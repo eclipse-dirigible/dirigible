@@ -62,6 +62,13 @@ public enum DirigibleConfig {
 
     SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS", "10000"), //
 
+    /**
+     * How often an idle instance gives its FAILED artefacts one more START attempt (#7248). A pass
+     * otherwise runs only on a registry change, so a listener the broker refused at boot was never
+     * retried until someone published something else.
+     */
+    SYNCHRONIZER_FAILED_RETRY_INTERVAL_SECONDS("DIRIGIBLE_SYNCHRONIZER_FAILED_RETRY_INTERVAL_SECONDS", "30"), //
+
     /** Bridge the platform readiness onto Spring's ApplicationAvailability (#6448). */
     READINESS_AVAILABILITY_BRIDGE_ENABLED("DIRIGIBLE_READINESS_AVAILABILITY_BRIDGE_ENABLED", Boolean.FALSE.toString()), //
 
@@ -77,6 +84,14 @@ public enum DirigibleConfig {
     APP_BASE_URL("DIRIGIBLE_APP_BASE_URL", ""), //
 
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en"), //
+
+    /**
+     * The tenant's country as an ISO 3166-1 alpha-2 code (e.g. {@code BG}), blank when the deployment
+     * has none. It resolves the label variants a generated application declares per country - what a
+     * national identifier is called is a property of the company, not of the language its users read
+     * the UI in - and is tenant-overridable through the tenant configuration.
+     */
+    APPLICATION_COUNTRY("DIRIGIBLE_APPLICATION_COUNTRY", ""), //
 
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
@@ -150,6 +165,15 @@ public enum DirigibleConfig {
      */
     TENANT_GROUPS_CLAIM("DIRIGIBLE_TENANT_GROUPS_CLAIM", "cognito:groups"),
 
+    /**
+     * Whether this deployment exposes the tenant provisioning API under
+     * {@code /services/tenant-provisioning/**}, through which an external provisioner registers a
+     * tenant with a caller-supplied id, registers its data source from credentials it created itself,
+     * and activates it. Off by default: the API hands out and accepts real database credentials, so a
+     * deployment has to opt in, and when it does not, none of the beans behind it exist at all.
+     */
+    TENANT_PROVISIONING_API_ENABLED("DIRIGIBLE_TENANT_PROVISIONING_API_ENABLED", Boolean.FALSE.toString()),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */
@@ -182,7 +206,9 @@ public enum DirigibleConfig {
     DEPENDENCIES_DYNAMIC_ENABLED("DIRIGIBLE_DEPENDENCIES_DYNAMIC", Boolean.TRUE.toString()),
 
     /**
-     * Directory the resolved dependency JARs are linked into; blank means [user
+     * Directory the resolved dependency JARs are linked into - the inventory of what the declarations
+     * resolve to, not a launch-classpath entry (the swappable modules classloader serves them; on
+     * loader.path the application classloader would shadow every later upgrade). Blank means [user
      * home]/.dirigible/resolved-modules.
      */
     DEPENDENCIES_DIR("DIRIGIBLE_DEPENDENCIES_DIR", null),
@@ -234,17 +260,30 @@ public enum DirigibleConfig {
      */
     EVENT_OUTBOX_RELAY_GRACE_SECONDS("DIRIGIBLE_EVENT_OUTBOX_RELAY_GRACE_SECONDS", "60"),
 
+    /**
+     * Interval (seconds) between ticks of the watchdog that re-attempts client-Java runtime state a
+     * previous pass could not establish - a JMS subscription the broker refused, a job registration
+     * that threw.
+     */
+    JAVA_RECONCILE_INTERVAL_SECONDS("DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS", "30"),
+
     /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
     INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
 
     /** Claude model the Intent Editor's AI assistant talks to. */
-    INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-4-8"),
+    INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-5"),
 
     /** Base URL of the Anthropic-compatible API the Intent assistant calls. */
     INTENT_AI_BASE_URL("DIRIGIBLE_INTENT_AI_BASE_URL", "https://api.anthropic.com"),
 
-    /** Maximum tokens the Intent assistant may generate in a single proposal. */
-    INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "8192"),
+    /**
+     * Maximum tokens the Intent assistant may generate in a single proposal. The tool contract re-emits
+     * the COMPLETE {@code app.intent} on every turn and every repair round, so the ceiling has to hold
+     * a whole application plus its explanation, not one edit - a few hundred lines of this YAML is
+     * thousands of tokens before the JSON string escaping, and the reasoning pass draws on the same
+     * budget.
+     */
+    INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "32768"),
 
     /** Anthropic API version header sent by the Intent assistant. */
     INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
@@ -276,7 +315,15 @@ public enum DirigibleConfig {
      * is absolute - it starts at arming and is never renewed by activity - so a state left armed and
      * forgotten stops hiding the real identity's world on its own.
      */
-    ACT_AS_TTL_SECONDS("DIRIGIBLE_ACT_AS_TTL_SECONDS", "1800");
+    ACT_AS_TTL_SECONDS("DIRIGIBLE_ACT_AS_TTL_SECONDS", "1800"),
+
+    /**
+     * Largest image, in bytes, a {@code .print} template may embed. An image is inlined into the
+     * stylesheet as base64 (which is a third larger again) and the whole document is rendered in
+     * memory, so a print that reaches for a 20 MB photograph must fail soft - print without it - rather
+     * than take the render down. 2 MB is far above any logo or stamp.
+     */
+    PRINT_IMAGE_MAX_SIZE("DIRIGIBLE_PRINT_IMAGE_MAX_SIZE", "2097152");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);

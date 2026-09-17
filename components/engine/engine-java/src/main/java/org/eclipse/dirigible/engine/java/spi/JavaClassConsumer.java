@@ -50,4 +50,20 @@ public interface JavaClassConsumer {
      */
     void onClassUnloaded(LoadedClass info);
 
+    /**
+     * Re-attempt runtime state this consumer wanted but could not establish - a JMS subscription the
+     * broker refused while it was still starting, a job registration that threw. Called periodically by
+     * {@code JavaConsumersReconciler} on a JVM-local timer, deliberately independent of a rebuild and
+     * of a tenant provisioning round: a client-Java generation is only rebuilt on publish, and the
+     * post-provisioning steps run only when a tenant was actually provisioned, so a consumer that
+     * relies on either to retry never retries at all on a steady-state instance.
+     *
+     * <p>
+     * Implementations must be cheap and a no-op when nothing is outstanding, and must be safe to call
+     * concurrently with a rebuild.
+     */
+    default void reconcile() {
+        // Nothing outstanding by default.
+    }
+
 }

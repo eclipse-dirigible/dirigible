@@ -175,6 +175,10 @@ document.addEventListener('alpine:init', () => {
         // nobody noticing. It is stored as its own message, so it is in the record too.
         this.reportBoundaries(reply.boundaries);
 
+        // The proposal's own requirement audit (dirigible #6997): where each sentence of the request
+        // landed - and, prominently, the ones it landed nowhere.
+        this.reportCoverage(reply.coverage);
+
         if (reply.proposedYaml) await this.adopt(reply.proposedYaml);
       } finally {
         await this.flush();
@@ -201,17 +205,50 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
+     * Render the proposal's requirement-coverage audit (dirigible #6997). Requirements the proposal
+     * does NOT carry get the boundary treatment - each its own unmissable message - because a silent
+     * omission is exactly the failure this audit exists to make loud. The rest of the mapping is one
+     * quiet note: a reviewer sees at a glance which sentence of the request landed where.
+     */
+    reportCoverage(coverage) {
+      const entries = (coverage || []).filter(c => c && c.requirement);
+      if (!entries.length) return;
+      const uncovered = entries.filter(c => !c.construct || c.construct.trim().toLowerCase() === 'none');
+      for (const miss of uncovered) {
+        this.say('boundary', 'Not carried by the proposal: ' + miss.requirement);
+      }
+      const mapped = entries.filter(c => !uncovered.includes(c));
+      if (mapped.length) {
+        this.say('note', 'Requirement coverage:\n'
+          + mapped.map(c => '• ' + c.requirement + ' → ' + c.construct).join('\n'));
+      }
+    },
+
+    /**
      * Validate a proposal and, when it is sound, make it the app. An invalid proposal is NOT applied -
      * the server already spent its repair rounds on it, so the user is shown what is wrong and can
      * rephrase instead of ending up with a broken buffer.
+     *
+     * The check is the full pre-flight, not just a parse (dirigible #6956): a proposal that parses
+     * but whose generation would drop a piece of the model, or be refused by a generation-time check,
+     * is a model that LOOKS finished and then generates wrong - the worst thing this gate could
+     * accept. The current project (when it already exists) is passed so the server judges the
+     * proposal against the real `.settings` and cross-model dependencies.
      */
     async adopt(proposedYaml) {
       const intent = Alpine.store('intent');
       let model;
       try {
-        model = await App.services.intentApi.parse(proposedYaml);
+        const verdict = await App.services.intentApi.validate(proposedYaml, intent.project || undefined);
+        const issues = (verdict && Array.isArray(verdict.issues)) ? verdict.issues : [];
+        if (issues.length) {
+          this.say('error', 'That change parses, but generating it would not produce what it says, so it was not applied:\n'
+            + issues.map(i => '• ' + i).join('\n'));
+          return;
+        }
+        model = verdict.model;
       } catch (e) {
-        const issues = e.issues.length ? e.issues : ['The proposal could not be parsed.'];
+        const issues = e.issues && e.issues.length ? e.issues : ['The proposal could not be parsed.'];
         this.say('error', 'That change does not validate yet, so it was not applied:\n' + issues.map(i => '• ' + i).join('\n'));
         return;
       }

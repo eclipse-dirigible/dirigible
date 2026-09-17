@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -90,19 +91,20 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // neither rewrites it nor lets the scrub take it. Checked before anything is built - there is
         // no output to produce for a module that already has its manifest.
         if (context.keepExistingModelFile(fileName)) {
-            LOGGER.debug("Keeping the existing app-test manifest [{}] — it is developer-owned after the first Generate", fileName);
+            LOGGER.debug("Keeping the existing app-test manifest [{}] — it is developer-owned after the first Generate",
+                    LoggedValue.of(fileName));
             return;
         }
 
         Map<String, Map<String, Object>> edmEntities = readModelEntities(context, baseName);
         if (edmEntities.isEmpty()) {
-            LOGGER.debug("Skipping app-test manifest for [{}] — no .model entities to describe", baseName);
+            LOGGER.debug("Skipping app-test manifest for [{}] — no .model entities to describe", LoggedValue.of(baseName));
             return;
         }
 
         Map<String, Object> manifest = buildManifest(baseName, context.getProjectName(), model, edmEntities, context);
         context.writeModelFile(fileName, GSON.toJson(manifest) + "\n");
-        LOGGER.debug("Generated app-test manifest [{}]", fileName);
+        LOGGER.debug("Generated app-test manifest [{}]", LoggedValue.of(fileName));
     }
 
     /**
@@ -234,6 +236,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // exactlyOne checks: exactly one of the named fields may be non-null - a sample record
         // filling all of them is rejected with 400, so the runner keeps only the first
         List<List<String>> exactlyOne = new ArrayList<>();
+        // compare checks: the record's own field must stand in a relation to a second value - another
+        // of its fields, or a literal (#7338). The sample values are per-type constants, so two dates
+        // come out EQUAL and a strict comparison (gt/lt/ne) would reject the sample record with 400 -
+        // and a sample quantity of 1 fails `gt 10` just as surely. The runner derives the left operand
+        // from whichever right-hand side the check names.
+        List<Map<String, Object>> compare = new ArrayList<>();
         for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
             if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
                                                                                            .isEmpty()) {
@@ -242,9 +250,26 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                                     .map(IntentNaming::pascalCase)
                                     .toList());
             }
+            if ("compare".equals(check.getKind()) && check.getField() != null && check.getOp() != null
+                    && (check.getThan() != null || check.getValue() != null)) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("field", IntentNaming.pascalCase(check.getField()));
+                entry.put("op", check.getOp()
+                                     .trim()
+                                     .toLowerCase(java.util.Locale.ROOT));
+                if (check.getThan() != null) {
+                    entry.put("than", IntentNaming.pascalCase(check.getThan()));
+                } else {
+                    entry.put("value", check.getValue());
+                }
+                compare.add(entry);
+            }
         }
         if (!exactlyOne.isEmpty()) {
             out.put("exactlyOne", exactlyOne);
+        }
+        if (!compare.isEmpty()) {
+            out.put("compare", compare);
         }
         out.put("fields", fields(entity));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
@@ -361,7 +386,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                     // reaching here means a degraded context - omit the relation rather than emit a
                     // guessed URL
                     LOGGER.warn("Omitting cross-model relation [{}] of [{}] from the app-test manifest - target unresolved",
-                            relation.getName(), entity.getName(), ex);
+                            LoggedValue.of(relation.getName()), LoggedValue.of(entity.getName()), ex);
                     continue;
                 }
                 out.put("crossModel", true);
@@ -473,9 +498,15 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         return sample;
     }
 
+    /**
+     * The seeded property the translation sample is taken from: the first string field the base row
+     * carries that actually HAS a language column - a field marked {@code translatable: false} is a key
+     * rather than a label and no translation seed may set it, so choosing it would silently drop the
+     * whole translation assertion from the generated runner.
+     */
     private static String firstTranslatableKey(EntityIntent entity, Map<String, Object> row) {
         for (FieldIntent field : entity.getFields()) {
-            if (!field.isPrimaryKey() && isStringType(field.getType()) && row.containsKey(field.getName())) {
+            if (field.hasLanguageColumn() && isStringType(field.getType()) && row.containsKey(field.getName())) {
                 return field.getName();
             }
         }
@@ -557,6 +588,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
         try {
             IRepository repository = context.getRepository();
+            if (repository == null || context.getProjectRoot() == null) {
+                return byName; // no repository/project to read back from (a dry run over an unsaved proposal)
+            }
             IResource resource = repository.getResource(context.getProjectRoot() + "/" + baseName + ".model");
             if (!resource.exists()) {
                 return byName;
@@ -577,7 +611,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 }
             }
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read the .model for the app-test manifest of [{}]; skipping", baseName, e);
+            LOGGER.warn("Failed to read the .model for the app-test manifest of [{}]; skipping", LoggedValue.of(baseName), e);
         }
         return byName;
     }

@@ -33,4 +33,19 @@ public class OutboxThingController {
         OutboxThing thing = things.findAll().get(0);
         return String.valueOf(things.move(thing.id));
     }
+
+    /**
+     * Deletes a row through a snapshot carrying nothing but its id — what a client repository
+     * legitimately holds. The delete event must still announce the name the row was stored with.
+     */
+    @Get("/deletePartial")
+    public String deletePartial() {
+        OutboxThing stored = new OutboxThing();
+        stored.name = "doomed";
+        Integer id = things.save(stored).id;
+        OutboxThing snapshot = new OutboxThing();
+        snapshot.id = id;
+        things.remove(snapshot);
+        return String.valueOf(id);
+    }
 }

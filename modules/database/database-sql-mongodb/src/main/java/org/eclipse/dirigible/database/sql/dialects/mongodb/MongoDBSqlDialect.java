@@ -18,6 +18,8 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.database.sql.DatabaseType;
@@ -177,4 +179,16 @@ public class MongoDBSqlDialect extends
         ExportImportUtil.importCollection(connection.unwrap(MongoDBConnection.class), table, input);
     }
 
+
+    /**
+     * A document store has no unique-constraint catalog to reconcile against.
+     *
+     * @param connection the connection
+     * @param table the table
+     * @return {@code null} - no catalog
+     */
+    @Override
+    public Map<String, List<String>> uniqueConstraints(Connection connection, String table) {
+        return null;
+    }
 }

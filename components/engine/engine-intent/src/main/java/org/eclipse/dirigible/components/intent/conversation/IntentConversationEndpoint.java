@@ -16,6 +16,7 @@ import java.util.Optional;
 import jakarta.annotation.security.RolesAllowed;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.conversation.IntentConversationService.ConversationKey;
 import org.eclipse.dirigible.components.intent.conversation.IntentConversationService.MessageDraft;
 import org.slf4j.Logger;
@@ -119,7 +120,8 @@ public class IntentConversationEndpoint {
             // Two clients extended the same conversation at the same instant and the database arbitrated.
             // Nothing was appended, and the loser's client keeps the turn pending, so its next append
             // carries it - reporting the conflict is therefore enough.
-            LOGGER.warn("Concurrent append to the [{}] conversation of project [{}] was rejected", surface, project, e);
+            LOGGER.warn("Concurrent append to the [{}] conversation of project [{}] was rejected", LoggedValue.of(surface),
+                    LoggedValue.of(project), e);
             throw new ResponseStatusException(HttpStatus.CONFLICT, "The conversation was extended concurrently. Please retry.", e);
         }
     }

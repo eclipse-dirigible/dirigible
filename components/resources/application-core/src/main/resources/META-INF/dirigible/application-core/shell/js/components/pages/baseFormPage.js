@@ -36,6 +36,10 @@ function baseFormPage() {
     // Per-page override: maps a backend errorCauses[].field name to this page's
     // `errors` key when they differ.
     fieldMap: {},
+    // Per-page override: maps a field name to its display label, used to render a server
+    // rejection that names the property ("The 'TaxRate' property is required") in the user's
+    // own vocabulary. Unmapped names are shown as the server wrote them.
+    fieldLabels: {},
 
     clearError(field) {
       if (this.errors[field]) this.errors[field] = '';
@@ -52,6 +56,18 @@ function baseFormPage() {
     applyApiError(err, { fallbackMessage, formState } = {}) {
       if (err && err.isApiError && err.errorType === 'ValidationError') {
         this.mapCauses(err.errorCauses);
+        this.state = 'validation-error';
+        this.scrollToSummary();
+        return;
+      }
+      // A plain 400 that NAMES a field of this form is a per-field rejection the generated
+      // controllers state in prose instead of structured causes. Answering it with the generic
+      // banner points at nothing (and leaves whatever field happened to be marked, marked), so
+      // map it onto that field and say what the server said.
+      const named = App.services.apiErrors.namedProperty(err, Object.keys(this.form || {}));
+      if (named) {
+        const message = App.services.apiErrors.messageWithLabels(err, this.fieldLabels);
+        this.errors = { [named]: message, __summary: message };
         this.state = 'validation-error';
         this.scrollToSummary();
         return;

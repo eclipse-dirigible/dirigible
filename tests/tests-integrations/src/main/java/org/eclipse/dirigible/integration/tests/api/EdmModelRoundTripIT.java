@@ -109,7 +109,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
     // A mostly same-model intent whose entities exercise the structured (List/Map) values #6826 was
     // losing: labelParts + uniqueConstraints + relatedEntities on Category, lookupColumns on Product's
     // FK, checks on Booking, and rollupGuard on Booking (the child of the capacity-bearing seat
-    // roll-up).
+    // roll-up). Category additionally carries scopedCalendars - Product's calendar filters
+    // by it, so Category's pages link into it.
     //
     // Product additionally carries the shapes #6883 needs, none of which existed here before: `owner`
     // and `reviewer` are named for their ROLE rather than for their target, so the target-derived and
@@ -138,10 +139,13 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   - { entity: Product }
 
               - name: Product
+                view: calendar
+                calendar: { start: launchedOn, scope: Category }
                 fields:
-                  - { name: id,    type: integer, primaryKey: true, generated: true }
-                  - { name: name,  type: string,  length: 100 }
-                  - { name: price, type: decimal }
+                  - { name: id,         type: integer, primaryKey: true, generated: true }
+                  - { name: name,       type: string,  length: 100 }
+                  - { name: price,      type: decimal }
+                  - { name: launchedOn, type: date }
                 relations:
                   - { name: Category, kind: manyToOne, to: Category, show: [code, title] }
                   - { name: owner,    kind: manyToOne, to: Employee }
@@ -155,6 +159,24 @@ class EdmModelRoundTripIT extends IntegrationTest {
                   - { name: capacity,   type: integer }
                   - { name: seatsTaken, type: integer }
                   - { name: seatsFree,  type: integer }
+
+              # A duplicable document (#7358): its object form is entity metadata the .edm has to carry,
+              # or an unrelated modeler save silently puts back the copy that keeps the source's dates.
+              - name: Order
+                duplicable:
+                  defaults: { orderedOn: now }
+                  reset: [dueOn]
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: orderedOn, type: date }
+                  - { name: dueOn,     type: date, calculatedActionOnCreate: custom.DueDate }
+
+              - name: OrderItem
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: integer }
+                relations:
+                  - { name: Order, kind: manyToOne, to: Order, composition: true }
 
               - name: Booking
                 checks:
@@ -256,7 +278,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // otherwise there is nothing for the transform to read back. uniqueConstraints is excluded here:
         // it is owned by the composite-unique-key feature, which emits it as a <constraints> section, not
         // a JSON attribute.
-        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "lookupColumns"}) {
+        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "scopedCalendars", "lookupColumns",
+                "duplicateReset", "duplicateDefaults"}) {
             assertTrue(edm.contains(key + "=\""), "the .edm must carry the structured value [" + key + "] as an attribute");
         }
 
@@ -291,8 +314,11 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // the .model from intent" for exactly the values that were being dropped.
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "labelParts");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "relatedEntities");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "scopedCalendars");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "checks");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "rollupGuard");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateReset");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateDefaults");
         assertPropertyStructuredEquals(modelFromIntent, modelFromEdm, "Product", "Category", "lookupColumns");
 
         // uniqueConstraints is owned by the composite-unique-key feature (a <constraints> section, not a

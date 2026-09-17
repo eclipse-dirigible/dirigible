@@ -70,6 +70,26 @@ public final class User {
         return UserFacade.getLanguage();
     }
 
+    /**
+     * Binds a language to the current thread, preferred over the request's Accept-Language by every
+     * read that resolves the language through {@link #getLanguage()} - the multilingual translation
+     * overlay in particular. Intended for in-process renders that run outside an HTTP request (a
+     * document snapshot, a mailed PDF attachment): the caller MUST clear it in a finally via
+     * {@link #clearLanguage()}.
+     *
+     * @param language the language to bind (a null or blank value leaves the override unset)
+     */
+    public static void setLanguage(String language) {
+        UserFacade.setLanguage(language);
+    }
+
+    /**
+     * Clears the thread-bound language override set by {@link #setLanguage(String)}.
+     */
+    public static void clearLanguage() {
+        UserFacade.clearLanguage();
+    }
+
     public static Integer getTimeout() {
         return UserFacade.getTimeout();
     }

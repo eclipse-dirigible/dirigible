@@ -376,6 +376,74 @@
             "notFoundStatus": "3",
             "ambiguousStatus": "4",
             "writesStatus": "true"
+        },
+        {
+            "name": "priceFromList",
+            "className": "PriceFromList",
+            "entity": "SalesOrderItem",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "true",
+            "setProperty": "PriceListItem",
+            "registerEntity": "PriceListItem",
+            "registerPerspective": "Settings",
+            "registerValueProperty": "Id",
+            "matches": [
+                {
+                    "registerProperty": "Product",
+                    "recordProperty": "Product",
+                    "recordExpression": "entity.Product",
+                    "local": "key0"
+                },
+                {
+                    "registerProperty": "PriceList",
+                    "recordProperty": "SalesOrder.Customer.PriceList",
+                    "recordExpression": "(hop1 == null ? null : hop1.PriceList)",
+                    "local": "key1"
+                }
+            ],
+            "matchSummary": "Product = Product, PriceList = SalesOrder.Customer.PriceList",
+            "filters": [],
+            "filterSummary": "",
+            "startProperty": "ValidFrom",
+            "endProperty": "ValidTo",
+            "valueProperty": "SalesOrder.OrderedOn",
+            "valueExpression": "(hop0 == null ? null : hop0.OrderedOn)",
+            "pathLoads": [
+                {
+                    "local": "hop0",
+                    "sourceExpression": "entity.SalesOrder",
+                    "entity": "SalesOrder",
+                    "perspective": "Sales Orders",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                },
+                {
+                    "local": "hop1",
+                    "sourceExpression": "(hop0 == null ? null : hop0.Customer)",
+                    "entity": "Customer",
+                    "perspective": "Customer",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                }
+            ],
+            "copies": [
+                {
+                    "registerProperty": "Price",
+                    "recordProperty": "Price"
+                }
+            ],
+            "hasCopies": "true",
+            "copySummary": "Price -> Price",
+            "outcomeProperty": "",
+            "statusProperty": "",
+            "foundStatus": "",
+            "notFoundStatus": "",
+            "ambiguousStatus": "",
+            "writesStatus": "false"
         }
     ],
     "writers": [
@@ -460,6 +528,155 @@
             "usesInboxUrl": false,
             "recordUrlEntity": "",
             "recordUrlKeyProperty": ""
+        },
+        {
+            "name": "monthlyStatements",
+            "className": "MonthlyStatements",
+            "cron": "0 0 7 1 * ?",
+            "entity": "Customer",
+            "perspective": "Partners",
+            "criteriaExpression": "Criteria.create().gt(\"OpenBalance\", 0)",
+            "action": "notify",
+            "sourceCrossModel": false,
+            "sourceModel": "",
+            "attachKeyProperty": "Id",
+            "relationLoads": [],
+            "toExpression": "entity.Email",
+            "subjectExpression": "\"Your statement\"",
+            "bodyExpression": "\"Please find attached your account statement.\"",
+            "attach": "report",
+            "attachEntity": "",
+            "attachReport": "CustomerStatement",
+            "attachReportBindings": [
+                {
+                    "parameter": "customer",
+                    "expression": "entity.Name"
+                },
+                {
+                    "parameter": "fromDate",
+                    "expression": "entity.PeriodStart"
+                },
+                {
+                    "parameter": "toDate",
+                    "expression": "entity.PeriodEnd"
+                }
+            ],
+            "attachLanguageExpression": "attachLanguageSource == null || attachLanguageSource.Language == null || attachLanguageSource.Language.isBlank() ? org.eclipse.dirigible.sdk.print.Print.defaultLanguage() : attachLanguageSource.Language.trim()",
+            "attachFileNameExpression": "\"CustomerStatement \" + \"Customer \" + entity.Id + \".pdf\"",
+            "attachLanguageFkProperty": "Country",
+            "attachLanguageTargetEntity": "Country",
+            "attachLanguageTargetPerspective": "Nomenclatures",
+            "attachLanguageCrossModel": false,
+            "attachLanguageTargetModel": "",
+            "usesRecordUrl": false,
+            "usesInboxUrl": false,
+            "recordUrlEntity": "",
+            "recordUrlKeyProperty": "",
+            "notifyOutcomeProperty": "StatementDelivery",
+            "notifyOutcomeEntity": "Customer",
+            "notifyOutcomePerspective": "Partners",
+            "notifyOutcomeKeyProperty": "Id",
+            "notifyOutcomeLength": "64"
+        }
+    ],
+    "transitions": [
+        {
+            "name": "void-order",
+            "className": "VoidOrder",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "statusProperty": "Status",
+            "setStatus": "8",
+            "allowedExpr": "currentStatus == 3 || currentStatus == 4",
+            "fromStatuses": "3, 4",
+            "guardExpr": "",
+            "guardText": "",
+            "notify": "true",
+            "notifyRelationLoads": [
+                {
+                    "local": "Customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners",
+                    "fkProperty": "Customer",
+                    "crossModel": false,
+                    "targetModel": "",
+                    "targetProject": ""
+                }
+            ],
+            "notifyToExpression": "(Customer == null ? null : Customer.Email)",
+            "notifySubjectExpression": "\"Order \" + entity.Number + \" was voided\"",
+            "notifyBodyExpression": "\"The order has been cancelled.\"",
+            "notifyRecordScoped": "false",
+            "forEach": "",
+            "forEachPerspective": "",
+            "forEachFkProperty": "",
+            "forEachKeyProperty": "",
+            "attach": "",
+            "attachEntity": "",
+            "attachKeyProperty": "",
+            "attachLanguageExpression": "",
+            "attachLanguageFkProperty": "",
+            "attachLanguageTargetEntity": "",
+            "attachFileNameExpression": "",
+            "attachReport": "",
+            "usesRecordUrl": "false",
+            "usesInboxUrl": "false",
+            "recordUrlEntity": "",
+            "recordUrlKeyProperty": "",
+            "notifyOutcomeProperty": "VoidNotice",
+            "notifyOutcomeEntity": "SalesOrder",
+            "notifyOutcomePerspective": "Sales Orders",
+            "notifyOutcomeKeyProperty": "Id",
+            "notifyOutcomeLength": "64"
+        }
+    ],
+    "postings": [
+        {
+            "name": "PostOrderToLedger",
+            "className": "PostOrderToLedger",
+            "isCreate": "false",
+            "sourceEntity": "SalesOrder",
+            "sourcePerspective": "Sales Orders",
+            "sourceKeyField": "Id",
+            "guardProperty": "Status",
+            "guardValue": "2",
+            "targetEntity": "JournalEntry",
+            "targetPerspective": "Journal",
+            "targetPk": "Id",
+            "itemsEntity": "JournalEntryLine",
+            "itemsPerspective": "Journal",
+            "itemsFk": "JournalEntry",
+            "backRefProperty": "SalesOrder",
+            "stornoProperty": "",
+            "stornoFilterProperty": "",
+            "hasRule": "false",
+            "ruleEntity": "",
+            "rulePerspective": "",
+            "ruleMatchProperty": "",
+            "ruleMatchValueJava": "",
+            "usedRuleColumns": [],
+            "conditionalRuleGuards": [],
+            "headerAssignments": [
+                {
+                    "targetProp": "Date",
+                    "expr": "source.Date"
+                },
+                {
+                    "targetProp": "Description",
+                    "expr": "\"Sales order \" + source.Number"
+                }
+            ],
+            "itemRows": [
+                {
+                    "guard": "",
+                    "assigns": [
+                        {
+                            "targetProp": "Debit",
+                            "expr": "source.Total"
+                        }
+                    ]
+                }
+            ]
         }
     ]
 }

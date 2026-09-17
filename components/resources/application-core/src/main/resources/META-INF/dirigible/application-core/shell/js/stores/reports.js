@@ -98,6 +98,10 @@ document.addEventListener('alpine:init', () => {
           if (def.description) it.description = def.description;
           if (def.dashboard === false) it.dashboard = false;
           if (def.tId) it.tId = def.tId;
+          // The report's chart type (line / pie / bar / ...), when it declares one. The dashboard
+          // reads it to pick the tile shape: a chart preview is a padded, borderless card like the
+          // reference's chart cards, a row preview the bordered full-bleed table card.
+          if (def.chart) it.chart = def.chart;
           if (def.descriptionTId) it.descriptionTId = def.descriptionTId;
           // A report-attached KPI widget: the dashboard shows a compact KPI tile (count / single
           // aggregate value / top-N list) instead of the report's iframe preview tile.
@@ -186,7 +190,8 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Load a KPI widget's data from the report's generated controller. Returns
-    //   { value }               for kind count/value (missing data coalesces to 0),
+    //   { value }               for kind count/value (missing data coalesces to 0); a count over an
+    //                           aggregating report reads the server-side SUM of its countColumn,
     //   { rows }                for kind list,
     //   { forbidden: true }     when the report is role-guarded and the user lacks the role
     //                           (the tile should be hidden, not shown as an error),
@@ -209,7 +214,17 @@ document.addEventListener('alpine:init', () => {
           const rows = await this._fetchJson(it.apiBase + '/search', { conditions, $limit: w.limit || 5 });
           return { rows: rows || [] };
         }
-        // kind: count (the default) — the number of records the report yields.
+        // kind: count (the default) — the number of records the report yields. An aggregating report
+        // yields one row per group, so its record count is its count(*) measure SUMMED over the rows;
+        // the count endpoint would report the number of groups (dirigible #7102). `countColumn` is
+        // present exactly for such a report, so its absence means one row is one record. The sum is
+        // the SERVER's (dirigible #7161): computing it here meant fetching every group row of the
+        // report - thousands, for one grouped by day or customer - per tile per dashboard load.
+        if (w.countColumn) {
+          const r = await this._fetchJson(it.apiBase + '/sum', { column: w.countColumn, conditions });
+          const total = r ? Number(r.sum) : NaN;
+          return { value: Number.isFinite(total) ? total : 0 };
+        }
         const r = conditions.length
           ? await this._fetchJson(it.apiBase + '/count', { conditions })
           : await this._fetchJson(it.apiBase + '/count');

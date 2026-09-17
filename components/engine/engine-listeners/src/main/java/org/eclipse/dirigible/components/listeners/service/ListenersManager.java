@@ -77,8 +77,11 @@ public class ListenersManager {
 
         }
         if (isMissingHandler(listenerDescriptor)) {
-            LOGGER.error("Listener {} cannot be started, because the handler does not exist!", listenerDescriptor);
-            return;
+            // Thrown, not logged and swallowed: a normal return had the synchronizer record the
+            // artefact as CREATED and running with nothing subscribed (#7248). The handler may
+            // simply be published on a later pass, and FAILED is what keeps the listener retried.
+            throw new IllegalStateException("Listener " + listenerDescriptor + " cannot be started, because the handler ["
+                    + listenerDescriptor.getHandlerPath() + "] does not exist");
         }
         ListenerManager listenerManager = messageListenerManagerFactory.create(listenerDescriptor);
         listenerManager.startListener();

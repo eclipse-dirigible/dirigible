@@ -51,6 +51,8 @@ class AppTestIntentGeneratorTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 200 }
+                  - { name: founded, type: date }
+                  - { name: renamed, type: date }
                   - { name: uuid, type: uuid }
                   - { name: slug, type: string, calculatedOnCreate: "1" }
                   - { name: total, type: decimal, aggregate: true }
@@ -60,6 +62,7 @@ class AppTestIntentGeneratorTest {
                   - { name: Twin, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country }, where: { name: Plovdiv } }
                 checks:
                   - { kind: exactlyOne, fields: [uuid, slug], message: "one of uuid/slug" }
+                  - { kind: compare, field: renamed, op: gt, than: founded, message: "renamed after founded" }
               - name: Account
                 group: master-data
                 hierarchy: Parent
@@ -194,6 +197,10 @@ class AppTestIntentGeneratorTest {
 
         Map<String, Object> cityEntity = entity(AppTestIntentGenerator.buildManifest("countries", "countries", model, edm()), "City");
         assertEquals(List.of(List.of("Uuid", "Slug")), cityEntity.get("exactlyOne"));
+        // A compare check rides into the manifest too: the sample values are per-type constants, so
+        // two dates come out equal and a strict comparison would have the sample record refused with
+        // 400 - the runner derives the left operand from the right by the operator's own step.
+        assertEquals(List.of(Map.of("field", "Renamed", "op", "gt", "than", "Founded")), cityEntity.get("compare"));
 
         // the cross-model relation resolves an absolute controller URL in the OWNER module (naming
         // convention here - no generation context; the real pass resolves against the owner's .model)

@@ -18,6 +18,9 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
+import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
+
 /**
  * Resolves a status referenced by its <b>seeded name</b> to the seed id, everywhere the intent
  * names a status, on the raw YAML tree - before the typed Gson mapping, so every downstream
@@ -49,10 +52,21 @@ final class StatusSymbolResolver {
     private static final Pattern COMPARISON =
             Pattern.compile("(\\b[A-Za-z_][A-Za-z0-9_]*\\b)\\s*(==|!=|<>|<=|>=|=|<|>)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b");
 
+    /**
+     * A {@code forbidWhen} one-hop comparison {@code <Relation>.<field> ==|!= <NAME>} - the whole term,
+     * so the name on the right resolves against the RELATION TARGET's nomenclature rather than the
+     * record's own.
+     */
+    private static final Pattern RELATION_COMPARISON = Pattern.compile("\\s*(\\w+)\\.(\\w+)\\s*(==|!=)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*");
+
     /** The operators for which a status NAME is meaningful - a name has no ordering. */
     private static final Set<String> EQUALITY = Set.of("==", "!=", "<>", "=");
 
     private static final Pattern INTEGER = Pattern.compile("-?\\d+");
+
+    /** The declarative glue lists carrying an {@code event.when} guard, to the subject naming one. */
+    private static final List<Map.Entry<String, String>> GLUE_LISTS = List.of(Map.entry("notifications", "notification"),
+            Map.entry("integrations", "integration"), Map.entry("outbound", "outbound"));
 
     /** Entity name to its raw node. */
     private final Map<String, Map<?, ?>> entities = new LinkedHashMap<>();
@@ -82,6 +96,8 @@ final class StatusSymbolResolver {
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
+        resolver.rewriteSchedules(root);
+        resolver.rewriteGlue(root);
         resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
         if (!resolver.issues.isEmpty()) {
@@ -169,6 +185,14 @@ final class StatusSymbolResolver {
                         "entity [" + entityName + "] immutableWhen");
                 put(entity, "immutableWhen", rewritten);
             }
+            // A period register's closedWhen keys on the REGISTER's own status - and the register is
+            // this entity, so the same target resolves it.
+            Map<?, ?> period = asMap(entity.get("period"));
+            if (period != null && period.get("closedWhen") != null) {
+                String rewritten = rewriteExpression(text(period, "closedWhen"), statusRelation, status,
+                        "entity [" + entityName + "] period closedWhen");
+                put(period, "closedWhen", rewritten);
+            }
             for (Object checkNode : asList(entity.get("checks"))) {
                 Map<?, ?> check = asMap(checkNode);
                 if (check == null) {
@@ -177,6 +201,17 @@ final class StatusSymbolResolver {
                 String subject = "entity [" + entityName + "] check [" + text(check, "kind") + "]";
                 putResolved(check, "status", status, subject + " status");
                 putResolved(check, "setStatus", status, subject + " setStatus");
+                // A requiredWhen condition may be about the status itself ("required once ISSUED"), so
+                // it resolves like every other guard - the terms about other properties pass through. A
+                // forbidWhen additionally reads a parent's status one hop away (`SalesInvoice.Status ==
+                // PAID`), which resolves against the RELATION TARGET's nomenclature, not the record's -
+                // so it is routed to its own resolver, which falls back to the record-local rewrite for
+                // its record-own terms.
+                if ("forbidwhen".equals(lower(text(check, "kind")))) {
+                    rewriteForbidWhen(entityName, check, statusRelation, status, subject + " when");
+                } else {
+                    rewriteWhen(check, statusRelation, status, subject + " when");
+                }
             }
         }
     }
@@ -213,21 +248,35 @@ final class StatusSymbolResolver {
             // the guard could never hold and the process silently never started (#6862).
             Map<?, ?> trigger = asMap(process.get("trigger"));
             if (trigger != null && trigger.get("when") != null) {
-                put(trigger, "when", rewriteExpression(text(trigger, "when"), statusRelationName(triggerEntity), statusOf(triggerEntity),
-                        subject + " trigger when"));
+                rewriteWhen(trigger, statusRelationName(triggerEntity), statusOf(triggerEntity), subject + " trigger when");
             }
-            // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
-            // status in the canonical case, but the same shape serves any nomenclature FK.
             for (Object stepNode : asList(process.get("steps"))) {
-                Map<?, ?> args = asMap(asMap(stepNode) == null ? null : asMap(stepNode).get("args"));
+                Map<?, ?> step = asMap(stepNode);
+                Map<?, ?> args = asMap(step == null ? null : step.get("args"));
+                if (args == null) {
+                    continue;
+                }
+                String stepSubject = subject + " step [" + text(step, "name") + "]";
+                // A `wait` step's guard qualifies the event that RESUMES the parked instance, and it is
+                // read against the event entity's own record - not necessarily the trigger entity's
+                // (`via:` is exactly the case where the two differ), so the nomenclature is the event
+                // entity's. Left unresolved, the name reached the generated listener as a string
+                // compared against the integer status FK: never true, and because a wait that matches
+                // nothing is a deliberate no-op, the instance simply stayed parked with nothing logged
+                // (#6907).
+                if ("wait".equals(lower(text(step, "kind"))) && args.get("when") != null) {
+                    String eventEntity = waitEventEntityOf(args);
+                    rewriteWhen(args, statusRelationName(eventEntity), statusOf(eventEntity), stepSubject + " when");
+                }
+                // `setRelationField: <Relation>` + `value:` writes an id of THAT relation's target - the
+                // status in the canonical case, but the same shape serves any nomenclature FK.
                 String relationName = text(args, "setRelationField");
                 if (relationName == null || args.get("value") == null) {
                     continue;
                 }
                 Map<?, ?> relation = toOneRelation(triggerEntity, relationName);
                 Target target = relation == null ? new Target(null, null) : new Target(text(relation, "to"), text(relation, "model"));
-                putResolved(args, "value", target,
-                        subject + " step [" + text(asMap(stepNode), "name") + "] setRelationField [" + relationName + "] value");
+                putResolved(args, "value", target, stepSubject + " setRelationField [" + relationName + "] value");
             }
         }
     }
@@ -247,16 +296,18 @@ final class StatusSymbolResolver {
             // A cross-model source's nomenclature is seeded in its own model; name it as such rather
             // than reporting the entity as unknown.
             Target status = text(event, "model") != null ? new Target(source, text(event, "model")) : statusOf(source);
-            put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+            if (event.get("when") instanceof String) { // a list `when` is refused by the parser; do not mangle it into a string here
+                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject));
+            }
         }
     }
 
     /**
      * Every status a create-from names, all three on the SOURCE's nomenclature: the {@code event} guard
-     * it qualifies on (issue #6711, exactly as a posting's does), the {@code sourceStatus} completion
-     * hook it flips to once the target exists, and the {@code sourceStatusOnRetire} the retirement of
-     * that target returns it to (issue #6868). The source is {@code from:}, owned by {@code fromUses:}
-     * when it is not local.
+     * it qualifies on (issue #6711, exactly as a posting's does), the {@code fromStatus} guard the
+     * click has to satisfy (issue #7068), the {@code sourceStatus} completion hook it flips to once the
+     * target exists, and the {@code sourceStatusOnRetire} the retirement of that target returns it to
+     * (issue #6868). The source is {@code from:}, owned by {@code fromUses:} when it is not local.
      */
     private void rewriteGenerates(Map<?, ?> root) {
         for (Object node : asList(root.get("generates"))) {
@@ -269,10 +320,155 @@ final class StatusSymbolResolver {
             Target status = text(generate, "fromUses") != null ? new Target(source, text(generate, "fromUses")) : statusOf(source);
             Map<?, ?> event = asMap(generate.get("event"));
             if (event != null && event.get("when") != null) {
-                put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(source), status, subject + " event when"));
+                rewriteWhen(event, statusRelationName(source), status, subject + " event when");
             }
+            putResolvedList(generate, "fromStatus", status, subject + " fromStatus");
             putResolved(generate, "sourceStatus", status, subject + " sourceStatus");
             putResolved(generate, "sourceStatusOnRetire", status, subject + " sourceStatusOnRetire");
+            rewriteGeneratesItemsWhere(generate, subject);
+        }
+    }
+
+    /**
+     * The source-row rule of a create-from's items block (issue #7091), whose status condition alone is
+     * symbolic - and on the ITEM row's own nomenclature, not the header's: the rule selects the rows of
+     * the source document, so resolving a name against the document's lifecycle would take an id out of
+     * the wrong nomenclature and quietly filter on it.
+     *
+     * <p>
+     * A cross-model source ({@code fromUses:}) owns its items too, so their nomenclature is seeded in
+     * that model and unresolvable here - and a LOCAL entity of the same name must not lend its own,
+     * whose ids are positional in the wrong nomenclature. The conditions therefore keep the numeric-id
+     * form every cross-model status site keeps. WHICH of them names the status is known only to the
+     * owner's {@code .model}, so a name there is refused where that model is read: at generation time,
+     * by {@code GlueIntentGenerator} (dirigible #7225) - not left in place to render as a string
+     * compared against the integer status FK.
+     */
+    private void rewriteGeneratesItemsWhere(Map<?, ?> generate, String subject) {
+        if (text(generate, "fromUses") != null) {
+            return;
+        }
+        Map<?, ?> items = asMap(generate.get("items"));
+        String itemEntity = items == null ? null : text(items, "from");
+        rewriteConditions(items == null ? null : items.get("where"), itemEntity, subject + " items where");
+    }
+
+    /**
+     * The row query of a cron schedule (issue #7251) - the same {@code { field, op, value }} triples an
+     * items rule carries, and the site a status guard is written at most often: a dunning run, a
+     * staleness sweep, a month-end generation all start by naming the status the row must stand in.
+     * Left unresolved, the name reached the generated job as a string compared against the integer
+     * status FK ({@code .eq("Status", "OVERDUE")}), so the query matched nothing forever and the
+     * schedule ticked on doing nothing - the silent failure naming a status exists to remove (#6645).
+     *
+     * <p>
+     * Same-model source only. A cross-model source ({@code model: <uses alias>}) is not in this file's
+     * {@code entities}, so neither its nomenclature nor even WHICH of the conditions names its status
+     * is knowable here - and it therefore keeps the numeric-id form, exactly as every other cross-model
+     * status site does. A name written there is not left in place to render as a string compared
+     * against the integer status FK: it is refused where the owner's {@code .model} is read, at
+     * generation time by {@code GlueIntentGenerator} (issue #7288), the same way the sibling
+     * cross-model {@code items: where:} rule is (#7225).
+     */
+    private void rewriteSchedules(Map<?, ?> root) {
+        for (Object node : asList(root.get("schedules"))) {
+            Map<?, ?> schedule = asMap(node);
+            if (schedule == null || text(schedule, "model") != null) {
+                continue;
+            }
+            rewriteConditions(schedule.get("where"), text(schedule, "entity"), "schedule [" + text(schedule, "name") + "] where");
+        }
+    }
+
+    /**
+     * The {@code event.when} guard of the three declarative glue lists - {@code notifications},
+     * {@code integrations} and {@code outbound} (issue #7289) - on the nomenclature of the entity the
+     * bound event is about.
+     *
+     * <p>
+     * These bind the same event axis a posting and an event-driven create-from bind, whose
+     * {@code event.when} has been symbolic since #6711, and the natural authoring of the construct is
+     * the status one: "mail the customer when the invoice reaches ISSUED", "forward the record once it
+     * is APPROVED". Left unresolved the name reached the generated listener as a string compared
+     * against the integer status FK ({@code Objects.equals(entity.Status, "ISSUED")}) - never true, so
+     * the mail never went out and the departure never left, with parse, generation, compile and publish
+     * all green.
+     *
+     * <p>
+     * The event entity is always LOCAL here (the axis takes no {@code model:}, and the parser refuses
+     * an unknown entity), so the nomenclature is this file's: a guard about anything else passes
+     * through untouched, exactly as at every other guard site.
+     */
+    private void rewriteGlue(Map<?, ?> root) {
+        for (Map.Entry<String, String> list : GLUE_LISTS) {
+            for (Object node : asList(root.get(list.getKey()))) {
+                Map<?, ?> entry = asMap(node);
+                Map<?, ?> event = asMap(entry == null ? null : entry.get("event"));
+                if (event == null || event.get("when") == null) {
+                    continue;
+                }
+                String entity = glueEventEntityOf(root, event);
+                rewriteWhen(event, statusRelationName(entity), statusOf(entity),
+                        list.getValue() + " [" + text(entry, "name") + "] event when");
+            }
+        }
+    }
+
+    /**
+     * The entity the bound event is about: the one a lifecycle binding names, or - for a process step
+     * binding, which names a step rather than a record - the trigger entity of that process, the record
+     * the step event is delivered about.
+     *
+     * <p>
+     * This runs on the RAW tree, before the typed mapping, so the kinds are spelled out rather than
+     * read off {@code EventBinding}; keep them in step with it. A kind missing here is silent in the
+     * usual way: the event entity does not resolve, so a status NAME in that guard cannot be looked up
+     * and the model is refused with a message about the nomenclature rather than about the binding.
+     */
+    private static String glueEventEntityOf(Map<?, ?> root, Map<?, ?> event) {
+        for (String kind : List.of("onCreate", "onUpdate", "onDelete", "onTransition", "onPhase", "onNotifyFailed")) {
+            String entity = text(event, kind);
+            if (entity != null) {
+                return entity;
+            }
+        }
+        for (String kind : List.of(StepEventSupport.ON_STEP_REACHED, StepEventSupport.ON_STEP_COMPLETED)) {
+            Map<?, ?> binding = asMap(event.get(kind));
+            String processName = binding == null ? null : text(binding, "process");
+            if (processName == null) {
+                continue;
+            }
+            for (Object node : asList(root.get("processes"))) {
+                Map<?, ?> process = asMap(node);
+                if (process != null && processName.equals(text(process, "name"))) {
+                    return triggerEntityOf(process);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Resolve the one condition of a {@code { field, op, value }} where list whose {@code field} names
+     * the queried entity's {@code function: EntityStatus} relation, on that entity's own nomenclature.
+     *
+     * <p>
+     * Only that condition is a candidate at all, exactly as a register lookup's static filter is: every
+     * other condition compares an ordinary column, whose string value (an {@code op: like} on a name)
+     * is just a value and would be reported as an unknown status.
+     */
+    private void rewriteConditions(Object where, String entityName, String subject) {
+        String statusRelation = statusRelationName(entityName);
+        if (statusRelation == null) {
+            return;
+        }
+        Target status = statusOf(entityName);
+        for (Object node : asList(where)) {
+            Map<?, ?> condition = asMap(node);
+            String field = condition == null ? null : text(condition, "field");
+            if (field != null && lower(field).equals(lower(statusRelation))) {
+                putResolved(condition, "value", status, subject + " [" + field + "]");
+            }
         }
     }
 
@@ -290,7 +486,7 @@ final class StatusSymbolResolver {
             String record = event.get("onCreate") != null ? text(event, "onCreate") : text(event, "onUpdate");
             Target status = statusOf(record);
             String subject = "resolve [" + text(resolve, "name") + "]";
-            if (event.get("when") != null) {
+            if (event.get("when") instanceof String) { // a list `when` is refused by the parser; do not mangle it into a string here
                 put(event, "when", rewriteExpression(text(event, "when"), statusRelationName(record), status, subject + " event when"));
             }
             for (String outcome : List.of("found", "notFound", "ambiguous")) {
@@ -354,8 +550,28 @@ final class StatusSymbolResolver {
         if (trigger == null) {
             return null;
         }
-        for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition")) {
+        // Every kind EventBinding knows, because this runs on the RAW tree before the typed mapping and
+        // therefore cannot read EventBinding itself: a kind missing here stops the trigger entity from
+        // resolving, so a status NAME anywhere in that process is refused with a message about the
+        // nomenclature rather than about the trigger.
+        for (String event : List.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed")) {
             String entity = text(trigger, event);
+            if (entity != null) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The entity whose lifecycle event resumes a {@code wait} step - the target of the one
+     * {@code onCreate}/{@code onUpdate}/{@code onTransition} arg it declares. Read through the
+     * generator's own list, so the vocabulary a wait accepts and the guard resolved against it cannot
+     * drift apart (the parser validates the same list).
+     */
+    private static String waitEventEntityOf(Map<?, ?> args) {
+        for (String event : ProcessWaitSupport.EVENT_KINDS) {
+            String entity = text(args, event);
             if (entity != null) {
                 return entity;
             }
@@ -443,6 +659,82 @@ final class StatusSymbolResolver {
             return null;
         }
         return resolveSymbol(token, target, subject);
+    }
+
+    /**
+     * Rewrite a {@code when} guard in place - a scalar comparison string, or a LIST of them (implicit
+     * AND, dirigible #6957): each element is rewritten independently, so a status name resolves to its
+     * seed id while the elements guarding other properties (a string trace field such as a lookup's
+     * {@code outcome:}) pass through untouched.
+     */
+    @SuppressWarnings("unchecked")
+    private void rewriteWhen(Map<?, ?> owner, String statusRelation, Target target, String subject) {
+        Object value = owner.get("when");
+        if (value instanceof List<?> list) {
+            List<Object> mutable = (List<Object>) list;
+            for (int i = 0; i < mutable.size(); i++) {
+                if (mutable.get(i) instanceof String term) {
+                    mutable.set(i, rewriteExpression(term, statusRelation, target, subject));
+                }
+            }
+        } else if (value instanceof String expression) {
+            put(owner, "when", rewriteExpression(expression, statusRelation, target, subject));
+        }
+    }
+
+    /**
+     * Rewrite a {@code forbidWhen} guard in place - each term either a one-hop
+     * {@code <Relation>.<field> ==|!= <NAME>} (dirigible #7275), whose name resolves against the
+     * RELATION TARGET's nomenclature, or a record-local comparison that defers to the ordinary
+     * record-scoped rewrite. A cross-model relation's nomenclature is seeded in its owner model, which
+     * this parser cannot read, so a name there is refused with the numeric-id fallback - as every
+     * cross-model status reference is.
+     */
+    @SuppressWarnings("unchecked")
+    private void rewriteForbidWhen(String entityName, Map<?, ?> check, String ownStatusRelation, Target ownStatus, String subject) {
+        Object value = check.get("when");
+        if (value instanceof List<?> list) {
+            List<Object> mutable = (List<Object>) list;
+            for (int i = 0; i < mutable.size(); i++) {
+                if (mutable.get(i) instanceof String term) {
+                    mutable.set(i, rewriteForbidWhenTerm(entityName, term, ownStatusRelation, ownStatus, subject));
+                }
+            }
+        } else if (value instanceof String term) {
+            put(check, "when", rewriteForbidWhenTerm(entityName, term, ownStatusRelation, ownStatus, subject));
+        }
+    }
+
+    private String rewriteForbidWhenTerm(String entityName, String term, String ownStatusRelation, Target ownStatus, String subject) {
+        Matcher matcher = RELATION_COMPARISON.matcher(term);
+        if (!matcher.matches()) {
+            // A record-local term (the child's own status/flag): resolve against the entity's own
+            // nomenclature exactly as every other record-scoped guard does.
+            return rewriteExpression(term, ownStatusRelation, ownStatus, subject);
+        }
+        String relationName = matcher.group(1);
+        String field = matcher.group(2);
+        String name = matcher.group(4);
+        if (INTEGER.matcher(name)
+                   .matches()) {
+            return term; // already a seed id
+        }
+        Map<?, ?> relation = toOneRelation(entityName, relationName);
+        if (relation == null) {
+            return term; // the parser reports the unknown relation
+        }
+        String targetEntity = text(relation, "to");
+        String targetStatusRelation = statusRelationName(targetEntity);
+        if (targetStatusRelation == null || !targetStatusRelation.equalsIgnoreCase(field)) {
+            return term; // not the target's status field - an ordinary column comparison, left alone
+        }
+        if (text(relation, "model") != null) {
+            issues.add(subject + " names the status [" + name + "] of [" + targetEntity + "], which belongs to model ["
+                    + text(relation, "model") + "] and is seeded there - a cross-model status must be referenced by its numeric seed id");
+            return term;
+        }
+        Integer id = resolveSymbol(name, statusOf(targetEntity), subject);
+        return id == null ? term : relationName + "." + field + " " + matcher.group(3) + " " + id;
     }
 
     /**

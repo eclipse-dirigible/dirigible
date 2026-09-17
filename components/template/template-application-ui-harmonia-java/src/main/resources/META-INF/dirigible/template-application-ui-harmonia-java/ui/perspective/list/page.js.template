@@ -41,6 +41,11 @@ document.addEventListener('alpine:init', () => {
 #end
       await this.load();
       this.loadLookups();
+      // A custom action changes rows this view lists (a transition flips a status, a create-from adds
+      // a record) through its own endpoint, not this page's editing path. Re-read on every action so
+      // the table, the selected record's pane and the status-filtered action buttons agree with the
+      // server (issue #7073).
+      this.onActionDone(async () => { await this.load(); this.loadLookups(); });
     },
 
     async load() {
@@ -185,12 +190,26 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
+    // The page numbers the pager shows: first, last and the current page's neighbours, '...' over
+    // each gap - at most 7 entries, so a long list never renders a link per page.
+    pageWindow() {
+      const total = this.totalPages, current = this.currentPage;
+      if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+      const start = Math.max(2, current - 1), end = Math.min(total - 1, current + 1);
+      const pages = [1];
+      if (start > 2) pages.push('...');
+      for (let p = start; p <= end; p++) pages.push(p);
+      if (end < total - 1) pages.push('...');
+      pages.push(total);
+      return pages;
+    },
+
     // ----- Export / print: the FULL filtered+sorted set (not the current page), cells resolved
     // exactly like the table (FK labels, formatted dates) via the shared basePage helpers.
     exportColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

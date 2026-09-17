@@ -68,4 +68,35 @@ class GlueAbortsTest {
         assertEquals(0, GlueIntentGenerator.buildAbortsForTest(model)
                                            .size());
     }
+
+    /**
+     * Deleting the row a flow runs for must retire the flow (dirigible #7074): every entity-triggered
+     * process gets a {@code -deleted} listener, with or without an {@code abortOn}, and whatever its
+     * {@code whenDeleted} says - {@code refuse} guards only the REST delete, a repository-level delete
+     * still reaches the row.
+     */
+    @Test
+    void everyEntityTriggeredProcessGetsADeleteAbortListener() {
+        List<Map<String, Object>> aborts = GlueIntentGenerator.buildDeleteAbortsForTest(IntentParser.parse(YAML));
+        assertEquals(1, aborts.size());
+        assertEquals("OrderApproval", aborts.get(0)
+                                            .get("process"));
+        assertEquals("SalesOrder", aborts.get(0)
+                                         .get("entity"));
+
+        assertEquals(1, GlueIntentGenerator.buildDeleteAbortsForTest(IntentParser.parse(YAML.replace("abortOn: { status: [3, 4] }", "")))
+                                           .size());
+        assertEquals(1,
+                GlueIntentGenerator.buildDeleteAbortsForTest(
+                        IntentParser.parse(YAML.replace("abortOn: { status: [3, 4] }", "whenDeleted: refuse")))
+                                   .size());
+    }
+
+    @Test
+    void aProcessWithoutAnEntityTriggerGetsNoDeleteAbort() {
+        String yaml = YAML.replace("    trigger: { onCreate: SalesOrder }\n", "")
+                          .replace("abortOn: { status: [3, 4] }", "");
+        assertEquals(0, GlueIntentGenerator.buildDeleteAbortsForTest(IntentParser.parse(yaml))
+                                           .size());
+    }
 }

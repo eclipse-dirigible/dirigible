@@ -32,7 +32,10 @@ import java.util.Set;
  * are unused (the call site IS the event) and {@link #attach} may name the document to send along.
  * {@code attach: print} renders the record's {@code .print} template to PDF server-side and
  * attaches it, which is how a business document (an invoice to its customer, a payslip to its
- * employee) is mailed declaratively.
+ * employee) is mailed declaratively. Its report-side sibling {@code attach: { report: <name>, bind:
+ * { <parameter>: <field> } }} renders a declared REPORT instead, with the recipient row binding the
+ * report's parameters - the customer statement, where the mailed artifact is a period's rows rather
+ * than one record's own document.
  */
 public class NotificationIntent {
 
@@ -43,10 +46,19 @@ public class NotificationIntent {
     private String subject;
     private String body;
     /**
-     * Optional document to attach: {@code print} renders the record's {@code .print} template to PDF
-     * (through the entity's generated print feeder) and attaches it. Blank = a plain-text message.
+     * Optional document to attach, in one of two authored shapes - hence {@link Object} rather than a
+     * String, and hence {@link #getAttach()} reporting only the KIND:
+     *
+     * <ul>
+     * <li>a scalar: {@code print} renders the record's own {@code .print} template to PDF (through the
+     * entity's generated print feeder), {@code recordPrint} a fan-out anchor's;</li>
+     * <li>a map: {@code { report: <name>, bind: { <parameter>: <field> } }} renders a declared report,
+     * each bound parameter resolved against the record the message is about.</li>
+     * </ul>
+     *
+     * Blank = a plain-text message.
      */
-    private String attach;
+    private Object attach;
     /**
      * The fixed print template language for {@link #attach} (a {@code languages:} code). Mutually
      * exclusive with {@link #languageFrom}; absent both, the render falls back to the first entry of
@@ -76,6 +88,21 @@ public class NotificationIntent {
      * the default.
      */
     private String fileName;
+    /**
+     * Optional <b>delivery outcome</b>: a string field of the record the message is about (the ROW
+     * inside a {@link #forEach} fan-out) that the send attempt stamps with {@code sent} or
+     * {@code failed: <reason>} (dirigible #7023).
+     *
+     * <p>
+     * A notify block is fail-soft - the transition, the schedule tick or the process step must not
+     * break because a mailbox is unreachable - and until this key the only trace of a failed delivery
+     * was a server log line: the document sat in SENT, nobody was told, and nothing downstream could
+     * react. Naming a field here makes the attempt part of the record: a list or a report can show
+     * "sent / failed (reason)" per document, the transition's own response reports it to the person who
+     * pressed the button, and a FAILED stamp publishes {@code -notifyFailed} so glue bound to
+     * {@code event: { onNotifyFailed: <Entity> }} can route the record or open a task.
+     */
+    private String outcome;
 
     /**
      * The keys {@link #fromMap} reads - the whole vocabulary of an embedded notify block. Published so
@@ -84,7 +111,17 @@ public class NotificationIntent {
      * not to this set would go straight back to being unauthorable.
      */
     public static final Set<String> BLOCK_KEYS =
-            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel");
+            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel", "outcome");
+
+    /**
+     * The kind {@link #getAttach()} reports for the map shape {@code attach: { report, bind }}. It is
+     * not an authorable scalar - {@code attach: report} names no report and binds nothing - so it can
+     * never collide with one.
+     */
+    public static final String ATTACH_REPORT = "report";
+
+    /** The keys the report shape reads, published so the parser can reject anything else. */
+    public static final Set<String> ATTACH_REPORT_KEYS = Set.of("report", "bind");
 
     /**
      * Read an <b>embedded</b> notify block off a free-form map - a process step's {@code args.notify},
@@ -102,11 +139,12 @@ public class NotificationIntent {
         notify.setTo(string(map.get("to")));
         notify.setSubject(string(map.get("subject")));
         notify.setBody(string(map.get("body")));
-        notify.setAttach(string(map.get("attach")));
+        notify.setAttach(map.get("attach"));
         notify.setLanguage(string(map.get("language")));
         notify.setLanguageFrom(string(map.get("languageFrom")));
         notify.setFileName(string(map.get("fileName")));
         notify.setForEach(string(map.get("forEach")));
+        notify.setOutcome(string(map.get("outcome")));
         String channel = string(map.get("channel"));
         if (channel != null) {
             notify.setChannel(channel);
@@ -116,6 +154,14 @@ public class NotificationIntent {
 
     private static String string(Object value) {
         return value == null ? null : value.toString();
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public void setOutcome(String outcome) {
+        this.outcome = outcome;
     }
 
     public String getName() {
@@ -166,12 +212,54 @@ public class NotificationIntent {
         this.body = body;
     }
 
+    /**
+     * The attachment KIND, which is what every reader of an attachment branches on: the authored scalar
+     * ({@code print} / {@code recordPrint}) as written, {@link #ATTACH_REPORT} for the map shape (even
+     * a malformed one - {@link #getReportAttachment()} and the parser report what is wrong with it),
+     * and {@code null} for a plain-text message.
+     *
+     * @return the attachment kind, or {@code null} when nothing is attached
+     */
     public String getAttach() {
-        return attach;
+        if (attach instanceof Map<?, ?>) {
+            return ATTACH_REPORT;
+        }
+        return attach == null ? null : attach.toString();
     }
 
-    public void setAttach(String attach) {
+    public void setAttach(Object attach) {
         this.attach = attach;
+    }
+
+    /**
+     * The report attachment the map shape declares.
+     *
+     * @return the report name and its bindings, or {@code null} when {@code attach} is not the map
+     *         shape
+     */
+    public ReportAttachment getReportAttachment() {
+        if (!(attach instanceof Map<?, ?> map)) {
+            return null;
+        }
+        String report = string(map.get("report"));
+        Map<String, String> bind = new LinkedHashMap<>();
+        if (map.get("bind") instanceof Map<?, ?> bound) {
+            for (Map.Entry<?, ?> entry : bound.entrySet()) {
+                bind.put(String.valueOf(entry.getKey()), string(entry.getValue()));
+            }
+        }
+        return new ReportAttachment(report == null ? null : report.trim(), bind);
+    }
+
+    /**
+     * A report attachment: the declared report to render, and how the record the message is about binds
+     * its parameters.
+     *
+     * @param report the declared report's name, {@code null} when the map shape named none
+     * @param bind parameter name -> a field or one-hop {@code relation.field} path of the record, in
+     *        authored order
+     */
+    public record ReportAttachment(String report, Map<String, String> bind) {
     }
 
     public String getLanguage() {

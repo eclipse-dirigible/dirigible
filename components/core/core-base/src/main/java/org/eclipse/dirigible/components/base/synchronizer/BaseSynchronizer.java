@@ -54,6 +54,21 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
             span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Exception occurred during synchronization");
 
             throw e;
+        } catch (StackOverflowError e) {
+            // Analysing ONE definition must never end the synchronization pass. A stack overflow in a
+            // parser is a property of that definition - a pathological source, a deeply nested document
+            // - not of the JVM: the stack has already unwound here and every other definition parses
+            // fine. Left to propagate, it escapes the whole run, and since the same file is parsed
+            // again on the next pass the job never completes again: no schema, no seeds, no compile, no
+            // routing, while HTTP keeps answering 200. Reported as a broken definition instead: the
+            // pass completes, the failure is logged and listed with the run's errors, and the
+            // definition is re-parsed on every later pass so a corrected source heals itself.
+            span.recordException(e);
+            span.setStatus(io.opentelemetry.api.trace.StatusCode.ERROR, "Stack overflow occurred during synchronization");
+
+            logger.error("Stack overflow while parsing [{}] by [{}]", location, this, e);
+            throw new ParseException("Stack overflow while parsing [" + location + "] - the definition is too large or too deeply "
+                    + "nested for the parser", 0);
         } finally {
             span.end();
         }

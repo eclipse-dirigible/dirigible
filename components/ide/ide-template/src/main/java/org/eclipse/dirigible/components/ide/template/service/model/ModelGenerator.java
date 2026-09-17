@@ -133,6 +133,8 @@ class ModelGenerator {
         annotateDocumentModels(entities);
         annotateGuardedRollups(entities);
         applyDefaultEntityLabels(entities);
+        // After the labels: a refusal message names the child by the label the UI shows.
+        CompositionChildren.annotate(entities);
         attachReportFilters(entities);
         Map<String, List<Map<String, Object>>> collections = partition(entities);
 
@@ -622,15 +624,22 @@ class ModelGenerator {
 
     /**
      * Sanitizes the parent perspective of a capacity guard into the package segment the repository
-     * imports the parent from.
+     * imports the parent from - and, for a guard whose parent is owned by ANOTHER model, that model's
+     * alias into the gen folder its generated code lives under.
      *
      * @param entities the entities
      */
     private static void annotateGuardedRollups(List<Map<String, Object>> entities) {
         for (Map<String, Object> entity : entities) {
             Map<String, Object> rollupGuard = asMap(entity.get("rollupGuard"));
-            if (rollupGuard != null && truthy(rollupGuard, "parentPerspective")) {
+            if (rollupGuard == null) {
+                continue;
+            }
+            if (truthy(rollupGuard, "parentPerspective")) {
                 rollupGuard.put("parentPerspective", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentPerspective")));
+            }
+            if (truthy(rollupGuard, "parentGenFolder")) {
+                rollupGuard.put("parentGenFolder", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentGenFolder")));
             }
         }
     }

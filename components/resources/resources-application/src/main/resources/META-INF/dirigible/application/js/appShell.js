@@ -22,8 +22,16 @@ document.addEventListener('alpine:init', () => {
   });
 
   Alpine.data('app', () => ({
-    hiddenPanels: { left: false },
-    isOpen: false,
+    // Narrow viewport (below the 1024px breakpoint). The sidebar then lives in the x-h-sheet drawer
+    // and the content frame drops its gutter and card chrome to use the full width.
+    isSmallScreen: false,
+
+    // The narrow-screen sidebar drawer, two-way bound to the x-h-sheet-overlay.
+    showSidebarSheet: false,
+
+    // A route template is being fetched - drives the toolbar's indefinite progress bar.
+    routeLoading: false,
+
     currentPath: '/dashboard',
     loading: true,
     groups: [],
@@ -107,7 +115,6 @@ document.addEventListener('alpine:init', () => {
         this.tenantConfigError = 'load';
       } finally {
         this.tenantConfigLoading = false;
-        this.refreshIcons();
       }
     },
 
@@ -231,7 +238,6 @@ document.addEventListener('alpine:init', () => {
         this.numberingError = 'load';
       } finally {
         this.numberingLoading = false;
-        this.refreshIcons();
       }
     },
 
@@ -278,7 +284,6 @@ document.addEventListener('alpine:init', () => {
         this.numberingError = 'save';
       } finally {
         row.saving = false;
-        this.refreshIcons();
       }
     },
 
@@ -378,6 +383,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+      // This component renders the toast overlay, so it lends its $notifications magic to the
+      // shared store (a store has no component scope of its own to reach the magic from).
+      Alpine.store('notifications').attachToaster(this.$notifications);
       this.loadActAs(); // fire-and-forget: the menu entry appears when the state arrives
       // The arming expires server-side; re-read it when the tab comes back so the banner is not
       // still claiming an identity the platform has already dropped.
@@ -535,23 +543,21 @@ document.addEventListener('alpine:init', () => {
             }
           }
         }
-        this.refreshIcons();
       };
       window.addEventListener('popstate', applyRoute);
       document.addEventListener('pinecone:end', applyRoute);
+      document.addEventListener('pinecone:start', () => { this.routeLoading = true; });
+      document.addEventListener('pinecone:fetch-error', () => { this.routeLoading = false; });
+      document.addEventListener('pinecone:end', () => { this.routeLoading = false; });
       // Resolve the initial route now that the perspectives are loaded (handles deep links / reloads).
       applyRoute();
 
       this._bp = Harmonia.getBreakpointListener((isNarrow) => {
-        this.hiddenPanels.left = isNarrow;
-        if (isNarrow) {
-          this.$refs.overlay.appendChild(this.$refs.sidebar);
-        } else {
-          this.$refs.sidebarPanel.appendChild(this.$refs.sidebar);
-        }
+        this.isSmallScreen = isNarrow;
+        // The sidebar is ONE element, moved between its wide-screen slot and the drawer.
+        const home = isNarrow ? this.$refs.sidebarSheet : this.$refs.sidebarSlot;
+        home.appendChild(this.$refs.sidebar);
       }, 1024);
-
-      this.$nextTick(() => this.refreshIcons());
     },
 
     destroy() { if (this._bp) this._bp.remove(); },
@@ -591,7 +597,6 @@ document.addEventListener('alpine:init', () => {
         this.hostedUrl = this.appUrl(item, '');
         this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
-        this.refreshIcons();
       }
       this.closeSideNav();
     },
@@ -645,7 +650,6 @@ document.addEventListener('alpine:init', () => {
       this.hostedUrl = '';
       this.currentPath = '/settings';
       window.PineconeRouter.navigate('/settings');
-      this.refreshIcons();
       this.closeSideNav();
     },
 
@@ -663,7 +667,6 @@ document.addEventListener('alpine:init', () => {
         }
         if (item.id === 'tenant-configuration') this.loadTenantConfig();
         if (item.id === 'document-numbering') this.loadNumbering();
-        this.refreshIcons();
       }
     },
 
@@ -732,7 +735,6 @@ document.addEventListener('alpine:init', () => {
       if (this.hostedId && !this.visibleGroups().some(g => (g.items || []).some(i => i.id === this.hostedId))) {
         this.navigate('/dashboard');
       }
-      this.refreshIcons();
     },
 
     projectionLabel() {
@@ -808,8 +810,7 @@ document.addEventListener('alpine:init', () => {
     isSvgIcon(icon) { return !!icon && /\.svg(\?|#|$)/i.test(icon); },
     isImageIcon(icon) { return !!icon && !this.isSvgIcon(icon) && (icon.indexOf('/') !== -1 || icon.indexOf('.') !== -1 || icon.indexOf('http') === 0); },
 
-    openSideNav() { this.isOpen = true; },
-    closeSideNav() { if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false; },
-    refreshIcons() {}, // no-op: Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle)
+    openSideNav() { this.showSidebarSheet = true; },
+    closeSideNav() { this.showSidebarSheet = false; },
   }));
 }, { once: true });

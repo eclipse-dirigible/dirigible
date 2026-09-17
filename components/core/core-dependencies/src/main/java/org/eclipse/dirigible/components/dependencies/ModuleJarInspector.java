@@ -30,17 +30,32 @@ final class ModuleJarInspector {
     /**
      * The inspection result.
      *
-     * @param projects the projects carried under META-INF/dirigible
-     * @param nativeLibraries the native library entries (.so / .dylib / .dll), empty for a loadable
-     *        module jar
+     * @param projects the projects carried under META-INF/dirigible - empty when the jar carries the
+     *        {@code .skip} marker, because then nothing of it is laid into the registry
+     * @param registryEntries the registry-relative paths the jar lays down, in
+     *        {@code /<project>/<path>} form - the exact set {@link #projects()} is derived from, and
+     *        the granularity at which the payload is removed again
+     * @param nativeLibraries the native library entries (.so / .so.N / .dylib / .jnilib / .dll), empty
+     *        for a loadable module jar
      * @param representativeClassResource a class entry usable to probe whether the parent classpath
      *        already carries this artifact, null when the jar has no classes
      */
-    record Inspection(Set<String> projects, List<String> nativeLibraries, String representativeClassResource) {
+    record Inspection(Set<String> projects, Set<String> registryEntries, List<String> nativeLibraries, String representativeClassResource) {
     }
 
     /** The registry payload root inside a jar. */
     private static final String DIRIGIBLE_ROOT = "META-INF/dirigible/";
+
+    /** The marker that opts a jar out of the registry expansion entirely. */
+    private static final String SKIP_MARKER = DIRIGIBLE_ROOT + ".skip";
+
+    /**
+     * A native library entry: the platform suffixes plus the versioned ELF form ({@code libfoo.so.1}).
+     * A jar carrying one cannot live on the swappable module tier - the JVM binds a native library to
+     * exactly one classloader.
+     */
+    private static final java.util.regex.Pattern NATIVE_LIBRARY = java.util.regex.Pattern.compile(
+            ".*(\\.so|\\.so(\\.\\d+)+|\\.dylib|\\.jnilib|\\.dll)$", java.util.regex.Pattern.CASE_INSENSITIVE);
 
     /**
      * A registry project name must be a plain path segment - no dots-only names, no separators - so it
@@ -64,9 +79,14 @@ final class ModuleJarInspector {
      */
     static Inspection inspect(Path jarPath) throws IOException {
         Set<String> projects = new LinkedHashSet<>();
+        Set<String> registryEntries = new LinkedHashSet<>();
         List<String> nativeLibraries = new ArrayList<>();
         String representativeClassResource = null;
         try (JarFile jar = new JarFile(jarPath.toFile())) {
+            // the .skip marker opts the jar out of the registry expansion (ClasspathExpander honors it
+            // too) - such a jar carries NO projects, so its removal must not delete a registry
+            // collection it never created
+            boolean skipped = jar.getJarEntry(SKIP_MARKER) != null;
             Enumeration<JarEntry> entries = jar.entries();
             while (entries.hasMoreElements()) {
                 JarEntry entry = entries.nextElement();
@@ -75,6 +95,9 @@ final class ModuleJarInspector {
                 }
                 String name = entry.getName();
                 if (name.startsWith(DIRIGIBLE_ROOT)) {
+                    if (skipped) {
+                        continue;
+                    }
                     String rest = name.substring(DIRIGIBLE_ROOT.length());
                     int slash = rest.indexOf('/');
                     if (slash > 0) {
@@ -91,8 +114,10 @@ final class ModuleJarInspector {
                                     + project + "] under META-INF/dirigible/ - refusing the jar");
                         }
                         projects.add(project);
+                        registryEntries.add("/" + rest);
                     }
-                } else if (name.endsWith(".so") || name.endsWith(".dylib") || name.endsWith(".dll")) {
+                } else if (NATIVE_LIBRARY.matcher(name)
+                                         .matches()) {
                     nativeLibraries.add(name);
                 } else if (representativeClassResource == null && name.endsWith(".class") && !name.startsWith("META-INF/")
                         && !"module-info.class".equals(name)) {
@@ -100,7 +125,7 @@ final class ModuleJarInspector {
                 }
             }
         }
-        return new Inspection(projects, nativeLibraries, representativeClassResource);
+        return new Inspection(projects, registryEntries, nativeLibraries, representativeClassResource);
     }
 
 }

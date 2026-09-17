@@ -52,6 +52,7 @@ Rather than force a rewrite, `form.js` defines **compatibility shims** inside
 | `$http.{get,post,put,delete}` | `ctx.http.*`, returning an AngularJS-style `{ data }` promise (rejects with `{ data: { message }, status }`) |
 | `NotificationHub().show({title,description})` | `ctx.notify(...)` |
 | `DialogHub().closeWindow()` | `ctx.close()` |
+| `DialogHub().cancelWindow()` | `ctx.cancel()` - closes reporting `status: 'cancelled'`, so the host knows the action was abandoned and announces nothing (issue #7149) |
 
 So an intent-generated task form (`$scope.onApproveClicked = …; $http.post('/services/bpm/…')`)
 runs unchanged. New forms can still be authored directly against the neutral `ctx`.

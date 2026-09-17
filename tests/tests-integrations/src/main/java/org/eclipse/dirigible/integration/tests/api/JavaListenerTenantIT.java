@@ -26,9 +26,6 @@ import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
-import org.quartz.JobKey;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
@@ -79,12 +76,9 @@ class JavaListenerTenantIT extends IntegrationTest {
     @Autowired
     private TenantContext tenantContext;
 
-    @Autowired
-    private Scheduler scheduler;
-
     @Test
     @Order(1)
-    void aTenantProvisionedAfterTheClassWasLoadedGetsSubscribedToo() throws SchedulerException {
+    void aTenantProvisionedAfterTheClassWasLoadedGetsSubscribedToo() {
         // The class is loaded while only the default tenant exists...
         publishEcho("OnProvision", "on-provision");
 
@@ -98,7 +92,7 @@ class JavaListenerTenantIT extends IntegrationTest {
 
     @Test
     @Order(2)
-    void aMessagePublishedInANonDefaultTenantReachesItsClientJavaListener() throws SchedulerException {
+    void aMessagePublishedInANonDefaultTenantReachesItsClientJavaListener() {
         // Reverse order: the tenant is already there when the class is loaded, so this is the
         // load-time fan-out's job.
         provisionTenant();
@@ -108,22 +102,13 @@ class JavaListenerTenantIT extends IntegrationTest {
         assertRoundTrip("on-load");
     }
 
-    /**
-     * Provision the shared tenant, once per class.
-     *
-     * <p>
-     * The provisioning job is triggered explicitly rather than waited for: its schedule is
-     * {@code DIRIGIBLE_TENANTS_PROVISIONING_FREQUENCY_SECONDS} wide (15 minutes by default) and the
-     * only prompt firing is the one at startup, so a test that merely waited would be racing that boot
-     * firing — which is exactly how a second tenant in the same class silently timed out.
-     */
-    private void provisionTenant() throws SchedulerException {
+    /** Provision the shared tenant, once per class. */
+    private void provisionTenant() {
         if (tenant != null) {
             return;
         }
         DirigibleTestTenant created = new DirigibleTestTenant("java-listener-tenant-it");
         createTenants(created);
-        scheduler.triggerJob(JobKey.jobKey("TenantsProvisioningJob", "system"));
         waitForTenantProvisioning(created);
         tenant = created;
     }

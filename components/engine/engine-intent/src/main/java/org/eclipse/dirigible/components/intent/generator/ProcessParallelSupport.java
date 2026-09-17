@@ -171,6 +171,23 @@ public final class ProcessParallelSupport {
      * the fork sits on.
      */
     public static List<String> routingTargets(StepIntent step) {
+        List<String> targets = new ArrayList<>(continuationTargets(step));
+        addIfPresent(targets, timerTarget(step, "timeout"));
+        addIfPresent(targets, timerTarget(step, "expire"));
+        addIfPresent(targets, stringArg(step, "onError"));
+        return targets;
+    }
+
+    /**
+     * The steps a step routes on to when the flow simply continues - a decision's {@code then} and
+     * {@code else}, any other step's {@code next}. Deliberately NOT the {@code then} of a boundary
+     * {@code timeout} / {@code expire} timer, nor a delegate's {@code onError} route: those are taken
+     * when a wait expires or a step fails, which is nobody's completing action.
+     *
+     * @param step the authored step
+     * @return the steps the flow continues into, in declaration order
+     */
+    public static List<String> continuationTargets(StepIntent step) {
         List<String> targets = new ArrayList<>(2);
         if ("decision".equalsIgnoreCase(step.getKind())) {
             addIfPresent(targets, stringArg(step, "then"));
@@ -178,9 +195,6 @@ public final class ProcessParallelSupport {
         } else {
             addIfPresent(targets, stringArg(step, "next"));
         }
-        addIfPresent(targets, timerTarget(step, "timeout"));
-        addIfPresent(targets, timerTarget(step, "expire"));
-        addIfPresent(targets, stringArg(step, "onError"));
         return targets;
     }
 

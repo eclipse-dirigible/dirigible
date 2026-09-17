@@ -105,7 +105,7 @@ window.MonitoringOps = (() => {
     logFiles: () => get('/services/ide/logs/'),
 
     /** One log file, whole. It is never polled - the page tails what it loaded. */
-    logFile: (file) => get('/services/ide/logs/' + encodeURIComponent(file)),
+    logFile: (file) => App.services.api.get('/services/ide/logs/' + encodeURIComponent(file), { ...ABSOLUTE, accept: 'text/plain' }),
 
     /**
      * Run a read that must not take the page down with it. A monitoring screen exists to show what is

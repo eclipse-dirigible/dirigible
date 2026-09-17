@@ -14,8 +14,13 @@
  *
  * notifications store — the shell's in-app notification list behind the top-right bell. App code /
  * glue pushes entries via Alpine.store('notifications').add({ title, description, variant }); the
- * bell shows the unread count and the dropdown lists them. (Transient toasts are a separate concern,
- * via Harmonia's $notifications overlay declared in index.html.)
+ * bell shows the unread count and the dropdown lists them.
+ *
+ * announce({ title, description, variant }) is what code that just DID something calls: it records
+ * the entry in the bell AND raises the transient toast over Harmonia's notification overlay (the
+ * `toast` template every shell declares in index.html). Before it existed (dirigible #7073) the only
+ * feedback path was the bell, so a refused transition and a successful one looked exactly the same
+ * on screen - nothing - and the user assumed the click had worked.
  *
  * A first source is wired in: the user's actionable BPM tasks (from the processTasks store) are
  * surfaced as notifications via syncTasks() — a new task shows up here, a completed one drops off.
@@ -37,6 +42,65 @@ document.addEventListener('alpine:init', () => {
         variant: n.variant || 'information',
         unread: true,
       });
+    },
+
+    /**
+     * Harmonia's `$notifications` magic, handed over by the page's root component (see
+     * attachToaster). It is the public toast API and it lives on an Alpine component scope, which a
+     * store never has - so the shell attaches it once at init, the way the Harmonia example apps do.
+     */
+    _toaster: null,
+
+    /**
+     * Attach the `$notifications` magic of the component that renders the toast overlay (the shared
+     * shell, the builder). Until a page attaches one, announce() only records the bell entry.
+     */
+    attachToaster(notifications) {
+      this._toaster = notifications && typeof notifications.add === 'function' ? notifications : null;
+    },
+
+    /**
+     * Record the entry in the bell AND show it as a transient toast. Use this for the OUTCOME of
+     * something the user just did; plain add() stays for background arrivals (a new task) that must
+     * not interrupt.
+     *
+     * The toast renders through the `toast` template every shell declares in its
+     * x-h-notification-overlay. A missing toaster / overlay / template is not a reason to lose the
+     * message: the bell entry is written first, so the worst case is the pre-#7073 behaviour rather
+     * than a broken page.
+     */
+    announce(n) {
+      n = n || {};
+      this.add(n);
+      if (!this._toaster) return;
+      const variant = n.variant || 'information';
+      const text = [n.title, n.description].filter(Boolean).join(' - ');
+      try {
+        // A refusal has to be READ; a success only has to be seen. Same reason the variant is
+        // carried through: the overlay template picks the icon from it.
+        const timeout = (variant === 'negative' || variant === 'warning') ? 12000 : 5000;
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout, data: { message: text, variant } });
+      } catch (e) {
+        console.warn('notifications: could not raise the toast for "' + text + '"', e);
+      }
+    },
+
+    /**
+     * Show a transient toast WITHOUT a bell entry: an ordinary confirmation ("Saved") the bell must
+     * not fill up with. announce() stays for the outcome of an action the user launched. Same public
+     * $notifications magic, same `toast` template; degrades to the console until a toaster is attached.
+     */
+    toast(message, variant) {
+      variant = variant || 'information';
+      if (!this._toaster) {
+        console.log('[toast] ' + message);
+        return;
+      }
+      try {
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout: 4000, data: { message, variant } });
+      } catch (e) {
+        console.warn('notifications: could not raise the toast for "' + message + '"', e);
+      }
     },
 
     markAllRead() { this.items.forEach(n => { n.unread = false; }); },
@@ -76,9 +140,12 @@ document.addEventListener('alpine:init', () => {
       const tasks = Alpine.store('processTasks');
       const name = tasks ? tasks.taskName(task) : (task.name || 'Task');
       const process = tasks ? tasks.processName(task) : (task.processDefinitionName || '');
+      // ... and WHICH record it is about, once the store has resolved it (#7077): "New task: Approve"
+      // says nothing about which invoice is waiting.
+      const subject = tasks ? tasks.subject(task) : '';
       return {
         title: window.T ? T('application-core:shell.notifications.newTask', 'New task: {{name}}', { name }) : 'New task: ' + name,
-        description: process,
+        description: subject && process ? process + ' · ' + subject : (subject || process),
       };
     },
   });

@@ -278,11 +278,37 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     };
 
-    $scope.generate = () => {
+    // A mutual cross-model cycle has no first project (#6539): this model's create-from needs the
+    // target model, which holds a foreign key back here and needs this one. The server answers such a
+    // Generate with 422 + `bootstrap: true`, meaning "the same pass succeeds if you let it skip that
+    // create-from" - offered here as a retry, so the developer never strips the block by hand.
+    const offerBootstrap = (issues) => {
+        dialogHub.showDialog({
+            title: 'Generate without the create-from?',
+            message: `${issues.join('\n')}\n\nGenerate everything else now? Then generate the other model, and Generate here again to emit the create-from.`,
+            preformatted: true,
+            buttons: [{
+                id: 'bootstrap',
+                state: ButtonStates.Emphasized,
+                label: 'Generate anyway',
+            },
+            {
+                id: 'cancel',
+                state: ButtonStates.Transparent,
+                label: 'Cancel',
+            }]
+        }).then((buttonId) => {
+            if (buttonId === 'bootstrap') {
+                $scope.$evalAsync(() => $scope.generate(true));
+            }
+        });
+    };
+
+    $scope.generate = (bootstrap) => {
         const location = fileLocation();
         $scope.state.isBusy = true;
         dialogHub.showBusyDialog('Generating model files and code');
-        $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
+        $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}${bootstrap ? '&bootstrap=true' : ''}`)
              .then((response) => {
                  $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
                  $scope.warnings = response.data.warnings || [];
@@ -297,6 +323,9 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.state.isBusy = false;
                      if (response.status === 422 && response.data && response.data.issues) {
                          $scope.issues = response.data.issues;
+                         if (response.data.bootstrap) {
+                             offerBootstrap(response.data.issues);
+                         }
                      } else {
                          dialogHub.showAlert({
                              title: 'Failed to generate',
@@ -447,6 +476,28 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     };
 
+    /**
+     * Render the proposal's requirement-coverage audit (dirigible #6997). A requirement the proposal
+     * does NOT carry gets the boundary treatment - its own unmissable bubble - because a silent
+     * omission is exactly the failure the audit exists to make loud. The rest of the mapping is one
+     * quiet bubble: which sentence of the request landed on which construct.
+     */
+    const reportCoverage = (coverage) => {
+        const entries = (coverage || []).filter((c) => c && c.requirement);
+        if (!entries.length) return;
+        const uncovered = entries.filter((c) => !c.construct || c.construct.trim().toLowerCase() === 'none');
+        for (const miss of uncovered) {
+            $scope.chat.messages.push({ role: 'boundary', text: 'Not carried by the proposal: ' + miss.requirement });
+        }
+        const mapped = entries.filter((c) => !uncovered.includes(c));
+        if (mapped.length) {
+            $scope.chat.messages.push({
+                role: 'assistant',
+                text: 'Requirement coverage:\n' + mapped.map((c) => '• ' + c.requirement + ' → ' + c.construct).join('\n'),
+            });
+        }
+    };
+
     /** Where a suggested class lives in this project - the same custom/ mapping the stub generator uses. */
     const customFileFor = (suggestedClass) => {
         if (!suggestedClass) return null;
@@ -491,6 +542,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      $scope.chat.turns.push({ role: 'assistant', content: reply });
                  }
                  reportBoundaries(response.data && response.data.boundaries);
+                 reportCoverage(response.data && response.data.coverage);
                  if (response.data && response.data.proposedYaml) {
                      proposedYaml = response.data.proposedYaml;
                      $scope.chat.proposalPending = true;

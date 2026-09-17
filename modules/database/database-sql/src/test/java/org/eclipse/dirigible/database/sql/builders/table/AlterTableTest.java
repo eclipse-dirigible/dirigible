@@ -120,4 +120,34 @@ public class AlterTableTest {
         assertEquals("ALTER TABLE \"ORDERS\" DROP CONSTRAINT FK1;", sql);
     }
 
+    /** Alter table add a unique key (the table alter processor's reconciliation form). */
+    @Test
+    public void alterTableAddUnique() {
+        String sql = SqlFactory.getDefault()
+                               .alter()
+                               .table("SALES_INVOICE")
+                               .add()
+                               .unique("SalesInvoice_Company_Number", new String[] {"SALES_INVOICE_COMPANY", "SALES_INVOICE_NUMBER"})
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals(
+                "ALTER TABLE \"SALES_INVOICE\" ADD CONSTRAINT \"SalesInvoice_Company_Number\" UNIQUE ( \"SALES_INVOICE_COMPANY\" , \"SALES_INVOICE_NUMBER\" );",
+                sql);
+    }
+
+    /** Alter table drop a unique key - the name quoted exactly as the ADD created it. */
+    @Test
+    public void alterTableDropUnique() {
+        String sql = SqlFactory.getDefault()
+                               .alter()
+                               .table("SALES_INVOICE")
+                               .drop()
+                               .unique("SalesInvoice_Company_Number", new String[] {"SALES_INVOICE_COMPANY", "SALES_INVOICE_NUMBER"})
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("ALTER TABLE \"SALES_INVOICE\" DROP CONSTRAINT \"SalesInvoice_Company_Number\";", sql);
+    }
+
 }

@@ -12,15 +12,18 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
@@ -32,10 +35,12 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
+import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.engine.RepositoryService;
 import org.flowable.engine.RuntimeService;
+import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
 import org.flowable.engine.repository.Deployment;
@@ -168,10 +173,7 @@ public class BpmProviderFlowable implements BpmProvider {
      * @return the process instance id
      */
     public String startProcess(String key, String businessKey, String parameters) {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
-
-        return startProcess(key, businessKey, variables);
+        return startProcess(key, businessKey, ProcessVariables.fromJson(parameters));
     }
 
     public String startProcess(String key, String businessKey, Map<String, Object> variables) {
@@ -304,9 +306,16 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Correlates a message event to the process instance.
      *
+     * An instance that is not subscribed to the message is the expected miss for the fail-soft glue
+     * that drives waits and aborts - it is reported by its own type, like an instance that has already
+     * ended, so a caller can tell it apart from a real fault (a database or Flowable failure, the wrong
+     * tenant scope, a mis-generated message name) instead of meeting a NullPointerException.
+     *
      * @param processInstanceId the process instance id
      * @param messageName the name of the event
      * @param variables the variables to be passed with the event
+     * @throws IllegalArgumentException if the instance does not exist in the current tenant, or is not
+     *         waiting on a message with this name
      */
     public void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
@@ -318,6 +327,11 @@ public class BpmProviderFlowable implements BpmProvider {
                                             .processInstanceId(processInstanceId)
                                             .executionTenantId(getTenantId())
                                             .singleResult();
+
+        if (execution == null) {
+            throw new IllegalArgumentException("Process instance with id [" + processInstanceId
+                    + "] is not waiting on a message event with name [" + messageName + "]");
+        }
 
         runtimeService.messageEventReceived(messageName, execution.getId(), variables);
     }
@@ -432,7 +446,6 @@ public class BpmProviderFlowable implements BpmProvider {
         RepositoryService repositoryService = processEngine.getRepositoryService();
 
         ProcessEngineConfiguration processEngineConfiguration = processEngine.getProcessEngineConfiguration();
-        RuntimeService runtimeService = processEngine.getRuntimeService();
 
         ProcessInstance processInstance = getProcessInstance(processInstanceId);
 
@@ -444,11 +457,10 @@ public class BpmProviderFlowable implements BpmProvider {
         if (processDefinition != null && processDefinition.hasGraphicalNotation()) {
             BpmnModel bpmnModel = repositoryService.getBpmnModel(processDefinition.getId());
             ProcessDiagramGenerator diagramGenerator = processEngineConfiguration.getProcessDiagramGenerator();
-            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png",
-                    runtimeService.getActiveActivityIds(processInstance.getId()), Collections.emptyList(),
-                    processEngineConfiguration.getActivityFontName(), processEngineConfiguration.getLabelFontName(),
-                    processEngineConfiguration.getAnnotationFontName(), processEngineConfiguration.getClassLoader(), 1.0,
-                    processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
+            InputStream resource = diagramGenerator.generateDiagram(bpmnModel, "png", getProcessInstanceActivityIds(processInstance),
+                    Collections.emptyList(), processEngineConfiguration.getActivityFontName(),
+                    processEngineConfiguration.getLabelFontName(), processEngineConfiguration.getAnnotationFontName(),
+                    processEngineConfiguration.getClassLoader(), 1.0, processEngineConfiguration.isDrawSequenceFlowNameWithNoLabelDI());
 
             try {
                 byte[] byteArray = IOUtils.toByteArray(resource);
@@ -609,46 +621,209 @@ public class BpmProviderFlowable implements BpmProvider {
         }
     }
 
+    /**
+     * Reports where a running process instance currently sits, per activity.
+     *
+     * <p>
+     * An active execution is only half the evidence. Flowable deactivates an execution as soon as an
+     * asynchronous attempt fails - its {@code JobRetryCmd} moves the job to the timer-job table and
+     * clears the active flag - and {@code RuntimeService#getActiveActivityIds} reports active
+     * executions only, so a step waiting between retry attempts is invisible there and only its own
+     * pending job still names it. Executable and timer jobs therefore count towards {@code positive}
+     * alongside the active executions, by the higher of the two counts rather than by their sum: a
+     * token that has not failed yet is active <em>and</em> job-bearing, so adding the two would report
+     * every pending asynchronous step twice. Dead-lettered jobs stay {@code negative}.
+     *
+     * <p>
+     * A retrying step is deliberately counted as {@code positive} - it is the step the instance is on,
+     * and its failure is already visible as the job's exception message and as {@code negative} once
+     * the retries are exhausted.
+     *
+     * @param processInstanceId the process instance id
+     * @return the counters per activity id, empty when no such instance runs in the current tenant
+     */
     public Map<String, ActivityStatusData> getProcessInstanceActiveActivityIds(String processInstanceId) {
         ProcessInstance processInstance = getProcessInstance(processInstanceId);
         if (null == processInstance) {
             return Collections.emptyMap();
         }
-        RuntimeService runtimeService = processEngine.getRuntimeService();
-        List<String> positiveActiveActivityIds = runtimeService.getActiveActivityIds(processInstance.getId());
 
-        List<Job> jobs = processEngine.getManagementService()
-                                      .createDeadLetterJobQuery()
-                                      .processInstanceId(processInstanceId)
-                                      .list();
-
-        List<String> negativeActiveActivityIds = jobs.stream()
-                                                     .map(Job::getElementId)
-                                                     .collect(Collectors.toList());
+        Map<String, Integer> activeExecutions = countByValue(processEngine.getRuntimeService()
+                                                                          .getActiveActivityIds(processInstance.getId()));
+        // Merged by the higher count, never added, because the two sources overlap on every token that
+        // has not failed yet. That undercounts only an element hosting both a waiting token and a
+        // retrying one - an asynchronous task behind a loop or a fan-in - which would take a further
+        // per-activity execution query to tell apart.
+        Map<String, Integer> pendingJobs = countByElementId(getPendingJobs(processInstanceId));
+        Map<String, Integer> deadLetterJobs = countByElementId(processEngine.getManagementService()
+                                                                            .createDeadLetterJobQuery()
+                                                                            .processInstanceId(processInstanceId)
+                                                                            .list());
 
         Map<String, ActivityStatusData> statuses = new HashMap<>();
-        for (String positive : positiveActiveActivityIds) {
-            ActivityStatusData data = statuses.get(positive);
-            if (data == null) {
-                data = new ActivityStatusData();
-                data.positive = 1;
-                statuses.put(positive, data);
-                continue;
-            }
-            data.positive += 1;
-        }
-        for (String negative : negativeActiveActivityIds) {
-            ActivityStatusData data = statuses.get(negative);
-            if (data == null) {
-                data = new ActivityStatusData();
-                data.negative = 1;
-                statuses.put(negative, data);
-                continue;
-            }
-            data.negative += 1;
-        }
+        activeExecutions.forEach((activityId, tokens) -> statusOf(statuses, activityId).positive = tokens);
+        pendingJobs.forEach((activityId, jobs) -> {
+            ActivityStatusData status = statusOf(statuses, activityId);
+            status.positive = Math.max(status.positive, jobs);
+        });
+        deadLetterJobs.forEach((activityId, jobs) -> statusOf(statuses, activityId).negative = jobs);
 
         return statuses;
+    }
+
+    /**
+     * The activity ids a running process instance occupies: its active executions plus the elements of
+     * its pending jobs, which are the only evidence left for a step parked between retry attempts.
+     *
+     * @param processInstance the already resolved process instance
+     * @return the occupied activity ids without duplicates, active executions first
+     */
+    public List<String> getProcessInstanceActivityIds(ProcessInstance processInstance) {
+        Set<String> activityIds = new LinkedHashSet<>(processEngine.getRuntimeService()
+                                                                   .getActiveActivityIds(processInstance.getId()));
+        activityIds.addAll(elementIds(getPendingJobs(processInstance.getId())));
+
+        return List.copyOf(activityIds);
+    }
+
+    /**
+     * Where each of the given process instances sits, in a fixed number of statements rather than three
+     * per instance.
+     *
+     * <p>
+     * The evidence is the same as for a single instance - active executions plus the elements of the
+     * pending jobs - gathered in three queries and grouped in memory: one execution query over all the
+     * given ids, and the two job queries over the current tenant, whose rows are only the jobs waiting
+     * to run and are then matched against the ids asked for. Flowable's job queries take a single
+     * process-instance id, so the tenant is the narrowest batch filter available; a listing of a few
+     * hundred instances is what this is for, and it is what the Monitoring shell polls every 30 s
+     * (<a href="https://github.com/eclipse-dirigible/dirigible/issues/7250">#7250</a>).
+     *
+     * <p>
+     * An execution counts only while it is active, matching {@code RuntimeService#getActiveActivityIds}
+     * - the query itself cannot filter on the flag, so an inactive scope execution, the parent of a
+     * subprocess or of a multi-instance body, is dropped here instead of being reported as a second
+     * activity of the instance.
+     *
+     * @param processInstances the already resolved process instances
+     * @return the occupied activity ids per process instance id, active executions first; an instance
+     *         occupying none is absent
+     */
+    public Map<String, List<String>> getProcessInstanceActivityIds(List<ProcessInstance> processInstances) {
+        Set<String> processInstanceIds = processInstances.stream()
+                                                         .map(ProcessInstance::getId)
+                                                         .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (processInstanceIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Set<String>> activityIds = new HashMap<>();
+        activeExecutions(processInstanceIds).forEach(
+                execution -> record(activityIds, processInstanceIds, execution.getProcessInstanceId(), execution.getActivityId()));
+        pendingJobs().forEach(job -> record(activityIds, processInstanceIds, job.getProcessInstanceId(), job.getElementId()));
+
+        return activityIds.entrySet()
+                          .stream()
+                          .collect(Collectors.toMap(Map.Entry::getKey, entry -> List.copyOf(entry.getValue())));
+    }
+
+    private static void record(Map<String, Set<String>> activityIds, Set<String> processInstanceIds, String processInstanceId,
+            String activityId) {
+        if (null == activityId || !processInstanceIds.contains(processInstanceId)) {
+            return;
+        }
+        activityIds.computeIfAbsent(processInstanceId, id -> new LinkedHashSet<>())
+                   .add(activityId);
+    }
+
+    /**
+     * The active child executions of the given process instances. The active flag is not a query
+     * criterion in Flowable, so it is read off the returned rows, which are execution entities; an
+     * implementation that does not expose the flag is taken at face value rather than dropped.
+     *
+     * @param processInstanceIds the process instance ids
+     * @return the active child executions
+     */
+    private List<Execution> activeExecutions(Set<String> processInstanceIds) {
+        List<Execution> executions = processEngine.getRuntimeService()
+                                                  .createExecutionQuery()
+                                                  .processInstanceIds(processInstanceIds)
+                                                  .onlyChildExecutions()
+                                                  .executionTenantId(getTenantId())
+                                                  .list();
+
+        return executions.stream()
+                         .filter(execution -> !(execution instanceof DelegateExecution delegate) || delegate.isActive())
+                         .toList();
+    }
+
+    /**
+     * The jobs the current tenant is waiting on, executable and timer alike - the batch counterpart of
+     * {@link #getPendingJobs(String)}.
+     *
+     * @return the pending jobs
+     */
+    private List<Job> pendingJobs() {
+        ManagementService managementService = processEngine.getManagementService();
+
+        List<Job> pendingJobs = new ArrayList<>(managementService.createJobQuery()
+                                                                 .jobTenantId(getTenantId())
+                                                                 .list());
+        pendingJobs.addAll(managementService.createTimerJobQuery()
+                                            .jobTenantId(getTenantId())
+                                            .list());
+
+        return pendingJobs;
+    }
+
+    /**
+     * The jobs a process instance is waiting on: the executable ones, including a job an executor
+     * currently holds, and the timer ones, where a failed job with retries left is parked between
+     * attempts.
+     *
+     * @param processInstanceId the process instance id
+     * @return the pending jobs
+     */
+    private List<Job> getPendingJobs(String processInstanceId) {
+        ManagementService managementService = processEngine.getManagementService();
+
+        List<Job> pendingJobs = new ArrayList<>(managementService.createJobQuery()
+                                                                 .processInstanceId(processInstanceId)
+                                                                 .list());
+        pendingJobs.addAll(managementService.createTimerJobQuery()
+                                            .processInstanceId(processInstanceId)
+                                            .list());
+
+        return pendingJobs;
+    }
+
+    private static ActivityStatusData statusOf(Map<String, ActivityStatusData> statuses, String activityId) {
+        return statuses.computeIfAbsent(activityId, id -> new ActivityStatusData());
+    }
+
+    private static Map<String, Integer> countByElementId(List<? extends Job> jobs) {
+        return countByValue(elementIds(jobs));
+    }
+
+    /**
+     * The flow elements the given jobs belong to. A job bound to no element - an asynchronous variable
+     * write, a process-instance migration - contributes nothing.
+     *
+     * @param jobs the jobs
+     * @return the element ids, duplicates kept
+     */
+    private static List<String> elementIds(List<? extends Job> jobs) {
+        return jobs.stream()
+                   .map(Job::getElementId)
+                   .filter(Objects::nonNull)
+                   .toList();
+    }
+
+    private static Map<String, Integer> countByValue(List<String> values) {
+        Map<String, Integer> counts = new HashMap<>();
+        values.forEach(value -> counts.merge(value, 1, Integer::sum));
+
+        return counts;
     }
 
     public Map<String, ActivityStatusData> getProcessDefinitionActiveActivityIds(String processDefinitionId) {

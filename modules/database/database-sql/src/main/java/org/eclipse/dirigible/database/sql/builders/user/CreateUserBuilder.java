@@ -48,10 +48,11 @@ public class CreateUserBuilder extends AbstractCreateSqlBuilder {
      */
     @Override
     public String generate() {
-        String generated = generateCreateUserStatement(userId, password);
-        logger.trace("generated: " + generated);
+        // The user, never the statement: the statement carries the password in clear text, and a trace
+        // log is exactly the wrong place for it to end up.
+        logger.trace("generating a create user statement for [{}]", userId);
 
-        return generated;
+        return generateCreateUserStatement(userId, password);
     }
 
     /**
@@ -64,14 +65,10 @@ public class CreateUserBuilder extends AbstractCreateSqlBuilder {
     protected String generateCreateUserStatement(String user, String pass) {
         StringBuilder sql = new StringBuilder();
         sql.append("CREATE USER ")
-           .append(getEscapeSymbol())
-           .append(user)
-           .append(getEscapeSymbol())
+           .append(encapsulateIdentifier(user))
            .append(SPACE)
-           .append(" PASSWORD ")
-           .append(getPasswordEscapeSymbol())
-           .append(pass)
-           .append(getPasswordEscapeSymbol());
+           .append("PASSWORD ")
+           .append(encapsulateLiteral(pass, getPasswordEscapeSymbol()));
         return sql.toString();
     }
 

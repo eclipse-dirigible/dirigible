@@ -20,6 +20,9 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('inboxPage', () => ({
     ...basePage(),
     searchTerm: '',
+    // Task ordering is client-side (the house style — see the entity list views' sortedItems). The
+    // backend returns tasks unordered, so default to newest-first and let the user flip the direction.
+    sortDir: 'desc',
     selectedId: null,
     autoRefresh: false,
     lastUpdated: null,
@@ -34,12 +37,16 @@ document.addEventListener('alpine:init', () => {
     actAs: { acting: null, hiddenTasks: 0 },
 
     init() {
-      // The store self-loads at startup; refresh on entry so the list is current.
-      this.refresh();
+      // The store self-loads at startup; re-read the list on entry so it is current — warm, since nothing
+      // has changed under us just by navigating here.
+      this.reload();
       this._onMessage = (e) => {
         if (e && e.data && e.data.type === 'harmonia.form.close') {
+          // The form wrote the record the selected task is about — that one subject re-reads, the rest of
+          // the list keeps its cache.
+          Alpine.store('processTasks').invalidate({ id: this.selectedId });
           this.selectedId = null;
-          this.refresh();
+          this.reload();
         }
       };
       window.addEventListener('message', this._onMessage);
@@ -54,12 +61,31 @@ document.addEventListener('alpine:init', () => {
 
     get filtered() {
       const q = this.searchTerm.trim().toLowerCase();
-      if (!q) return this.tasks;
+      const store = Alpine.store('processTasks');
       // Filter on what the row actually reads — the translated names — as well as the raw ones, so
       // typing what is on screen finds it in any language.
-      const store = Alpine.store('processTasks');
-      return this.tasks.filter(t => [store.taskLabel(t), t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
-        .some(v => v && String(v).toLowerCase().includes(q)));
+      const base = q
+        ? this.tasks.filter(t => [store.taskLabel(t), store.subject(t), t.name, t.processDefinitionName,
+                                  t.processInstanceBusinessKey, t.assignee]
+            .some(v => v && String(v).toLowerCase().includes(q)))
+        : this.tasks;
+      return this.sortByTime(base);
+    },
+
+    // Order by task creation time (a copy — the store's list is shared with the notification bell).
+    // A task missing a createTime sinks to the bottom either way, rather than jumping to the top.
+    sortByTime(list) {
+      const dir = this.sortDir === 'asc' ? 1 : -1;
+      return [...list].sort((a, b) => {
+        const ta = a.createTime ? new Date(a.createTime).getTime() : 0;
+        const tb = b.createTime ? new Date(b.createTime).getTime() : 0;
+        return (ta - tb) * dir;
+      });
+    },
+
+    toggleSort() {
+      this.sortDir = this.sortDir === 'desc' ? 'asc' : 'desc';
+      this.refreshIcons();
     },
 
     get selected() { return this.tasks.find(t => t.id === this.selectedId) || null; },
@@ -78,7 +104,8 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       try {
         await App.services.api.post('/services/inbox/tasks/' + task.id, { action: 'CLAIM' }, { baseUrl: '' });
-        await this.refresh();
+        // A claim changes who owns the task, not the record it is about; the subjects stay valid.
+        await this.reload();
         this.selectedId = task.id; // keep the selection after the list re-fetches
       } catch (e) {
         console.error('inbox: unable to claim task', e);
@@ -103,9 +130,24 @@ document.addEventListener('alpine:init', () => {
       if (res.ok) window.location.reload();
     },
 
-    async refresh() {
+    // The Refresh button: authoritative, so it drops the subject cache and re-reads every record the
+    // subject lines are built from.
+    refresh() {
+      return this._load(true);
+    },
+
+    // Everything automatic — page entry, the auto-refresh tick, a claim, a completed form — re-reads the
+    // task LIST and keeps the subject cache warm. Clearing it on a 15s timer meant every record and every
+    // relation target was re-fetched each cycle and the subject lines blanked out and repopulated (#7157);
+    // what a cycle can genuinely invalidate is one task, and that is invalidated where it happens.
+    reload() {
+      return this._load(false);
+    },
+
+    async _load(authoritative) {
       await this.loadActAs();
-      await Alpine.store('processTasks').refresh();
+      const store = Alpine.store('processTasks');
+      await (authoritative ? store.refresh() : store.load());
       this.lastUpdated = new Date();
       // A completed task drops out of the list — clear a stale selection.
       if (this.selectedId && !this.tasks.some(t => t.id === this.selectedId)) this.selectedId = null;
@@ -120,7 +162,7 @@ document.addEventListener('alpine:init', () => {
           if (!this.$root || !this.$root.isConnected) return this.stopAuto();
           // Server gone — processTasks already stopped its own poll; stop auto-refresh too (refresh to resume).
           if (Alpine.store('processTasks').serverUnavailable) return this.stopAuto();
-          this.refresh();
+          this.reload();
         }, 15000);
       } else {
         this.stopAuto();
@@ -129,9 +171,12 @@ document.addEventListener('alpine:init', () => {
 
     stopAuto() { if (this._timer) { clearInterval(this._timer); this._timer = null; } },
 
+    // Task timestamps print through the instance Timestamp pattern, like every other date the
+    // application shows. toLocaleString() rendered them in the BROWSER's locale, so the Inbox could
+    // date a task dd/mm/yyyy on an instance whose lists and forms were all ISO.
     fmtTime(t) {
       if (!t) return '';
-      try { return new Date(t).toLocaleString(); } catch (_) { return String(t); }
+      try { return HarmoniaFormat.value(t, true); } catch (_) { return String(t); }
     },
   }));
 }, { once: true });

@@ -38,7 +38,9 @@ import java.util.Map;
  * <p>
  * Mapping is split into two disjoint maps so the source-copy vs constant intent is unambiguous:
  * {@link #map} copies a source property onto a target property; {@link #defaults} sets a target
- * property to {@code now} (the current date) or a literal (string / integer / decimal / boolean).
+ * property to {@code now} (the current moment, in the target property's own shape - a
+ * {@code LocalDate}, an {@code Instant}, the {@code YYYY-MM} month or the {@code YYYY-Www} week) or
+ * a literal (string / integer / decimal / boolean).
  *
  * <p>
  * The composition line-items of the target are filled by exactly one of two mutually-exclusive
@@ -188,10 +190,34 @@ public class GeneratesIntent {
      */
     private Integer sourceStatusOnRetire;
 
+    /**
+     * Optional guard on the SOURCE's own status (issue #7068): the create-from is refused (409) when
+     * the source record does not currently stand in one of these {@code EntityStatus} seed ids - the
+     * {@code from:} of a {@link TransitionIntent}, spelled {@code fromStatus} here because
+     * {@link #from} already names the source ENTITY.
+     *
+     * <p>
+     * When it is absent but {@link #sourceStatus} is declared, the guard is IMPLIED and refuses the one
+     * state that is certainly wrong: a source already standing at its post-generation status has
+     * already been generated from, so a second click - or a second POST to the endpoint - would mint a
+     * duplicate document (a second invoice for the same proforma). The completion hook declares the
+     * "already done" status; nothing about it said the action was finished, which is why the button
+     * kept working and kept charging the customer twice.
+     *
+     * <p>
+     * It gates the CLICK, not the event trigger: an event-driven create-from carries its own
+     * at-most-once back-reference guard (or asks for a row per event with {@code mode: append}), and
+     * qualifies its moment with the {@code event.when} status guard.
+     */
+    private List<Integer> fromStatus;
+
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
 
-    /** Target property -> {@code now} or a literal value (string / integer / decimal / boolean). */
+    /**
+     * Target property -> {@code now} (the current moment in that property's own shape) or a literal
+     * value (string / integer / decimal / boolean).
+     */
     private Map<String, String> defaults = new LinkedHashMap<>();
 
     /**
@@ -217,6 +243,38 @@ public class GeneratesIntent {
      * month). See {@code GenerateChildIntent}.
      */
     private java.util.List<GenerateChildIntent> children;
+
+    /**
+     * Scheduled generation only (issue #7070): the natural key that makes a SECOND run of the job a
+     * no-op instead of a duplicate. Each element either names a property of {@link #to} that this same
+     * block already assigns through {@link #map} or {@link #defaults}, or - {@code { run: month }},
+     * issue #7106 - the calendar period of the run itself; before the target is built, the target is
+     * looked up by those values and a matching row makes the source row - and every child under it -
+     * skipped.
+     *
+     * <p>
+     * The {@code run:} term is what makes the key expressible for the recurring-template family: a
+     * monthly bill generated from a standing template is a plain document with a {@code date} and no
+     * period column to name, so it ranges over that date instead - the period needs no storage of its
+     * own. See {@link UniqueKeyIntent}.
+     *
+     * <p>
+     * Why a schedule needs its own guard: the at-most-once cardinality of an EVENT-driven create-from
+     * ({@link #event}, {@code mode: once}) is the back-reference to ONE source record, and a schedule's
+     * source is a standing row - the same {@code Project} matches the query every month, so a
+     * back-reference lookup would generate the first project-month and never another. The natural key
+     * is the pair that actually identifies a run's output ({@code [Project, period]}), so a re-run
+     * within the same period finds it and a genuine next period does not. A re-run is not exotic: a
+     * failed deploy, a Quartz misfire recovery and an admin pressing Run in Monitoring all replay a
+     * tick, and without this every one of them double-creates.
+     *
+     * <p>
+     * It is a read-then-create guard, best-effort against two concurrent ticks - the same shape the
+     * event-driven guard has - so a UNIQUE database key on the same columns is still the durable
+     * backstop. Absent, the generation reports an advisory rather than refusing: every intent authored
+     * before this existed keeps generating exactly what it did.
+     */
+    private List<UniqueKeyIntent> unique;
 
     /**
      * Optional declared input form (issue #6685): a small set of the TARGET's properties the user
@@ -367,6 +425,19 @@ public class GeneratesIntent {
         this.sourceStatus = sourceStatus;
     }
 
+    public List<Integer> getFromStatus() {
+        return fromStatus;
+    }
+
+    public void setFromStatus(List<Integer> fromStatus) {
+        this.fromStatus = fromStatus;
+    }
+
+    /** Whether an explicit list of allowed SOURCE statuses is declared (see {@link #fromStatus}). */
+    public boolean hasFromStatus() {
+        return fromStatus != null && !fromStatus.isEmpty();
+    }
+
     public Integer getSourceStatusOnRetire() {
         return sourceStatusOnRetire;
     }
@@ -421,6 +492,19 @@ public class GeneratesIntent {
 
     public void setChildren(java.util.List<GenerateChildIntent> children) {
         this.children = children;
+    }
+
+    public List<UniqueKeyIntent> getUnique() {
+        return unique;
+    }
+
+    public void setUnique(List<UniqueKeyIntent> unique) {
+        this.unique = unique;
+    }
+
+    /** Whether a scheduled generation declares the natural key that makes a re-run a no-op. */
+    public boolean hasUnique() {
+        return unique != null && !unique.isEmpty();
     }
 
     public List<PromptFieldIntent> getPrompt() {

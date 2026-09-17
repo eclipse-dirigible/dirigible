@@ -193,6 +193,40 @@ class NotificationSupportTest {
     }
 
     @Test
+    void configRecipientIsReadAtSendTimeNotMailedAsTheKey() {
+        Map<String, EntityIntent> byName = libraryModel();
+        // The operations mailbox differs per environment (#7385). Before this, `@config:OPS_EMAIL`
+        // contained an '@' and was therefore quoted as a literal address: the mail went to the key.
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("@config:OPS_EMAIL", "Order {id}"), byName.get("Order"), byName, Map.of());
+
+        assertEquals("org.eclipse.dirigible.sdk.core.Configurations.get(\"OPS_EMAIL\")", plan.toExpression());
+        assertTrue(plan.loads()
+                       .isEmpty(),
+                "a configuration key is not a relation - it must not register a relation load");
+    }
+
+    @Test
+    void configRecipientToleratesSurroundingWhitespaceAroundTheKey() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("  @config: OPS_EMAIL  ", "s"), byName.get("Order"), byName, Map.of());
+
+        assertEquals("org.eclipse.dirigible.sdk.core.Configurations.get(\"OPS_EMAIL\")", plan.toExpression());
+    }
+
+    @Test
+    void anAddressThatMerelyCONTAINSTheMarkerStaysALiteral() {
+        Map<String, EntityIntent> byName = libraryModel();
+        // The rule is the PREFIX, exactly as it is for an integration url: and a payload value - a
+        // marker in the middle of a value is part of the address, not a reference.
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops+@config:x@x.com", "s"), byName.get("Order"), byName, Map.of());
+
+        assertEquals("\"ops+@config:x@x.com\"", plan.toExpression());
+    }
+
+    @Test
     void unresolvableRecipientRelationYieldsNoPlan() {
         Map<String, EntityIntent> byName = libraryModel();
         // 'nope' is not a to-one relation of Order -> recipient cannot resolve -> skip the notification.

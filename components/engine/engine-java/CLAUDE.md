@@ -67,6 +67,12 @@ classes at the jar ROOT are injected by the build itself, with the nested jars k
   honors it natively, so there is no `DIRIGIBLE_*` property for this.
 - `ClassPathIndex` appends the same `loader.path` / `LOADER_PATH` jars to the **compile** classpath, so
   registry sources can still be compiled against a drop-in module's classes.
+- **Never put the resolved-modules directory (`DIRIGIBLE_DEPENDENCIES_DIR`) on `loader.path`.** Those
+  jars are served by the swappable `ModulesClassLoader`, which is parent-first: with the same jars also
+  on the application classloader, an upgrade or a removal resolves to the launch-classpath copy and the
+  swap silently changes nothing. The pipeline detects the case and reports such an artifact as
+  `shadowed` rather than `active`, but the only fix is to keep the directory off the launch classpath
+  (the shipped `Dockerfile` does).
 
 ## The bean container (`ComponentContainer`, `engine-java`)
 
@@ -90,6 +96,37 @@ One Spring-singleton container, rebuilt per `ClientClassLoader` generation.
   client-facing lookup — resolves client beans first, then platform beans. Client code must **not**
   use the platform-internal `BeanProvider` (that's core-only; `JavaRepository.store()` uses it because
   it is platform code).
+- **`createUnmanaged(Class)` wires a client class the container does NOT own** — today exactly one
+  family: a client class **Flowable** instantiates itself and which therefore never becomes a bean —
+  a `JavaDelegate` (#7058) and a `flowable:class` execution / task listener (#7222). Same rules as a `@Component` (constructor / field `@Inject` / collection, by type
+  with the parameter or field name disambiguating, `@PostConstruct`), resolved against the **live**
+  singletons — it constructs no bean, so a cycle is impossible on this path — and the instance is
+  **not registered** (it never appears in `get` / `getAll` / `instanceOf`, and a failure here is not a
+  `wiringErrors()` entry: it belongs to the step being executed, not to the generation).
+  `@PreDestroy` is never invoked (nothing owns the instance) and the container logs one WARN if one is
+  declared. It answers **`Optional.empty()` when the class declares no injection point at all** (no
+  constructor parameters, no `@Inject` field, no `@PostConstruct`), which is what keeps every delegate
+  written before this byte-identical: the caller then stays on its own plain instantiation. The seam is
+  **`ClientBeanFactory extends ClientBeanResolver`** in `core-java`, deliberately not a fourth method on
+  the read view the SDK `Beans` facade wraps — handing client code a factory for instances nobody owns
+  would invite lifecycles the container cannot manage. It has to live in `core-java` because the one
+  consumer, `engine-bpm-flowable`, must not depend on `engine-java` (that closes a module cycle).
+  Ambiguity **refuses** rather than guessing, which is stricter than `Beans.get(SomeInterface.class)`
+  (that answers empty and falls through to the platform context, surfacing as "no such bean").
+  Unit coverage: `ComponentContainerUnmanagedTest`; end-to-end: `JavaDelegateInjectionIT`.
+- **"A `JavaDelegate` must NOT be a `@Component`" is checked at publish, not per execution** (#7291).
+  `rebuild` flags a bean that implements `org.flowable.engine.delegate.JavaDelegate` — matched by
+  interface **name**, since `engine-java` cannot see the Flowable type — as a `wiringWarnings()` entry,
+  which `JavaSynchronizer` projects onto the Problems view while leaving the artefact `CREATED` (the
+  bean works; the annotation is the mistake). `createUnmanaged` still WARNs, because a delegate can
+  reach it from an AOT module the synchronizer never saw, but **once per class per generation and then
+  at DEBUG**: the `${JavaTask}` path wires a fresh delegate for every execution, so an unconditional
+  WARN restated the same fact on every tick of a step that runs all day. The suppression set is cleared
+  by `rebuild`, so a republish says it again. Its message says "instantiated outside the container"
+  rather than "is a JavaDelegate", because the check there is `isBean` on whatever class the caller
+  asked to wire — it must not claim more than it looked at. Coverage:
+  `ComponentContainerDelegateRuleTest` (with a name-only `org.flowable.engine.delegate.JavaDelegate`
+  stand-in under `src/test/java`, which is how the by-name match is testable without the dependency).
 
 ## Behaviour consumers (`JavaClassConsumer` SPI)
 
@@ -123,6 +160,42 @@ instantiate client classes.
   `offlineDurableSubscriberTimeout` (7 days, set in `MessagingConfig`) — the consumer cannot
   unsubscribe on its own, because `onClassUnloaded` fires for a *replaced* class as well as a deleted
   one, and a class deleted while the server was down is never reported at all.
+- **A subscription (or a job registration) that could not be established is retried on a JVM-local
+  timer.** `JavaConsumersReconciler` calls `JavaClassConsumer.reconcile()` on every consumer every
+  `DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS` (30), and `ListenerClassConsumer` /
+  `ScheduledClassConsumer` implement it by re-attempting what is still not open. Before that, a
+  subscription that lost the boot race against the embedded broker's `vm://localhost` transport was
+  never retried at all and the handler stayed silent for the life of the process — a topic discards
+  what it delivers to nobody, so an intent app's `onCreate` trigger wrote the row and started nothing
+  while every controller answered 200 (#7217). Neither of the two triggers the consumers relied on
+  ever arrives on a steady instance: a generation is rebuilt only on publish, and the
+  `TenantPostProvisioningStep` runs only when `TenantsProvisioner` actually provisioned a tenant
+  (`if (!tenants.isEmpty())` over `findByStatus(INITIAL)`). Three things about the shape:
+  **it is a timer of its own, not Quartz and not Spring's `@Scheduled`** — a `SystemJob` fires once
+  cluster-wide (`isClustered=true`) and this state is per-JVM, while Spring's scheduling pool is a
+  single thread shared with `AccessVerifier` and `TscWatcherService` that an unreachable `failover:`
+  broker would block indefinitely; **`subscribe` catches `RuntimeException` as well as `JMSException`**,
+  because `ActiveMQConnectionArtifactsFactory` reports a broker that is not accepting by wrapping the
+  `JMSException` in an `IllegalStateException` — uncaught, it escaped the per-tenant fan-out, skipped
+  every tenant behind the failing one and leaked whatever had already opened; and **a pass re-checks
+  registration identity** (`registrations.get(fqn) != registration`) before subscribing, because a
+  republish can swap the registration mid-pass and connections opened for the superseded one could
+  never be closed. Log volume is bounded on purpose: WARN on a subscription's first failure, DEBUG on
+  the repeats, plus one WARN summary per incomplete pass — a permanently refused subscription (every
+  node of a deployment derives the same durable id, so the second one to attach is turned away for
+  good) would otherwise emit a line per tenant per tick forever.
+- **A retry pass touches only what is still missing, on both sides.** Each consumer records the
+  `(declaration, tenant)` pairs that landed — `Registration.isSubscribed` / `isRegistered` — and a
+  pass skips them. The bound matters most on the scheduled side, because a registration there is a
+  *write*: `ScheduledClassConsumer` used to re-run `jobService.save` (`saveAndFlush`) +
+  `jobsManager.scheduleJob` + an INFO line for every job of every loaded class in every tenant on
+  every tick while any ONE job's registration was failing, so N x T row writes and reschedules every
+  30 s from every node of the cluster onto the same shared `DIRIGIBLE_JOBS` rows, burying the single
+  WARN that was the actual fault (#7265). A class **reload** still re-registers everything the class
+  declares: a fresh `Registration` records nothing as landed, which is what lets a changed cron reach
+  the row. The per-tenant work also sits in a `try` **inside** the `executeForEachTenant` body, since
+  that helper propagates the first throw — without it one tenant's refusal leaves every tenant behind
+  it untouched and forces the ones in front of it to be redone by the retry.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free
   of an `engine-java` dependency).
@@ -172,6 +245,49 @@ then `JavaClassRegistry` + `JavaHandler.handle`. A `JavaHandler` that is also `@
 as the container-built (injected) singleton; a plain `JavaHandler` (no `@Component`) is instantiated per
 request via its no-arg constructor.
 
+## `JavaDelegate` and BPMN listeners — injected, but never a bean
+
+A client `JavaDelegate` is created by **Flowable**, not by the container, so it is not a `@Component`
+and must not be annotated as one: that would build a fully-injected singleton the engine never runs,
+next to the un-injected instance it does — silently, with the fields reading `null` at runtime while
+the container looked correctly wired (#7058). Since the intent DSL's `processes:` makes `delegate:`
+steps the standard place for application logic, both paths now wire the instance the engine builds,
+through `ClientBeanFactory.createUnmanaged` (see the container section):
+
+- **`flowable:class`** — `ResilientClassDelegate.instantiateDelegate` (`engine-bpm-flowable`). Flowable
+  **caches** this instance on the parsed activity (`ClassDelegate.activityBehaviorInstance`), so it is
+  per activity and shared across executions, as it always was; `FlowableClientClassLoaderRefresher`
+  evicts the process-definition cache on every client rebuild, which is what re-wires it against the
+  new generation.
+- **`${JavaTask}` + a `handler` field** — `DirigibleJavaCallDelegate`, fresh per execution.
+
+**The same is true of a `flowable:class` execution or task listener, and it takes a SECOND engine
+registration (#7222).** A listener is not created by the activity-behaviour factory: Flowable's
+`ProcessEngineConfigurationImpl.initListenerFactory` builds its own `DefaultListenerFactory` carrying a
+stock `DefaultClassDelegateFactory`, and `createClassDelegateExecutionListener` /
+`createClassDelegateTaskListener` call **that**. So configuring only
+`setActivityBehaviorFactory(new ResilientActivityBehaviorFactory(new ResilientClassDelegateFactory()))`
+left the listener path on plain reflection — a constructor collaborator failed to instantiate and an
+`@Inject` field silently read `null`, the #7058 symptom one artefact type over. `BpmFlowableConfig`
+therefore also does `setListenerFactory(new DefaultListenerFactory(classDelegateFactory))` with the
+**same** factory instance (the engine keeps a pre-set listener factory and only injects the expression
+manager into it), so both listener kinds come out as `ResilientClassDelegate`s and share
+`instantiateDelegate`. What a listener does **not** get is the intent step resilience: `execute` is the
+service-task entry point and Flowable's `notify` paths never reach it, so a listener failure keeps the
+stock behaviour — a listener is not a step, and nothing in the DSL emits one. Pinned by
+`ResilientListenerFactoryTest` (both listener kinds, plus the defect case) and
+`JavaDelegateInjectionIT.both_listener_kinds_wire_their_collaborators`.
+
+A delegate annotated `@Component` is reported at **publish** as a Problems entry on its source
+(`ComponentContainer.wiringWarnings()`), not as a WARN per step execution — see the container section.
+
+Three properties worth keeping: a delegate stays **lazy** (nothing is built at publish, so an
+unsatisfiable dependency is a *step* failure routed by the step's `retry:` / `onError:`, never a
+publish-time wiring error); a class declaring **no injection point is built exactly as before**; and
+`<flowable:field>` declarations are applied **last**, so a BPMN-declared literal still wins for its own
+field — a `fields:` name and an injected member must therefore not collide. `Beans.get(...)` inside
+`execute` keeps working and remains the escape hatch for a lazy or deliberately ambiguous lookup.
+
 ## Extension points (no annotation)
 
 An extension point is a **plain Java interface**; a contribution is a `@Component` implementing it (its
@@ -211,7 +327,9 @@ the default user-data datasource, not SystemDB.
 - **A repository that overrides targeted writes must override the event-carrying form.** `updateProperties(id, values, topic)` is where a generated repository hangs its declarative checks, stored label and document resum; the plain two-argument form delegates to it. The base two-argument form deliberately does NOT re-dispatch, because `recalculate` reaches it through `super` precisely to bypass those semantics.
 - **No outbox, no write.** If the entry cannot be recorded the transaction fails, which is the whole contract: a row whose event was never recorded is exactly the state this replaces. `JavaEventOutboxIT` covers both halves — an ordinary create reaching its listener, and an entry only the relay can deliver.
 
-**Manage entities ONLY through their generated `<Entity>Repository` — NEVER the generic `Store`/`Database` for entity CRUD.** The generated repository (`@Repository extends JavaRepository<T>`) is the *only* sanctioned way to load/save/update/delete a managed entity, because it carries validations, **event publishing** (the create/`-updated`/`-deleted` topics that intent triggers/reactions/rollups/notifications listen on, recorded through the transactional outbox above), the multilingual read-overlay (a `multilingual: true` entity's finds translate string properties from its `<TABLE>_LANG` table for the caller's `Accept-Language` via `org.eclipse.dirigible.sdk.db.Translator`), and other per-entity behaviour. The generic `org.eclipse.dirigible.sdk.db.Store` (name-keyed dynamic map) and raw `Database` SQL **bypass all of that silently** and MUST NOT be used to read or mutate a managed entity. (`updateWithoutEvent` is fine — it's a deliberate repository method that keeps `super.update`'s validations/i18n and only omits the event, for workflow-driven system writes: intent SetField/Writer/trigger delegates.) The **targeted** writes are the write-back primitives a workflow should reach for instead of a full-row merge: `updateProperty`/`updateProperties` persist only the named columns (still gated by the entity's `checks:`, still refreshing a `label:`), `updateDerived` adds back the `-updated` event for recomputed totals. A generated repository routes those through its own bookkeeping (the `history:` trail as SYSTEM, the stored `label:` Name) and its declarative gates — except that `checks:` is skipped for a write touching only platform-owned columns (`ProcessId`), because recording WHICH process handles a record must not be refusable by a business gate. Consequence for a *reusable* delegate/service: it can't statically import a foreign `<Entity>Entity`, so the code that touches a specific entity must live **in that entity's project** (where it imports that project's repository); keep only entity-agnostic helpers (e.g. a number generator over its own `NumberRepository`) in a shared project. Don't make code "general" by reaching into arbitrary entities through `Store`.
+**Several writes that only make sense together are ONE transaction — `UnitOfWork.call(...)`.** Every store call is otherwise its own transaction, which is right for a single write and wrong for an operation built out of several: an intent create-from writes the target header, then its lines, then flips the source's status, and a line the target refused used to leave the first two behind — a document that exists, is marked as the period's billing, and is missing exactly what it was for, answering `500` while doing it (issue #7069). `org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> { ... })` (and its `run` sibling) runs the block on ONE session and ONE transaction: it commits when the block returns and rolls back whole when it throws. It is thread-bound, so every repository the block reaches joins it without being told; blocks nest, and the outermost owns the commit. Reads inside the block go through the same session, so a guard that re-reads the row it just wrote sees it. The events the writes record ride that transaction as always and reach the broker only once the WHOLE unit committed — which is why an announcement about the unit's outcome (the create-from's `-transitioned`) is RECORDED INSIDE the block, on the write it is about: the unit's commit is what makes it true, and only what committed is ever handed out, so a transition a rolled-back unit undid is never announced while a crash after the commit no longer loses the event (issue #7160). A bare publish after the block was the one event of that flow outside the outbox, and `EventOutboxRelayJob` cannot recover what was never recorded. Deliberately outside the unit, each on its own connection: the `History` trail, document-number allocation and the outbox table's DDL — a rolled-back unit can leave a history row and consume a number, both records of an attempt rather than business state. Read-your-own-writes covers by-id reads and targeted mutations too, and this needs help from the store rather than falling out of the shared session: inside a unit a `findById` resolves through a flushed HQL query, not `session.find` — a just-persisted `IDENTITY` dynamic-map entity, once any later write in the block has flushed the session, is NOT returned by a subsequent `session.find` on its id (it comes back `null`), and a targeted `updateProperty`/`updateProperties` flushes the block's pending inserts before its `update … where id` runs. Without both, a generated document's synchronous total recompute (reload the header, sum the lines by FK, write the totals through the targeted mutation) run inside a create-from's unit reloaded its own just-created header as `null` and gave up before summing a line, committing the zeros the header was inserted with while the identical line recomputed correctly when POSTed on its own connection (issue #7096). `JavaUnitOfWorkIT` covers the rollback, the control case without the block, and both halves of the read-your-own-writes contract (a guard re-reading its own write, and the write-then-query-then-targeted-update recompute); `IntentGeneratesItemsIT` proves the header total equals the sum of the lines end-to-end through a published create-from with `items:`.
+
+**Manage entities ONLY through their generated `<Entity>Repository` — NEVER the generic `Store`/`Database` for entity CRUD.** The generated repository (`@Repository extends JavaRepository<T>`) is the *only* sanctioned way to load/save/update/delete a managed entity, because it carries validations, **event publishing** (the create/`-updated`/`-deleted` topics that intent triggers/reactions/rollups/notifications listen on, recorded through the transactional outbox above), the multilingual read-overlay (a `multilingual: true` entity's finds translate string properties from its `<TABLE>_LANG` table for the caller's `Accept-Language` via `org.eclipse.dirigible.sdk.db.Translator`), and other per-entity behaviour. The generic `org.eclipse.dirigible.sdk.db.Store` (name-keyed dynamic map) and raw `Database` SQL **bypass all of that silently** and MUST NOT be used to read or mutate a managed entity. (`updateWithoutEvent` is fine — it's a deliberate repository method that keeps `super.update`'s validations/i18n and only omits the event, for workflow-driven system writes: intent SetField/Writer/trigger delegates.) The **targeted** writes are the write-back primitives a workflow should reach for instead of a full-row merge: `updateProperty`/`updateProperties` persist only the named columns (still gated by the entity's `checks:`, still refreshing a `label:`), `updateDerived` adds back the `-updated` event for recomputed totals. A generated repository routes those through its own bookkeeping (the `history:` trail as SYSTEM, the stored `label:` Name) and its declarative gates — except that `checks:` is skipped for a write touching only platform-owned columns (`ProcessId`), because recording WHICH process handles a record must not be refusable by a business gate. Consequence for a *reusable* delegate/service: it can't statically import a foreign `<Entity>Entity`, so the code that touches a specific entity must live **in that entity's project** (where it imports that project's repository); keep only entity-agnostic helpers (e.g. a number generator over its own `NumberRepository`) in a shared project. Don't make code "general" by reaching into arbitrary entities through `Store`. **A full-row `update()` never writes the system-owned columns at all** — it reloads the stored row and takes the `readOnly:`/roll-up/aggregate values from THERE, so a partial payload cannot erase them (#6689) — and since #6937 it **WARNs** when the payload carried a value of its own that is not the stored one, naming the entity, the columns and the discarded values. That warning is a *contract violation being reported*, not a hiccup: a writer that computes such a column belongs on a targeted primitive. Silence there is how a hand-written listener maintaining a costing pool through `update()` kept answering 200 for weeks while the column never moved — every step green, the derived data frozen at its created value. A payload that carries the stored value back (every ordinary form round-trip) stays silent, and a date is never reported: the form's own round-trip truncates it, so a difference there says nothing about who wrote it. **A `delete` announces the row it removed, not the caller's argument**, for the same reason and read the same way: the row is still there to be read until the removal, so the store reads it inside the deleting transaction and publishes THAT (#7146). Published the caller's way, a partial snapshot's unset columns arrived null and every reaction reading one no-oped in silence — the `abortOn` listener reads `ProcessIds` off the delete payload, so a process outlived its record on exactly the path the cascade relies on.
 
 ## Errors are surfaced to developers
 
@@ -221,6 +339,13 @@ view and mark the `JavaFile` artefact `FAILED` (see `JavaSynchronizer.recordComp
 `ComponentContainer.wiringErrors()` carried on `RebuildResult`). Don't regress this — it's how a
 browser-IDE developer sees what's wrong without reading the server log.
 
+**Bean-wiring warnings** (`ComponentContainer.wiringWarnings()`, also on `RebuildResult`) take the same
+route to the Problems view but leave the artefact `CREATED`: the class compiled and wired, it just
+breaks a container rule. Today there is one — a bean that is also a `JavaDelegate` (#7291). Reach for a
+warning rather than an error whenever the code still runs correctly enough that failing the artefact
+would be a lie; reach for the Problems view rather than a log line whenever the audience is the
+developer who wrote the line, not the operator who happened to run the process.
+
 ## Conventions / gotchas
 
 - `@Roles` mirrors `UserFacade.isInRole` without pulling `api-security` (which would drag
@@ -228,16 +353,23 @@ browser-IDE developer sees what's wrong without reading the server log.
 - Controller routing: base path = class FQN with slashes; longest base path wins, literal beats
   `{placeholder}`; `TypeCoercer` → `400` on parse failure; `@Body` via Spring's primary `ObjectMapper`;
   return `void`/`String`/other → write-yourself / `text/plain` / JSON.
-- Spring Boot strips `ResponseStatusException.getReason()` from the JSON body — ITs assert status code
-  only, not body text.
+- `ControllerInvoker` renders its own compact `{status, error, message}` body, so a generated
+  controller's validation reason reaches the caller verbatim. The platform-wide error body carries the
+  reason too since #6994; the ITs here still assert status codes only.
 
 ## Tests
 
-- Unit (`engine-java/src/test`): `ComponentContainerTest`, `ControllerClassConsumer*Test`,
+- Unit (`engine-java/src/test`): `ComponentContainerTest`, `ComponentContainerUnmanagedTest`,
+  `ControllerClassConsumer*Test`,
   `ControllerInvoker*Test`, `ControllerRouterTest`, `JavaLoaderTest`; (`data-store-java`)
   `JavaEntityToHbmMapperTest`, `EntityBeanMapperTest`, `CriteriaTest`.
-- HTTP ITs (extend `IntegrationTest`, no Selenide): `JavaEngineIT` (handler lifecycle), `JavaComponentIT`
-  (constructor + collection injection, and a `@Component` `JavaHandler`), `JavaNoMixingIT` (the
+- HTTP ITs (extend `IntegrationTest`, no Selenide): `JavaEngineIT` (handler lifecycle),
+  `JavaListenerSubscriptionRetryIT` (a refused subscription reaches its handler once the timer retries
+  it - the refusal injected as the `IllegalStateException` the connection factory really throws, scoped
+  to that one listener's durable id), `JavaComponentIT`
+  (constructor + collection injection, and a `@Component` `JavaHandler`), `JavaDelegateInjectionIT`
+  (both BPMN delegate paths injected, the unsatisfiable one failing the step and not the deployment,
+  and a recompiled collaborator reaching the cached delegate), `JavaNoMixingIT` (the
   no-mixing rejection), `JavaTemplateIT` (generated DAO/REST shape), `IntentEngineIT` (intent glue).
 
 ## Cross-repo effort (three repos)

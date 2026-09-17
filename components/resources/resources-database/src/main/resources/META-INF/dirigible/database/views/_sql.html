@@ -11,7 +11,7 @@
     <span x-h-toolbar-title class="shrink-0" x-text="T('database:sql.title', 'SQL Console')"></span>
     <div x-h-toolbar-spacer></div>
 
-    <div x-h-select data-filter="contains" class="w-64" x-show="$store.explorer.datasources.length">
+    <div x-h-select class="w-3xs" x-show="$store.explorer.datasources.length">
       <input x-h-select-input id="database-sql-datasource" x-model="$store.explorer.datasource"
              @change="$store.explorer.onDatasourceChanged()"
              :aria-label="T('database:explorer.datasource', 'Datasource')"
@@ -27,7 +27,7 @@
 
     <button id="database-sql-run" x-h-button data-variant="primary" data-size="sm" @click="run()"
             :disabled="!datasource || !state.statement.trim() || state.running">
-      <span x-show="state.running" x-h-spinner data-size="sm"></span>
+      <template x-if="state.running"><span x-h-spinner class="size-4"></span></template>
       <svg x-h-lucide role="presentation" x-show="!state.running" data-lucide="play" class="size-4"></svg>
       <span x-text="T('database:sql.run', 'Run')"></span>
     </button>
@@ -37,12 +37,12 @@
     </button>
   </div>
 
-  <div x-h-split class="bk-stretch flex-1" data-orientation="vertical" data-variant="border">
+  <div x-h-split class="flex-1" data-orientation="vertical" data-variant="border">
 
     <!-- The statement -->
     <div x-h-split-panel data-size="40%" data-min="120">
       <div class="vbox size-full p-2">
-        <textarea id="database-sql-statement" class="size-full font-mono text-sm rounded-md border border-border bg-transparent p-2"
+        <textarea id="database-sql-statement" x-h-textarea class="size-full font-mono text-sm"
                   spellcheck="false"
                   :placeholder="T('database:sql.placeholder', 'SELECT * FROM ...   (Ctrl/Cmd+Enter to run)')"
                   :aria-label="T('database:sql.title', 'SQL Console')"
@@ -103,7 +103,6 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('database:sql.confirmTitle', 'Run a write statement?')"></h2>
-        <p x-h-dialog-description></p>
         <button x-h-dialog-close @click="confirmOpen = false" :aria-label="T('database:explorer.close', 'Close')">
           <svg x-h-lucide role="presentation" data-lucide="x"></svg>
         </button>

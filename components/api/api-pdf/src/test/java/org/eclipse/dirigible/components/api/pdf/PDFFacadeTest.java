@@ -34,6 +34,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class PDFFacadeTest {
 
+    /** A 1x1 red PNG - the smallest image that proves the bytes reached the renderer. */
+    private static final String ONE_PIXEL_PNG_BASE64 =
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+
     /**
      * Generate pdf test.
      *
@@ -75,6 +79,52 @@ public class PDFFacadeTest {
         assertTrue(pdf.length > 0);
         String content = new String(pdf, StandardCharsets.ISO_8859_1);
         assertTrue(content.contains("DejaVuSans"), "The bundled DejaVu Sans font should be embedded in the PDF");
+    }
+
+    /**
+     * An image carried inline in a {@code data:} URI is embedded in the PDF. Inlining is the only way a
+     * document can carry an image the platform holds itself (a logo in the tenant content store, a
+     * record's attachment): the rendered stylesheet reaches FOP with no session, credentials or tenant
+     * scope, so nothing may be fetched later. FOP reads the scheme natively
+     * ({@code InternalResourceResolver}), which is what this pins - a FOP upgrade that dropped it would
+     * silently stop printing every logo.
+     */
+    @Test
+    public void generatePdfWithInlineImageTest() {
+        String pngDataUri = "data:image/png;base64," + ONE_PIXEL_PNG_BASE64;
+        String template = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <xsl:stylesheet version="1.1" xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                                xmlns:fo="http://www.w3.org/1999/XSL/Format">
+                    <xsl:template match="/">
+                        <fo:root xmlns:fo="http://www.w3.org/1999/XSL/Format">
+                            <fo:layout-master-set>
+                                <fo:simple-page-master master-name="page" page-height="29.7cm" page-width="21cm">
+                                    <fo:region-body/>
+                                </fo:simple-page-master>
+                            </fo:layout-master-set>
+                            <fo:page-sequence master-reference="page">
+                                <fo:flow flow-name="xsl-region-body">
+                                    <fo:block>
+                                        <fo:external-graphic src="%s" content-width="120pt"/>
+                                    </fo:block>
+                                </fo:flow>
+                            </fo:page-sequence>
+                        </fo:root>
+                    </xsl:template>
+                </xsl:stylesheet>
+                """.formatted(pngDataUri);
+
+        byte[] pdf = PDFFacade.generate(template, "<data/>");
+
+        assertNotNull(pdf);
+        String content = new String(pdf, StandardCharsets.ISO_8859_1);
+        assertTrue(content.contains("/Subtype /Image"), "The inline image should be embedded as a PDF image XObject");
+        String noImage = new String(
+                PDFFacade.generate(template.replace("data:image/png;base64," + ONE_PIXEL_PNG_BASE64, "nope:///x.png"), "<data/>"),
+                StandardCharsets.ISO_8859_1);
+        assertTrue(!noImage.contains("/Subtype /Image"),
+                "An unreadable graphic renders nothing and does not abort the PDF - which is what makes a missing image fail-soft");
     }
 
     /**

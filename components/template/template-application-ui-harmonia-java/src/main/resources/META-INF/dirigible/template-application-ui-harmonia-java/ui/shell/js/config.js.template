@@ -30,5 +30,12 @@ App.config = {
   // the Region & Language picker. The shared application shell compares this declaration against
   // the platform set and lists the app as a warning when translations are missing; untranslated
   // content falls back to the default language.
-  languages: ${appLanguages}
+  languages: ${appLanguages},
+
+  // Country-scoped label overrides (the intent's field `countryLabels:`), keyed by ISO 3166-1
+  // alpha-2 country code and then by the label's own translation key. The shared i18n runtime
+  // prefers an entry here over the language catalogs whenever the tenant declares a country
+  // (DIRIGIBLE_APPLICATION_COUNTRY): which term a national identifier goes by is a property of the
+  // company, not of the language its users read the UI in. Empty for an app that declares none.
+  countryLabels: ${countryLabels}
 };

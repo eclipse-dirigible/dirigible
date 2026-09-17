@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -95,7 +96,7 @@ final class CrossModelImpactSupport {
         try {
             return parseShape(new String(resource.getContent(), StandardCharsets.UTF_8));
         } catch (RuntimeException e) {
-            LOGGER.warn("Could not read the previous shape of [{}] - skipping the cross-model impact report", modelPath, e);
+            LOGGER.warn("Could not read the previous shape of [{}] - skipping the cross-model impact report", LoggedValue.of(modelPath), e);
             return Map.of();
         }
     }
@@ -173,7 +174,8 @@ final class CrossModelImpactSupport {
                 model = IntentParser.parse(candidate.getValue());
             } catch (RuntimeException e) {
                 // A candidate we cannot parse is somebody else's problem - it must not fail this pass.
-                LOGGER.debug("Skipping unparseable intent of project [{}] while reporting cross-model impact", candidate.getKey(), e);
+                LOGGER.debug("Skipping unparseable intent of project [{}] while reporting cross-model impact",
+                        LoggedValue.of(candidate.getKey()), e);
                 continue;
             }
             if (declaresUse(model, ownerModel, ownerProject) && relatesTo(model, ownerModel, entity)) {
@@ -238,7 +240,7 @@ final class CrossModelImpactSupport {
             String issue = "Model [" + ownerModel + "] no longer declares " + removal.describe()
                     + ", but the generated code of these projects still dereferences it cross-model and will not compile until they are regenerated: "
                     + consumers + " (client Java compiles as one batch, so a single stale reference stops every module's beans)";
-            LOGGER.warn(issue);
+            LOGGER.warn(LoggedValue.of(issue));
             context.addIssue(issue);
         }
     }
@@ -285,7 +287,7 @@ final class CrossModelImpactSupport {
             }
         } catch (RuntimeException e) {
             // Best-effort discovery: an unreadable neighbour must never fail the owner's generation.
-            LOGGER.warn("Could not scan [{}] for cross-model consumers", root, e);
+            LOGGER.warn("Could not scan [{}] for cross-model consumers", LoggedValue.of(root), e);
         }
     }
 }

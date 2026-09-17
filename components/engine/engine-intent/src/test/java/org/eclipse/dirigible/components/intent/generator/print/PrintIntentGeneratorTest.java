@@ -104,6 +104,24 @@ class PrintIntentGeneratorTest {
         assertTrue(template.contains("<total align=\"right\">Total: {{document.Total}}</total>"));
     }
 
+    /**
+     * The scaffold carries the issuer's logo slot. It is emitted unconditionally because an image the
+     * content store does not hold renders nothing at all, so a deployment that never uploads a logo
+     * prints exactly as before - and one that does needs no regeneration of a customized template.
+     */
+    @Test
+    void carriesTheSharedLogoSlotInTheHeader() {
+        Map<EntityIntent, EntityIntent> masters = PrintIntentGenerator.documentMasters(model);
+        EntityIntent master = masters.keySet()
+                                     .iterator()
+                                     .next();
+        String template = PrintIntentGenerator.buildTemplate(master, masters.get(master), IntentEntities.byName(model));
+
+        assertTrue(template.contains("<image src=\"Templates/Print/logo.png\" width=\"120\"/>"));
+        assertTrue(template.indexOf("<image") < template.indexOf(">Sales Invoice</text>"), "the logo belongs above the title");
+        new DocumentParser().parseDocument(template);
+    }
+
     @Test
     void generationIsDeterministic() {
         Map<EntityIntent, EntityIntent> masters = PrintIntentGenerator.documentMasters(model);

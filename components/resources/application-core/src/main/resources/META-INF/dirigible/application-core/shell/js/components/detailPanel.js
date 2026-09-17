@@ -38,11 +38,14 @@
  * Like a calendar, a files panel always renders (its empty state is meaningful), never the shared
  * "no records" line.
  */
-function detailPanel(def, masterId) {
+function detailPanel(def, masterId, master) {
   return {
     ...basePage(),
     def,
     masterId,
+    // The master RECORD the panel is rendered under (the form/master page already holds it). Read only
+    // by isForbidden() to hide affordances the server would refuse - never fetched here.
+    master,
     rows: [],
     state: "loading", // loading | error | empty | default
     error: null,
@@ -67,6 +70,14 @@ function detailPanel(def, masterId) {
       }
       await this.load();
       this.loadLookups();
+      // A custom action can create or change rows this panel lists (a Record Reminder writes a
+      // PaymentReminder against the open invoice), and it does so behind the panel's back - through
+      // its own endpoint, not this panel's editing path. Re-read on every action so the panel stops
+      // saying "No records" about a record that exists (issue #7073).
+      this.onActionDone(async () => {
+        await this.load();
+        this.loadLookups();
+      });
     },
 
     // Fetch the referenced rows for each relationship column once, keyed by FK -> the whole row (so both
@@ -183,6 +194,28 @@ function detailPanel(def, masterId) {
     // is being worked on from inside its master, so re-pointing it here is never the intent).
     masterQuery() {
       return encodeURIComponent(this.def.masterEntityId) + "=" + encodeURIComponent(this.masterId);
+    },
+    // A forbidWhen check over this child's master (intent `checks: forbidWhen`, dirigible #7275): the
+    // server rejects the write on every path, and here the affordance is hidden when the condition
+    // holds against the master the panel already holds - no extra fetch, the fromStatus (#7068) pattern.
+    // `def.forbidWhen` is a list of guards (each a list of ANDed terms); any guard that fully holds
+    // hides Add/edit/delete. A term reads `master[property]`, comparing as strings so a numeric status
+    // FK matches its seed id; a missing master value never equals a real id, so `==` shows and `!=` hides.
+    isForbidden() {
+      const guards = this.def && this.def.forbidWhen;
+      if (!Array.isArray(guards) || !guards.length) return false;
+      const m = this.master;
+      if (!m || typeof m !== "object") return false;
+      return guards.some(
+        (terms) =>
+          Array.isArray(terms) &&
+          terms.length &&
+          terms.every((t) => {
+            const cur = m[t.property];
+            const eq = String(cur === undefined || cur === null ? "" : cur) === String(t.value);
+            return t.equal ? eq : !eq;
+          }),
+      );
     },
     addRow() {
       const q = "?" + this.masterQuery() + "&embedded=1&dialog=1";

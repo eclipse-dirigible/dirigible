@@ -1,0 +1,24 @@
+{
+    "name": "UOW_LEDGER_ENTRY",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "primaryKey": true,
+            "identity": true,
+            "nullable": false,
+            "name": "ENTRY_ID"
+        },
+        {
+            "type": "VARCHAR",
+            "length": "255",
+            "nullable": true,
+            "name": "ENTRY_NAME"
+        },
+        {
+            "type": "INTEGER",
+            "nullable": false,
+            "name": "ENTRY_AMOUNT"
+        }
+    ]
+}

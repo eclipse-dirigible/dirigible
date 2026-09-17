@@ -22,43 +22,51 @@
     <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: fmtTime(lastUpdated) })"></span>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="autoRefresh"
             @click="toggleAuto()" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'">
-      <svg x-h-lucide role="img" data-lucide="pause" x-show="autoRefresh"></svg>
-      <svg x-h-lucide role="img" data-lucide="play" x-show="!autoRefresh"></svg>
+      <svg x-h-lucide role="presentation" data-lucide="pause" x-show="autoRefresh"></svg>
+      <svg x-h-lucide role="presentation" data-lucide="play" x-show="!autoRefresh"></svg>
     </button>
-    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
   </div>
 
   <!-- Act-as (delegated entry): while armed this Inbox serves the ACTING identity's tasks, so the
        real user's own assigned tasks are absent. Say it, and say how many — an empty list under a
        forgotten arming reads as a broken process (#6694). -->
   <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
-       style="background: var(--color-warning, #b45309); color: #fff;">
-    <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+       style="background: var(--warning); color: var(--warning-foreground);">
+    <svg role="presentation" x-h-lucide data-lucide="user-round-cog"></svg>
     <span x-text="actAs.hiddenTasks
         ? T('application-core:shell.inbox.actAsHidden', 'Acting as {{person}} — {{count}} of your own tasks are hidden', { person: actAs.acting, count: actAs.hiddenTasks })
         : T('application-core:shell.inbox.actAsServing', 'Acting as {{person}} — this Inbox serves their tasks, not yours', { person: actAs.acting })"></span>
     <div class="flex-1"></div>
     <button x-h-button data-size="sm" data-variant="outline" @click="exitActAs()"
-            style="border-color:#fff; color:#fff; background:transparent;">
+            style="border-color: var(--warning-foreground); color: var(--warning-foreground); background: transparent;">
       <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
     </button>
   </div>
 
-  <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the task list -->
     <div x-h-split-panel data-size="20%" data-min="280">
       <div class="vbox size-full">
-        <div class="p-2">
-          <div x-h-input-group data-size="sm">
+        <div class="p-2 hbox gap-2 items-center">
+          <div x-h-input-group data-size="sm" class="flex-1">
             <input x-h-input.group type="text" :placeholder="T('application-core:shell.inbox.filterTasks', 'Filter tasks...')" x-model="searchTerm" @input="refreshIcons()" />
             <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg></div>
           </div>
+          <!-- Sort toggle: the Inbox is a task list, not a column table, so it has no header to click
+               (unlike the entity list views) — a direction toggle is the equivalent affordance. -->
+          <button x-h-button data-variant="outline" data-size="icon-sm" class="shrink-0" @click="toggleSort()"
+                  :aria-label="sortDir === 'desc' ? T('application-core:shell.inbox.sortNewestFirst', 'Newest first') : T('application-core:shell.inbox.sortOldestFirst', 'Oldest first')"
+                  :title="sortDir === 'desc' ? T('application-core:shell.inbox.sortNewestFirst', 'Newest first') : T('application-core:shell.inbox.sortOldestFirst', 'Oldest first')">
+            <svg x-h-lucide role="presentation" data-lucide="arrow-down-wide-narrow" x-show="sortDir === 'desc'"></svg>
+            <svg x-h-lucide role="presentation" data-lucide="arrow-up-narrow-wide" x-show="sortDir === 'asc'"></svg>
+          </button>
         </div>
 
         <div x-show="filtered.length === 0" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+            <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></svg></div>
             <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTasks', 'No tasks')"></div>
             <div x-h-info-page-description x-text="actAs.acting
                 ? T('application-core:shell.inbox.noTasksActAsHint', 'You are acting as {{person}} and this list is theirs. Exit to see your own tasks.', { person: actAs.acting })
@@ -74,9 +82,13 @@
                   <td x-h-table-cell>
                     <div class="vbox gap-1">
                       <span class="font-medium" x-text="$store.processTasks.taskLabel(task)"></span>
+                      <!-- What the task is ABOUT: the record's number, counterparty and total, resolved
+                           live from the locators the task carries. The BPM business key ('Ref 6', the
+                           record id) is shown only when there is no subject to read instead (#7077). -->
+                      <span x-show="$store.processTasks.subject(task)" class="text-sm" x-text="$store.processTasks.subject(task)"></span>
                       <span x-h-text.muted class="text-xs">
                         <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? T('application-core:shell.inbox.mine', 'Mine') : T('application-core:shell.inbox.available', 'Available')"></span>
-                        <span x-show="task.processInstanceBusinessKey" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
+                        <span x-show="task.processInstanceBusinessKey && !$store.processTasks.subject(task)" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
                         <span x-show="task.createTime" x-text="' · ' + fmtTime(task.createTime)"></span>
                       </span>
                     </div>
@@ -101,9 +113,10 @@
 
       <div x-show="selected" class="vbox size-full">
         <div x-h-toolbar data-variant="transparent">
-          <span x-h-toolbar-title x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
+          <span x-h-toolbar-title class="shrink-0" x-text="selected ? $store.processTasks.taskLabel(selected) : ''"></span>
+          <span x-show="selected && $store.processTasks.subject(selected)" x-h-text.muted class="text-sm truncate" x-text="selected ? $store.processTasks.subject(selected) : ''"></span>
           <div x-h-toolbar-spacer></div>
-          <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
+          <span x-show="selected && selected.processInstanceBusinessKey && !$store.processTasks.subject(selected)" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
           <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? T('application-core:shell.inbox.assignedToMe', 'Assigned to me') : T('application-core:shell.inbox.available', 'Available')"></span>
         </div>
 
@@ -111,12 +124,12 @@
         <div x-show="selected && !selected.mine" class="vbox gap-3 items-start p-4">
           <div x-h-info-page>
             <div x-h-info-page-header>
-              <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+              <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></svg></div>
               <div x-h-info-page-title x-text="T('application-core:shell.inbox.claimTask', 'Claim this task')"></div>
               <div x-h-info-page-description x-text="T('application-core:shell.inbox.claimHint', 'This task is available to your group. Claim it to open and complete its form.')"></div>
             </div>
           </div>
-          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" x-h-lucide data-lucide="hand"></i><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
+          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><svg role="presentation" x-h-lucide data-lucide="hand"></svg><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
         </div>
 
         <!-- Claimed + has a form: render the standalone form inline. -->

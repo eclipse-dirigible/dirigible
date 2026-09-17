@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.registry.watcher;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
+import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
@@ -32,7 +34,9 @@ public class ExternalRegistryWatcher extends RecursiveFolderWatcher {
     private final IRepository repository;
 
     @Autowired
-    public ExternalRegistryWatcher(IRepository repository) {
+    public ExternalRegistryWatcher(IRepository repository, RegistryMutationTracker mutationTracker,
+            SynchronizationWatcher synchronizationWatcher) {
+        super(mutationTracker, synchronizationWatcher);
         this.repository = repository;
     }
 

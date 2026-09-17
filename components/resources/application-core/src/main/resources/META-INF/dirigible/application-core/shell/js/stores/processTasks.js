@@ -23,6 +23,49 @@
  * The task form is opened in the app-wide dialog wired in index.html; on close the store re-fetches.
  */
 document.addEventListener('alpine:init', () => {
+  // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
+  // outside the store: it is a request cache, not view state, and several tasks of the same document (or
+  // several documents of the same customer) must share one fetch rather than one each.
+  //
+  // It is BOUNDED in both directions, because a shell stays open for a working day: an entry older than
+  // the TTL is re-fetched (so a record edited elsewhere stops answering with the value it had this
+  // morning), and the map never holds more than MAX entries (least recently used dropped first), so the
+  // memory a long session holds is a function of the cap, not of how many documents were ever inspected.
+  const RECORD_CACHE_TTL_MS = 60000;
+  const RECORD_CACHE_MAX = 200;
+  const recordCache = new Map();
+
+  const cacheKey = (url, id) => url + '/' + id;
+
+  const fetchRecord = (url, id) => {
+    const key = cacheKey(url, id);
+    const cached = recordCache.get(key);
+    if (cached && (Date.now() - cached.at) < RECORD_CACHE_TTL_MS) {
+      // A Map iterates in insertion order, so re-inserting a hit makes it the most recently used and the
+      // eviction below always drops the coldest entry.
+      recordCache.delete(key);
+      recordCache.set(key, cached);
+      return cached.promise;
+    }
+    const promise = App.services.api.get(url + '/' + encodeURIComponent(id), { baseUrl: '' })
+      .catch(() => null);   // unreachable or not permitted: the subject simply omits what it cannot read
+    recordCache.delete(key);
+    recordCache.set(key, { at: Date.now(), promise });
+    while (recordCache.size > RECORD_CACHE_MAX) recordCache.delete(recordCache.keys().next().value);
+    return promise;
+  };
+
+  // The cache keys each task's subject line was built from — the record itself plus every relation target
+  // a label was read from — keyed by task id, since the task objects themselves are replaced on every
+  // load. Dropping exactly those keys is what lets a task whose record just changed re-read it while
+  // every other task keeps its warm entry.
+  const subjectKeys = new Map();
+
+  const forgetTask = (taskId) => {
+    (subjectKeys.get(taskId) || []).forEach((key) => recordCache.delete(key));
+    subjectKeys.delete(taskId);
+  };
+
   Alpine.store('processTasks', {
     byProcessId: {},
     tasks: [],          // flat list of all the user's tasks (assignee + groups) — the Inbox view
@@ -31,6 +74,8 @@ document.addEventListener('alpine:init', () => {
     formUrl: '',
     formTitle: '',
     formTitleKey: '',   // the open task's translation key; '' for a process that declares no catalog
+    formTaskId: '',     // the open task, so closing the form re-reads exactly the record it wrote
+    subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
     _poll: null,
 
@@ -53,9 +98,16 @@ document.addEventListener('alpine:init', () => {
       // store (serverUnavailable back to false) and resumes.
       if (this.serverUnavailable) return;
       try {
+        // A personal shell (`taskScope: 'assignee'`) serves strictly the person's own work, so it asks
+        // only for the tasks assigned to them. The back-office group queues a user's ROLES make them a
+        // candidate for - Credit Note Confirm, Journal Entry Post - belong to the back-office shell;
+        // listing them next to an employee's own Submit tasks made the Personal Inbox a second, wider
+        // back office (#7077). The scope is a display choice: the server gates every task either way.
+        const personalOnly = (window.App && App.config && App.config.taskScope) === 'assignee';
         const [mine, groups] = await Promise.all([
           App.services.api.get('/services/inbox/tasks?type=assignee&limit=100', { baseUrl: '' }),
-          App.services.api.get('/services/inbox/tasks?type=groups&limit=100', { baseUrl: '' }),
+          personalOnly ? Promise.resolve([])
+            : App.services.api.get('/services/inbox/tasks?type=groups&limit=100', { baseUrl: '' }),
         ]);
         const map = {};
         const flat = [];
@@ -74,6 +126,7 @@ document.addEventListener('alpine:init', () => {
         this.tasks = flat;
         this.loaded = true;
         this.loadTaskLabelCatalogs(flat);
+        this.resolveSubjects(flat);
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
@@ -96,7 +149,90 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    refresh() { return this.load(); },
+    // An explicit refresh — the Inbox's Refresh button — re-reads the records the subject lines are built
+    // from, which is what makes it authoritative. Everything automatic (the 30s poll, the Inbox's 15s
+    // auto-refresh) goes through load() instead and only resolves the tasks it has not seen yet, so a
+    // shell sitting open does not re-fetch every document, and the subject lines do not blank out and
+    // repopulate on every cycle (#7157).
+    refresh() {
+      recordCache.clear();
+      subjectKeys.clear();
+      this.subjects = {};
+      return this.load();
+    },
+
+    // The targeted counterpart: the record behind ONE task has just been written (its form completed), so
+    // that task alone re-resolves and every other subject stays warm.
+    invalidate(task) {
+      if (!task) return;
+      forgetTask(task.id);
+      delete this.subjects[task.id];
+    },
+
+    /**
+     * The business identity of the record a task is about - the document's number, its counterparty and
+     * its total - for the row that lists the task away from its own application. Before this, a row
+     * carried only the BPM business key ('Ref 6', the record id), so the approver had to open every task
+     * to learn what they were approving (#7077).
+     *
+     * The task carries LOCATORS, not values (see the TaskSubject DTO): the record's REST URL and the
+     * properties that identify it. They are resolved here, live, the same way the task form resolves the
+     * record it edits - a subject stamped when the process started would state the total of a document
+     * whose lines are added afterwards.
+     */
+    subject(task) {
+      return (task && this.subjects[task.id]) || '';
+    },
+
+    async resolveSubjects(tasks) {
+      const current = new Set(tasks.map((t) => t.id));
+      Object.keys(this.subjects).forEach((id) => {
+        if (current.has(id)) return;
+        delete this.subjects[id];
+        subjectKeys.delete(id);   // the records stay cached (another task may share them); they age out on TTL
+      });
+      const pending = tasks.filter((t) => t.subject && this.subjects[t.id] === undefined);
+      if (!pending.length) return;
+      await Promise.all(pending.map((t) => this.resolveSubject(t)));
+      // The bell bakes an item's text in when it arrives, so it is re-titled once the subjects are in.
+      const notifications = Alpine.store('notifications');
+      if (notifications && notifications.syncTasks) notifications.syncTasks(this.tasks);
+    },
+
+    async resolveSubject(task) {
+      this.subjects[task.id] = '';   // claim it, so a concurrent load does not resolve the same task twice
+      try {
+        const declared = task.subject;
+        const keys = [cacheKey(declared.url, declared.id)];
+        const record = await fetchRecord(declared.url, declared.id);
+        subjectKeys.set(task.id, keys);
+        if (!record) return;
+        const parts = [];
+        for (const field of declared.fields) {
+          const value = await this.subjectPart(field, record[field.property], keys);
+          if (value) parts.push(value);
+        }
+        this.subjects[task.id] = parts.join(' · ');
+      } catch (e) {
+        console.warn('processTasks: unable to resolve the subject of task ' + task.id, e);
+      }
+    },
+
+    // One property of a subject line, rendered the way the record's own application renders it.
+    async subjectPart(field, value, keys) {
+      if (value === null || value === undefined || value === '') return '';
+      if (field.kind === 'relation') {
+        if (keys) keys.push(cacheKey(field.url, value));
+        const related = await fetchRecord(field.url, value);
+        const label = related && related[field.label];
+        return label === null || label === undefined || label === '' ? '' : String(label);
+      }
+      if (!window.HarmoniaFormat) return String(value);
+      if (field.kind === 'number') return HarmoniaFormat.number(value, null, '');
+      if (field.kind === 'integer') return HarmoniaFormat.number(value, '0', '');
+      if (field.kind === 'date') return HarmoniaFormat.value(value, true);
+      return String(value);
+    },
 
     // A task names its own translation key ('<project>:<model>-model.processes.<task>', minted into
     // the process definition at generation time), and the module that raised it is not necessarily
@@ -165,16 +301,21 @@ document.addEventListener('alpine:init', () => {
       // (and the catalogs, which may still be loading) rather than being resolved once here.
       this.formTitle = task.name || 'Task';
       this.formTitleKey = task.nameKey || '';
+      this.formTaskId = task.id;
       this.formOpen = true;
     },
 
     // Called when the task-form dialog closes; the generated task form completes the task itself,
     // so a re-fetch drops the finished task from the originating view's badge.
     closeForm() {
+      // The form just wrote the record this task is about, so that one subject is re-read; the rest of
+      // the inbox is untouched and keeps its cache.
+      this.invalidate({ id: this.formTaskId });
       this.formOpen = false;
       this.formUrl = '';
       this.formTitleKey = '';
-      this.refresh();
+      this.formTaskId = '';
+      this.load();
     },
   });
 }, { once: true });

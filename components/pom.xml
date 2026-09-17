@@ -28,6 +28,7 @@
         <module>core/core-spring</module>
         <module>core/core-project</module>
         <module>core/core-tenants</module>
+        <module>core/core-tenants-provisioning</module>
         <module>core/core-tracing</module>
         <module>core/core-java</module>
         <module>core/core-liquibase</module>
@@ -1642,6 +1643,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-tenants</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-tenants-provisioning</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

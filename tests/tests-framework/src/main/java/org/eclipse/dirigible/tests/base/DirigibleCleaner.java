@@ -48,10 +48,7 @@ class DirigibleCleaner {
             clearEntityManagerCaches();
 
             // clean up SystemDB
-            DirigibleDataSource systemDataSource = dataSourcesManager.getSystemDataSource();
-            if (systemDataSource.isOfType(DatabaseSystem.H2)) {
-                dropAllObjects(systemDataSource);
-            }
+            cleanupSystemDataSource(dataSourcesManager.getSystemDataSource());
 
             // clean up DefaultDB
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
@@ -77,6 +74,28 @@ class DirigibleCleaner {
             deleteCMSFolder();
             deleteDirigibleFolder();
         }
+    }
+
+    /**
+     * The SystemDB carries the platform's own schema, so it is cleaned between test classes exactly
+     * like the DefaultDB - otherwise a PostgreSQL SystemDB leg would leak artefacts, tenants and roles
+     * from one IT class into the next.
+     *
+     * @param dataSource the system data source
+     */
+    private void cleanupSystemDataSource(DirigibleDataSource dataSource) {
+        if (dataSource.isOfType(DatabaseSystem.H2)) {
+            dropAllObjects(dataSource);
+            return;
+        }
+
+        if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            deleteSchemas(dataSource);
+            createSchema(dataSource, "public");
+            return;
+        }
+
+        LOGGER.warn("Missing cleanup logic for system datasource [{}] - it is left as is", dataSource);
     }
 
     private void cleanupMSSQL(DirigibleDataSource dataSource) {

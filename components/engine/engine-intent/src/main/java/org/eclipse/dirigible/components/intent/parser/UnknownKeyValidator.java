@@ -13,7 +13,9 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -22,6 +24,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 
 import com.google.gson.annotations.SerializedName;
 
@@ -61,9 +64,13 @@ final class UnknownKeyValidator {
      * The entity-event / process-step axes a notification, an integration or a departure may bind to.
      * {@code onTransition} is the status channel - a workflow setter, a {@code transitions:} button and
      * a {@code generates} completion hook publish {@code -transitioned} and never {@code -updated}.
+     * {@code onPhase} (with its sibling {@code phase}) is the enrichment channel - a write a listener
+     * makes event-silently announces its declared phase, which is the only moment a consumer of that
+     * value may observe. {@code onNotifyFailed} is the delivery channel - a notify block that stamps an
+     * {@code outcome:} announces the send it could not complete, which is otherwise only a log line.
      */
-    private static final Set<String> GLUE_EVENT_KEYS =
-            Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onStepReached", "onStepCompleted", "when");
+    private static final Set<String> GLUE_EVENT_KEYS = Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed",
+            "onPhase", "phase", "onStepReached", "onStepCompleted", "when");
 
     /**
      * Author-facing maps whose keys are a closed vocabulary, keyed by {@code <SimpleClassName>#<field>}
@@ -78,8 +85,13 @@ final class UnknownKeyValidator {
      */
     private static final Map<String, Set<String>> MAP_KEYS = Map.ofEntries(
             Map.entry("ProcessIntent#trigger",
-                    Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "when", "businessKey", "businessKeyStrategy")),
+                    Set.of("onCreate", "onUpdate", "onDelete", "onTransition", "onNotifyFailed", "when", "businessKey",
+                            "businessKeyStrategy")),
             Map.entry("ProcessIntent#abortOn", Set.of("status", "then")), Map.entry("NotificationIntent#event", GLUE_EVENT_KEYS),
+            // A notify block's `attach` is a scalar (print / recordPrint) OR the report shape
+            // { report, bind } - a non-map node falls straight through this check. `bind`'s own keys are
+            // the named report's parameters, so it stays opaque here and the notify validator checks it.
+            Map.entry("NotificationIntent#attach", NotificationIntent.ATTACH_REPORT_KEYS),
             Map.entry("NotificationIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("NotificationIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("IntegrationIntent#event", GLUE_EVENT_KEYS),
@@ -87,12 +99,12 @@ final class UnknownKeyValidator {
             Map.entry("IntegrationIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("OutboundIntent#event", GLUE_EVENT_KEYS), Map.entry("OutboundIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("OutboundIntent#event.onStepCompleted", Set.of("process", "step")),
-            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "when", "model")),
+            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "onPhase", "phase", "when", "model")),
             Map.entry("PostingIntent#rule", Set.of("entity", "match")),
             // Both axes plus the cardinality (#6800). Spelled out rather than reusing GLUE_EVENT_KEYS:
             // a create-from binds onTransition (which no other consumer has) and never onUpdate/onDelete.
             Map.entry("GeneratesIntent#event",
-                    Set.of("onTransition", "onCreate", "onStepReached", "onStepCompleted", "when", "mode", "model")),
+                    Set.of("onTransition", "onCreate", "onPhase", "phase", "onStepReached", "onStepCompleted", "when", "mode", "model")),
             Map.entry("GeneratesIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("GeneratesIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("GenerateChildIntent#forEach", Set.of("entity", "days", "model", "match")),
@@ -153,6 +165,88 @@ final class UnknownKeyValidator {
                 : " - did you mean [" + nearest + "]?";
     }
 
+    /**
+     * The hint for a key that is not declared where it was written. A misplaced key is the more common
+     * slip on the map-shaped features - {@code mode} written beside {@code event:} rather than inside
+     * it, {@code when} written inside a step binding rather than beside it - and it is the one a bare
+     * "unknown key" reads as "the platform does not support this", which is how a valid capability gets
+     * dropped from an intent instead of being moved one line.
+     *
+     * <p>
+     * The registered vocabularies already say where every map key IS legal, so an exact match elsewhere
+     * on the same feature is reported as a relocation. Only when the key is legal nowhere on the
+     * feature does this fall back to the fuzzy "did you mean" - an exact placement beats a near-miss
+     * guess.
+     *
+     * @param key the authored key
+     * @param owner the model class the key was written on, directly or inside one of its maps
+     * @param withinOwner the map path within that class ({@code event}, {@code event.onStepCompleted}),
+     *        or {@code null} when the key sits on the object itself
+     * @param here the vocabulary that rejected it
+     * @return the suffix to append to the issue message
+     */
+    private static String placement(String key, Class<?> owner, String withinOwner, Collection<String> here) {
+        if (withinOwner != null && keysOf(owner).containsKey(key)) {
+            return " - [" + key + "] is declared on the " + subject(owner) + " itself, not inside " + shape(withinOwner)
+                    + " - move it out one level";
+        }
+        String prefix = owner.getSimpleName() + "#";
+        List<String> elsewhere = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> registered : MAP_KEYS.entrySet()) {
+            if (!registered.getKey()
+                           .startsWith(prefix)
+                    || !registered.getValue()
+                                  .contains(key)) {
+                continue;
+            }
+            String where = registered.getKey()
+                                     .substring(prefix.length());
+            if (!where.equals(withinOwner)) {
+                elsewhere.add(where);
+            }
+        }
+        if (elsewhere.isEmpty()) {
+            return suggestion(key, here);
+        }
+        // Several bindings may accept the same key - a step event's { process, step } is registered
+        // under both onStepReached and onStepCompleted. Point at the one the author actually wrote
+        // (its binding is a sibling of the rejected key), and sort otherwise so the message is stable
+        // rather than dependent on the registration map's iteration order.
+        Collections.sort(elsewhere);
+        for (String where : elsewhere) {
+            String binding = where.substring(where.lastIndexOf('.') + 1);
+            if (here.contains(binding)) {
+                return moveTo(key, where, owner);
+            }
+        }
+        return moveTo(key, elsewhere.get(0), owner);
+    }
+
+    /** The relocation hint itself, shared by the preferred and the fallback candidate. */
+    private static String moveTo(String key, String where, Class<?> owner) {
+        return " - [" + key + "] belongs inside " + shape(where) + " on this " + subject(owner) + " - move it there";
+    }
+
+    /**
+     * A map path rendered as the YAML the author has to write: {@code `event: { onStepCompleted: ...
+     * }`}.
+     */
+    private static String shape(String withinOwner) {
+        int dot = withinOwner.indexOf('.');
+        return dot < 0 ? "`" + withinOwner + ":`"
+                : "`" + withinOwner.substring(0, dot) + ": { " + withinOwner.substring(dot + 1) + ": ... }`";
+    }
+
+    /**
+     * The feature's author-facing name: {@code GeneratesIntent} is what an author calls a `generates`.
+     */
+    private static String subject(Class<?> owner) {
+        String name = owner.getSimpleName();
+        return name.endsWith("Intent") ? name.substring(0, name.length() - "Intent".length())
+                                             .toLowerCase(Locale.ROOT)
+                : name;
+    }
+
     private static void walk(Object node, Class<?> type, String path, List<String> issues) {
         if (!(node instanceof Map<?, ?> map)) {
             return; // a wrong-shaped node is reported by the typed mapping, not here
@@ -162,13 +256,13 @@ final class UnknownKeyValidator {
             String key = String.valueOf(entry.getKey());
             Field field = declared.get(key);
             if (field == null) {
-                issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, declared.keySet()));
+                issues.add("unknown key [" + key + "] " + at(path) + placement(key, type, null, declared.keySet()));
                 continue;
             }
             String childPath = path.isEmpty() ? key : path + "." + key;
             Set<String> vocabulary = MAP_KEYS.get(type.getSimpleName() + "#" + key);
             if (vocabulary != null) {
-                walkMap(entry.getValue(), vocabulary, type.getSimpleName() + "#" + key, childPath, issues);
+                walkMap(entry.getValue(), vocabulary, type, key, childPath, issues);
                 continue;
             }
             descend(entry.getValue(), field.getGenericType(), childPath, issues);
@@ -179,19 +273,20 @@ final class UnknownKeyValidator {
      * Check a closed-vocabulary map, and any registered map nested one level inside it (a step-event
      * binding's {@code { process, step }} under {@code event: { onStepReached: ... }}).
      */
-    private static void walkMap(Object node, Set<String> vocabulary, String registration, String path, List<String> issues) {
+    private static void walkMap(Object node, Set<String> vocabulary, Class<?> owner, String withinOwner, String path, List<String> issues) {
         if (!(node instanceof Map<?, ?> map)) {
             return; // a wrong-shaped node is reported by the feature's own validator
         }
+        String registration = owner.getSimpleName() + "#" + withinOwner;
         for (Map.Entry<?, ?> entry : map.entrySet()) {
             String key = String.valueOf(entry.getKey());
             if (!vocabulary.contains(key)) {
-                issues.add("unknown key [" + key + "] " + at(path) + suggestion(key, vocabulary));
+                issues.add("unknown key [" + key + "] " + at(path) + placement(key, owner, withinOwner, vocabulary));
                 continue;
             }
             Set<String> nested = MAP_KEYS.get(registration + "." + key);
             if (nested != null) {
-                walkMap(entry.getValue(), nested, registration + "." + key, path + "." + key, issues);
+                walkMap(entry.getValue(), nested, owner, withinOwner + "." + key, path + "." + key, issues);
             }
         }
     }

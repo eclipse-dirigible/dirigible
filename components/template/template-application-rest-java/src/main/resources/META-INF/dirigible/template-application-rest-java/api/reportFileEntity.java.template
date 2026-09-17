@@ -75,6 +75,21 @@ public class ${name}Controller {
         }
     }
 
+    @Post("/sum")
+    @Documentation("Sum a numeric column of ${name}")
+    public Map<String, Object> sum(@Body Map<String, Object> filter) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        try {
+            // One aggregated number over the (filtered) report - what a dashboard count tile over an
+            // aggregating report reads instead of summing every group row in the browser (#7161).
+            return Map.of("sum", repository.sum(stringValue(filter == null ? null : filter.get("column")), filter));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
     @Post("/search")
     @Documentation("Search ${name}")
     public List<Map<String, Object>> search(@Body Map<String, Object> filter) {
@@ -103,6 +118,10 @@ public class ${name}Controller {
         }
     }
 
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
+    }
+
     private static Integer intValue(Map<String, Object> filter, String key) {
         if (filter == null) {
             return null;
@@ -124,15 +143,30 @@ public class ${name}Controller {
 
     private void checkPermissions(String operationType) {
 #if($perspectiveRole)
-        if (!UserFacade.isInRole("${perspectiveRole}")) {
+        if (!isInAnyRole("${perspectiveRole}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($security.roleRead)
-        if ("read".equals(operationType) && !UserFacade.isInRole("${security.roleRead}")) {
+        if ("read".equals(operationType) && !isInAnyRole("${security.roleRead}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
+    }
+
+    /**
+     * Whether the caller holds ANY of a comma-separated role list. A convention-derived report gate
+     * carries one name; a gate the intent's `permissions[].can: [<Report>:read]` tokens authorized
+     * arrives here as "A,B" and holding either of them is enough.
+     */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && UserFacade.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 #end
 }

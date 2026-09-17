@@ -28,9 +28,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
-import org.quartz.JobKey;
-import org.quartz.Scheduler;
-import org.quartz.SchedulerException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.annotation.DirtiesContext;
@@ -90,9 +87,6 @@ class TokenGroupsTenantResolutionIT extends IntegrationTest {
     @Autowired
     private TenantConfigurationService tenantConfigurationService;
 
-    @Autowired
-    private Scheduler scheduler;
-
     @BeforeAll
     static void useTokenGroupsResolution() {
         DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(true);
@@ -103,22 +97,15 @@ class TokenGroupsTenantResolutionIT extends IntegrationTest {
     /**
      * Provisions the tenant and seeds the markers, once for the class.
      *
-     * <p>
-     * The provisioning job is triggered explicitly rather than waited for: its schedule is
-     * {@code DIRIGIBLE_TENANTS_PROVISIONING_FREQUENCY_SECONDS} wide (15 minutes by default) and the
-     * only prompt firing is the one at startup.
-     *
-     * @throws SchedulerException if the provisioning job cannot be triggered
      * @throws SQLException if a marker cannot be written
      */
     @BeforeEach
-    void provisionTenantsAndSeedMarkers() throws SchedulerException, SQLException {
+    void provisionTenantsAndSeedMarkers() throws SQLException {
         if (provisionedTenant != null) {
             return;
         }
         DirigibleTestTenant created = new DirigibleTestTenant("token-groups-resolution-it");
         createTenants(created);
-        scheduler.triggerJob(JobKey.jobKey("TenantsProvisioningJob", "system"));
         waitForTenantProvisioning(created);
         provisionedTenant = created;
 

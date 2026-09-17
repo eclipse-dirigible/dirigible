@@ -181,6 +181,92 @@ class UnknownKeyIntentTest {
                 "both problems should be reported in one pass: " + ex.getIssues());
     }
 
+    /**
+     * A base with a create-from, for the misplaced-key cases below. The map-shaped features are where a
+     * key lands at the wrong level, because their nesting is the only place in the DSL where "beside"
+     * and "inside" are both plausible readings of the same requirement.
+     */
+    private static final String GENERATES_YAML = """
+            name: fines
+            entities:
+              - name: FineStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true }
+              - name: Fine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: violationAt, type: timestamp }
+                relations:
+                  - { name: Status, kind: manyToOne, to: FineStatus, function: EntityStatus, init: 1 }
+              - name: FineLog
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: event, type: string }
+                relations:
+                  - { name: fine, kind: manyToOne, to: Fine }
+            generates:
+              - name: log-identified
+                from: Fine
+                to: FineLog
+                event: { onTransition: Fine, when: "Status == IDENTIFIED", mode: append }
+                map:
+                  fine: id
+                defaults:
+                  event: "IDENTIFIED"
+            seeds:
+              - name: fine-statuses
+                entity: FineStatus
+                rows:
+                  - { id: 1, name: NEW, stage: draft }
+                  - { id: 2, name: IDENTIFIED, stage: live }
+            """;
+
+    @Test
+    void theGeneratesShowcaseParses() {
+        assertDoesNotThrow(() -> IntentParser.parse(GENERATES_YAML));
+    }
+
+    /**
+     * The slip that cost a real intent its append cardinality: `mode` written beside `event:` rather
+     * than inside it. A bare "unknown key" reads as "the platform has no such thing" - and the fix an
+     * author (or an assistant) then reaches for is to drop the key and accept the wrong cardinality, so
+     * the message has to name the place the key IS legal.
+     */
+    @Test
+    void aKeyBelongingOneLevelDownNamesTheMapItBelongsIn() {
+        String issue =
+                assertIssue(GENERATES_YAML.replace("    to: FineLog\n", "    to: FineLog\n    mode: append\n"), "unknown key [mode]");
+        assertTrue(issue.contains("belongs inside `event:`"), "should name the event map: " + issue);
+        assertTrue(issue.contains("generates"), "should name the feature: " + issue);
+    }
+
+    /** The same slip in the other direction: a key of the create-from written inside its event. */
+    @Test
+    void aKeyBelongingOneLevelUpSaysToMoveItOut() {
+        String issue = assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine,", "event: { to: FineLog, onTransition: Fine,"),
+                "unknown key [to]");
+        assertTrue(issue.contains("declared on the generates itself"), "should name the owning feature: " + issue);
+        assertTrue(issue.contains("not inside `event:`"), "should name the map it was written in: " + issue);
+    }
+
+    /** Two levels down: the step binding's own keys, written flat on the event. */
+    @Test
+    void aKeyBelongingInANestedBindingRendersTheWholeShape() {
+        String issue = assertIssue(GENERATES_YAML.replace("event: { onTransition: Fine, when: \"Status == IDENTIFIED\", mode: append }",
+                "event: { onStepCompleted: { process: P, step: s }, process: P, mode: append }"), "unknown key [process]");
+        assertTrue(issue.contains("`event: { onStepCompleted: ... }`"), "should render the nested shape: " + issue);
+    }
+
+    /** A key legal nowhere on the feature still gets the fuzzy near-miss, not a placement claim. */
+    @Test
+    void aKeyLegalNowhereKeepsTheDidYouMeanFallback() {
+        String issue = assertIssue(GENERATES_YAML.replace("    to: FineLog\n", "    too: FineLog\n"), "unknown key [too]");
+        assertTrue(issue.contains("did you mean [to]"), "should still guess the near-miss: " + issue);
+        assertTrue(!issue.contains("belongs inside"), "should not claim a placement: " + issue);
+    }
+
     private static String assertIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         String issue = ex.getIssues()

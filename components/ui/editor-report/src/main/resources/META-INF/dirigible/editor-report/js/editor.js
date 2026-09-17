@@ -15,6 +15,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	const layoutHub = new LayoutHub();
 	const dialogHub = new DialogHub();
 	let genFile = '';
+	let legacyGenFile = '';
 	let workspace = '';
 	let contents;
 	$scope.changed = false;
@@ -128,6 +129,19 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.fileChanged();
 			}
 		}
+		// A count tile's column must be a count(*) one - a count(<field>) sums to the number of rows
+		// carrying that field, not to the record count (dirigible #7161). Drop a stored one that is
+		// not, rather than leave the widget naming a column the picker no longer offers.
+		const widget = report.widget;
+		if (widget && widget.countColumn) {
+			const column = (report.columns || []).find(c => c.alias === widget.countColumn);
+			if (!isCountAllColumn(column)) {
+				console.warn('report editor: dropping the count tile\'s column [' + widget.countColumn
+					+ '] - only a count(*) column sums to the record count');
+				delete widget.countColumn;
+				$scope.fileChanged();
+			}
+		}
 		return report;
 	}
 
@@ -176,18 +190,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		loadDatabasesMetadata();
 	};
 
+	// The generation descriptor is named after the whole model file ('revenue.report.gen') since
+	// #7057, so that two model files of one project differing only in extension keep their own
+	// record. A project generated before that carries the base-name form ('revenue.gen'), which is
+	// still the record of its generation - hence the fallback.
+	const resolveGenFile = () => WorkspaceService.resourceExists(genFile).then(() => genFile,
+		() => WorkspaceService.resourceExists(legacyGenFile).then(() => legacyGenFile));
+
 	$scope.regenerate = () => {
 		$scope.save();
 		dialogHub.showBusyDialog('Loading data');
-		WorkspaceService.loadContent(genFile).then((response) => {
-			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
-			if (!response.data.templateId) {
-				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
-			} else {
-				dialogHub.showBusyDialog('Regenerating');
-				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
-			}
-		}, (error) => {
+		const onError = (error) => {
 			console.error(error);
 			dialogHub.closeBusyDialog();
 			dialogHub.showAlert({
@@ -196,7 +209,16 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				type: AlertTypes.Error,
 				preformatted: true,
 			});
-		});
+		};
+		resolveGenFile().then((path) => WorkspaceService.loadContent(path).then((response) => {
+			let { models, perspectives, templateId, filePath, workspaceName, projectName, ...params } = response.data;
+			if (!response.data.templateId) {
+				$scope.chooseTemplate(response.data.projectName, response.data.filePath, params);
+			} else {
+				dialogHub.showBusyDialog('Regenerating');
+				$scope.generateFromModel(response.data.projectName, response.data.filePath, response.data.templateId, params);
+			}
+		}, onError), onError);
 	};
 
 	$scope.generateFromModel = (project, filePath, templateId, params) => {
@@ -222,7 +244,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 
 	$scope.checkGenFile = () => {
-		WorkspaceService.resourceExists(genFile).then(() => {
+		resolveGenFile().then(() => {
 			$scope.$evalAsync(() => {
 				$scope.canRegenerate = true;
 			});
@@ -312,7 +334,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		if (data.path === $scope.dataParameters.filePath) {
 			$scope.$evalAsync(() => {
 				$scope.dataParameters = ViewParameters.get();
-				genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+				genFile = $scope.dataParameters.filePath + '.gen';
+				legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 				workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 			});
 		};
@@ -1466,7 +1489,8 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		$scope.state.error = true;
 		$scope.errorMessage = 'The \'contentType\' data parameter is missing.';
 	} else {
-		genFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
+		genFile = $scope.dataParameters.filePath + '.gen';
+		legacyGenFile = $scope.dataParameters.filePath.substring(0, $scope.dataParameters.filePath.lastIndexOf('.')) + '.gen';
 		workspace = $scope.dataParameters.filePath.substring($scope.dataParameters.filePath.indexOf('/', 1), 1);
 		loadFileContents();
 		$scope.checkGenFile();
@@ -1598,8 +1622,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	// Begin Dashboard Widget Section ------------------------------------------------------------------------------
 	// The `widget` block turns the report into a dashboard KPI tile: kind `count` shows the report's
-	// record count, `value` one aggregate cell (a measure column, optionally pinned by `at` equals
-	// conditions over grouping columns), `list` the first rows as a mini table. Consumed at runtime
+	// record count (its `countColumn` summed when the report aggregates), `value` one aggregate cell
+	// (a measure column, optionally pinned by `at` equals conditions over grouping columns), `list`
+	// the first rows as a mini table. Consumed at runtime
 	// by the Harmonia shell's reports store; the tile replaces the report's dashboard preview tile.
 
 	$scope.widgetKinds = [
@@ -1635,7 +1660,26 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 			delete widget.valueType;
 			delete widget.pattern;
 		}
+		if (widget.kind !== 'count') delete widget.countColumn;
 	};
+
+	// The COUNT column a `count` tile sums. An aggregating report yields one row per group, so its
+	// record count is a COUNT measure summed over the rows - the count endpoint would report the
+	// number of groups (dirigible #7102). Left empty for a report that is not aggregated: there one
+	// row is one record and the endpoint is right.
+	//
+	// Only count(*) qualifies (dirigible #7161): summing a count(<field>) yields the number of rows
+	// where that field is NOT NULL, which is a different number and never the record count. The
+	// star is the column NAME of such a column (or its raw expression on a hand-authored one).
+	$scope.widgetCountColumns = () => ($scope.report.columns || []).filter(isCountAllColumn);
+
+	function isCountAllColumn(column) {
+		if (!column || column.aggregate !== 'COUNT') return false;
+		const term = (column.expression !== undefined && column.expression !== null && column.expression !== '')
+			? column.expression
+			: column.name;
+		return typeof term === 'string' && term.trim() === '*';
+	}
 
 	// The measure the tile shows: an aggregate column of this report. Type and (money) pattern ride
 	// along so the dashboard can format the number without re-deriving the column.

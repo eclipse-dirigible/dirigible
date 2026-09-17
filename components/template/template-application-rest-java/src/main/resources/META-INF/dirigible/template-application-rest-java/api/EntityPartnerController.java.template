@@ -1,5 +1,24 @@
 package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 
+## A duplicate is the same refusal whichever door the caller used: a collision with a business key is
+## answered here with the 409 naming the field that the power surface answers with, rather than
+## letting the driver's text out as a 500 (#7137). Either kind of key earns the mapping: a composite
+## `unique:` the model NAMED, or a single-column `unique: true`, which is a column-level UNIQUE the
+## SCHEMA leaves for the database to name - the name every dialect generates is built from the
+## column, which is the handle the mapping keys on.
+#foreach($property in $properties)
+#if($property.dataUnique)
+#set($hasUniqueColumns = "true")
+#end
+#end
+#set($hasDuplicateKeys = false)
+#if($uniqueConstraints && !$uniqueConstraints.isEmpty())
+#set($hasDuplicateKeys = true)
+#end
+#if($hasUniqueColumns)
+#set($hasDuplicateKeys = true)
+#end
+
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
@@ -20,6 +39,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.LinkedHashMap;
 import java.util.List;
+#if($hasDuplicateKeys)
+import java.util.Locale;
+#end
 import java.util.Map;
 
 ## Role-scoped properties (the modeler's per-property read/write role, or the intent's `visibleTo:`
@@ -145,6 +167,10 @@ public class ${name}PartnerController {
 #if($masterLock)
         requireMasterMutable(entity.${masterLock.fkProperty});
 #end
+#if($periodLock)
+        // Nothing new may be filed into a closed period either - that is what closing one means.
+        requirePeriodOpen(entity.${periodLock.dateProperty});
+#end
 #foreach($sensitive in $sensitiveProperties)
         entity.${sensitive} = null;
 #end
@@ -156,18 +182,44 @@ public class ${name}PartnerController {
         }
 #end
 #end
+#if($workflowStatusProperty)
+        requireWorkflowStatusOnCreate(entity);
+#end
+        // Validated LAST, on what will actually be written: the owner is forced above and the
+        // sensitive / role-scoped fields are cleared, so validating earlier would judge a payload the
+        // server has not finished deciding. Before the save, so a refused create never reaches the
+        // insert - and never allocates a document number.
+        validate(entity);
+#if($hasReferenceValidations)
+        validateReferences(entity);
+#end
+#if($hasDuplicateKeys)
+        try {
+            return scrub(repository.save(entity));
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return scrub(repository.save(entity));
+#end
     }
 
     @Put("/{id}")
     @Documentation("Update my ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
         ${name}Entity existing = requireMine(id);
-#if($immutableAlways || $immutableStatusProperty)
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
 #end
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
+#end
+#if($workflowStatusProperty)
+        applyWorkflowStatus(existing, entity);
+#end
+#if($periodLock)
+        // The stored date is checked above; this refuses a move INTO a closed period.
+        requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
 #if($partnerParent)
@@ -188,18 +240,38 @@ public class ${name}PartnerController {
         }
 #end
 #end
+        validate(entity);
+#if($hasReferenceValidations)
+        validateReferences(entity);
+#end
+#if($hasDuplicateKeys)
+        try {
+            return scrub(repository.update(entity));
+        } catch (RuntimeException e) {
+            throw duplicateOrRethrow(e);
+        }
+#else
         return scrub(repository.update(entity));
+#end
     }
 
     @Delete("/{id}")
     @Documentation("Delete my ${name} by id")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
         ${name}Entity existing = requireMine(id);
-#if($immutableAlways || $immutableStatusProperty)
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
 #end
 #if($masterLock)
         requireMasterMutable(existing.${masterLock.fkProperty});
+#end
+#if($processDeleteGuards)
+        requireNoRunningProcess(existing);
+#end
+#if($deleteChecks && $deleteChecks.size() > 0)
+        // A `checks: forbidWhen` refuses the REMOVAL of a row it guards too, not only its create and
+        // its update - the delete is the third affordance the master-detail panel hides (#7372).
+        requireDeletable(existing);
 #end
         try {
             repository.deleteById(id);
@@ -291,17 +363,28 @@ public class ${name}PartnerController {
             return;
         }
         ${masterLock.entityClass} master = ${masterRepositoryRef}.findOne(masterId).orElse(null);
-        if (master == null || isMasterMutable(master)) {
+        if (master == null) {
             return;
         }
+#if($masterLock.always || $masterLock.statusProperty)
+        if (!isMasterMutable(master)) {
 #if($masterLock.always)
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} belongs to an append-only ${masterLock.entity} and can no longer be changed");
 #else
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${masterLock.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+        }
+#end
+#if($masterLock.period)
+        if (!isMasterPeriodOpen(master.${masterLock.period.dateProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${masterLock.period.entity} covering this ${masterLock.entity} is closed - book the correction in an open period");
+        }
 #end
     }
+#if($masterLock.always || $masterLock.statusProperty)
 
     private static boolean isMasterMutable(${masterLock.entityClass} master) {
 #if($masterLock.always)
@@ -319,36 +402,154 @@ public class ${name}PartnerController {
 #end
     }
 #end
-#if($immutableAlways)
+#if($masterLock.period)
 
-    private void requireMutable(${name}Entity existing) {
-        if (isMutable(existing)) {
-            return;
+    // The master's own period guard, read through the line: adding, editing or removing a line
+    // recomputes the document's totals, so a document dated in a closed period freezes its lines with
+    // it - exactly as a locked status does.
+    private boolean isMasterPeriodOpen(${masterLock.period.dateJavaClass} date) {
+        if (date == null) {
+            return true;
         }
+        for (${masterLock.period.entityClass} period : new ${masterLock.period.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${masterLock.period.startProperty}", date)
+                                                                                   .ge("${masterLock.period.endProperty}", date))) {
+            if (period.${masterLock.period.statusProperty} != null) {
+                for (String closed : "${masterLock.period.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${masterLock.period.statusProperty}))) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+#end
+#end
+#if($immutableAlways || $immutableStatusProperty || $periodLock)
+
+    // User-write immutability. `immutable: true` freezes a record from the moment it is created,
+    // `immutableWhen:` while its status says so, `immutableInPeriod:` while the period covering its
+    // date is closed - and the three compose. Workflow / system writes through the repository stay
+    // unaffected, as on the power surface.
+    private void requireMutable(${name}Entity existing) {
+#if($immutableAlways)
         throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "This ${name} is append-only - records can neither be edited nor deleted");
+#else
+#if($immutableStatusProperty)
+        if (!isStatusMutable(existing)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} is immutable in its current status - corrections go through the workflow");
+        }
+#end
+#if($periodLock)
+        requirePeriodOpen(existing.${periodLock.dateProperty});
+#end
+#end
     }
+#end
+#if($workflowStatusProperty)
 
-    private static boolean isMutable(${name}Entity existing) {
-        return false;
-    }
-#elseif($immutableStatusProperty)
-
-    private void requireMutable(${name}Entity existing) {
-        if (isMutable(existing)) {
+    // Workflow-owned status (dirigible #7339). ${workflowStatusProperty} is derived state owned by the
+    // flow that moves it - a `processes:` step or a `transitions[]` button - the same way a roll-up
+    // target is owned by its roll-up. Those writers reach the repository through the targeted
+    // updateProperty / updateProperties primitives, never through this controller, so refusing the
+    // column here takes nothing away from them: it closes the plain create/update that would otherwise
+    // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
+    private void requireWorkflowStatusOnCreate(${name}Entity entity) {
+        if (entity.${workflowStatusProperty} == null) {
+            // Nothing said: the record starts where the model says it starts (the relation's `init:`,
+            // applied by the repository), which is what every generated form posts.
             return;
         }
-        throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "This ${name} is immutable in its current status - corrections go through the workflow");
+#if($workflowStatusInitial)
+        if (String.valueOf(entity.${workflowStatusProperty}).equals("${workflowStatusInitial}")) {
+            return;
+        }
+#end
+        throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
     }
 
-    private static boolean isMutable(${name}Entity existing) {
+    // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
+    // the stored row rather than refused, which is also what stops a partial payload from erasing the
+    // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
+    private void applyWorkflowStatus(${name}Entity stored, ${name}Entity entity) {
+        if (entity.${workflowStatusProperty} == null) {
+            entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
+            return;
+        }
+        if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
+        }
+    }
+
+    private static final String WORKFLOW_STATUS_REFUSAL =
+            "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#end
+#if($processDeleteGuards)
+
+    // Delete guard (intent process `whenDeleted: refuse`): while a flow this record started is still
+    // running, the record cannot be deleted - complete or abort the flow first, as on the power surface.
+    private void requireNoRunningProcess(${name}Entity existing) {
+        for (String guard : "${processDeleteGuards}".split(",")) {
+            String process = guard.substring(0, guard.indexOf(':'));
+            String label = guard.substring(guard.indexOf(':') + 1);
+            String instance = org.eclipse.dirigible.sdk.bpm.ProcessStamps.idFor(existing.ProcessIds, process);
+            if (instance == null && (existing.ProcessIds == null || existing.ProcessIds.isBlank())) {
+                instance = existing.ProcessId;
+            }
+            if (instance != null && !instance.isBlank() && org.eclipse.dirigible.sdk.bpm.Process.isRunning(instance)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is still in its " + label + " flow - complete or cancel it before deleting");
+            }
+        }
+    }
+#end
+#if($immutableStatusProperty && !$immutableAlways)
+
+    private static boolean isStatusMutable(${name}Entity existing) {
         if (existing.${immutableStatusProperty} == null) {
             return true;
         }
         for (String immutable : "${immutableStatusValues}".split(",")) {
             if (immutable.equals(String.valueOf(existing.${immutableStatusProperty}))) {
                 return false;
+            }
+        }
+        return true;
+    }
+#end
+#if($periodLock)
+
+    // Date-based immutability (intent `immutableInPeriod:`): once the ${periodLock.entity} covering a
+    // record's ${periodLock.dateProperty} is closed, that record can no longer be created, edited or
+    // deleted through this REST surface, whatever status it carries.
+    private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
+        if (isPeriodOpen(date)) {
+            return;
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+    }
+
+    // A date covered by no period at all is open: periods are declared as they are needed, and an
+    // unopened future month must not freeze the present. A record carrying no date falls in none.
+    private boolean isPeriodOpen(${periodLock.dateJavaClass} date) {
+        if (date == null) {
+            return true;
+        }
+        for (${periodLock.entityClass} period : new ${periodLock.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${periodLock.startProperty}", date)
+                                                                                   .ge("${periodLock.endProperty}", date))) {
+            if (period.${periodLock.statusProperty} != null) {
+                for (String closed : "${periodLock.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
+                        return false;
+                    }
+                }
             }
         }
         return true;
@@ -407,6 +608,342 @@ public class ${name}PartnerController {
     }
 #end
 
+
+    /**
+     * The same value validation the power surface applies (${name}Controller.validate) - required
+     * fields, declared lengths, format patterns and row-level checks. The personal surface is the one
+     * a person actually types into, so skipping it here meant a missing required field reached the
+     * insert and came back as a 500 with the raw NOT NULL violation instead of a 400 naming the field
+     * - and, for a numbered document, only after the insert had already burned a number from the
+     * series. Static and payload-only, so it costs no read.
+     */
+    private static void validate(${name}Entity entity) {
+#if($rowChecks && $rowChecks.size() > 0)
+#foreach($check in $rowChecks)
+#if($check.kind == "requiredWhen")
+        // Row-level check (intent `checks: requiredWhen`): ${check.label} must carry a value while the
+        // condition holds. Ungated, so the rule holds on every user write - the moment a value becomes
+        // mandatory only at a transition, the check names that status and the repository owns it.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object requiredValue = ${check.valueExpression};
+            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#elseif($check.kind == "forbidWhen")
+        // Row-level check (intent `checks: forbidWhen`): reject the write while the condition holds - a
+        // child may test its parent one hop away (the parent is loaded by FK first). Ungated, so it
+        // holds on every user write; a gated forbidWhen is the repository's, like a document check.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guardJavaExpression}) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#elseif($check.kind == "agree")
+## The two records a junction row links must point at the same third thing (intent `checks: agree`,
+## #7409) - the same customer, the same currency, the same company. Each side is one hop away, so both
+## records are loaded by their foreign key first; an unset side is skipped unless the check says to
+## refuse it, because requiredness is the relation's own declaration.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object agreeLeft = ${check.leftExpression};
+            Object agreeRight = ${check.rightExpression};
+#if($check.whenNull == "refuse")
+            if (agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)) {
+#else
+            if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
+#end
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#elseif($check.kind == "compare")
+## A value of the row compared with a second one (intent `checks: compare`) - another field of the
+## SAME row, or a LITERAL (#7338: the positive quantity, the percentage at most 100, the date that is
+## not in the past). A comparison is about values that EXIST, so an absent left operand is not a
+## violation - requiredness is its own declaration. Numbers compare by value through BigDecimal (a
+## decimal against a long still compares exactly); temporals compare through their own compareTo,
+## which is why the parser holds the two sides to one family - and why a moment literal is rendered
+## in the column's own shape (LocalDate for a date, Instant for a timestamp).
+#if($check.literalJavaExpression)
+        if (entity.${check.field} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#end
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+        }
+#else
+        if (entity.${check.field} != null && entity.${check.than} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
+#end
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+        }
+#end
+#else
+        // Row-level check (intent `checks: exactlyOne`).
+        {
+            int assigned = 0;
+#foreach($field in $check.fields)
+            if (entity.${field} != null) {
+                assigned++;
+            }
+#end
+            if (assigned != 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#end
+#end
+#end
+#foreach($property in $properties)
+## A required value the PLATFORM supplies is not the caller's to send: the generated repository fills a
+## document number and a uuid on insert, so demanding them here would refuse every create of a numbered
+## document with a message about a field no form has (#7099).
+#if($property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
+        if (entity.${property.name} == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
+        if (entity.${property.name} != null && entity.${property.name}.length() > ${property.dataLength}) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' exceeds the maximum length of ${property.dataLength}");
+        }
+#end
+#if($property.widgetPattern && $property.widgetPattern != "")
+## A format constraint describes what a value must look like WHEN THERE IS ONE - on an OPTIONAL
+## property a blank string is "no value", exactly as on the power surface.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
+        }
+#end
+#end
+    }
+#if($deleteChecks && $deleteChecks.size() > 0)
+    /**
+     * The {@code checks: forbidWhen} refusal on a DELETE (#7372). That construct is the one check kind
+     * about the write HAPPENING rather than about the values it carries, so removing a row it guards is
+     * a change like any other - and the largest of the three the master-detail panel hides (Add, row
+     * edit, row delete). Checked against the STORED row, since a delete carries no payload.
+     *
+     * <p>
+     * The gate rides along here instead of routing the rule to the repository, as it does for a create
+     * and an update: a delete is nobody's transition - no process step deletes a record - so there is
+     * no repository-side write for a gated check to sit on. It also keeps the composition cascade out
+     * of this: a master sweeping its own children away goes through their repositories and never this
+     * verb, and whether THAT is allowed is what {@code whenMasterDeleted:} declares.
+     */
+    private static void requireDeletable(${name}Entity entity) {
+#foreach($check in $deleteChecks)
+#if($check.status && $check.status != "")
+        if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
+#end
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guardJavaExpression}) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
+#if($check.status && $check.status != "")
+        }
+#end
+#end
+    }
+#end
+
+#if($hasReferenceValidations)
+    /**
+     * The same hierarchy reference checks the power surface applies
+     * (${name}Controller.validateReferences): a {@code leafOnly:} relation must point at a leaf, and a
+     * {@code hierarchy:} parent must not close a cycle. The pickers mirror both rules client-side, but
+     * a hand-crafted request must not bypass them on THIS door either - referential integrity is
+     * deliberately business-layer-only, so nothing downstream would refuse the row (#7153).
+     */
+    private void validateReferences(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.leafOnlyRepositoryClass && $property.widgetHierarchyProperty)
+        // ${property.name} is leafOnly: the referenced ${property.relationshipEntityName} must have no children.
+        if (entity.${property.name} != null && !new ${property.leafOnlyRepositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                        .eq("${property.widgetHierarchyProperty}", entity.${property.name})).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
+        }
+#end
+#end
+#if($hierarchyProperty)
+        // The tree edge must not form a cycle: walk up from the assigned parent; hitting the entity
+        // itself (or an implausible depth) rejects the write.
+        if (entity.${hierarchyProperty} != null) {
+            Object self = entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
+            Object cursor = entity.${hierarchyProperty};
+            int depth = 0;
+            while (cursor != null && depth++ < 100) {
+                if (cursor.equals(self)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "The '${hierarchyProperty}' reference would create a cycle in the ${name} hierarchy");
+                }
+                ${name}Entity parent = repository.findOne(cursor).orElse(null);
+                if (parent == null) {
+                    break;
+                }
+                cursor = parent.${hierarchyProperty};
+            }
+            if (depth >= 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The ${name} hierarchy is implausibly deep - aborting");
+            }
+        }
+#end
+    }
+#end
+
+#if($hasDuplicateKeys)
+    /**
+     * The business keys of ${name}, keyed by the name the database puts into the violation it raises -
+     * a composite key by the constraint name the model emitted (so this map and the schema cannot
+     * drift), a single-column {@code unique} by its column name, which is what every dialect builds
+     * its own generated constraint name out of ("VACATIONS_PUBLIC_HOLIDAY_PUBLIC_HOLIDAY_DAY_key").
+     * Iterated longest key first, so a column whose name is a prefix of a longer one still answers
+     * with its own message rather than the shorter key's. The power surface's map verbatim - the same
+     * collision has to read the same whichever surface the caller wrote through.
+     */
+    private static final Map<String, String> DUPLICATE_MESSAGES = duplicateMessages();
+
+    private static Map<String, String> duplicateMessages() {
+        Map<String, String> messages = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
+                                                                                   .reversed()
+                                                                                   .thenComparing(java.util.Comparator.naturalOrder()));
+#if($uniqueConstraints)
+#foreach($uniqueConstraint in $uniqueConstraints)
+        messages.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), "${uniqueConstraint.messageJavaLiteral}");
+#end
+#end
+#foreach($property in $properties)
+#if($property.dataUnique)
+        messages.put("${property.dataName}".toUpperCase(Locale.ROOT), "A ${name} with this '${property.name}' already exists");
+#end
+#end
+        return java.util.Collections.unmodifiableMap(messages);
+    }
+
+    /**
+     * The markers the drivers append the executed statement to their message behind - Hibernate's
+     * "[insert into ...]" and H2's "SQL statement:". Everything from there on is the SQL, not the
+     * violation.
+     */
+    private static final List<String> STATEMENT_MARKERS = List.of("SQL STATEMENT:", "[INSERT ", "[UPDATE ", "[DELETE ", "[MERGE ");
+
+    /**
+     * A write that collided with one of those keys is a conflict the caller can act on - answered with
+     * the message that names the field - and anything else is rethrown untouched. Matching is on the
+     * key name inside the driver's message, which is the only handle the database gives back; every
+     * dialect names the violated constraint there.
+     */
+    private static RuntimeException duplicateOrRethrow(RuntimeException e) {
+        if (isConstraintViolation(e) && isDuplicateViolation(e)) {
+            String message = duplicateMessageFor(violationText(e));
+            if (message != null) {
+                return new ResponseStatusException(HttpStatus.CONFLICT, message);
+            }
+        }
+        return e;
+    }
+
+    /**
+     * The message of the business key the given violation names, or {@code null} when it names none of
+     * them - a primary key, or a uniqueness constraint of another table.
+     */
+    private static String duplicateMessageFor(String violation) {
+        if (violation == null) {
+            return null;
+        }
+        String upper = violation.toUpperCase(Locale.ROOT);
+        for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
+            if (upper.contains(constraint.getKey())) {
+                return constraint.getValue();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The text of the violation the database raised: the message of the INNERMOST
+     * {@code java.sql.SQLException} in the chain - the one that carries the constraint name and the
+     * Detail line - with the statement the driver appends to it cut off.
+     * <p>
+     * Anchoring the match there is load-bearing, not tidiness. Hibernate re-reports the failure with
+     * the executed SQL attached ("... [insert into PRODUCT (PRODUCT_CODE, PRODUCT_NAME, ...)]") and H2
+     * appends its own "SQL statement:" block, so a message read whole lists EVERY column of the table:
+     * a collision on one unique field would be answered with the message of another, and a
+     * primary-key violation - SQLSTATE 23505 as well - with a business key's.
+     */
+    private static String violationText(Throwable e) {
+        String text = null;
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof java.sql.SQLException && cause.getMessage() != null) {
+                text = cause.getMessage();
+            }
+        }
+        if (text == null) {
+            text = e.getMessage();
+        }
+        return text == null ? null : withoutStatement(text);
+    }
+
+    /** The message up to the first statement marker in it, which is where the column list starts. */
+    private static String withoutStatement(String message) {
+        String upper = message.toUpperCase(Locale.ROOT);
+        int cut = message.length();
+        for (String marker : STATEMENT_MARKERS) {
+            int at = upper.indexOf(marker);
+            if (at >= 0 && at < cut) {
+                cut = at;
+            }
+        }
+        return message.substring(0, cut);
+    }
+
+    /**
+     * Whether the violation is specifically about UNIQUENESS. A column name matches the text of a
+     * foreign-key violation too ("Key (COMPANY_ID)=(5) is not present in table ..."), which is a
+     * different conflict and must not be answered as a duplicate. Every supported dialect either
+     * reports SQLSTATE 23505 or says so in words - PostgreSQL "duplicate key value violates unique
+     * constraint", H2 "Unique index or primary key violation", MySQL "Duplicate entry", Oracle
+     * "unique constraint (...) violated" - and says it in the violation itself, so the words are read
+     * off the same anchored text the key match uses rather than off the statement appended to it.
+     */
+    private static boolean isDuplicateViolation(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof java.sql.SQLException sqlException && "23505".equals(sqlException.getSQLState())) {
+                return true;
+            }
+        }
+        String violation = violationText(e);
+        if (violation == null) {
+            return false;
+        }
+        String upper = violation.toUpperCase(Locale.ROOT);
+        return upper.contains("DUPLICATE") || upper.contains("UNIQUE");
+    }
+
+#end
     /** Whether a persistence failure is (caused by) a database constraint violation. */
     private static boolean isConstraintViolation(Throwable e) {
         for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {

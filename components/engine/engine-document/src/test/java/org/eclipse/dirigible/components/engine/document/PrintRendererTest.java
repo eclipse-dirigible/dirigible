@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.parsers.document.renderer.ImageResolver;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -40,7 +41,7 @@ class PrintRendererTest {
 
     @Test
     void mergesDocumentValuesIntoFo() {
-        String fo = PrintRenderer.renderFo(TEMPLATE, data());
+        String fo = renderFo(TEMPLATE, data());
 
         assertTrue(fo.contains("INV-001"), "document.number should be merged");
         assertTrue(fo.contains("ACME Ltd."), "document.customer should be merged");
@@ -49,7 +50,7 @@ class PrintRendererTest {
 
     @Test
     void expandsTableRowsFromItems() {
-        String fo = PrintRenderer.renderFo(TEMPLATE, data());
+        String fo = renderFo(TEMPLATE, data());
 
         assertTrue(fo.contains("Widget"), "first item should be rendered");
         assertTrue(fo.contains("Gadget"), "second item should be rendered");
@@ -59,7 +60,7 @@ class PrintRendererTest {
 
     @Test
     void unresolvedPlaceholdersNeverLeakRawBraces() {
-        String fo = PrintRenderer.renderFo(TEMPLATE, Map.of("items", List.of()));
+        String fo = renderFo(TEMPLATE, Map.of("items", List.of()));
 
         assertFalse(fo.contains("{{"), "unresolved placeholders must render empty, not as raw braces");
     }
@@ -72,7 +73,7 @@ class PrintRendererTest {
      */
     @Test
     void alternativePlaceholderOperandsRenderTheFirstNonBlankValue() {
-        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE,
+        String fo = renderFo(FALLBACK_TEMPLATE,
                 Map.of("document", Map.of("NameLocal", "Metafor OOD", "Name", "Metaphor Ltd."), "items", List.of()));
 
         assertTrue(fo.contains("Metafor OOD"), "the filled first operand should win");
@@ -81,7 +82,7 @@ class PrintRendererTest {
 
     @Test
     void aBlankFirstOperandFallsThroughToTheNext() {
-        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE,
+        String fo = renderFo(FALLBACK_TEMPLATE,
                 Map.of("document", Map.of("Name", "Metaphor Ltd.", "Spaces", "   ", "Note", "the note"), "items", List.of()));
 
         assertTrue(fo.contains("Metaphor Ltd."), "an absent first operand should fall through to the canonical name");
@@ -90,7 +91,7 @@ class PrintRendererTest {
 
     @Test
     void allBlankOperandsRenderEmpty() {
-        String fo = PrintRenderer.renderFo(FALLBACK_TEMPLATE, Map.of("items", List.of()));
+        String fo = renderFo(FALLBACK_TEMPLATE, Map.of("items", List.of()));
 
         assertFalse(fo.contains("{{"), "all-blank alternatives must render empty, not as raw braces");
         assertFalse(fo.contains("NameLocal"), "no operand path may leak into the output");
@@ -106,6 +107,48 @@ class PrintRendererTest {
                 </page>
             </document>
             """;
+
+    /**
+     * An image whose source the host resolves is embedded; one it declines (a missing logo, an
+     * oversized file, a document that is not an image) leaves NO graphic behind - a printed document
+     * without a logo is correct output, a broken-image box is not.
+     */
+    @Test
+    void anImageIsEmbeddedThroughTheHostResolver() {
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")),
+                source -> "data:image/png;base64,AAAA");
+
+        assertTrue(fo.contains("<fo:external-graphic src=\"data:image/png;base64,AAAA\""), "the resolved source should be emitted");
+        assertTrue(fo.contains("content-width=\"120pt\""), "the width hint should size the image");
+    }
+
+    @Test
+    void anUnresolvableImageRendersNothing() {
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")), source -> null);
+
+        assertFalse(fo.contains("external-graphic"), "an image the host cannot read must not be rendered at all");
+    }
+
+    @Test
+    void anImageWithNoBoundSourceIsNeverHandedToTheResolver() {
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of(), source -> {
+            throw new AssertionError("a blank source must not reach the resolver: [" + source + "]");
+        });
+
+        assertFalse(fo.contains("external-graphic"), "an unbound image source must not be rendered");
+    }
+
+    private static final String IMAGE_TEMPLATE = """
+            <document id="sales-invoice">
+                <page>
+                    <image src="{{document.Logo}}" width="120"/>
+                </page>
+            </document>
+            """;
+
+    private static String renderFo(String template, Map<String, Object> data) {
+        return PrintRenderer.renderFo(template, data, ImageResolver.PASS_THROUGH);
+    }
 
     private static Map<String, Object> data() {
         return Map.of("document", Map.of("number", "INV-001", "customer", "ACME Ltd.", "total", "123.45"), "items",

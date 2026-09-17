@@ -54,10 +54,27 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     private static final double DEFAULT_PAGE_HEIGHT = 842;
     private static final double DEFAULT_PAGE_PADDING = 40;
 
+    /** Resolves an {@code <image>} source into something FOP can read. */
+    private final ImageResolver imageResolver;
+
     /**
-     * Creates a renderer; instances are stateless and reusable.
+     * Creates a renderer that emits every {@code <image>} source unchanged; instances are stateless and
+     * reusable.
      */
-    public XslFoRenderer() {}
+    public XslFoRenderer() {
+        this(ImageResolver.PASS_THROUGH);
+    }
+
+    /**
+     * Creates a renderer that resolves {@code <image>} sources through the given resolver — how a host
+     * with a content store inlines the bytes of a logo or of a record's file. Instances are stateless
+     * and reusable.
+     *
+     * @param imageResolver the image source resolver, never {@code null}
+     */
+    public XslFoRenderer(ImageResolver imageResolver) {
+        this.imageResolver = imageResolver == null ? ImageResolver.PASS_THROUGH : imageResolver;
+    }
 
     @Override
     public String render(LayoutNode root) {
@@ -308,25 +325,41 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         }
     }
 
+    /**
+     * Renders one image. An absent, blank or unresolvable source renders <b>nothing</b> — no block, no
+     * placeholder: a printed business document with no logo is correct output, a broken-image box is
+     * not. {@code width}/{@code height} are the resize hints; each is emitted only when it is an
+     * absolute measurement, so a single one scales the image proportionally.
+     */
     private void appendImage(StringBuilder fo, LayoutNode node, ImageNode image) {
         String src = image.attributes()
                           .getOrDefault("src", "");
-        if (src.isEmpty()) {
+        if (src.isBlank()) {
+            return;
+        }
+        String resolved = imageResolver.resolve(src);
+        if (resolved == null || resolved.isBlank()) {
             return;
         }
         fo.append("<fo:block")
           .append(alignAttribute(node))
           .append("><fo:external-graphic src=\"")
-          .append(escape(src))
+          .append(escape(resolved))
           .append("\"");
-        if (node.width()
-                .type() == Measurement.Type.ABSOLUTE_PX) {
-            fo.append(" content-width=\"")
-              .append(points(node.width()
-                                 .value()))
-              .append("\"");
-        }
+        appendContentDimension(fo, "content-width", node.width());
+        appendContentDimension(fo, "content-height", node.height());
         fo.append("/></fo:block>\n");
+    }
+
+    private static void appendContentDimension(StringBuilder fo, String attribute, Measurement measurement) {
+        if (measurement.type() != Measurement.Type.ABSOLUTE_PX) {
+            return;
+        }
+        fo.append(" ")
+          .append(attribute)
+          .append("=\"")
+          .append(points(measurement.value()))
+          .append("\"");
     }
 
     private static String alignAttribute(LayoutNode node) {

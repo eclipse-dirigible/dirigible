@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.initializers.definition;
 
+import java.util.List;
 import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -32,6 +33,14 @@ public interface DefinitionRepository extends JpaRepository<Definition, Long> {
     @Transactional
     @Query("update Definition d set d.checksum = :checksum where d.type in :types")
     void updateChecksums(String checksum, Set<String> types);
+
+    /**
+     * Finds every definition of the given artefact types.
+     *
+     * @param types the artefact types
+     * @return the definitions
+     */
+    List<Definition> findByTypeIn(Set<String> types);
 
     /**
      * Initialize checksums.

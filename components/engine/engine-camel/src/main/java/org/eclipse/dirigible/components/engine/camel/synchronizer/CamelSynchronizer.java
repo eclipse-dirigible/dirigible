@@ -180,12 +180,11 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
                     }
                     break;
                 case START: {
-                    if (ArtefactLifecycle.FAILED.equals(camel.getLifecycle())) {
-                        String message = "Cannot start a Route in a failing state: " + camel.getKey();
-                        callback.addError(message);
-                        callback.registerState(this, wrapper, ArtefactLifecycle.FATAL, message);
-                        return true;
-                    }
+                    // A FAILED route is retried, never promoted to FATAL (#7248). The outer catch
+                    // records a failed create as FAILED and hands it to the in-pass retry, whose
+                    // START phase then reached this guard - so a route refused for a transient
+                    // reason went FATAL within the very pass that first saw it, and was stripped
+                    // from every later one until the file's bytes changed.
                     addToProcessor(camel);
                     callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
                 }

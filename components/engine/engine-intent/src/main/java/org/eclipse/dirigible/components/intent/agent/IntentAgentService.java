@@ -19,12 +19,17 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.intent.ai.AssistantGuide;
 import org.eclipse.dirigible.components.intent.ai.ModelClient;
 import org.eclipse.dirigible.components.intent.ai.ProposalRepairLoop;
+import org.eclipse.dirigible.components.intent.ai.TextPatch;
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
@@ -33,12 +38,22 @@ import com.google.gson.JsonObject;
  *
  * <p>
  * The assistant edits the intent at the same altitude the developer does - it never re-emits a
- * model file, and it never writes Java. Per the intent layer's "edit shape, not file shape"
- * contract, Claude is given the current {@code app.intent} and the user's request and may call a
- * single {@code propose_intent} tool that returns the <em>complete</em> updated YAML. The editor
- * diffs that against the current buffer and lets the developer accept or reject - nothing is
- * written to disk here. When the model only needs to answer or ask a clarifying question it replies
- * in plain text and proposes nothing.
+ * model file, and it never writes Java. Claude is given the current {@code app.intent} and the
+ * user's request and may call a single {@code propose_intent} tool. The editor diffs the proposal
+ * against the current buffer and lets the developer accept or reject - nothing is written to disk
+ * here. When the model only needs to answer or ask a clarifying question it replies in plain text
+ * and proposes nothing.
+ *
+ * <p>
+ * The tool takes the proposal in <b>edit shape</b>: anchored {@code edits} spliced into the current
+ * document server-side (dirigible #6958), with the complete {@code yaml} kept as the fallback for a
+ * rewrite or for a document that does not exist yet. That is what "edit shape, not file shape"
+ * asked for in the first place, and it is the only way an edit's cost stops scaling with the size
+ * of the application: a one-field change to a 400-line intent used to re-emit all 400 lines, on the
+ * first turn and again on every repair round. What travels back to the editor is unchanged - the
+ * complete document it renders as a Monaco diff - because the server materializes the patch before
+ * anything else looks at it, so validation, the repair loop and both surfaces see exactly what they
+ * saw before.
  *
  * <p>
  * Every proposal is validated server-side with the same {@link IntentParser} that backs the
@@ -67,29 +82,70 @@ class IntentAgentService {
     private static final String SYSTEM_PROMPT = AssistantGuide.load("/intent-assistant-guide.md");
 
     private static final ModelClient.ToolSpec TOOL = new ModelClient.ToolSpec(TOOL_NAME,
-            "Propose a complete, updated app.intent YAML for the developer to review as a diff.", inputSchema());
+            "Propose an update to app.intent for the developer to review as a diff - as anchored edits to the current document,"
+                    + " or as the complete document when there is nothing to anchor on.",
+            inputSchema());
+
+    /** Pretty-printed so a replayed patch reads as the model wrote it. Plain Gson - no @Expose here. */
+    private static final Gson EDITS_JSON = new GsonBuilder().setPrettyPrinting()
+                                                            .create();
 
     private final ModelClient modelClient;
+    private final IntentGenerationService generationService;
 
-    IntentAgentService(ModelClient modelClient) {
+    IntentAgentService(ModelClient modelClient, IntentGenerationService generationService) {
         this.modelClient = modelClient;
+        this.generationService = generationService;
     }
 
     /**
-     * The proposal's shape. {@code boundaries} is the structured half of the honesty contract: a
-     * requirement the DSL cannot express must arrive as data the editor can render distinctly and the
-     * developer can forward verbatim, not buried in prose that reads like the rest of the answer.
+     * The proposal's shape. The change itself arrives as {@code edits} or - the fallback - as a
+     * complete {@code yaml}; exactly one is expected, and neither is schema-required because requiring
+     * both would be wrong and requiring one of them is not expressible here. A call carrying neither is
+     * refused into the repair loop, like any other unusable proposal.
+     *
+     * <p>
+     * {@code boundaries} is the structured half of the honesty contract: a requirement the DSL cannot
+     * express must arrive as data the editor can render distinctly and the developer can forward
+     * verbatim, not buried in prose that reads like the rest of the answer.
+     *
+     * <p>
+     * {@code coverage} is the completeness half (dirigible #6997): a REQUIRED requirement-by-
+     * requirement mapping of the request onto the proposal. The server cannot verify the mapping - both
+     * sides are prose - but demanding the enumeration makes the model walk the request while it still
+     * holds the pen, so an omission stops being a thing nobody looked at and becomes a hole in a list
+     * the model itself is writing. The mapping then reaches the developer as structure.
      */
     private static Map<String, Object> inputSchema() {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("explanation", Map.of("type", "string", "description", "A short, plain explanation of what changed and why."));
-        properties.put("yaml", Map.of("type", "string", "description", "The COMPLETE updated app.intent YAML document."));
+        properties.put("edits", TextPatch.editsSchema("app.intent"));
+        properties.put("yaml",
+                Map.of("type", "string", "description",
+                        "The COMPLETE updated app.intent YAML document. Send this INSTEAD of edits only when there is nothing to "
+                                + "anchor on (the document is empty) or the change rewrites most of it."));
+        properties.put("coverage",
+                Map.of("type", "array", "description",
+                        "EVERY discrete requirement in the developer's request, one entry each, mapped to what carries it. "
+                                + "Enumerate the request first, then map: a requirement you cannot map to a construct is a defect to fix "
+                                + "before proposing, not a footnote. For a small edit the list is small - it is never empty.",
+                        "items", coverageItemSchema()));
         properties.put("boundaries",
                 Map.of("type", "array", "description",
                         "Every requirement this proposal could NOT express in the intent - one entry each, "
                                 + "including ones the proposal omits entirely. Empty when the request fit inside the DSL.",
                         "items", boundaryItemSchema()));
-        return Map.of("type", "object", "properties", properties, "required", List.of("explanation", "yaml"));
+        return Map.of("type", "object", "properties", properties, "required", List.of("explanation", "coverage"));
+    }
+
+    private static Map<String, Object> coverageItemSchema() {
+        Map<String, Object> properties = new LinkedHashMap<>();
+        properties.put("requirement", Map.of("type", "string", "description", "One discrete requirement, in the developer's own words."));
+        properties.put("construct", Map.of("type", "string", "description",
+                "The construct(s) of the proposed YAML that carry it, named precisely (e.g. \"generates: log-no-match (defaults: reason)\"). "
+                        + "Use \"boundary\" when a boundaries entry carries it instead, and \"none\" when the proposal does not carry it "
+                        + "- never leave a requirement out of this list to avoid saying \"none\"."));
+        return Map.of("type", "object", "properties", properties, "required", List.of("requirement", "construct"));
     }
 
     private static Map<String, Object> boundaryItemSchema() {
@@ -124,17 +180,108 @@ class IntentAgentService {
      * @return the assistant's reply text and, when it proposed an edit, the complete proposed YAML
      */
     AgentReply chat(AgentRequest request) {
+        String current = StringUtils.defaultString(request.yaml());
         List<Map<String, Object>> messages = ModelClient.messages(request.history(), buildUserTurn(request));
         ProposalRepairLoop loop =
-                new ProposalRepairLoop("yaml", "yaml", IntentAgentService::validationIssues, IntentAgentService::repairTurn);
+                new ProposalRepairLoop(reply -> proposal(current, reply), "yaml", this::validationIssues, IntentAgentService::repairTurn);
         ProposalRepairLoop.Outcome outcome = loop.run(messages, this::callModel);
 
         String reply = replyText(outcome);
         if (!outcome.issues()
                     .isEmpty()) {
-            reply += "\n\nNote: this proposal still fails intent validation:\n" + ProposalRepairLoop.bulleted(outcome.issues());
+            reply += outcome.proposal() == null
+                    ? "\n\nNote: the assistant's edits could not be applied to the current app.intent:\n"
+                            + ProposalRepairLoop.bulleted(outcome.issues())
+                    : "\n\nNote: this proposal still fails intent validation:\n" + ProposalRepairLoop.bulleted(outcome.issues());
         }
-        return new AgentReply(reply, outcome.proposal(), boundaries(outcome.reply()));
+        List<AgentCoverage> coverage = coverage(outcome.reply());
+        List<String> uncovered = coverage.stream()
+                                         .filter(AgentCoverage::uncovered)
+                                         .map(AgentCoverage::requirement)
+                                         .toList();
+        if (!uncovered.isEmpty()) {
+            // The model's own audit found holes and proposed anyway - make them impossible to miss,
+            // exactly the way outstanding validation issues are surfaced (dirigible #6997).
+            reply += "\n\nNote: by the proposal's own coverage audit, these requirements are NOT carried by it:\n"
+                    + ProposalRepairLoop.bulleted(uncovered);
+        }
+        return new AgentReply(reply, outcome.proposal(), boundaries(outcome.reply()), coverage);
+    }
+
+    /**
+     * Read the proposal out of a reply: the anchored edits materialized against the document the model
+     * was shown, or the complete document when it sent one.
+     *
+     * <p>
+     * The materialization happens here, at the edge, so nothing downstream has to know a patch existed:
+     * the repair loop validates a whole document, the developer reviews a whole document, and a patch
+     * that will not apply - a stale anchor, an anchor matching twice, overlapping edits - is refused
+     * with its reasons and corrected by the model instead of being half-written into one.
+     *
+     * <p>
+     * A reply carrying both {@code yaml} and {@code edits} takes the {@code yaml}: the contract asks
+     * for one, but of the two the whole document is the one that cannot half-apply, and refusing a
+     * proposal the model has already paid to write in full would cost the developer a round to fix
+     * nothing. It is logged, because a model that always sends both quietly gives up the saving this
+     * contract exists for.
+     *
+     * @param current the document in the editor buffer, i.e. the one the user turn embedded
+     * @param reply the model's reply
+     * @return the proposal for the repair loop
+     */
+    private static ProposalRepairLoop.Proposal proposal(String current, ModelClient.ModelReply reply) {
+        JsonObject input = reply.toolInput();
+        if (input == null) {
+            return ProposalRepairLoop.Proposal.none();
+        }
+        JsonArray edits = input.has("edits") && input.get("edits")
+                                                     .isJsonArray() ? input.getAsJsonArray("edits") : null;
+        String yaml = reply.toolString("yaml");
+        if (StringUtils.isNotBlank(yaml)) {
+            if (edits != null && !edits.isEmpty()) {
+                LOGGER.warn("The intent AI proposal carried both [{}] edit(s) and a complete document; taking the document.", edits.size());
+            }
+            return ProposalRepairLoop.Proposal.of(yaml);
+        }
+        if (edits == null) {
+            return ProposalRepairLoop.Proposal.refused(null,
+                    List.of("the propose_intent call carried neither `edits` nor `yaml`, so it proposed nothing"));
+        }
+        String replay = EDITS_JSON.toJson(edits);
+        TextPatch.Result patched = TextPatch.apply(current, edits);
+        if (patched.document() == null) {
+            LOGGER.info("The intent AI proposal's [{}] edit(s) could not be applied: {}", edits.size(), patched.issues());
+            return ProposalRepairLoop.Proposal.refused(replay, patched.issues());
+        }
+        LOGGER.info("The intent AI proposed [{}] anchored edit(s) ([{}] characters) over a [{}]-character app.intent.", edits.size(),
+                replay.length(), current.length());
+        return ProposalRepairLoop.Proposal.patched(patched.document(), replay);
+    }
+
+    /**
+     * The requirement-coverage audit, in the order the model listed it (dirigible #6997). A malformed
+     * entry is dropped rather than failing the turn, and an absent audit is an empty list - an older
+     * transcript replayed against this contract must still answer.
+     */
+    private static List<AgentCoverage> coverage(ModelClient.ModelReply reply) {
+        JsonObject input = reply.toolInput();
+        if (input == null || !input.has("coverage") || !input.get("coverage")
+                                                             .isJsonArray()) {
+            return List.of();
+        }
+        List<AgentCoverage> coverage = new ArrayList<>();
+        for (JsonElement element : input.getAsJsonArray("coverage")) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject entry = element.getAsJsonObject();
+            String requirement = member(entry, "requirement");
+            if (StringUtils.isBlank(requirement)) {
+                continue;
+            }
+            coverage.add(new AgentCoverage(requirement, member(entry, "construct")));
+        }
+        return coverage;
     }
 
     /**
@@ -197,15 +344,24 @@ class IntentAgentService {
     }
 
     /**
-     * Validate a proposed intent with the same parser that backs the editor's parse endpoint.
+     * Validate a proposed intent with the same parser that backs the editor's parse endpoint, and -
+     * when it parses - with a dry generation pass (dirigible #6956): the band the parser legitimately
+     * cannot see, a document that parses but whose generation would drop glue or be refused by a
+     * generation-time check, comes back to the repair loop instead of reaching the developer looking
+     * finished.
+     *
+     * <p>
+     * The dry run has no project context here (a proposal is not saved anywhere yet), so cross-model
+     * references resolve by convention and never produce a false "cannot be resolved" issue. A failure
+     * of the dry-run machinery itself must not fail the turn - the parse verdict alone is then the
+     * answer, exactly what this method returned before the dry run existed.
      *
      * @param proposedYaml the proposal
      * @return the validation issues; empty for a valid proposal
      */
-    private static List<String> validationIssues(String proposedYaml) {
+    private List<String> validationIssues(String proposedYaml) {
         try {
             IntentParser.parse(proposedYaml);
-            return List.of();
         } catch (IntentValidationException ex) {
             LOGGER.debug("Intent AI proposal failed structural validation", ex);
             return ex.getIssues();
@@ -213,13 +369,35 @@ class IntentAgentService {
             LOGGER.debug("Intent AI proposal is not parseable", ex);
             return List.of("the proposed YAML could not be parsed: " + ex.getMessage());
         }
+        try {
+            return generationService.dryRun(proposedYaml);
+        } catch (RuntimeException ex) {
+            LOGGER.error("The dry generation pass over an AI proposal failed - accepting the parse verdict alone", ex);
+            return List.of();
+        }
     }
 
-    /** The corrective user turn: the validation issues plus the repair instruction. */
+    /**
+     * The corrective user turn: why the proposal was not accepted, plus the repair instruction. It is
+     * worded for both kinds of rejection - a document that fails validation and a patch that will not
+     * apply - because to the model they are the same moment: its last proposal did not land.
+     *
+     * <p>
+     * The one thing it must say about a patch is where the anchors belong. A repair round is not a
+     * second edit on top of the first: the current app.intent has not changed, the previous proposal
+     * was never written anywhere, so a corrected edit anchors on the same document the first one did.
+     */
     private static String repairTurn(List<String> issues) {
-        return "The proposed app.intent fails intent validation with the following issue(s):\n" + ProposalRepairLoop.bulleted(issues)
-                + "\nCall propose_intent again with the corrected COMPLETE YAML. Fix only these issues and keep everything else"
-                + " exactly as proposed.";
+        return "The proposed app.intent was not accepted, for the following reason(s):\n" + ProposalRepairLoop.bulleted(issues)
+                + "\nCall propose_intent again with the correction - `edits`, or the complete `yaml` if the change no longer fits a"
+                + " handful of them. Anchor the edits on the CURRENT app.intent as it was given to you; it has not changed, and your"
+                + " previous proposal was not applied to it. Fix only these issues and keep everything else"
+                + " exactly as proposed.\n\nHow to fix them: a key rejected at one level is often valid at another - relocate it"
+                + " before removing it, and re-read the guide section for the feature rather than inferring the platform's limits"
+                + " from the message. Do NOT satisfy an issue by deleting a requirement the user asked for, by weakening a"
+                + " cardinality, or by replacing a declarative construct with a hand-written delegate or service task. If after"
+                + " that you still believe something cannot be expressed, keep the construct closest to the requirement and say"
+                + " what is missing in the explanation - do not silently drop it.";
     }
 
     /**

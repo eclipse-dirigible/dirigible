@@ -49,6 +49,7 @@ import org.eclipse.dirigible.components.database.helpers.FormattingParameters;
 import org.eclipse.dirigible.components.database.params.ParametersSetter;
 import org.eclipse.dirigible.database.persistence.processors.identity.PersistenceNextValueIdentityProcessor;
 import org.eclipse.dirigible.database.sql.SqlFactory;
+import org.eclipse.dirigible.database.sql.builders.schema.CreateSchemaBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -971,6 +972,280 @@ public class DatabaseFacade implements InitializingBean {
                 throw ex;
             }
         });
+    }
+
+    // =========== Users and schemas ===========
+
+    /**
+     * Creates a database user in the default data source.
+     *
+     * @param userId the user id
+     * @param password the password
+     * @throws Throwable the throwable
+     */
+    public static void createUser(String userId, String password) throws Throwable {
+        createUser(userId, password, null);
+    }
+
+    /**
+     * Creates a database user.
+     *
+     * @param userId the user id
+     * @param password the password
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void createUser(String userId, String password, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                String sql = SqlFactory.getNative(connection)
+                                       .create()
+                                       .user(userId, password)
+                                       .build();
+                executeStatements(connection, sql);
+            } catch (Exception ex) {
+                logger.error("Failed to create user [{}] in data source [{}].", userId, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Sets the password of an existing database user in the default data source.
+     *
+     * @param userId the user id
+     * @param password the new password
+     * @throws Throwable the throwable
+     */
+    public static void setUserPassword(String userId, String password) throws Throwable {
+        setUserPassword(userId, password, null);
+    }
+
+    /**
+     * Sets the password of an existing database user.
+     *
+     * @param userId the user id
+     * @param password the new password
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void setUserPassword(String userId, String password, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                String sql = SqlFactory.getNative(connection)
+                                       .alter()
+                                       .user(userId, password)
+                                       .build();
+                executeStatements(connection, sql);
+            } catch (Exception ex) {
+                logger.error("Failed to set the password of user [{}] in data source [{}].", userId, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Drops a database user from the default data source.
+     *
+     * @param userId the user id
+     * @throws Throwable the throwable
+     */
+    public static void dropUser(String userId) throws Throwable {
+        dropUser(userId, null);
+    }
+
+    /**
+     * Drops a database user.
+     *
+     * @param userId the user id
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void dropUser(String userId, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                String sql = SqlFactory.getNative(connection)
+                                       .drop()
+                                       .user(userId)
+                                       .build();
+                executeStatements(connection, sql);
+            } catch (Exception ex) {
+                logger.error("Failed to drop user [{}] in data source [{}].", userId, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Whether a database user exists in the default data source.
+     *
+     * @param userId the user id
+     * @return true, if the user exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsUser(String userId) throws Throwable {
+        return existsUser(userId, null);
+    }
+
+    /**
+     * Whether a database user exists.
+     *
+     * @param userId the user id
+     * @param datasourceName the datasource name
+     * @return true, if the user exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsUser(String userId, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                return SqlFactory.getNative(connection)
+                                 .existsUser(connection, userId);
+            } catch (Exception ex) {
+                logger.error("Failed to check whether user [{}] exists in data source [{}].", userId, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Creates a schema in the default data source.
+     *
+     * @param schema the schema
+     * @param owner the user to own the schema, or null to leave ownership to the database
+     * @throws Throwable the throwable
+     */
+    public static void createSchema(String schema, String owner) throws Throwable {
+        createSchema(schema, owner, null);
+    }
+
+    /**
+     * Creates a schema.
+     *
+     * @param schema the schema
+     * @param owner the user to own the schema, or null to leave ownership to the database
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void createSchema(String schema, String owner, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                CreateSchemaBuilder builder = SqlFactory.getNative(connection)
+                                                        .create()
+                                                        .schema(schema);
+                if (null != owner) {
+                    builder.authorization(owner);
+                }
+                executeStatements(connection, builder.build());
+            } catch (Exception ex) {
+                logger.error("Failed to create schema [{}] in data source [{}].", schema, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Drops a schema from the default data source.
+     *
+     * @param schema the schema
+     * @param cascade whether to drop the objects the schema contains as well
+     * @throws Throwable the throwable
+     */
+    public static void dropSchema(String schema, boolean cascade) throws Throwable {
+        dropSchema(schema, cascade, null);
+    }
+
+    /**
+     * Drops a schema.
+     *
+     * @param schema the schema
+     * @param cascade whether to drop the objects the schema contains as well
+     * @param datasourceName the datasource name
+     * @throws Throwable the throwable
+     */
+    public static void dropSchema(String schema, boolean cascade, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        LoggingExecutor.executeNoResultWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                String sql = SqlFactory.getNative(connection)
+                                       .drop()
+                                       .schema(schema)
+                                       .cascade(cascade)
+                                       .build();
+                executeStatements(connection, sql);
+            } catch (Exception ex) {
+                logger.error("Failed to drop schema [{}] in data source [{}].", schema, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Whether a schema exists in the default data source.
+     *
+     * @param schema the schema
+     * @return true, if the schema exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsSchema(String schema) throws Throwable {
+        return existsSchema(schema, null);
+    }
+
+    /**
+     * Whether a schema exists.
+     *
+     * @param schema the schema
+     * @param datasourceName the datasource name
+     * @return true, if the schema exists
+     * @throws Throwable the throwable
+     */
+    public static boolean existsSchema(String schema, String datasourceName) throws Throwable {
+        DataSource dataSource = getDataSource(datasourceName);
+
+        return LoggingExecutor.executeWithException(dataSource, () -> {
+
+            try (Connection connection = dataSource.getConnection()) {
+                return SqlFactory.getNative(connection)
+                                 .existsSchema(connection, schema);
+            } catch (Exception ex) {
+                logger.error("Failed to check whether schema [{}] exists in data source [{}].", schema, datasourceName, ex);
+                throw ex;
+            }
+        });
+    }
+
+    /**
+     * Executes what a builder produced, which on some dialects is more than one statement - creating a
+     * user on MSSQL is a server login and a database user, and dropping it removes both.
+     *
+     * @param connection the connection
+     * @param sql the generated statement, or several separated by a semicolon
+     * @throws SQLException the SQL exception
+     */
+    private static void executeStatements(Connection connection, String sql) throws SQLException {
+        for (String statement : sql.split(";")) {
+            if (!statement.isBlank()) {
+                try (PreparedStatement preparedStatement = connection.prepareStatement(statement.trim())) {
+                    preparedStatement.executeUpdate();
+                }
+            }
+        }
     }
 
     // =========== SQL ===========

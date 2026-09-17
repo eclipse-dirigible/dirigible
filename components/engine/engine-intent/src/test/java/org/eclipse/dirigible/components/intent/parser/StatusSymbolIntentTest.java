@@ -62,6 +62,19 @@ class StatusSymbolIntentTest {
                 source: Invoice
                 filter: "Status != VOIDED"
                 measures: ["sum(paid)"]
+            notifications:
+              - name: issued-mail
+                event: { onUpdate: Invoice, when: "Status == ISSUED" }
+                to: ops@example.com
+                subject: "Invoice {number} issued"
+                body: "The invoice has been issued."
+            schedules:
+              - name: dunning
+                cron: "0 0 8 * * ?"
+                entity: Invoice
+                where:
+                  - { field: Status, op: eq, value: ISSUED }
+                notify: { to: ops@example.com, subject: "Invoice overdue" }
             seeds:
               - name: invoice-statuses
                 entity: InvoiceStatus
@@ -108,6 +121,40 @@ class StatusSymbolIntentTest {
                                          .get(0)
                                          .getFilter(),
                 "report filter");
+        assertEquals("3", String.valueOf(model.getSchedules()
+                                              .get(0)
+                                              .getWhere()
+                                              .get(0)
+                                              .getValue()),
+                "schedule where status");
+        assertEquals("Status == 3", String.valueOf(model.getNotifications()
+                                                        .get(0)
+                                                        .getEvent()
+                                                        .get("when")),
+                "notification event when");
+    }
+
+    /**
+     * The {@code event.when} of the three declarative glue lists (issue #7289) - the guard that
+     * qualifies the moment a mail goes out, a record is forwarded or a departure leaves. Left
+     * unresolved, the name reached the generated listener as a string compared with the integer status
+     * FK, so the guard could never hold and the message was never sent.
+     */
+    @Test
+    void anUnknownStatusNameInAGlueEventGuardIsRejected() {
+        assertIssue(YAML.replace("event: { onUpdate: Invoice, when: \"Status == ISSUED\" }",
+                "event: { onUpdate: Invoice, when: \"Status == ISUED\" }"), "not a seeded status of [InvoiceStatus]");
+    }
+
+    /**
+     * The row query of a cron schedule (issue #7251) - the site a status guard is written at most
+     * often, and the one left behind when the sibling {@code items: where:} gained the rewrite: a name
+     * there generated {@code .eq("Status", "OVERDUE")} into the job and matched nothing forever.
+     */
+    @Test
+    void anUnknownStatusNameInAScheduleQueryIsRejected() {
+        assertIssue(YAML.replace("field: Status, op: eq, value: ISSUED", "field: Status, op: eq, value: ISUED"),
+                "not a seeded status of [InvoiceStatus]");
     }
 
     /** The point of the exercise: a mistyped status is a parse error, not another status. */
@@ -190,6 +237,72 @@ class StatusSymbolIntentTest {
         assertEquals("Status != 9", model.getReports()
                                          .get(0)
                                          .getFilter());
+    }
+
+    /**
+     * The items of a cross-model source ({@code fromUses:}) are seeded in the owner model, so a status
+     * NAME in their source-row rule is left in the numeric-id form for the generator to refuse against
+     * the owner's {@code .model} (dirigible #7225) - and a LOCAL entity that merely shares the item's
+     * name must not lend its own nomenclature to it: that id is positional in the wrong seed list.
+     */
+    @Test
+    void aCrossModelItemSourceIsNotResolvedAgainstASameNamedLocalEntity() {
+        String yaml = """
+                name: delivery-notes
+                uses:
+                  - { model: inventory }
+                entities:
+                  - name: LineStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: GoodsIssueItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: LineStatus, function: EntityStatus, init: 1 }
+                  - name: DeliveryNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: DeliveryNoteItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: DeliveryNote, kind: manyToOne, to: DeliveryNote, composition: true, required: true }
+                generates:
+                  - name: delivery-note-from-goods-issue
+                    from: GoodsIssue
+                    fromUses: inventory
+                    to: DeliveryNote
+                    forEntity: GoodsIssue
+                    map:
+                      Number: number
+                    items:
+                      from: GoodsIssueItem
+                      to: DeliveryNoteItem
+                      where:
+                        - { field: Status, op: eq, value: APPROVED }
+                      map:
+                        Quantity: quantity
+                seeds:
+                  - name: line-statuses
+                    entity: LineStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("APPROVED", model.getGenerates()
+                                      .get(0)
+                                      .getItems()
+                                      .getWhere()
+                                      .get(0)
+                                      .getValue(),
+                "the local LineStatus seed id 2 must not be taken for the inventory model's APPROVED");
     }
 
     private static void assertIssue(String yaml, String expected) {

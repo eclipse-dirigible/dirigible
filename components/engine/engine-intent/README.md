@@ -24,7 +24,9 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
 | [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
+| [`period` / `immutableInPeriod`](#period--immutableinperiod---date-based-immutability) | 409 on user writes to a record dated in a closed fiscal period |
 | [`lifecycle`](#lifecycle---the-legal-status-graph) | the whole legal status graph, enforced on every status write |
+| [`phases`](#phases--the-enrichment-channel) | a named moment a listener's silent enrichment announces, which a consumer can bind |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -46,7 +48,7 @@ filters) are covered at the generation layer by `IntentEngineIT` and the parser 
 | [`integrations`](#integrations--outbound-http) | outbound HTTP on a data change |
 | [`inbound`](#inbound--webhooks-queues-and-drop-folders) | an arrival that creates records, optionally gated and mapped |
 | [`outbound`](#outbound--emit-on-a-queue-or-topic) | emit a record on a queue or topic on an event |
-| [`permissions`](#permissions--roles) | roles |
+| [`permissions`](#permissions---roles-and-gates) | roles + access gates |
 | [Planned](#planned--recognised-but-not-yet-implemented) | recognised, not yet implemented |
 
 ## entities
@@ -93,7 +95,9 @@ entities:
 
 Entity-level extras: `order: [Id, Product, Quantity, ...]` sequences form controls/list columns;
 `duplicable: true` adds a Duplicate button on a document (clones header + items through the normal
-create path); `imports: |` injects Java import lines into the generated repository (pairs with
+create path), and its object form says what the copy must NOT carry over - `duplicable: { defaults: {
+date: now }, reset: [due, taxEventDate] }`, where `reset` hands a field back to the entity's own
+create-time rule and `defaults` writes a constant (`now` is the current moment in the field's own shape); `imports: |` injects Java import lines into the generated repository (pairs with
 calculated actions); `aggregate: true` on a document master's numeric field keeps it equal to the
 sum of the items' same-named field (the totals footer).
 
@@ -113,9 +117,12 @@ Values: `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting` (entit
 
 ## checks - declarative validations
 
-Row-level `exactlyOne` on every user write; document-level `itemsMin` / `itemsSumEqual` gated on a
-status transition (drafting stays unconstrained; the failing transition aborts with the authored
-message).
+Row-level `exactlyOne`, `compare` and `requiredWhen` on every user write; document-level `itemsMin` /
+`itemsSumEqual` gated on a status transition (drafting stays unconstrained; the failing transition aborts with the authored
+message). A document-level check counts the document's LINES: a child flagged
+`function: DocumentItem`, else the `*Item`-named child, else the sole composition child, else the
+first declared. Flag the lines child explicitly on a document that owns several composition children
+(payment allocations, promotions, printed snapshots).
 
 ```yaml
 - name: JournalEntry
@@ -125,7 +132,56 @@ message).
 - name: JournalEntryItem
   checks:
     - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
+- name: SalesInvoice
+  checks:
+    - { kind: compare, field: due, op: ge, than: date, message: "Due cannot be before the invoice date" }
+    - { kind: compare, field: discountPercent, op: le, value: 100, message: "A discount cannot exceed 100%" }
+- name: VacationRequest
+  checks:
+    # ...and the same comparison gated: a zero-day draft is fine, submitting one is not
+    - { kind: compare, field: days, op: gt, value: 0, status: SUBMITTED,
+        message: "A request must cover at least one working day" }
 ```
+
+`compare` relates a value of the row to a second one: `op:` is `ge` / `gt` / `le` / `lt` / `eq` /
+`ne`, the left operand is the entity's own field, and the right one is either another of its own
+fields (`than:`) or a literal (`value:`) - exactly one of the two, since a comparison has one
+right-hand side. An absent operand is not a violation - requiredness is its own declaration.
+
+The two operands must compare: both dates, both timestamps or both numbers. A `value:` is typed the
+same way by the field it is compared with - a number for a numeric field, and for a temporal one
+either a **moment** (`CURRENT_DATE` / `CURRENT_TIMESTAMP` / `NOW`, with at most one signed ISO-8601
+offset - the same vocabulary a schedule's `where:` carries, resolved against the clock of the write)
+or a quoted ISO-8601 date / instant. Quote a temporal literal: an unquoted `2026-01-01` is a date
+object to the YAML loader long before the intent sees it.
+
+A `compare` is row-level by default - enforced on every user write, in all three generated surfaces'
+controllers, as a 400 with the authored message. The optional `status:` gate is the routing, exactly
+as on `requiredWhen`: with one, the comparison is enforced by the repository when the record is
+persisted CARRYING that status, so the rule holds at the transition and the draft still being filled
+in is not refused. A gated comparison needs the entity's `function: EntityStatus` relation.
+
+`requiredWhen` is a value that is required only under a condition - the rule `required` cannot
+express, because the value is needed for one way of handling the record and meaningless for the
+others. The value may be the record's own field or a one-hop `Relation.field` (the target may be
+owned by another model), and the condition is one or more `<Property> ==|!= <literal>` comparisons
+over the record's own properties, ANDed:
+
+```yaml
+- name: SalesInvoice
+  checks:
+    # holds on every user write
+    - { kind: requiredWhen, field: reference, when: "kind == 'export'",
+        message: "An export needs a reference" }
+    # ...or only at the status the value is finally needed at, enforced by the repository, so the
+    # transition that sends the document refuses with this message
+    - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: SENT,
+        message: "Sent Method is E-mail but the customer has no e-mail address" }
+```
+
+A condition compares a `string`, an `integer`, a `long`, a `boolean` or a to-one's key - the types
+an equality is exact on. A malformed condition, or a literal that is not a value of the property's
+type, is a validation error rather than a rule that silently never (or always) holds.
 
 ## immutableWhen / immutable - user-write immutability
 
@@ -141,6 +197,41 @@ message).
 seed ids (terms joined with `||`). `immutable: true` is the unconditional append-only variant, mutually
 exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
 corrections are flow-generated reversals, never edits.
+
+## period / immutableInPeriod - date-based immutability
+
+```yaml
+- name: AccountingPeriod
+  period:
+    start: startDate
+    end: endDate                       # inclusive
+    closedWhen: "Status == CLOSED"     # the immutableWhen grammar; seeded names or ids
+  fields:
+    - { name: id,        type: integer, primaryKey: true, generated: true }
+    - { name: startDate, type: date }
+    - { name: endDate,   type: date }
+  relations:
+    - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: OPEN }
+
+- name: JournalEntry
+  immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+```
+
+`immutableWhen` freezes a record for what it IS; this freezes it for WHEN it falls. Once the period
+covering the named date is closed, that record can no longer be created, edited or deleted through
+the REST surface (409) - including a CREATE dated inside the closed window and an update that would
+MOVE a record into one. Workflow / system writes through the repository stay possible, exactly as for
+the status guard: a correction to a closed period is a reversal booked in an open one.
+
+The register is an ordinary entity, so closing a period is a plain status transition (a
+`transitions:` button, a `lifecycle:` edge, a workflow step) - `period:` only names the two bounds
+and what CLOSED means, once, where the period lives.
+
+A date covered by **no** period is open (periods are opened as they are needed, and an undeclared
+month must not freeze what is booked into it), and a record whose date is unset falls in none. The
+lock reaches a composition CHILD of a guarded master, as the status lock does, since a line write
+recomputes the document's totals. The register must be an entity of the SAME model - the guard is
+generated into this model's controllers, which can only query a repository generated alongside them.
 
 ## lifecycle - the legal status graph
 
@@ -164,6 +255,56 @@ controller's targeted write, a workflow `setRelationField`, a hand-written actio
 declared, a record must also be created in that status. At authoring time the graph is what
 `transitions:`, a status-setting workflow step and a check's rejection are validated against, so the
 buttons and the graph cannot disagree.
+
+## phases - the enrichment channel
+
+An enrichment a listener computes on create - a costing pool, a snapshot column, an external lookup -
+has to be written back **without** an event, or it would re-fire every onUpdate consumer of a change
+the user never made. So it publishes nothing at all, and a declarative consumer of the enriched value
+had no moment to bind: bound to `onCreate` it races the listener (the order of two listeners on one
+event is undefined) and reads the un-enriched row - a plausible journal entry posted for a null
+amount, with every pipeline step green.
+
+A phase is that write's own channel. The entity declares the moments it announces:
+
+```yaml
+entities:
+  - name: StockMovement
+    phases: [costed]
+    fields:
+      - { name: id,        type: integer, primaryKey: true, generated: true }
+      - { name: costValue, type: decimal, precision: 18, scale: 2 }
+```
+
+The generated repository gains one `announce<Phase>` method per declared phase. The enriching
+listener writes **through it** - the values and the notice travel in ONE targeted write, so they
+commit together and nobody can observe one without the other:
+
+```java
+new StockMovementRepository().announceCosted(movement.Id, java.util.Map.of("CostValue", cost));
+```
+
+Any glue consumer then binds the phase instead of the insert:
+
+```yaml
+postings:
+  - name: cogsPosting
+    event: { onPhase: StockMovement, phase: costed }
+    creates: JournalEntry
+    backReference: StockMovement
+    rule: { entity: PostingRule, match: { documentType: "Goods Issue" } }
+    items:
+      - { Account: rule(costOfSalesAccount), debit: "CostValue" }
+      - { Account: rule(inventoryAccount),   credit: "CostValue" }
+```
+
+`onPhase` is accepted by `postings:`, `notifications:`, `integrations:`, `outbound:` and an
+event-driven `generates:`; the `when:` guard stays optional there, the phase already being one moment.
+A phase name is a lower-camel identifier and may not be one of the platform's own channels
+(`updated` / `deleted` / `transitioned` / `rekeyed`). A consumer binding a phase the entity does not
+declare fails the parse - it would otherwise bind a topic nothing publishes to and simply never fire.
+A cross-model source declares its phases in its own model, so the name cannot be checked from here
+(the same limit a cross-model status nomenclature has).
 
 ## hierarchy / leafOnly - tree entities
 
@@ -367,8 +508,10 @@ processes:
       - { name: end,      kind: end }
 ```
 
-Service-task shapes: `setField` / `setRelationField` (generated handlers), `call` (TS handler,
-deprecated), `delegate` (a reusable hand-written client `JavaDelegate` with injected `fields`).
+Service-task shapes: `setField` / `clearField` / `setRelationField` (generated handlers), `call` (TS
+handler, deprecated), `delegate` (a reusable hand-written client `JavaDelegate` with injected
+`fields`). `clearField: <field>` is the erasure twin of `setField` - it names a `string`/`text` field
+and takes no `value`, so a flow can take back a failure text it wrote earlier.
 Decisions may test `relation.field` paths (`customer.creditLimit > 10000`) - resolvers are
 generated. Tasks surface in the Inbox and inline on the record's page.
 
@@ -403,6 +546,7 @@ generates:
     map: { Customer: Customer }
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
+    fromStatus: [2]                   # optional guard: the SOURCE statuses the action may run from
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
     sourceStatusOnRetire: 2           # optional INVERSE: where the SOURCE returns when the target is retired
 ```
@@ -426,6 +570,16 @@ Adds a button on the source view; the clone saves through the target's repositor
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
 the source's `-transitioned` topic is published.
+
+`fromStatus:` (#7068) guards the CLICK: the endpoint answers **409** and the button stops offering
+itself unless the source stands in one of the listed statuses (seeded names or ids) - the `from:` of a
+`transitions:` entry, spelled differently only because `from:` here already names the source ENTITY.
+Declaring `sourceStatus:` and no `fromStatus:` IMPLIES the guard against exactly that status: a source
+already standing where the completion hook put it has been generated from, and a second click used to
+mint a second document (another invoice for an already-invoiced proforma, in the customer's hands). It
+is refused where it cannot mean anything - a `page` scope, a source with no `function: EntityStatus`
+relation, an event-only create-from (guard the moment with `event.when:`), and an allow-list that
+contains the `sourceStatus` the action itself writes.
 
 `event: { onTransition: <Source>, when: "Status == <status>" }` (or `onCreate`, or a process step)
 mints the target with nobody clicking; the `map:` entry copying the source's key is then the
@@ -470,7 +624,7 @@ unposted worklist), never throws.
 ```yaml
 postings:
   - name: salesInvoicePosting
-    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
+    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }   # or onCreate, or onPhase
     creates: JournalEntry
     backReference: SalesInvoice
     map: { entryDate: date, reason: "Sales invoice {number}" }
@@ -509,8 +663,32 @@ rollups:
       status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
 ```
 
+A status the roll-up sets, it also lets go of: the first move into `statusWhenFull` /
+`statusWhenPartial` remembers the status it displaced in a hidden parent column (`Displaced<Status>`),
+and a sum back at zero - the only allocation deleted, amended to 0 or re-parented away - restores
+it, so a paid invoice returns to CONFIRMED (or to ISSUED, if it was paid straight from there) rather
+than staying PAID with nothing paid. A status the roll-up did not set (a manual void of a partially
+paid document) is never touched.
+
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
+
+Either end may be owned by another model. A cross-model PARENT is named by the `via` relation's own
+`model:` alias (the child is local and owns the event). A cross-model CHILD is named by the roll-up's
+`model:` plus a `parent:` naming the local entity the total lands on - the n:m allocation direction,
+where the link rows live with one side of the pairing and the other side's total belongs here:
+
+```yaml
+rollups:
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, model: sales-invoices,
+      parent: CustomerPayment, via: CustomerPayment, field: allocated, op: sum, of: amount }
+```
+
+`capacity`/`balance`/`status` are refused for a cross-model PARENT (they read its own fields and
+seeds) but work for a cross-model CHILD, where they are writes on the local parent - except the
+overdraw guard, which belongs to the child's own DAO and is reported as not installed. The vacated
+side of a re-parented FOREIGN child is repaired only when the owner model marks that relation as a
+grouping key.
 
 ## settlements - payment allocation
 
@@ -556,6 +734,14 @@ reports:
     credit: credit
     dimensions: [account.code, account.name]
     filter: "journalEntry.status == 2"
+  - name: GeneralLedger
+    kind: balance
+    source: JournalEntryItem
+    date: journalEntry.entryDate              # its first hop is the document the lines share
+    debit: debit
+    credit: credit
+    dimensions: [account.code, account.name]
+    correspondence: account.code              # turnovers per corresponding account, allocated
 ```
 
 In `filter:`, reference relations via `relation.field` (translated to a JOIN); a bare relation
@@ -618,9 +804,43 @@ schedules:
       - { field: status, op: eq, value: ACTIVE }
     generate:
       to: EmployeeTimesheet                   # cross-model target via `uses:` alias
+      unique: [Employee, Period]              # the natural key - a re-run of the job is a no-op
       map: { Employee: id }
       defaults: { Period: now }
 ```
+
+`unique:` names the TARGET properties that identify ONE tick's output. The generated job looks the
+target up by exactly those values - rendered from this same block's `map` / `defaults`, so what is
+looked up and what is written cannot drift - and skips the source row, `children` included, when it
+already exists. Declare it on every scheduled generation: without it a replayed tick (a failed deploy,
+a Quartz misfire recovery, an admin pressing Run) creates a duplicate document with duplicate children.
+Every entry must be assigned by this block's `map`/`defaults`; an on-demand `generates` action refuses
+it, its cardinality being its event `mode`.
+
+An entry may instead be **the period of the run** - `{ run: month }` - for a target that has no period
+column to name at all, which is the whole recurring-template family (a monthly rent bill, a quarterly
+retainer invoice: a plain document with a `date`):
+
+```yaml
+schedules:
+  - name: monthly-recurring-bills
+    cron: "0 0 5 1 * ?"
+    entity: BillTemplate
+    generate:
+      to: PurchaseInvoice
+      unique: [Supplier, supplierNumber, { run: month }]   # one bill per template per calendar month
+      map: { Supplier: Supplier }
+      defaults: { date: now, supplierNumber: "RECURRING - awaiting invoice" }
+```
+
+`run:` stores nothing: the document's own date already carries the period, so the guard **ranges over
+that date** (`between(first of the month, last of the month)`) and a re-run on any day of the month
+finds what the 1st created - which is what makes Monitoring's *Run now* safe on any day. Periods are
+`day`, `week`, `month`, `quarter`, `year`. The date it ranges over is the one this block assigns from
+`now`; `of: <property>` names it when the block assigns more than one, and a block that assigns none
+is refused (there would be nothing to compare). A run term never stands alone either - a key that is
+only a period identifies one target per period for the whole schedule, so the first matching row would
+generate and every other row be skipped as if it had already run.
 
 A `where` value is a literal or a **moment**: `CURRENT_DATE` / `CURRENT_TIMESTAMP` (`NOW`), optionally
 offset by a single signed ISO-8601 duration resolved against the clock of the run that fires - which is
@@ -637,7 +857,9 @@ Exactly one offset on one token - a moment vocabulary, not an expression languag
 happens in the queried field's own shape, so a `date` field takes `CURRENT_DATE` and a date-only amount
 (`P7D`/`P1M`/`P1Y`) while a `timestamp` field takes `CURRENT_TIMESTAMP` and any amount; a mismatched
 token, a time offset on a date, a second offset, or a moment on a non-temporal field is an authoring
-error rather than a query that silently never matches.
+error rather than a query that silently never matches. That shape is the Java one the generated column
+carries - `java.time.LocalDate` for a `date`, `java.time.Instant` for a `timestamp`, the `audit: true`
+`CreatedAt`/`UpdatedAt` columns a sweep usually reads included.
 
 ## integrations - outbound HTTP
 
@@ -702,12 +924,37 @@ when the queue or topic is a contract with a system outside this deployment (the
 [#6766](https://github.com/eclipse-dirigible/dirigible/issues/6766) - the name is passed through
 verbatim, so nothing in the intent layer resolves it).
 
-## permissions - roles
+## permissions - roles and gates
 
 ```yaml
 permissions:
   - { role: Librarian, can: [Member:read, Member:write, Loan:approve] }
+  - { role: Member,    can: [Book:read] }
 ```
+
+Each entry declares a role - emitted into `<intent>.roles` - and the resources it may act on. The
+`can: [Resource:action]` tokens are **what the generated application enforces**: an entity (or
+report) a token names is gated by the roles the author declared, instead of the convention-derived
+`<project>.<perspective>.<Entity>ReadOnly` / `FullAccess` names, and a composition child inherits the
+grants of the master it is managed under. An entity no token names keeps the convention gates, which
+stay declared and grantable.
+
+| action | gate |
+|---|---|
+| `read`, `view`, `list` | read |
+| `write`, `create`, `update`, `edit`, `delete`, `manage` | write, **and read with it** |
+| `*`, `all` | both |
+| anything else (`approve`, `start`, ...) | none - reported as a generation advisory |
+
+A grant is an allow-list: if no role may write a covered entity, nothing may - the write gate names a
+role that is never declared. A token naming a resource the intent does not declare is a generation
+issue (it would gate nothing); a token that is not a `Resource:action` pair is refused at parse.
+
+Turning on `{"access": {"generate": true}}` in the project's `.settings` additionally emits
+`<intent>.access` - the URL constraints over the controller subtrees, generated pages and report
+pages the templates publish, from the same tokens. A **hand-authored `.access` at the project root is
+deleted by the next Generate** (`.access` is an intent-owned extension); hand-written constraints
+belong under `custom/`.
 
 ## Print, tests and the shell (generated automatically)
 

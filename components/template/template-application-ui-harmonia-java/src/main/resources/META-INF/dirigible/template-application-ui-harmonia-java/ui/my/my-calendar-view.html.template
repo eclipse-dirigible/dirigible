@@ -11,11 +11,11 @@
     <!-- The calendar is an ADDITIONAL browse page and owns /my/${name}; the personal list lives at
          /my/${name}/list and carries the mirror switch back here. -->
     <button x-h-button data-variant="outline" data-size="sm" @click="goList()">
-      <i role="img" x-h-lucide data-lucide="table"></i>
+      <svg role="presentation" x-h-lucide data-lucide="table"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.list', 'List')"></span>
     </button>
     <button x-h-button data-variant="primary" @click="newEntity()">
-      <i role="img" x-h-lucide data-lucide="plus"></i>
+      <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
   </div>
@@ -24,7 +24,7 @@
   <div x-show="state === 'error'" class="p-4" x-h-text.muted x-text="error"></div>
 
   <!-- Calendar (own events only - served by the scoped MyController) -->
-  <div x-show="state === 'default'" class="bk-stretch" style="flex: 1; min-height: 0; padding: 0.5rem;">
+  <div x-show="state === 'default'" style="flex: 1; min-height: 0; padding: 0.5rem;">
     <div x-h-calendar="calCfg" style="height: 100%; min-height: 560px;"
          @event-click="onEventClick" @date-click="onDateClick"></div>
   </div>

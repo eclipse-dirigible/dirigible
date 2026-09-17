@@ -9906,6 +9906,654 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "convert-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT-to-bytea",
+        "author": "dirigible",
+        "comment": "The seed content was a @Lob byte[], which PostgreSQL renders as an oid large object - and pgjdbc refuses the large-object API on the auto-commit connection the synchronization thread saves seeds on, so every seed save failed there. The column is inline bytea now; deployments that already created it as oid are converted here, the large objects are unlinked, and one whose large object is already gone converts to NULL (the next synchronization re-reads the file).",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "dbms": {
+              "type": "postgresql"
+            }
+          },
+          {
+            "sqlCheck": {
+              "expectedResult": "1",
+              "sql": "SELECT count(*) FROM information_schema.columns WHERE lower(table_name) = 'dirigible_cms_seeds' AND lower(column_name) = 'cms_seed_content' AND lower(data_type) = 'oid'"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "sql": {
+              "dbms": "postgresql",
+              "splitStatements": true,
+              "sql": "CREATE TEMPORARY TABLE DIRIGIBLE_CMS_SEEDS_LOBS AS SELECT CMS_SEED_CONTENT AS LOB_OID FROM DIRIGIBLE_CMS_SEEDS WHERE CMS_SEED_CONTENT IS NOT NULL;\nUPDATE DIRIGIBLE_CMS_SEEDS SET CMS_SEED_CONTENT = NULL WHERE CMS_SEED_CONTENT IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_largeobject_metadata m WHERE m.oid = CMS_SEED_CONTENT);\nALTER TABLE DIRIGIBLE_CMS_SEEDS ALTER COLUMN CMS_SEED_CONTENT TYPE bytea USING (CASE WHEN CMS_SEED_CONTENT IS NULL THEN NULL ELSE lo_get(CMS_SEED_CONTENT) END);\nSELECT lo_unlink(m.oid) FROM pg_largeobject_metadata m JOIN DIRIGIBLE_CMS_SEEDS_LOBS l ON l.LOB_OID = m.oid;\nDROP TABLE DIRIGIBLE_CMS_SEEDS_LOBS;"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_CMS_SEEDS",
+        "author": "dirigible",
+        "comment": "The table was left to Hibernate's hbm2ddl fallback, which rendered its content column through whatever dialect was configured - H2's blob against PostgreSQL, whose CREATE was then rejected and swallowed. The content column is added per vendor below.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_CMS_SEEDS"
+                    },
+                    "name": "CMS_SEED_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DEPENDENCIES",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DESCRIPTION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_ERROR",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_KEY",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_STATUS",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_LOCATION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_NAME",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_PHASE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_RUNNING",
+                    "type": "BOOLEAN"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_TYPE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CMS_SEED_PATH",
+                    "type": "VARCHAR(1020)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_CMS_SEEDS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "constraintName": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "ARTEFACT_KEY",
+              "constraintName": "UK_DIRIGIBLE_CMS_SEEDS_ARTEFACT_KEY",
+              "tableName": "DIRIGIBLE_CMS_SEEDS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT-postgresql",
+        "author": "dirigible",
+        "dbms": "postgresql",
+        "comment": "Liquibase renders BLOB as PostgreSQL oid - an out-of-line large object, which is not what one file's bytes are. bytea matches the entity's @JdbcTypeCode(LONG32VARBINARY) mapping.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "columnName": "CMS_SEED_CONTENT"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_CMS_SEEDS",
+              "columns": [
+                {
+                  "column": {
+                    "name": "CMS_SEED_CONTENT",
+                    "type": "BYTEA"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "add-DIRIGIBLE_CMS_SEEDS_CMS_SEED_CONTENT",
+        "author": "dirigible",
+        "dbms": "!postgresql",
+        "comment": "BLOB on H2, varbinary(max) on SQL Server - what the entity's @JdbcTypeCode(LONG32VARBINARY) mapping renders there.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "columnExists": {
+                  "tableName": "DIRIGIBLE_CMS_SEEDS",
+                  "columnName": "CMS_SEED_CONTENT"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addColumn": {
+              "tableName": "DIRIGIBLE_CMS_SEEDS",
+              "columns": [
+                {
+                  "column": {
+                    "name": "CMS_SEED_CONTENT",
+                    "type": "BLOB"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_NUMBER_SERIES_DECLARATIONS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+                    },
+                    "name": "DECLARATION_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "CREATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "UPDATED_BY",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DEPENDENCIES",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_DESCRIPTION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_ERROR",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_KEY",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_STATUS",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_LOCATION",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_NAME",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_PHASE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "ARTEFACT_RUNNING",
+                    "type": "BOOLEAN"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "ARTEFACT_TYPE",
+                    "type": "CLOB"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "DECLARATION_PREFIX",
+                    "type": "VARCHAR(64)"
+                  }
+                },
+                {
+                  "column": {
+                    "constraints": {
+                      "nullable": false
+                    },
+                    "name": "DECLARATION_SIZE",
+                    "type": "INT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_TABLE",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_KEY",
+                    "type": "VARCHAR(255)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "DECLARATION_PARTITION_LABEL",
+                    "type": "VARCHAR(255)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS",
+                  "constraintName": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "ARTEFACT_KEY",
+              "constraintName": "UK_DIRIGIBLE_NUMBER_SERIES_DECLARATIONS_ARTEFACT_KEY",
+              "tableName": "DIRIGIBLE_NUMBER_SERIES_DECLARATIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-UK_DIRIGIBLE_DATA_TABLE_UNIQUES_CONSTRAINTS_ID",
+        "author": "dirigible",
+        "comment": "TableConstraint joined its owning TableConstraints with @OneToOne, so Hibernate put a unique index on the join column and a table could carry at most ONE unique index, ONE foreign key and ONE check - the second insert failed with a duplicate key and the whole .schema was never synchronized. The mapping is @ManyToOne now; the index it created is already materialized on every deployed instance and is dropped here.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "uniqueConstraintExists": {
+              "tableName": "DIRIGIBLE_DATA_TABLE_UNIQUES",
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_UNIQUES_CONSTRAINTS_ID"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "dropUniqueConstraint": {
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_UNIQUES_CONSTRAINTS_ID",
+              "tableName": "DIRIGIBLE_DATA_TABLE_UNIQUES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-UK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS_CONSTRAINTS_ID",
+        "author": "dirigible",
+        "comment": "TableConstraint joined its owning TableConstraints with @OneToOne, so Hibernate put a unique index on the join column and a table could carry at most ONE unique index, ONE foreign key and ONE check - the second insert failed with a duplicate key and the whole .schema was never synchronized. The mapping is @ManyToOne now; the index it created is already materialized on every deployed instance and is dropped here.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "uniqueConstraintExists": {
+              "tableName": "DIRIGIBLE_DATA_TABLE_FOREIGNKEYS",
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS_CONSTRAINTS_ID"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "dropUniqueConstraint": {
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS_CONSTRAINTS_ID",
+              "tableName": "DIRIGIBLE_DATA_TABLE_FOREIGNKEYS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-UK_DIRIGIBLE_DATA_TABLE_CHECKS_CONSTRAINTS_ID",
+        "author": "dirigible",
+        "comment": "TableConstraint joined its owning TableConstraints with @OneToOne, so Hibernate put a unique index on the join column and a table could carry at most ONE unique index, ONE foreign key and ONE check - the second insert failed with a duplicate key and the whole .schema was never synchronized. The mapping is @ManyToOne now; the index it created is already materialized on every deployed instance and is dropped here.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "uniqueConstraintExists": {
+              "tableName": "DIRIGIBLE_DATA_TABLE_CHECKS",
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_CHECKS_CONSTRAINTS_ID"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "dropUniqueConstraint": {
+              "constraintName": "UK_DIRIGIBLE_DATA_TABLE_CHECKS_CONSTRAINTS_ID",
+              "tableName": "DIRIGIBLE_DATA_TABLE_CHECKS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-legacy-named-UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_ID-h2",
+        "author": "dirigible",
+        "comment": "A deployment bootstrapped by hbm2ddl before this changelog existed carries the same unique index under the name Hibernate generated for it, which the drop-by-name changesets above cannot address. It is dropped here by the column it covers. A no-op where no such index is left, so the changelog stays idempotent; MSSQL is not swept - it has no CI leg to verify the statement against.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "dbms": {
+              "type": "h2"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "sql": {
+              "dbms": "h2",
+              "splitStatements": true,
+              "sql": "EXECUTE IMMEDIATE (SELECT COALESCE(MAX('ALTER TABLE \"' || tc.TABLE_NAME || '\" DROP CONSTRAINT \"' || tc.CONSTRAINT_NAME || '\"'), 'SET @DIRIGIBLE_NOOP = 1') FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND k.TABLE_NAME = tc.TABLE_NAME WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND UPPER(tc.TABLE_NAME) = 'DIRIGIBLE_DATA_TABLE_UNIQUES' AND UPPER(k.COLUMN_NAME) = 'CONSTRAINTS_ID'); EXECUTE IMMEDIATE (SELECT COALESCE(MAX('ALTER TABLE \"' || tc.TABLE_NAME || '\" DROP CONSTRAINT \"' || tc.CONSTRAINT_NAME || '\"'), 'SET @DIRIGIBLE_NOOP = 1') FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND k.TABLE_NAME = tc.TABLE_NAME WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND UPPER(tc.TABLE_NAME) = 'DIRIGIBLE_DATA_TABLE_FOREIGNKEYS' AND UPPER(k.COLUMN_NAME) = 'CONSTRAINTS_ID'); EXECUTE IMMEDIATE (SELECT COALESCE(MAX('ALTER TABLE \"' || tc.TABLE_NAME || '\" DROP CONSTRAINT \"' || tc.CONSTRAINT_NAME || '\"'), 'SET @DIRIGIBLE_NOOP = 1') FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE k ON k.CONSTRAINT_NAME = tc.CONSTRAINT_NAME AND k.TABLE_NAME = tc.TABLE_NAME WHERE tc.CONSTRAINT_TYPE = 'UNIQUE' AND UPPER(tc.TABLE_NAME) = 'DIRIGIBLE_DATA_TABLE_CHECKS' AND UPPER(k.COLUMN_NAME) = 'CONSTRAINTS_ID');"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-legacy-named-UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_ID-postgresql",
+        "author": "dirigible",
+        "comment": "A deployment bootstrapped by hbm2ddl before this changelog existed carries the same unique index under the name Hibernate generated for it, which the drop-by-name changesets above cannot address. It is dropped here by the column it covers. A no-op where no such index is left, so the changelog stays idempotent; MSSQL is not swept - it has no CI leg to verify the statement against.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "dbms": {
+              "type": "postgresql"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "sql": {
+              "dbms": "postgresql",
+              "splitStatements": false,
+              "sql": "DO $$\nDECLARE r record;\nBEGIN\n  FOR r IN SELECT tc.table_name, tc.constraint_name\n             FROM information_schema.table_constraints tc\n             JOIN information_schema.key_column_usage k\n               ON k.constraint_name = tc.constraint_name AND k.table_name = tc.table_name\n            WHERE tc.constraint_type = 'UNIQUE'\n              AND upper(tc.table_name) IN ('DIRIGIBLE_DATA_TABLE_UNIQUES','DIRIGIBLE_DATA_TABLE_FOREIGNKEYS','DIRIGIBLE_DATA_TABLE_CHECKS')\n              AND upper(k.column_name) = 'CONSTRAINTS_ID'\n  LOOP\n    EXECUTE format('ALTER TABLE %I DROP CONSTRAINT %I', r.table_name, r.constraint_name);\n  END LOOP;\nEND $$;"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-legacy-UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_ID-schema-qualified",
+        "author": "dirigible",
+        "comment": "Corrects the 14.56.0 legacy sweeps (#7370): they read information_schema without a schema filter and dropped without qualifying the table, so on a database that holds those tables in more than one schema the lookup and the ALTER TABLE could address different schemas - dropping the wrong constraint or failing - and the H2 variant collapsed its match to MAX(...), dropping at most one constraint per table and silently leaving a second. Those released sweeps are immutable (their checksums are on every deployed instance), so the correction is this new changeset rather than an edit. A CustomTaskChange because the operation is not portably expressible in changelog SQL - PostgreSQL needs a DO loop to drop more than one and H2 has no procedural SQL at all - while JDBC schema-qualifies AND drops every match once, for both databases. It drops every UNIQUE constraint on CONSTRAINTS_ID it finds in the current schema; a schema with none yields no rows, so the change is a no-op and the changelog stays idempotent. Gated to H2 and PostgreSQL - MSSQL has no CI leg, exactly as the original sweeps.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "or": [
+              {
+                "dbms": {
+                  "type": "h2"
+                }
+              },
+              {
+                "dbms": {
+                  "type": "postgresql"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "customChange": {
+              "class": "org.eclipse.dirigible.components.core.liquibase.DropLegacyConstraintsIdUniqueIndexChange"
+            }
+          }
+        ]
+      }
     }
   ]
 }

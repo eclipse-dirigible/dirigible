@@ -49,7 +49,12 @@ public class ProjectDeployer {
     /** The workspace every fixture is deployed from - the one the IDE opens by default. */
     private static final String WORKSPACE = "workspace";
 
-    /** The extension of the descriptor a model file is generated with. */
+    /**
+     * The extension of the descriptor a model file is generated with. A generation names it after the
+     * model file's whole name - {@code edm.model.gen} - so that every generation of a project keeps its
+     * own record (#7057); a project generated before that carries the base-name form ({@code edm.gen}),
+     * which is still a valid descriptor, so a fixture may hold either.
+     */
     private static final String DESCRIPTOR_EXTENSION = ".gen";
 
     /**
@@ -143,15 +148,19 @@ public class ProjectDeployer {
 
     private Map<String, Object> readDescriptor(String project, String modelFileName) {
         int dot = modelFileName.lastIndexOf('.');
-        String descriptorPath = (dot < 0 ? modelFileName : modelFileName.substring(0, dot)) + DESCRIPTOR_EXTENSION;
+        String legacyName = (dot < 0 ? modelFileName : modelFileName.substring(0, dot)) + DESCRIPTOR_EXTENSION;
 
         String user = DirigibleTestTenant.createDefaultTenant()
                                          .getUsername();
-        String location = IRepositoryStructure.PATH_USERS + "/" + user + "/" + WORKSPACE + "/" + project + "/" + descriptorPath;
+        String folder = IRepositoryStructure.PATH_USERS + "/" + user + "/" + WORKSPACE + "/" + project + "/";
 
-        IResource resource = repository.getResource(location);
+        IResource resource = repository.getResource(folder + modelFileName + DESCRIPTOR_EXTENSION);
         if (!resource.exists()) {
-            throw new IllegalStateException("Missing generation descriptor [" + location + "]");
+            resource = repository.getResource(folder + legacyName);
+        }
+        if (!resource.exists()) {
+            throw new IllegalStateException("Missing generation descriptor [" + folder + modelFileName + DESCRIPTOR_EXTENSION + "] and ["
+                    + folder + legacyName + "]");
         }
         return JsonHelper.fromJson(new String(resource.getContent(), StandardCharsets.UTF_8), DESCRIPTOR_TYPE);
     }

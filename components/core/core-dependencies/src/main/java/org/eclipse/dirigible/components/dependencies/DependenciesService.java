@@ -54,6 +54,15 @@ class DependenciesService {
     /** The failures key carrying a frozen boot without a lockfile. */
     private static final String LOCKFILE_FAILURE_KEY = "project-lock.json";
 
+    /** The failures key carrying a registry-payload reconciliation failure. */
+    private static final String PAYLOAD_FAILURE_KEY = "registry-payload";
+
+    /** The first retry delay after a failed pass, in milliseconds. */
+    private static final long RETRY_BASE_MILLIS = 60_000L;
+
+    /** The retry delay ceiling after repeated failures, in milliseconds. */
+    private static final long RETRY_MAX_MILLIS = 900_000L;
+
     /** The collector. */
     private final ProjectDependenciesCollector collector;
 
@@ -80,6 +89,14 @@ class DependenciesService {
 
     /** The fingerprint of the declarations the last resolution processed, null before it. */
     private volatile String lastDeclaredFingerprint;
+
+    /**
+     * When the last pass reported failures, the moment the watcher may retry it; 0 when it was clean.
+     */
+    private volatile long retryAtMillis;
+
+    /** The current retry delay, doubled on every consecutive failing pass. */
+    private volatile long retryDelayMillis = RETRY_BASE_MILLIS;
 
     /**
      * Instantiates a new dependencies service.
@@ -133,6 +150,38 @@ class DependenciesService {
     }
 
     /**
+     * Whether the watcher should re-run the pipeline although the declarations did not change - the
+     * previous pass reported failures and its backoff has elapsed. A resolution that fails on a
+     * repository outage must not disarm the watcher until someone edits a project.json: the
+     * declarations are unchanged when the network recovers, so nothing but a retry ever activates them.
+     *
+     * @return true when a retry is due
+     */
+    boolean isRetryDue() {
+        long due = retryAtMillis;
+        return due != 0 && System.currentTimeMillis() >= due;
+    }
+
+    /**
+     * Records the outcome of one pass for the watcher's retry decision - a clean pass clears the
+     * backoff, a failing one schedules the next retry and doubles the delay up to the ceiling.
+     *
+     * @param clean whether the pass reported no failures
+     */
+    private void recordPassOutcome(boolean clean) {
+        if (clean) {
+            retryAtMillis = 0;
+            retryDelayMillis = RETRY_BASE_MILLIS;
+            return;
+        }
+        long delay = retryDelayMillis;
+        retryAtMillis = System.currentTimeMillis() + delay;
+        retryDelayMillis = Math.min(delay * 2, RETRY_MAX_MILLIS);
+        LOGGER.info("The dependency pass reported failures - retrying in [{}] second(s) even if the declarations do not change",
+                delay / 1000);
+    }
+
+    /**
      * Runs the resolution of both dependency tiers and reconciles the results into the running system.
      * In frozen mode the activated set comes from the lockfile alone; otherwise the union is resolved,
      * verified against the lockfile and activated - the platform tier (appended to the system
@@ -144,11 +193,16 @@ class DependenciesService {
      */
     synchronized DependenciesState resolveAndActivate() {
         DeclaredDependencies declared = collector.collect();
-        lastDeclaredFingerprint = declared.fingerprint();
         Path localRepository = MavenResolverConfig.fromConfiguration()
                                                   .localRepository();
         DependenciesState state = isFrozen() ? activateFrozen(declared, localRepository) : resolveDynamic(declared, localRepository);
         lastState.set(state);
+        // the fingerprint disarms the watcher for these declarations, so a failing pass arms the
+        // backoff instead: unchanged declarations that failed on a repository 503 or a network blip
+        // are retried until they resolve, rather than waiting for someone to edit a project.json
+        lastDeclaredFingerprint = declared.fingerprint();
+        recordPassOutcome(state.failures()
+                               .isEmpty());
         LOGGER.info(
                 "Maven dependency {} completed: [{}] declared, [{}] jar(s) activated, [{}] platform-scoped, [{}] mediated,"
                         + " [{}] failure(s), classloader generation [{}]",
@@ -212,7 +266,7 @@ class DependenciesService {
         if (moduleGate.isEmpty()) {
             outcome = dependencySynchronizer.swap(localRepository, paths(verifiedModule), paths(verifiedPlatform), moduleResult.mediated());
         } else {
-            outcome = SwapOutcome.kept(null);
+            outcome = SwapOutcome.kept((String) null);
             LOGGER.error("Not swapping the dependency layer: [{}] declaration/resolution failure(s) - the installed generation keeps "
                     + "serving. Failures: {}", moduleGate.size(), moduleGate);
         }
@@ -221,9 +275,7 @@ class DependenciesService {
         failures.putAll(platformResult.failures());
         failures.putAll(moduleResult.failures());
         failures.putAll(integrityFailures);
-        if (outcome.error() != null) {
-            failures.put(SWAP_FAILURE_KEY, outcome.error());
-        }
+        reportSwapFailures(outcome, failures);
 
         // both tiers seed the next launch's classpath through the resolved-modules directory;
         // stale links are removed only after a fully clean pass
@@ -245,6 +297,7 @@ class DependenciesService {
         reportResolution(platformResult, List.of(), integrityFailures, outcome.swapped(), ArtifactStatus.SCOPE_PLATFORM, report);
         platformStates.forEach(state -> report.add(
                 new ArtifactStatus(state.coordinate(), ArtifactStatus.SCOPE_PLATFORM, state.status(), state.message())));
+        reportSwapOutcome(outcome, report);
 
         return state(false, declared, paths(allArtifacts), mediated, failures, platformStates, report, localRepository);
     }
@@ -282,16 +335,14 @@ class DependenciesService {
             outcome =
                     dependencySynchronizer.swap(localRepository, plan.artifacts(ArtifactStatus.SCOPE_MODULE), platformArtifacts, Map.of());
         } else {
-            outcome = SwapOutcome.kept(null);
+            outcome = SwapOutcome.kept((String) null);
             LOGGER.error("Not swapping the dependency layer: [{}] declaration failure(s) - the installed generation keeps serving."
                     + " Failures: {}", moduleGate.size(), moduleGate);
         }
 
         Map<String, String> failures = new LinkedHashMap<>(declared.errors());
         failures.putAll(plan.failures());
-        if (outcome.error() != null) {
-            failures.put(SWAP_FAILURE_KEY, outcome.error());
-        }
+        reportSwapFailures(outcome, failures);
 
         List<Path> allArtifacts = new ArrayList<>(plan.activations()
                                                       .stream()
@@ -327,6 +378,7 @@ class DependenciesService {
         }
         platformStates.forEach(state -> report.add(
                 new ArtifactStatus(state.coordinate(), ArtifactStatus.SCOPE_PLATFORM, state.status(), state.message())));
+        reportSwapOutcome(outcome, report);
 
         return state(true, declared, allArtifacts, Map.of(), failures, platformStates, report, localRepository);
     }
@@ -449,6 +501,65 @@ class DependenciesService {
             artifacts.add(new Lockfile.LockedArtifact(artifact.coordinate(), hashes.get(artifact.coordinate()), requestedBy, artifact.via(),
                     scope));
         }
+    }
+
+    /**
+     * Adds the swap's own failures: the abort reason, the per-declaration rejections (the rest of the
+     * resolution still activated) and a registry-payload reconciliation failure.
+     *
+     * @param outcome the swap outcome
+     * @param failures the failures to add to
+     */
+    private static void reportSwapFailures(SwapOutcome outcome, Map<String, String> failures) {
+        if (outcome.error() != null) {
+            failures.put(SWAP_FAILURE_KEY, outcome.error());
+        }
+        failures.putAll(outcome.rejected());
+        if (outcome.payloadError() != null) {
+            failures.put(PAYLOAD_FAILURE_KEY, outcome.payloadError());
+        }
+    }
+
+    /**
+     * Corrects the per-artifact report with what the swap actually did: a rejected declaration carries
+     * its rejection reason, and an artifact the launch classpath already provides is reported as
+     * shadowed rather than active - a swap that reports a new artifact as serving while parent-first
+     * delegation keeps serving another version is the one outcome an operator cannot debug.
+     *
+     * @param outcome the swap outcome
+     * @param report the per-artifact report to correct
+     */
+    private static void reportSwapOutcome(SwapOutcome outcome, List<ArtifactStatus> report) {
+        if (outcome.rejected()
+                   .isEmpty()
+                && outcome.shadowed()
+                          .isEmpty()) {
+            return;
+        }
+        Set<String> reported = new LinkedHashSet<>();
+        report.replaceAll(status -> {
+            String rejection = outcome.rejected()
+                                      .get(status.coordinate());
+            if (rejection != null) {
+                reported.add(status.coordinate());
+                return new ArtifactStatus(status.coordinate(), status.scope(), ArtifactStatus.STATUS_FAILED, rejection);
+            }
+            if (outcome.shadowed()
+                       .contains(status.coordinate())
+                    && ArtifactStatus.STATUS_ACTIVE.equals(status.status())) {
+                return new ArtifactStatus(status.coordinate(), status.scope(), ArtifactStatus.STATUS_SHADOWED,
+                        "The launch classpath (loader.path / LOADER_PATH) already carries this artifact - parent-first delegation serves"
+                                + " that copy, so the declared one is inert. Remove it from the launch classpath to let the declaration"
+                                + " take effect.");
+            }
+            return status;
+        });
+        outcome.rejected()
+               .forEach((coordinate, reason) -> {
+                   if (!reported.contains(coordinate)) {
+                       report.add(new ArtifactStatus(coordinate, ArtifactStatus.SCOPE_MODULE, ArtifactStatus.STATUS_FAILED, reason));
+                   }
+               });
     }
 
     /**

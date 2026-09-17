@@ -33,6 +33,22 @@ public class SecurityUtil {
         this.roleService = roleService;
     }
 
+    /**
+     * Creates the role unless it exists. Needed for roles outside the {@link Roles} enum - a role a
+     * token carries as a scope, for instance - which no initializer creates a row for.
+     *
+     * @param roleName the role name
+     */
+    public void ensureRole(String roleName) {
+        if (roleService.roleExistsByName(roleName)) {
+            return;
+        }
+        Role role = new Role("TEST", roleName, "Created by an integration test");
+        role.setPhase(org.eclipse.dirigible.components.base.artefact.ArtefactPhase.CREATE);
+        role.updateKey();
+        roleService.save(role);
+    }
+
     public void createUserInDefaultTenant(String username, String password, String roleName) {
         User user = createUserInDefaultTenant(username, password);
 

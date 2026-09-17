@@ -113,6 +113,7 @@ class ScheduledClassConsumerTenantRegistrationTest {
         });
 
         TenantContext tenantContext = mock(TenantContext.class);
+        when(tenantContext.getCurrentTenant()).thenAnswer(invocation -> provisionedTenants.get(currentTenantId.get()));
         // Run the callable once per provisioned tenant, inline, with that tenant current.
         when(tenantContext.executeForEachTenant(any())).thenAnswer(invocation -> {
             for (String tenantId : new ArrayList<>(provisionedTenants.keySet())) {
@@ -142,8 +143,9 @@ class ScheduledClassConsumerTenantRegistrationTest {
         consumer.execute();
 
         row("beta");
-        assertEquals(List.of(DEFAULT_TENANT_ID, "acme", "beta"), scheduledForTenants,
-                "the top-up re-registers every tenant; scheduling an already-scheduled job is a no-op");
+        // ONLY the late tenant: the tenants the load already covered are recorded as registered, so
+        // the top-up does not rewrite their rows or reschedule their triggers (#7265).
+        assertEquals(List.of("beta"), scheduledForTenants, "the top-up registers the tenants that are missing the job, and no others");
     }
 
     @Test

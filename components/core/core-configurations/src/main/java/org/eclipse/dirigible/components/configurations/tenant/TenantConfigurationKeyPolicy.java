@@ -45,6 +45,11 @@ class TenantConfigurationKeyPolicy {
             // modules themselves carry whatever translations they ship, falling back to the default
             // (first) language for anything missing.
             "DIRIGIBLE_APPLICATION_LANGUAGES", //
+            // The tenant's country as an ISO 3166-1 alpha-2 code, resolving the country-scoped label
+            // variants a generated application declares. Per-tenant by definition: one deployment
+            // serves companies in several jurisdictions, and the term a field goes by follows the
+            // company's country rather than the reader's language.
+            "DIRIGIBLE_APPLICATION_COUNTRY", //
             // Serve and store Office documents with the legacy Microsoft mime types. Per-tenant
             // because it depends on the client software a tenant's users actually open files with;
             // the resolver reads it per call, so a change applies without a restart.

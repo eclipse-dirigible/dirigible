@@ -121,6 +121,22 @@ public class RelationIntent {
     private boolean leafOnly;
 
     /**
+     * What a DELETE of the MASTER does to this composition's children - {@code cascade} (the default)
+     * or {@code refuse}. Valid on a {@code composition: true} to-one only, where it is the child that
+     * declares the ownership edge.
+     *
+     * <p>
+     * {@code cascade}: the master's generated repository deletes the children with it, in the same
+     * transaction and through their own repository, so each child's {@code -deleted} event fires and
+     * every roll-up over the child relinquishes what it counted. {@code refuse}: the master's delete is
+     * rejected while any child exists, naming both entities - for a document whose lines must be
+     * removed deliberately. Either way no row is left pointing at a master that is gone: an orphan is
+     * invisible in the UI (no parent page renders it) and still counted by every report and roll-up
+     * over the child.
+     */
+    private String whenMasterDeleted;
+
+    /**
      * Marks this to-one relation as the OWNER of the record for the personal surface: on the generated
      * personal (my) REST controller, reads are filtered to the logged-in user's mapped identity record
      * and writes force this FK server-side. Valid only when the target entity declares
@@ -313,6 +329,24 @@ public class RelationIntent {
 
     public void setWhere(Map<String, Object> where) {
         this.where = where;
+    }
+
+    public String getWhenMasterDeleted() {
+        return whenMasterDeleted;
+    }
+
+    public void setWhenMasterDeleted(String whenMasterDeleted) {
+        this.whenMasterDeleted = whenMasterDeleted;
+    }
+
+    /**
+     * Whether a delete of the master must be REFUSED while this composition has children, rather than
+     * cascading into them.
+     *
+     * @return true when {@code whenMasterDeleted: refuse} was authored
+     */
+    public boolean isMasterDeleteRefused() {
+        return "refuse".equals(whenMasterDeleted == null ? null : whenMasterDeleted.trim());
     }
 
     public boolean isLeafOnly() {

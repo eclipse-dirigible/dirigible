@@ -1,18 +1,20 @@
 package gen.events.${javaGenFolderName};
 
 import java.util.List;
-#if($action != "generate")
+#if($notifies)
 import java.util.HashMap;
 import java.util.Map;
 #end
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
-#if($action != "generate")
+#if($notifies)
 import org.eclipse.dirigible.sdk.core.Configurations;
 import org.eclipse.dirigible.sdk.mail.Mail;
 #end
 import org.eclipse.dirigible.sdk.job.JobHandler;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 
 import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Entity;
 import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Repository;
@@ -26,9 +28,9 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
 #end
 
 /**
- * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, either notify
- * (mail) or generate a target record (create-from, saved through the target's generated repository so
- * its numbering / status init / calculated fields fire).
+ * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, notify (mail),
+ * generate a target record (create-from, saved through the target's generated repository so its
+ * numbering / status init / calculated fields fire), or BOTH - a tick that records what it sent.
  *
  * Generated from the intent schedules block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories. The mail sender comes from the
@@ -37,140 +39,487 @@ import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspec
 @Component("${javaGenFolderName}_${className}Job")
 public class ${className}Job implements JobHandler {
 
+    /** Application logger - nested under the platform's `app.` root, like every other app logger. */
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Job");
+
     @Override
     public String cron() {
-        return "${cron}";
+        return "${cronJavaLiteral}";
     }
 
     @Override
     public void run() {
         List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
+        int failed = 0;
+#if($notifies)
+#if(!$generates)
+        int sent = 0;
+#end
+        int skipped = 0;
+#end
+#if($generates)
+        int created = 0;
+#if($hasGenUnique)
+        int existed = 0;
+#end
+#end
+#if($hasEscalation)
+        int notDue = 0;
+#end
         for (${entity}Entity entity : rows) {
-#if($action == "generate")
+#if($notifies)
+            // Declared outside the try so the row's failure line can still name the recipient; null
+            // there says the row failed before one was resolved.
+            String to = null;
+#end
+            // ONE TRY PER SOURCE ROW, and the WHOLE row is FAIL-SOFT. A schedule tick is a batch - a
+            // dunning run mails every overdue invoice, a monthly run generates a timesheet per employee -
+            // and one bad row used to abort the loop, so every row after it was silently skipped and the
+            // next tick started over from the top. Each row is attempted, counted and logged with its own
+            // key, and the tick reports the totals.
+            //
+            // The try opens HERE, before the row's relation loads, the escalation lookup, the guard's
+            // lookup and the attachment render (#7178, #7233): those read the database too - a foreign
+            // key at a row a concurrent delete removed, a connection blip, a print template that fails
+            // for ONE document - and a throw from any of them used to abort the tick exactly as a refused
+            // generation or an unreachable mailbox did. One bad row costs one `failed`.
+            //
+            // A generation is written in ONE transaction per row (header, children and grandchildren
+            // together): each used to commit on its own, so a tick that died halfway left a childless
+            // header behind - and with the `unique:` guard finding exactly that header, every later run
+            // reported "already existed" and the row stayed incomplete forever (#7133). A refused row now
+            // leaves nothing behind, so the next tick really does complete what this one could not.
+            //
+            // When the tick both records and mails, the SEND is part of that unit and runs last (#7365),
+            // and the recipient is resolved BEFORE anything is written - so a row with nobody to mail is
+            // counted as such without leaving a history row claiming a message that was never addressed.
+            try {
 #foreach($load in $relationLoads)
-            // A one-hop `relation.field` map source: the queried row's foreign key loads the related row,
-            // once per row, and the mapping below reads a field off it. Null-guarded - a nullable relation
-            // is a legitimate empty value, not a reason to skip the row.
-            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+                // A one-hop `relation.field` source: the queried row's foreign key loads the related row,
+                // once per row, and the recipient / placeholder / mapping below reads a field off it.
+                // Null-guarded - a nullable relation is a legitimate empty value, not a reason to skip.
+                ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
-            gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
-                    new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
-#foreach($a in $genFieldAssignments)
-            target.${a.targetProp} = ${a.expr};
-#end
-            var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
-#foreach($c in $genChildren)
-#if($c.kind == "days")
-            // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
-            for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
-                    monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
-                    day.isBefore(monthEnd); day = day.plusDays(1)) {
-                if (day.getDayOfWeek().getValue() >= 6) {
+#if($hasEscalation)
+                // ESCALATION LADDER (intent `escalate:` - issue #7276). How overdue this row is decides
+                // WHICH level applies: the highest ${escalationEntity} whose ${escalationAfterProperty}
+                // threshold the row has passed, counted in whole days from its ${escalationSinceProperty}.
+                // A row that has passed none is left alone this tick rather than mailed at the bottom
+                // level - "not due yet" is a real answer, and it is counted so the log can say so.
+                // The ladder is a settings table (three rows for a dunning ladder), so it is read whole
+                // and the maximum picked here rather than ordered in the database.
+                // The pick is made into a mutable candidate and then FROZEN into the local the rest of
+                // the row reads: the generation below runs inside a lambda, which may only close over an
+                // effectively final variable - a level assigned in the loop is not one.
+                ${escalationEntityClass} escalationCandidate = null;
+                if (entity.${escalationSinceProperty} != null) {
+                    long overdueDays = java.time.temporal.ChronoUnit.DAYS.between(entity.${escalationSinceProperty},
+                            java.time.LocalDate.now());
+                    for (${escalationEntityClass} level : new ${escalationRepositoryClass}().findAll(Criteria.create())) {
+                        if (level.${escalationAfterProperty} == null || level.${escalationAfterProperty} > overdueDays) {
+                            continue;
+                        }
+                        if (escalationCandidate == null
+                                || level.${escalationAfterProperty} > escalationCandidate.${escalationAfterProperty}) {
+                            escalationCandidate = level;
+                        }
+                    }
+                }
+                if (escalationCandidate == null) {
+                    notDue++;
                     continue;
                 }
-                ${c.toEntityClass} ${c.rowVar} = new ${c.toEntityClass}();
-                ${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
-                ${c.rowVar}.${c.dayField} = day;
-#foreach($a in $c.fieldAssignments)
-                ${c.rowVar}.${a.targetProp} = ${a.expr};
+                final ${escalationEntityClass} ${escalationLocal} = escalationCandidate;
 #end
-                new ${c.toRepositoryClass}().save(${c.rowVar});
-            }
-#else
-            // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
-            for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
-                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
-                ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
-                child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
-#foreach($a in $c.fieldAssignments)
-                child${c.rowVar}.${a.targetProp} = ${a.expr};
+#if($generates)
+#if($hasGenUnique)
+                // IDEMPOTENCY (intent `generate.unique:` - issues #7070, #7106). A tick used to create
+                // unconditionally, so running this job twice - a redeploy, a Quartz misfire recovery, an
+                // admin pressing Run in Monitoring - minted a second ${genToEntity} for the same
+                // ${entity}, with a duplicate set of children under it. The natural key is looked up with
+                // the very values this row is about to be written from, so a re-run finds its own earlier
+                // output and skips the row entirely, children included. A `run:` period term is a RANGE
+                // over the date this run writes, which is how a target with no period column of its own
+                // ("one bill per template per month") is still keyed. Best-effort against two concurrent
+                // ticks, exactly as the event-driven create-from's guard is - a UNIQUE database key on the
+                // same columns is the durable backstop.
+#if($notifies)
+                // It gates the MAIL too (#7276): the send happens only where a record was written, so the
+                // same (row, level) is never mailed twice. The record is written and the message sent in
+                // ONE unit (#7365), so a row it skips really was mailed - the guard is read as history.
 #end
-                var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
-#foreach($g in $c.children)
-#if($g.kind == "days")
-                // ${g.toEntity}: one row per working day (Mon-Fri) of the current month.
-                for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
-                        monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
-                        day.isBefore(monthEnd); day = day.plusDays(1)) {
-                    if (day.getDayOfWeek().getValue() >= 6) {
-                        continue;
-                    }
-                    ${g.toEntityClass} ${g.rowVar} = new ${g.toEntityClass}();
-                    ${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
-                    ${g.rowVar}.${g.dayField} = day;
-#foreach($a in $g.fieldAssignments)
-                    ${g.rowVar}.${a.targetProp} = ${a.expr};
+#set($genUniqueValueTerms = 0)
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+#set($genUniqueValueTerms = $genUniqueValueTerms + 1)
 #end
-                    new ${g.toRepositoryClass}().save(${g.rowVar});
-                }
-#else
-                // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
-                for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
-                        org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
-                    ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
-                    child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
-#foreach($a in $g.fieldAssignments)
-                    child${g.rowVar}.${a.targetProp} = ${a.expr};
 #end
-                    new ${g.toRepositoryClass}().save(child${g.rowVar});
+#if($genUniqueValueTerms > 0)
+                // Each key value is read ONCE, into a local, because the lookup and the diagnostic below
+                // both need it and a term can be a field off a loaded relation.
+                java.util.List<String> nullKeyTerms = new java.util.ArrayList<>();
+#foreach($u in $genUnique)
+#if($u.kind != "range")
+                Object key${u.property} = ${u.expr};
+                if (key${u.property} == null) {
+                    nullKeyTerms.add("${u.property}");
                 }
 #end
 #end
-            }
+                if (!nullKeyTerms.isEmpty()) {
+                    // A NULL key term (issue #7134). The lookup itself is null-safe - Criteria.eq binds
+                    // `is null` for a null value, so the guard still finds this tick's own earlier output
+                    // instead of matching nothing and minting a duplicate on every re-run. What it cannot
+                    // do is tell two source rows apart by a term that is null in both: under the declared
+                    // key they ARE one output, so the second row is counted as already existing. That is
+                    // the key being weaker than the author meant, and it is said out loud here rather than
+                    // discovered as a missing document.
+                    LOG.warn("Schedule ${name}: unique key term(s) {} are null for ${entity} [{}] - the natural key cannot tell rows sharing"
+                            + " that null apart, so they collapse to one ${genToEntity}; key on a property this generate always assigns",
+                            nullKeyTerms, entity.${attachKeyProperty});
+                }
 #end
-#end
+                if (!new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().findAll(Criteria.create()
+#foreach($u in $genUnique)
+#if($u.kind == "range")
+                        .between("${u.property}", ${u.lower}, ${u.upper})
 #else
-#foreach($load in $relationLoads)
-            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+                        .eq("${u.property}", key${u.property})
 #end
+#end
+                        ).isEmpty()) {
+                    existed++;
+                    continue;
+                }
+#end
+#end
+#if($notifies)
 #if($usesRecordUrl == "true")
-            // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
-            // in the layer that knows the generated application's URL layout; the intent layer
-            // contributes only the entity and its key, which is what keeps it path-agnostic.
-            String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
-                    + "/edit";
+                // {recordUrl} - the deep link to the row this message is about. The ROUTE is composed HERE,
+                // in the layer that knows the generated application's URL layout; the intent layer
+                // contributes only the entity and its key, which is what keeps it path-agnostic.
+                String recordUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/${recordUrlEntity}/" + entity.${recordUrlKeyProperty}
+                        + "/edit";
 #end
 #if($usesInboxUrl == "true")
-            // {inboxUrl} - the deep link to the recipient's process Inbox.
-            String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
-                    + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
+                // {inboxUrl} - the deep link to the recipient's process Inbox.
+                String inboxUrl = Configurations.get("DIRIGIBLE_APP_BASE_URL", "")
+                        + "/services/web/${projectName}/gen/${genFolderName}/index.html#/inbox";
 #end
-            String to = ${toExpression};
-            if (to == null || to.isBlank()) {
-                continue;
-            }
-            String subject = ${subjectExpression};
-            String body = ${bodyExpression};
-            Map part = new HashMap();
-            part.put("type", "text");
-            part.put("contentType", "text/plain");
-            part.put("text", body);
-            List<Map> parts = new java.util.ArrayList<>();
-            parts.add(part);
+                to = ${toExpression};
+                if (to == null || to.isBlank()) {
+                    // A row with nobody to mail is a legitimate no-op, but it is COUNTED: "matched 40,
+                    // mailed 12" is the line that says a query is wider than the addresses behind it.
+                    skipped++;
+#if($notifyOutcomeProperty != "")
+                    stampNotifySkipped(entity.${notifyOutcomeKeyProperty});
+#end
+                    continue;
+                }
+                // The send may run inside the generation's unit-of-work lambda, which can only close
+                // over an effectively final local; `to` is assigned here, so the frozen copy is what the
+                // message is addressed with. `to` itself stays the one the row's failure line names.
+                final String recipient = to;
+                String subject = ${subjectExpression};
+                String body = ${bodyExpression};
+                Map part = new HashMap();
+                part.put("type", "text");
+                part.put("contentType", "text/plain");
+                part.put("text", body);
+                List<Map> parts = new java.util.ArrayList<>();
+                parts.add(part);
 #if($attach == "print")
-            // attach: print - render THIS row's own print template to PDF server-side (the generated
-            // feeder assembles the { document, items } payload) and attach it, so a periodic notice
-            // carries the document itself (a reminder with the invoice, not just about it).
+                // attach: print - render THIS row's own print template to PDF server-side (the generated
+                // feeder assembles the { document, items } payload) and attach it, so a periodic notice
+                // carries the document itself (a reminder with the invoice, not just about it).
 #if($attachLanguageFkProperty != "")
-            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
-                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
-            Map document = new HashMap();
-            document.put("type", "attachment");
-            document.put("contentType", "application/pdf");
-            document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
-                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
-            parts.add(document);
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
+                        new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+                parts.add(document);
+#elseif($attach == "report")
+                // attach: { report, bind } - run the declared report scoped to THIS recipient and attach the
+                // rendered PDF. The bindings ARE the report's parameters, which is what makes the rows this
+                // recipient's own: a customer statement is a period of rows, not one record's document.
+#if($attachLanguageFkProperty != "")
+                ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                        : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
 #end
-            String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
-            try {
-                Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
+                Map<String, Object> reportFilter = new HashMap<>();
+#foreach($binding in $attachReportBindings)
+                reportFilter.put("${binding.parameter}", reportValue(${binding.expression}));
+#end
+                Map<String, Object> reportData = new HashMap<>();
+                // The bound values double as the rendered header, so the PDF states which slice it is - a
+                // table of rows never does.
+                reportData.put("document", reportFilter);
+                reportData.put("items", new gen.${attachReportGenFolder}.data.${attachReportPerspective}.${attachReport}Repository()
+                        .findAll(null, null, reportFilter));
+                Map document = new HashMap();
+                document.put("type", "attachment");
+                document.put("contentType", "application/pdf");
+                document.put("fileName", ${attachFileNameExpression});
+                document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachReport}", ${attachLanguageExpression},
+                        org.eclipse.dirigible.sdk.utils.Json.stringify(reportData)));
+                parts.add(document);
+#end
+                String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+#end
+#if($generates)
+                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+                    gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
+                            new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
+#foreach($a in $genFieldAssignments)
+                    target.${a.targetProp} = ${a.expr};
+#end
+                    var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
+#foreach($c in $genChildren)
+#if($c.kind == "days")
+                    // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
+                    for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                            monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                            day.isBefore(monthEnd); day = day.plusDays(1)) {
+                        if (day.getDayOfWeek().getValue() >= 6) {
+                            continue;
+                        }
+                        ${c.toEntityClass} ${c.rowVar} = new ${c.toEntityClass}();
+                        ${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+                        ${c.rowVar}.${c.dayField} = day;
+#foreach($a in $c.fieldAssignments)
+                        ${c.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                        new ${c.toRepositoryClass}().save(${c.rowVar});
+                    }
+#else
+                    // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
+                    for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
+                            org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
+                        ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
+                        child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+#foreach($a in $c.fieldAssignments)
+                        child${c.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                        var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
+#foreach($g in $c.children)
+#if($g.kind == "days")
+                        // ${g.toEntity}: one row per working day (Mon-Fri) of the current month.
+                        for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                                monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                                day.isBefore(monthEnd); day = day.plusDays(1)) {
+                            if (day.getDayOfWeek().getValue() >= 6) {
+                                continue;
+                            }
+                            ${g.toEntityClass} ${g.rowVar} = new ${g.toEntityClass}();
+                            ${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+                            ${g.rowVar}.${g.dayField} = day;
+#foreach($a in $g.fieldAssignments)
+                            ${g.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                            new ${g.toRepositoryClass}().save(${g.rowVar});
+                        }
+#else
+                        // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
+                        for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
+                                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
+                            ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
+                            child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+#foreach($a in $g.fieldAssignments)
+                            child${g.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                            new ${g.toRepositoryClass}().save(child${g.rowVar});
+                        }
+#end
+#end
+                    }
+#end
+#end
+#if($notifies)
+                    // THE SEND RIDES THE UNIT (#7365). It used to follow the commit, so a mail that could
+                    // not go out - an SMTP blink, an unreachable MX, a refused relay - left the record
+                    // behind anyway; the `unique:` guard then found exactly that record on the next tick
+                    // and skipped the row, mail included. The reminder was never retried and the history
+                    // said it had been sent. Sending as the unit's last act makes the record mean what the
+                    // combined form claims: a failed send rolls the record back, so the next tick sees an
+                    // unsent row and completes it. The remaining window is a commit that fails AFTER a
+                    // successful send, which costs a duplicate message rather than a lost one.
+                    mail(from, recipient, subject, parts);
+#end
+                });
+                created++;
+#end
+#if($notifies && !$generates)
+                Mail.send(from, new String[] {recipient}, new String[0], new String[0], subject, parts);
+                sent++;
+#end
+#if($notifyOutcomeProperty != "")
+                stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, null);
+#end
             } catch (Exception ex) {
-                throw new RuntimeException("Failed to send schedule ${name}", ex);
-            }
+                failed++;
+#if($generates && $notifies)
+                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}] and mail it to [{}]",
+                        entity.${attachKeyProperty}, to, ex);
+#elseif($generates)
+                LOG.error("Schedule ${name}: could not generate ${genToEntity} from ${entity} [{}]", entity.${attachKeyProperty}, ex);
+#else
+                LOG.error("Schedule ${name}: could not mail ${entity} [{}] at [{}]", entity.${attachKeyProperty}, to, ex);
 #end
+#if($notifyOutcomeProperty != "")
+                stampNotifyOutcome(entity.${notifyOutcomeKeyProperty}, ex);
+#end
+            }
+        }
+#if($hasEscalation)
+        // "not due at any level" is a normal outcome of an escalating tick, not a failure: it is every
+        // row that has not yet aged past the bottom rung. Counted so "matched 40, created 3" reads as
+        // the ladder working rather than as a query that nearly missed.
+        LOG.info("Schedule ${name}: [{}] of [{}] matching ${entity} row(s) had passed no ${escalationEntity} threshold yet", notDue,
+                rows.size());
+#end
+#if($generates && $notifies)
+        // ONE line for the combined form (#7365): `failed` counts rows, not halves, and reporting it in
+        // both a generate and a notify summary made a tick with one bad row read as two. Created and
+        // mailed are one number because they are one unit - a record exists only where the mail went out.
+#if($hasGenUnique)
+        LOG.info("Schedule ${name}: created and mailed [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s),"
+                + " already existed [{}], no recipient [{}], failed [{}]", created, rows.size(), existed, skipped, failed);
+#else
+        LOG.info("Schedule ${name}: created and mailed [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s),"
+                + " no recipient [{}], failed [{}]", created, rows.size(), skipped, failed);
+#end
+#elseif($generates)
+#if($hasGenUnique)
+        // "matched 40, created 0, already existed 40" is the line that says a re-run did nothing -
+        // which is the whole point of the natural key, and is otherwise indistinguishable from a tick
+        // that never ran. "failed" is the other half: a partial tick is now nothing at all and the next
+        // run completes it, so the count of rows this one could not generate has to be visible.
+        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), already existed [{}],"
+                + " failed [{}]", created, rows.size(), existed, failed);
+#else
+        LOG.info("Schedule ${name}: created [{}] ${genToEntity}(s) from [{}] matching ${entity} row(s), failed [{}]", created,
+                rows.size(), failed);
+#end
+#elseif($notifies)
+        LOG.info("Schedule ${name}: mailed [{}] of [{}] matching ${entity} row(s), no recipient [{}], failed [{}]", sent, rows.size(),
+                skipped, failed);
+#end
+    }
+#if($attach == "report")
+
+    /**
+     * A bound report parameter as the generated report repository reads one - a String, because the
+     * value is JSON-encoded for the named-parameter binder and only a JSON primitive is accepted
+     * there (a date arrives as its ISO text). Null is deliberate rather than defensive: an absent
+     * value is what makes the repository fall back to the parameter's declared initial, so a
+     * nullable source column widens the report instead of emptying it.
+     */
+    private static String reportValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+#end
+#if($generates && $notifies)
+
+    /**
+     * Send the message from inside the generation's unit of work, as an unchecked call.
+     *
+     * <p>
+     * A send is the last act of the unit that wrote the record the message is about (#7365), so a
+     * delivery that fails has to travel out of the lambda and roll that record back - otherwise the
+     * record survives, the `unique:` guard reads it as "already sent" on the next tick, and the message
+     * is lost for good. {@code Mail.send} throws a checked exception, which a {@code Runnable} cannot,
+     * so it is rethrown unchecked - carrying the original message, because the outcome stamp and the
+     * row's failure line both report it, and the cause, because the log records the stack.
+     *
+     * @param from the configured sender
+     * @param to the resolved recipient
+     * @param subject the rendered subject
+     * @param parts the rendered body and any attachment
+     */
+    private static void mail(String from, String to, String subject, List<Map> parts) {
+        try {
+            Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
+        } catch (Exception ex) {
+            String reason = ex.getMessage() == null || ex.getMessage()
+                                                         .isBlank() ? ex.getClass()
+                                                                        .getSimpleName()
+                    : ex.getMessage();
+            throw new IllegalStateException(reason, ex);
         }
     }
+#end
+#if($notifyOutcomeProperty != "")
+
+    /**
+     * Record what this delivery attempt did, on the record the message was about - the notify block's
+     * `outcome: ${notifyOutcomeProperty}` field.
+     *
+     * A notify block is FAIL-SOFT: the transition, the schedule tick or the process step must not break
+     * because a mailbox is unreachable. Until this stamp existed the only trace of a mail that never
+     * left was a server log line - the document sat in its sent status, the person who asked for it saw
+     * success, and nothing downstream could react. The stamp is that missing trace.
+     *
+     * It is a TARGETED write, so no "-updated" re-fires and a concurrent edit to any other column of the
+     * row cannot be reverted. A FAILURE additionally carries the "-notifyFailed" topic into the outbox
+     * with the write, so the trace and its announcement commit together and glue bound to
+     * `event: { onNotifyFailed: ${notifyOutcomeEntity} }` observes exactly what the record shows. A
+     * delivery that WORKED announces nothing: it is the normal path, and a channel for it would only
+     * give every reaction a second copy of an event it already has.
+     *
+     * The stamp itself never throws. It is a record OF an outcome, so letting it fail would turn a
+     * diagnostic into a second and louder failure - and on the per-row paths it would abort the rows
+     * still to send. A `checks:` gate refusing the write is exactly such a case: an unbalanced document
+     * refuses every authored write, and it must not also lose the reason its mail did not go out.
+     */
+    private static void stampNotifyOutcome(Object id, Exception failure) {
+        writeNotifyOutcome(id, failure == null ? "sent" : "failed: " + notifyFailureReason(failure),
+                failure == null ? null : "${projectName}-${notifyOutcomePerspective}-${notifyOutcomeEntity}-notifyFailed");
+    }
+
+    /**
+     * Record that this delivery had nobody to mail - the notify block's `outcome: ${notifyOutcomeProperty}`
+     * field. `skipped` is its own value, distinct from `failed`: a record with no recipient is a data
+     * problem to surface (a customer row with no e-mail address), not a delivery that broke, so it fires
+     * no "-notifyFailed" event - only the stamp a list filter reads. Without it the field stays empty,
+     * indistinguishable from a record the handler never ran for - the very state the outcome field exists
+     * to remove (#7369).
+     */
+    private static void stampNotifySkipped(Object id) {
+        writeNotifyOutcome(id, "skipped", null);
+    }
+
+    private static void writeNotifyOutcome(Object id, String value, String eventTopic) {
+        if (id == null) {
+            return;
+        }
+        // Truncated HERE, to the length the parser holds the field to: a column that truncates does it
+        // in the database, where nothing reports what was cut.
+        if (value.length() > ${notifyOutcomeLength}) {
+            value = value.substring(0, ${notifyOutcomeLength});
+        }
+        try {
+            new ${notifyOutcomeRepositoryClass}().updateProperties(id, java.util.Map.of("${notifyOutcomeProperty}", value), eventTopic);
+        } catch (Exception ex) {
+            LOG.error("Could not record the delivery outcome [{}] on ${notifyOutcomeEntity} [{}]", value, id, ex);
+        }
+    }
+
+    /**
+     * What to tell a person about a failed delivery. An exception with no message (an NPE, a socket
+     * closed without one) still has to say something actionable, so its class name stands in rather
+     * than the literal "null".
+     */
+    private static String notifyFailureReason(Exception failure) {
+        String message = failure == null ? null : failure.getMessage();
+        return message == null || message.isBlank() ? failure.getClass()
+                                                             .getSimpleName()
+                : message;
+    }
+#end
 }

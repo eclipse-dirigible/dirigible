@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -76,7 +77,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
                                                        .getName()
                     + "/Print/en/standard.print";
             context.writeModelFileIfAbsent(fileName, buildTemplate(master.getKey(), master.getValue(), IntentEntities.byName(model)));
-            LOGGER.debug("Generated standard print template [{}]", fileName);
+            LOGGER.debug("Generated standard print template [{}]", LoggedValue.of(fileName));
         }
     }
 
@@ -169,7 +170,9 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
                 .append("     The published copy is seeded into the CMS under Templates/")
                 .append(master.getName())
                 .append("/Print/<lang>/ where it\n")
-                .append("     can be customized (download/upload) through the Documents perspective. -->\n");
+                .append("     can be customized (download/upload) through the Documents perspective.\n")
+                .append(PrintLogo.comment())
+                .append("     -->\n");
         template.append("<document id=\"")
                 .append(IntentNaming.upperSnake(master.getName())
                                     .toLowerCase()
@@ -184,6 +187,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
         if (number != null) {
             template.append("            <row>\n");
             template.append("                <stack width=\"*\">\n");
+            PrintLogo.append(template, "                    ");
             template.append("                    <text style=\"title\">")
                     .append(escape(label))
                     .append("</text>\n");
@@ -195,6 +199,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
             template.append("                </stack>\n");
             template.append("            </row>\n");
         } else {
+            PrintLogo.append(template, "            ");
             template.append("            <text style=\"title\">")
                     .append(escape(label))
                     .append("</text>\n");

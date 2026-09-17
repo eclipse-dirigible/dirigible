@@ -15,7 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 
+import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.junit.jupiter.api.Test;
@@ -37,48 +39,102 @@ class ScheduleSupportTest {
         return s;
     }
 
+    /**
+     * The Java the generation actually runs on - the clauses this class reads out of the schedule, put
+     * through the renderer that turns them into the builder call (issue #7406). Asserting on this keeps
+     * every case below testing what it always tested, while the neutral halves are pinned separately by
+     * {@link #theWhereIsReadAsClausesNotWrittenAsJava()}, so the two cannot drift apart.
+     *
+     * @param schedule the schedule
+     * @return the rendered criteria
+     */
+    private static String rendered(ScheduleIntent schedule) {
+        return JavaLiterals.criteriaExpression(ScheduleSupport.criteria(schedule));
+    }
+
+    /**
+     * What the glue carries: the clauses, as data. A {@code Criteria.create().lt("Due",
+     * java.time.LocalDate.now())} in a process description writes a runtime package and a Java date API
+     * into an artefact every template reads, Java and JavaScript alike (issue #7406).
+     */
+    @Test
+    void theWhereIsReadAsClausesNotWrittenAsJava() {
+        List<Map<String, Object>> clauses = ScheduleSupport.criteria(
+                schedule(List.of(cond("dueOn", "lt", "CURRENT_DATE-P7D"), cond("status", "eq", "ACTIVE"), cond("quantity", "gt", 1))));
+
+        assertEquals(List.of(
+                Map.of("op", "lt", "property", "DueOn", "value",
+                        Map.of("kind", "moment", "shape", "date", "offset", "P7D", "forward", false)),
+                Map.of("op", "eq", "property", "Status", "value", Map.of("kind", "string", "text", "ACTIVE")),
+                Map.of("op", "gt", "property", "Quantity", "value", Map.of("kind", "number", "text", "1"))), clauses);
+        assertFalse(clauses.toString()
+                           .contains("java."),
+                "the process description carries the facts, not the Java rendered from them");
+    }
+
     @Test
     void emptyWhereIsAnUnfilteredCriteria() {
-        assertEquals("Criteria.create()", ScheduleSupport.criteriaExpression(schedule(List.of())));
+        assertEquals("Criteria.create()", rendered(schedule(List.of())));
     }
 
     @Test
     void buildsTypedCriteriaWithPascalFieldsDateTokensAndLiterals() {
         ScheduleIntent s = schedule(List.of(cond("dueOn", "lt", "CURRENT_DATE"), cond("status", "eq", "ACTIVE")));
-        assertEquals("Criteria.create().lt(\"DueOn\", java.time.LocalDate.now()).eq(\"Status\", \"ACTIVE\")",
-                ScheduleSupport.criteriaExpression(s));
+        assertEquals("Criteria.create().lt(\"DueOn\", java.time.LocalDate.now()).eq(\"Status\", \"ACTIVE\")", rendered(s));
     }
 
     @Test
     void numbersAndTimestampTokensRenderWithoutQuotes() {
         ScheduleIntent s = schedule(List.of(cond("quantity", "gt", 1), cond("changedAt", "ge", "CURRENT_TIMESTAMP")));
-        assertEquals("Criteria.create().gt(\"Quantity\", 1).ge(\"ChangedAt\", java.time.LocalDateTime.now())",
-                ScheduleSupport.criteriaExpression(s));
+        assertEquals("Criteria.create().gt(\"Quantity\", 1).ge(\"ChangedAt\", java.time.Instant.now())", rendered(s));
     }
 
     @Test
     void aRelativeMomentOffsetsTheTokenAgainstTheRunsClock() {
         ScheduleIntent s = schedule(List.of(cond("updatedAt", "lt", "CURRENT_TIMESTAMP-PT30M"), cond("sentOn", "lt", "CURRENT_DATE-P7D")));
-        assertEquals(
-                "Criteria.create().lt(\"UpdatedAt\", java.time.LocalDateTime.now().minus(java.time.Duration.parse(\"PT30M\")))"
-                        + ".lt(\"SentOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P7D\")))",
-                ScheduleSupport.criteriaExpression(s));
+        assertEquals("Criteria.create().lt(\"UpdatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))"
+                + ".lt(\"SentOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P7D\")))", rendered(s));
     }
 
     @Test
     void theForwardFormIsAdmittedSymmetrically() {
-        ScheduleIntent s = schedule(List.of(cond("dueOn", "le", "CURRENT_DATE+P7D")));
-        assertEquals("Criteria.create().le(\"DueOn\", java.time.LocalDate.now().plus(java.time.Period.parse(\"P7D\")))",
-                ScheduleSupport.criteriaExpression(s));
+        ScheduleIntent s = schedule(List.of(cond("dueOn", "le", "CURRENT_DATE+P7D"), cond("changedAt", "le", "CURRENT_TIMESTAMP+PT1H"),
+                cond("closedAt", "le", "CURRENT_TIMESTAMP+P1M")));
+        assertEquals(
+                "Criteria.create().le(\"DueOn\", java.time.LocalDate.now().plus(java.time.Period.parse(\"P7D\")))"
+                        + ".le(\"ChangedAt\", java.time.Instant.now().plus(java.time.Duration.parse(\"PT1H\")))"
+                        + ".le(\"ClosedAt\", java.time.ZonedDateTime.now().plus(java.time.Period.parse(\"P1M\")).toInstant())",
+                rendered(s));
+    }
+
+    /**
+     * A moment is rendered in the shape the queried COLUMN carries, and a {@code timestamp} column -
+     * declared, or one of the {@code audit: true} ones a staleness sweep is for - is a
+     * {@code java.time.Instant} (#7384).
+     *
+     * <p>
+     * Nothing downstream catches getting this wrong: {@code Criteria} takes an {@code Object}, so a
+     * {@code LocalDateTime} compiles and publishes, and only the tick itself fails - on the bind,
+     * before a single row is read, every time the job fires.
+     */
+    @Test
+    void aTimestampMomentIsRenderedInTheColumnsOwnInstantShape() {
+        ScheduleIntent s = schedule(List.of(cond("CreatedAt", "lt", "CURRENT_TIMESTAMP-PT30M"), cond("UpdatedAt", "ge", "NOW")));
+        String criteria = rendered(s);
+        assertEquals("Criteria.create().lt(\"CreatedAt\", java.time.Instant.now().minus(java.time.Duration.parse(\"PT30M\")))"
+                + ".ge(\"UpdatedAt\", java.time.Instant.now())", criteria);
+        assertFalse(criteria.contains("LocalDateTime"), "a LocalDateTime is not assignable to the Instant the column binds");
     }
 
     @Test
     void aCalendarAmountOnATimestampStaysACalendarAmount() {
-        // P1M is a month, not 30 days - a Period on a LocalDateTime keeps that meaning, which a
-        // Duration could not express at all.
+        // P1M is a month, not 30 days - a Period keeps that meaning, which a Duration could not express
+        // at all - so it is applied on the calendar of the run's own zone and handed back as the instant
+        // the timestamp column carries.
         ScheduleIntent s = schedule(List.of(cond("changedAt", "lt", "CURRENT_TIMESTAMP-P1M")));
-        assertEquals("Criteria.create().lt(\"ChangedAt\", java.time.LocalDateTime.now().minus(java.time.Period.parse(\"P1M\")))",
-                ScheduleSupport.criteriaExpression(s));
+        assertEquals(
+                "Criteria.create().lt(\"ChangedAt\", java.time.ZonedDateTime.now().minus(java.time.Period.parse(\"P1M\")).toInstant())",
+                rendered(s));
     }
 
     @Test
@@ -118,7 +174,7 @@ class ScheduleSupportTest {
         // The parser reports it; the generator must still emit something that compiles rather than a
         // half-built expression.
         ScheduleIntent s = schedule(List.of(cond("dueOn", "lt", "CURRENT_DATE-PT30M")));
-        assertEquals("Criteria.create().lt(\"DueOn\", \"CURRENT_DATE-PT30M\")", ScheduleSupport.criteriaExpression(s));
+        assertEquals("Criteria.create().lt(\"DueOn\", \"CURRENT_DATE-PT30M\")", rendered(s));
     }
 
     @Test

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.jobs.synchronizer;
 import jakarta.persistence.EntityManager;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
+import org.eclipse.dirigible.components.jobs.domain.JobStatus;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
+import java.sql.Timestamp;
 import java.text.ParseException;
 import java.util.Collections;
 import java.util.List;
@@ -146,5 +148,32 @@ public class JobSynchronizerTest {
         assertNotNull(list);
         assertEquals("/test/control.job", list.get(0)
                                               .getLocation());
+    }
+
+    /**
+     * The last run is history, not something the artefact declares: re-parsing a published job file
+     * must not reset the job to "never ran" (dirigible #7075).
+     *
+     * @throws ParseException the parse exception
+     */
+    @Test
+    public void reparsingKeepsTheLastRun() throws ParseException {
+        String content =
+                "{\"expression\":\"0/1 * * * * ?\",\"group\":\"defined\",\"handler\":\"test/handler.js\",\"description\":\"Control Job\"}";
+        Job job = jobSynchronizer.parse("/test/recorded.job", content.getBytes())
+                                 .get(0);
+        Timestamp executedAt = new Timestamp(System.currentTimeMillis());
+        job.setStatus(JobStatus.FAILED);
+        job.setMessage("boom");
+        job.setExecutedAt(executedAt);
+        jobRepository.saveAndFlush(job);
+        entityManager.clear();
+
+        Job reparsed = jobSynchronizer.parse("/test/recorded.job", content.getBytes())
+                                      .get(0);
+
+        assertEquals(JobStatus.FAILED, reparsed.getStatus());
+        assertEquals("boom", reparsed.getMessage());
+        assertEquals(executedAt, reparsed.getExecutedAt());
     }
 }

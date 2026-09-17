@@ -98,27 +98,49 @@ class EntityUniqueIntentTest {
         assertIssue(yaml, "only a field or a to-one relation has a column on this entity to constrain");
     }
 
-    @Test
-    void aCrossModelRelationIsRejected() {
-        String yaml = """
-                name: provisioning
-                uses:
-                  - { name: catalog }
-                entities:
-                  - name: Tenant
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                  - name: TenantApplication
-                    unique:
-                      - { fields: [tenant, application] }
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                    relations:
-                      - { name: tenant, kind: manyToOne, to: Tenant, required: true }
-                      - { name: application, kind: manyToOne, to: Application, model: catalog, required: true }
-                """;
+    /** The consumer of a cross-model target keeps the shape it references in {@code uses:}. */
+    private static final String CROSS_MODEL_PROVISIONING = """
+            name: provisioning
+            uses:
+              - { model: catalog }
+            entities:
+              - name: Tenant
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+              - name: TenantApplication
+                unique:
+                  - { fields: [tenant, application] }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: tenant, kind: manyToOne, to: Tenant, required: true }
+                  - { name: application, kind: manyToOne, to: Application, model: catalog, required: true }
+            """;
 
-        assertIssue(yaml, "cross-model relation [application]");
+    /**
+     * #7092: a cross-model to-one stores the target's id in this entity's own FK column - the
+     * projection is only the read-side copy - so it constrains exactly like a same-model to-one.
+     * Refusing it made the natural key of most transactional rows ((project-month, employee),
+     * (customer, period)) unavailable in a modular fleet, where the master data is cross-model by
+     * design.
+     */
+    @Test
+    void aCrossModelToOneIsAcceptedBecauseItsForeignKeyColumnIsLocal() {
+        IntentModel model = IntentParser.parse(CROSS_MODEL_PROVISIONING);
+
+        List<UniqueIntent> keys = entity(model, "TenantApplication").getUnique();
+        assertEquals(1, keys.size());
+        assertEquals(List.of("tenant", "application"), keys.get(0)
+                                                           .getFields());
+    }
+
+    @Test
+    void aCrossModelToManyIsStillRejectedBecauseItHasNoColumnHere() {
+        String yaml = CROSS_MODEL_PROVISIONING.replace(
+                "  - { name: application, kind: manyToOne, to: Application, model: catalog, required: true }",
+                "  - { name: application, kind: oneToMany, to: Application, model: catalog }");
+
+        assertIssue(yaml, "only a field or a to-one relation has a column on this entity to constrain");
     }
 
     @Test

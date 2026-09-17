@@ -78,6 +78,37 @@ class ChildLockControllerTemplateIT {
     }
 
     /**
+     * A master locked by its PERIOD alone (intent {@code immutableInPeriod:} with no
+     * {@code immutableWhen}) - the branch that has no status half at all. The guard emits the period
+     * check and nothing about a status: consulting {@code master.Status} here would reference a
+     * property the master need not have.
+     */
+    @Test
+    void aMasterLockedByItsPeriodAloneLocksItsChildrenWithoutAStatusCheck() throws Exception {
+        String rendered = render("EntityController.java.template", context(periodOnlyLock()));
+
+        assertTrue(rendered.contains("isMasterPeriodOpen(master.IssueDate)"), "the guard must read the master's own date: " + rendered);
+        assertTrue(rendered.contains("gen.sales.data.periods.AccountingPeriodRepository().findAll("),
+                "the guard must query the register the intent named: " + rendered);
+        assertTrue(rendered.contains("\"2\".split(\",\")"), "the guard must carry the register's closed status ids");
+        assertFalse(rendered.contains("master.Status"), "a master with no status lock has no status to consult: " + rendered);
+        assertFalse(rendered.contains("isMasterMutable"), "a master with no status lock emits no status guard: " + rendered);
+        assertNoUnresolvedReferences(rendered);
+    }
+
+    /** Both halves at once: the child inherits a master frozen by its status AND by its period. */
+    @Test
+    void aMasterLockedByBothEmitsBothHalves() throws Exception {
+        Map<String, Object> masterLock = statusLock();
+        masterLock.put("period", period());
+        String rendered = render("EntityController.java.template", context(masterLock));
+
+        assertTrue(rendered.contains("isMasterMutable(master)"), "the status half must survive alongside the period one");
+        assertTrue(rendered.contains("isMasterPeriodOpen(master.IssueDate)"), "the period half must be emitted too");
+        assertNoUnresolvedReferences(rendered);
+    }
+
+    /**
      * The personal and partner controllers already hold their composition parent's repository when the
      * scope is inherited through it, so the guard reuses that field rather than injecting the same
      * repository twice.
@@ -129,7 +160,8 @@ class ChildLockControllerTemplateIT {
     /** Asserts the emitted guard resolved every reference - an unresolved one renders literally. */
     private static void assertNoUnresolvedReferences(String rendered) {
         for (String line : rendered.split("\n")) {
-            if (line.contains("MasterMutable") || line.contains("masterRepository") || line.contains("parentRepository.findOne")) {
+            if (line.contains("MasterMutable") || line.contains("masterRepository") || line.contains("parentRepository.findOne")
+                    || line.contains("PeriodOpen") || line.contains("PeriodRepository")) {
                 assertFalse(line.contains("${"), "an unresolved template reference survived into the guard: " + line);
             }
         }
@@ -164,6 +196,28 @@ class ChildLockControllerTemplateIT {
         masterLock.put("statusProperty", "Status");
         masterLock.put("statusValues", "2,3");
         return masterLock;
+    }
+
+    private static Map<String, Object> periodOnlyLock() {
+        Map<String, Object> masterLock = baseLock();
+        masterLock.put("always", Boolean.FALSE);
+        masterLock.put("period", period());
+        return masterLock;
+    }
+
+    /** The master's resolved period lock, as {@code ModelParameterProcessor} joins it. */
+    private static Map<String, Object> period() {
+        Map<String, Object> period = new LinkedHashMap<>();
+        period.put("dateProperty", "IssueDate");
+        period.put("dateJavaClass", "java.time.LocalDate");
+        period.put("entity", "AccountingPeriod");
+        period.put("entityClass", "gen.sales.data.periods.AccountingPeriodEntity");
+        period.put("repositoryClass", "gen.sales.data.periods.AccountingPeriodRepository");
+        period.put("startProperty", "StartDate");
+        period.put("endProperty", "EndDate");
+        period.put("statusProperty", "Status");
+        period.put("closedValues", "2");
+        return period;
     }
 
     private static Map<String, Object> appendOnlyLock() {

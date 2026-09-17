@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceD
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskSubject;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
@@ -53,14 +54,19 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @GetMapping(value = "/instance/{id}/tasks")
     public ResponseEntity<List<TaskDTO>> getProcessInstanceTasks(@PathVariable("id") String id,
             @RequestParam(value = "type", required = false) String type) {
-        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(id, extractPrincipalType(type))));
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasksWithProcessVariables(id, extractPrincipalType(type))));
     }
 
     /**
      * Maps a task list, resolving each process definition's task-label catalog once - a whole inbox is
      * typically a handful of definitions, and every task of one shares its catalog.
+     * <p>
+     * The tasks must come from a query that loaded their process variables
+     * ({@code findTasksWithProcessVariables}): every row's subject is derived from them, and reading
+     * them off the task is what keeps a listing at one statement instead of one variable query per task
+     * on every poll (issue #7141).
      *
-     * @param tasks the tasks
+     * @param tasks the tasks, with their process variables loaded
      * @return the DTOs
      */
     private List<TaskDTO> mapToDTOs(List<Task> tasks) {
@@ -111,13 +117,39 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                      dto.setNameKey(keys.taskNameKey(task.getTaskDefinitionKey()));
                      dto.setProcessDefinitionNameKey(keys.processNameKey());
                  });
+        dto.setSubject(subjectOf(task));
 
         return dto;
     }
 
+    /**
+     * What the task is ABOUT, for a row that lists it away from the record's own application. A row
+     * used to read {@code Sales Invoice Approval - Approve - Ref 6} - the BPM business key, which
+     * defaults to the primary key - so an approver had to open every task to learn which customer and
+     * which amount they were approving (issue #7077). The generated trigger seeds the record's locators
+     * and the properties that identify it into the process variables; only those travel, and the client
+     * resolves their values live.
+     * <p>
+     * Read off the variables the listing query already fetched with the task - never re-queried per
+     * task, which is what made an inbox of 100 tasks cost 100 variable reads on every 30 s poll (issue
+     * #7141).
+     * <p>
+     * Best-effort: a task whose variables are not there is still listed, without a subject.
+     *
+     * @param task the task, from a query that loaded its process variables
+     * @return the subject locators, or null when the process declares none
+     */
+    private TaskSubject subjectOf(Task task) {
+        Map<String, Object> variables = task.getProcessVariables();
+        if (variables == null || variables.isEmpty()) {
+            return null;
+        }
+        return TaskSubject.from(variables);
+    }
+
     @GetMapping(value = "/tasks")
     public ResponseEntity<List<TaskDTO>> getTasks(@RequestParam(value = "type", required = false) String type) {
-        return ResponseEntity.ok(mapToDTOs(bpmService.findTasks(extractPrincipalType(type))));
+        return ResponseEntity.ok(mapToDTOs(bpmService.findTasksWithProcessVariables(extractPrincipalType(type))));
     }
 
     @GetMapping(value = "/tasks/{taskId}/variables")
@@ -150,7 +182,23 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             bpmService.unclaimTask(taskId);
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
-            bpmService.completeTask(taskId, actionData.getData());
+            try {
+                bpmService.completeTask(taskId, actionData.getData());
+            } catch (RuntimeException ex) {
+                String rejection = ClientValidationFailure.messageOf(ex);
+                if (rejection == null) {
+                    throw ex;
+                }
+                // A declarative gate refused the transition the completion drives (an intent
+                // `checks:` rule - a document with no line items, an unbalanced entry). The
+                // completion has rolled back with it, so the task is still in the inbox: answer the
+                // person who acted with the authored message instead of a 500 (issue #7014). The
+                // message is the BODY, not a ResponseStatusException reason - Spring Boot strips the
+                // reason from the default error payload, and the task form reads the body.
+                logger.debug("Completion of task [{}] was rejected: {}", taskId, rejection, ex);
+                return ResponseEntity.badRequest()
+                                     .body(rejection);
+            }
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");

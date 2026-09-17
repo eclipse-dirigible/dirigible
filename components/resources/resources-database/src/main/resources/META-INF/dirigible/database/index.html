@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
   Copyright (c) 2010-2026 Eclipse Dirigible contributors
   SPDX-License-Identifier: EPL-2.0
@@ -11,7 +11,6 @@
 -->
 <!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
 <html lang="en" data-brand-title>
-
   <head>
     <meta charset="UTF-8" />
     <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
@@ -22,66 +21,60 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
-
-    <script>
-      (function () {
-        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
-      })();
-    </script>
   </head>
 
-  <body class="vbox size-full" x-data="app">
-
-    <!-- Narrow-viewport drawer host. -->
-    <div x-h-sheet-overlay="isOpen">
-      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+  <body class="vbox size-full bg-sidebar" x-data="app">
+    <!-- Narrow-screen drawer. appShell.js moves the ONE sidebar element between this sheet and its
+         wide-screen slot below at the 1024px breakpoint. -->
+    <div x-h-sheet-overlay="showSidebarSheet">
+      <div x-h-sheet data-align="left" x-ref="sidebarSheet"></div>
     </div>
 
     <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
-    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
-
-      <!-- Sidebar -->
-      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
-           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
-        <div x-h-sidebar x-ref="sidebar">
-          <div x-h-sidebar-header>
-            <div class="hbox items-center gap-2 p-1">
-              <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-              <div class="vbox gap-0">
-                <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
-                <span x-h-text.muted class="text-xs leading-tight" x-text="T('database:shell.title', 'Database')"></span>
+    <div x-cloak class="hbox size-full">
+      <!-- Wide-screen home of the sidebar - a plain flex slot, not a resizable panel: the sidebar has
+           one right width (--sidebar-width) and nothing here benefits from dragging it. -->
+      <div x-ref="sidebarSlot" class="vbox shrink-0">
+        <div x-h-sidebar x-ref="sidebar" data-borderless="true">
+          <div x-h-sidebar-header data-borderless="true">
+            <div x-h-sidebar-header-item>
+              <img :src="$store.branding.logo" alt="" aria-hidden="true" class="size-8 rounded-control" />
+              <div class="vbox min-w-0">
+                <span class="truncate" x-text="$store.branding.name"></span>
+                <span class="truncate text-sm font-normal text-muted-foreground" x-text="T('database:shell.title', 'Database')"></span>
               </div>
             </div>
           </div>
 
-          <div x-h-sidebar-content>
+          <!-- x-h-sidebar carries no landmark role of its own, so the navigation says what it is. -->
+          <nav x-h-sidebar-content :aria-label="T('database:shell.nav.group', 'Database')">
             <div x-h-sidebar-group>
               <div x-h-sidebar-group-label x-text="T('database:shell.nav.group', 'Database')"></div>
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
-                    <button id="database-nav-explorer" x-h-sidebar-menu-button :data-active="isActive('/explorer')" @click="navigate('/explorer')">
-                      <i role="img" x-h-lucide data-lucide="database"></i>
+                    <button id="database-nav-explorer" x-h-sidebar-menu-nav :data-active="isActive('/explorer')" @click="navigate('/explorer')">
+                      <svg role="presentation" x-h-lucide data-lucide="database"></svg>
                       <span class="flex-1" x-text="T('database:shell.nav.explorer', 'Explorer')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
-                    <button id="database-nav-sql" x-h-sidebar-menu-button :data-active="isActive('/sql')" @click="navigate('/sql')">
-                      <i role="img" x-h-lucide data-lucide="square-terminal"></i>
+                    <button id="database-nav-sql" x-h-sidebar-menu-nav :data-active="isActive('/sql')" @click="navigate('/sql')">
+                      <svg role="presentation" x-h-lucide data-lucide="square-terminal"></svg>
                       <span class="flex-1" x-text="T('database:shell.nav.sql', 'SQL Console')"></span>
                     </button>
                   </li>
                 </ul>
               </div>
             </div>
-          </div>
+          </nav>
 
           <!-- The deep tooling lives in the Workbench; the shell links to it rather than cloning it. -->
-          <div x-h-sidebar-footer>
+          <div x-h-sidebar-footer data-borderless="true">
             <ul x-h-sidebar-menu>
               <li x-h-sidebar-menu-item>
                 <a x-h-sidebar-menu-button href="/services/web/shell-ide/" target="_blank" rel="noopener">
-                  <i role="img" x-h-lucide data-lucide="external-link"></i>
+                  <svg role="presentation" x-h-lucide data-lucide="external-link"></svg>
                   <span x-text="T('database:shell.nav.workbench', 'Open in Workbench')"></span>
                 </a>
               </li>
@@ -90,62 +83,77 @@
         </div>
       </div>
 
-      <!-- Main panel -->
-      <div x-h-split-panel>
-        <div class="vbox size-full">
+      <!-- Content column. min-w-0 is load-bearing: a flex item defaults to min-width:auto, so a long
+           truncated line inside would refuse to shrink and scroll the whole document sideways.
+           Narrow drops the gutter and the card chrome and uses the full width. -->
+      <div class="min-w-0 flex-1 overflow-hidden" :class="isSmallScreen ? '' : 'p-2'">
+        <main class="vbox size-full overflow-hidden bg-background" :class="isSmallScreen ? '' : 'rounded-xl border shadow-sm'">
           <div x-h-toolbar data-variant="transparent" x-cloak>
-            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
-                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
-              <i role="img" x-h-lucide data-lucide="menu"></i>
+            <button x-show="isSmallScreen" x-h-button data-variant="transparent" aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <svg role="presentation" x-h-lucide data-lucide="menu"></svg>
             </button>
             <span x-h-toolbar-title class="shrink-0" x-text="T('database:shell.title', 'Database')"></span>
             <div x-h-toolbar-spacer></div>
-            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
-                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
-              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm" :aria-label="T('application-core:shell.theme.title', 'Theme')" :title="T('application-core:shell.theme.title', 'Theme')">
+              <svg x-h-lucide role="presentation" :data-lucide="$store.theme.icon"></svg>
             </button>
+            <ul x-h-menu aria-label="Theme" data-align="bottom-end">
+              <li x-h-menu-radio-item="'light'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun"></svg>
+                <span x-text="T('application-core:shell.theme.light', 'Light')"></span>
+              </li>
+              <li x-h-menu-radio-item="'dark'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="moon"></svg>
+                <span x-text="T('application-core:shell.theme.dark', 'Dark')"></span>
+              </li>
+              <li x-h-menu-radio-item="'auto'" name="theme" x-model="$store.theme.mode">
+                <svg role="presentation" x-h-lucide data-lucide="sun-moon"></svg>
+                <span x-text="T('application-core:shell.theme.auto', 'Auto')"></span>
+              </li>
+            </ul>
 
-            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
-                    :aria-label="$store.currentUser.name || 'Account'">
-              <i role="img" x-h-lucide data-lucide="circle-user"></i>
-            </button>
+            <!-- An avatar carrying the user's initials; the dropdown names them. x-h-menu-label is a
+                 legal direct child of the menu, so the identity line needs no presentational li wrapper. -->
+            <button id="user-menu-trigger" x-h-avatar x-h-menu-trigger.dropdown :aria-label="$store.currentUser.name || 'Account'" x-text="$store.currentUser.initials"></button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
-              <div x-h-tile class="mb-1">
-                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
-                <div x-h-tile-content>
-                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
-                </div>
+              <div x-h-menu-label>
+                <span x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></span>
               </div>
               <div x-h-menu-separator></div>
               <!-- Switch shells without the detour through Home: the same `platform-shells` list the
                    launchpad renders, minus this one (the shared `shells` store). -->
               <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
               <li x-h-menu-item @click="$store.shells.openHome()">
-                <i role="img" x-h-lucide data-lucide="house"></i>
+                <svg role="presentation" x-h-lucide data-lucide="house"></svg>
                 <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
               </li>
               <template x-for="shell in $store.shells.items" :key="shell.id">
                 <li x-h-menu-item @click="$store.shells.open(shell)">
-                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
-                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
-                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <!-- An svg placeholder is rendered in place, so the bound :data-lucide stays reactive. -->
+                  <svg x-h-lucide role="presentation" :data-lucide="$store.shells.iconFor(shell)"></svg>
                   <span x-text="shell.label"></span>
                 </li>
               </template>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <i role="img" x-h-lucide data-lucide="log-out"></i>
+                <svg role="presentation" x-h-lucide data-lucide="log-out"></svg>
                 <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>
           </div>
 
+          <!-- Route progress: the router is fetching the next view's fragment. The zero-height
+               positioning parent keeps the bar from shifting the page it sits above. -->
+          <div class="relative">
+            <div class="absolute top-0 left-0 z-20 w-full rounded-none" x-show="routeLoading" x-cloak>
+              <div x-h-progress="0" data-loading="true" aria-label="Loading page"></div>
+            </div>
+          </div>
+
           <!-- Pinecone Router renders the matched view fragment here. -->
           <div id="app" class="size-full overflow-auto flex-1"></div>
-        </div>
+        </main>
       </div>
-
     </div>
 
     <!-- Routes -->
@@ -187,5 +195,4 @@
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
   </body>
-
 </html>

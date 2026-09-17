@@ -148,7 +148,7 @@ document.addEventListener('alpine:init', () => {
 ## ProcessIds stays OUT of the form model: it is the per-process at-most-once bookkeeping the
 ## trigger listener writes, and a form that carried it would post a stale copy back over a stamp
 ## written while the document was open.
-#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessIds")
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && !$property.isHiddenProperty)
 #if($property.widgetType == "CHECKBOX")
       ${property.name}: false,
 #elseif($property.widgetType == "NUMBER")
@@ -201,6 +201,9 @@ document.addEventListener('alpine:init', () => {
     draftMode: 'create',     // 'create' | 'edit'
     draftSaving: false,
     draftError: null,
+    // The column a rejected save named, marked aria-invalid in the dialog. One at a time: the
+    // controller rejects on the first failing property.
+    draftFieldError: null,
     // Print (renders the CMS-seeded .print template server-side to PDF)
     printLangOpen: false,
     printLanguages: [],
@@ -214,9 +217,9 @@ document.addEventListener('alpine:init', () => {
     // controller's GET /{id}/history. Read-only - nothing here writes to the shadow table.
     history: [],
 #set($historyFirst = true)
-    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabel)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
+    historyLabels: {#foreach($property in $properties)#if(!$property.dataPrimaryKey && (!$property.auditType || $property.auditType == "NONE"))#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end#if($historyFirst)#set($historyFirst = false)#else, #end'${property.name}': ['$projectName:${tprefix}.t.${property.dataName}', '${hlabel}']#end#end},
 #end
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
     // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
@@ -281,8 +284,11 @@ document.addEventListener('alpine:init', () => {
         // graph through the repositories and returns the { document, items } payload the template binds
         // - so {{document.<Relation>.<Field>}} resolves. It is the auditable source of what a print
         // receives; the browser calls it as the logged-in user (auth + tenant + i18n are the caller's).
+        // Pin the feeder's language to the CHOSEN print language, not the UI locale: the repositories'
+        // multilingual overlay reads Accept-Language, so without this the nomenclature values (Payment
+        // Method, Status, ...) would render in the UI locale while the template is in the print language.
         const payload = await App.services.api.get(
-          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
+          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '', language: lang });
         const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -375,7 +381,7 @@ document.addEventListener('alpine:init', () => {
         this.state = 'loading';
         try {
           await this.loadHeader();
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
             this.mutable = !m || m.mutable !== false;
@@ -415,6 +421,28 @@ document.addEventListener('alpine:init', () => {
       });
 #end
 #end
+      // Create mode: the blank form plus whatever the URL and the depends-on prefills put in it is
+      // the state the user started from; anything typed after this is an unsaved change (#7359).
+      if (!this.isEdit && !this.isPreview) this.markPristine();
+
+      // A custom action (a transition, a create-from, an action page) changes this document behind
+      // the page's back: its status flips, its totals move, its panels gain rows. Re-read the header
+      // so the status pill, the stepper and the transition buttons - which are filtered by the
+      // CURRENT status - all speak about the record as it now is (issue #7073). The detail panels
+      // re-read themselves (detailPanel does the same on this event).
+      this.onActionDone(async () => {
+        if (!this.isEdit && !this.isPreview) return;
+        try {
+          await this.loadHeader();
+#if($history == "true")
+          await this.loadHistory();
+#end
+          await this.loadItems();
+        } catch (e) {
+          console.error('[${name}DocumentPage] could not refresh after a custom action', e);
+        }
+      });
+
       this.refreshIcons();
     },
 
@@ -453,7 +481,16 @@ document.addEventListener('alpine:init', () => {
       await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
 #end
+      // The header now holds exactly what the server holds: that is the state every exit is compared
+      // against (issue #7359). Re-taken after every item change, which re-reads the header too.
+      this.markPristine();
       this.refreshIcons();
+    },
+
+    // Put the header back to what the server holds - the guard dialog's Discard when the user is
+    // STAYING on the document (the line dialog it was about to open saves against this header).
+    async reloadForm() {
+      await this.loadHeader();
     },
 
     async loadOptions() {
@@ -571,7 +608,14 @@ document.addEventListener('alpine:init', () => {
         const payload = this.toPayload();
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
-          this.backToList();
+          // Save STAYS on the document (issue #7359): saving and leaving were the same click, so a
+          // user who saved a header mid-session was thrown back to the list. Re-read it instead -
+          // the server's calculated fields and totals come back with it - and say it was saved. The
+          // way out is Back to list, which is now guarded. Create mode already worked this way.
+          await this.loadHeader();
+          await this.loadItems();
+          this.state = 'ready';
+          App.services.toast(T('$projectName:${tprefix}.messages.saved', 'Saved'), 'positive');
           return;
         } else {
           // Create the header, then stay on the document (now in edit mode) so items can be added.
@@ -580,6 +624,9 @@ document.addEventListener('alpine:init', () => {
           if (newId != null) {
             this.id = newId;
             this.mode = 'edit';
+            // The write landed, so there is nothing left to protect: clear the guard before the page
+            // navigates itself, or it would veto its own route change.
+            this.clearPristine();
             window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
             await this.loadHeader();
             await this.loadItems();
@@ -672,6 +719,24 @@ document.addEventListener('alpine:init', () => {
           '${docNumberProp}',
 #end
         ].forEach(f => { delete header[f]; });
+#if($duplicateReset)
+        // `duplicable.reset`: handed back to the create path, which fills each of these exactly as it
+        // would on a hand-made document (a calculatedActionOnCreate, a defaultValue) - a copied value
+        // would be respected by that rule and stick.
+#foreach($r in $duplicateReset)
+        delete header['${r}'];
+#end
+#end
+#if($duplicateDefaults)
+        // `duplicable.defaults`: constants the copy carries instead of the source's values.
+#foreach($d in $duplicateDefaults)
+#if($d.shape == "literal")
+        header['${d.name}'] = ${d.js};
+#else
+        header['${d.name}'] = this.todayAs('${d.shape}');
+#end
+#end
+#end
         const created = await App.services.api.post(this.apiPath, header);
         const newId = created && (created.${primaryKeysString} !== undefined ? created.${primaryKeysString} : created.id);
         if (newId == null) throw new Error('No id returned for the duplicated document.');
@@ -687,12 +752,36 @@ document.addEventListener('alpine:init', () => {
             await App.services.api.post(this.itemsDef.apiPath, body);
           }
         }
+        this.clearPristine();
         window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
       } catch (e) {
         this.applyApiError(e, { fallbackMessage: 'Could not duplicate the document.' });
       } finally {
         this.state = 'ready';
       }
+    },
+
+    // The current moment in the target field's own shape, for a `duplicable.defaults` value of `now`.
+    // The calendar shapes are built from the LOCAL calendar fields, never from toISOString(): that is
+    // UTC, so east of Greenwich every copy made after the evening cut-over would be dated yesterday.
+    // A `timestamp` field is the exception and the reason: it binds a java.time.Instant on the server,
+    // which is an instant and not a wall clock, so it carries the full ISO instant the form's own
+    // toPayload() sends for a datetime input - the local calendar shapes would not bind at all.
+    todayAs(shape) {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      if (shape === 'timestamp') return now.toISOString();
+      if (shape === 'month') return now.getFullYear() + '-' + pad(now.getMonth() + 1);
+      if (shape === 'week') {
+        // ISO-8601 week: Thursday of the current week decides both the week number and its year.
+        const thursday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
+        const firstThursday = new Date(thursday.getFullYear(), 0, 4);
+        firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
+        const week = 1 + Math.round((thursday - firstThursday) / (7 * 24 * 60 * 60 * 1000));
+        return thursday.getFullYear() + '-W' + pad(week);
+      }
+      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
     },
 #end
 
@@ -1086,7 +1175,12 @@ document.addEventListener('alpine:init', () => {
     // right on first render.
     openRowDialog(row, preset) {
       if (!this.itemsEnabled || this.isPreview) return;
+      // A line is saved on its own, against the header AS THE SERVER HOLDS IT, and saving one
+      // re-reads the header - so starting a line with an unsaved header both hides the edit and
+      // leaves the user believing the whole document was saved (issue #7359). Ask first.
+      if (this.isDirty()) { this.confirmLeave(() => this.openRowDialog(row, preset), 'continue'); return; }
       this.draftError = null;
+      this.draftFieldError = null;
       this.draftMode = row ? 'edit' : 'create';
       // Suppress the Depends-On watchers while the draft is (re)built - filling an existing row's
       // trigger must not clear/auto-select its stored dependents.
@@ -1143,7 +1237,25 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; },
+    // A line the server refuses is refused for ONE reason it states in prose, naming the property:
+    // "The 'TaxRate' property is required". Read that name out of the message and the dialog can do
+    // what the generic banner never could - point at the field that is wrong and repeat the reason
+    // in the dialog's own labels. A message naming no editable column keeps the generic banner.
+    applyDraftError(e, fallback) {
+      const columns = this.editColumns;
+      const named = App.services.apiErrors.namedProperty(e, columns.map(c => c.name));
+      if (named) {
+        const labels = {};
+        for (const col of columns) labels[col.name] = T(col.tkey, col.label);
+        this.draftFieldError = named;
+        this.draftError = App.services.apiErrors.messageWithLabels(e, labels);
+        return;
+      }
+      this.draftFieldError = null;
+      this.draftError = App.services.apiErrors.messageFor(e, fallback);
+    },
+
+    closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; this.draftFieldError = null; },
 
     draftPayload() {
       const payload = {};
@@ -1172,6 +1284,7 @@ document.addEventListener('alpine:init', () => {
       if (this.draftMode === 'fill') { await this.fillMonthDraft(); return; }
       this.draftSaving = true;
       this.draftError = null;
+      this.draftFieldError = null;
       try {
         const pk = this.itemsDef.primaryKey;
         const body = this.draftPayload();
@@ -1184,7 +1297,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();   // refresh the rows (server defaults / calculated item fields)
         await this.loadHeader();  // refresh the header + totals (server-side calculated aggregates)
       } catch (e) {
-        this.draftError = App.services.apiErrors.messageFor(e, 'Could not save the line.');
+        this.applyDraftError(e, 'Could not save the line.');
       } finally {
         this.draftSaving = false;
       }
@@ -1202,6 +1315,9 @@ document.addEventListener('alpine:init', () => {
     openFillDialog() {
       const col = this.fillDateColumn();
       if (!col) return;
+      // Same reason as openRowDialog - asked here so the answer reopens the FILL dialog, not the
+      // plain line dialog.
+      if (this.isDirty()) { this.confirmLeave(() => this.openFillDialog(), 'continue'); return; }
       this.openRowDialog(null);
       if (!this.rowDialogOpen) return;   // openRowDialog refused (preview / items disabled)
       this.draftMode = 'fill';
@@ -1214,6 +1330,7 @@ document.addEventListener('alpine:init', () => {
     async fillMonthDraft() {
       this.draftSaving = true;
       this.draftError = null;
+      this.draftFieldError = null;
       try {
         const col = this.fillDateColumn();
         const month = String((col && this.draft[col.name]) || '').slice(0, 7);
@@ -1229,7 +1346,7 @@ document.addEventListener('alpine:init', () => {
         }
         this.rowDialogOpen = false; this.draft = {};
       } catch (e) {
-        this.draftError = App.services.apiErrors.messageFor(e, 'Could not fill the month.');
+        this.applyDraftError(e, 'Could not fill the month.');
       } finally {
         this.draftSaving = false;
         await this.loadItems();   // reflect what was created even on a mid-loop failure
@@ -1258,7 +1375,13 @@ document.addEventListener('alpine:init', () => {
       return String(v).slice(0, 10);
     },
 
-    askDeleteRow(row) { if (this.isPreview) return; this.deleteTarget = row; this.deleteOpen = true; },
+    // Deleting a line re-reads the header (the totals move), which would take an unsaved header edit
+    // with it - so the dirty header is settled first (issue #7359).
+    askDeleteRow(row) {
+      if (this.isPreview) return;
+      if (this.isDirty()) { this.confirmLeave(() => this.askDeleteRow(row), 'continue'); return; }
+      this.deleteTarget = row; this.deleteOpen = true;
+    },
 
     async confirmDeleteRow() {
       if (!this.deleteTarget) return;
@@ -1283,7 +1406,9 @@ document.addEventListener('alpine:init', () => {
       return window.HarmoniaFormat.number(v, pattern);
     },
 
-    backToList() { window.PineconeRouter.navigate('/${name}'); },
+    // Every exit from the document goes through the guard: a dirty header is never dropped without
+    // being asked about (issue #7359). A clean one leaves silently, as before.
+    backToList() { this.guardExit(() => window.PineconeRouter.navigate('/${name}')); },
 
     // Preview -> the editable document for the same record.
     goEdit() { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit'); },

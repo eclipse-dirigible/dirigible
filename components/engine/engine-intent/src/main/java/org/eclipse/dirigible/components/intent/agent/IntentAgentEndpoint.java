@@ -30,7 +30,9 @@ import org.springframework.web.server.ResponseStatusException;
  * <p>
  * {@code POST /services/ide/intent/agent} - body is the current intent YAML, the developer's
  * message and the prior transcript; returns {@code {reply, proposedYaml}}. The assistant only
- * proposes a complete YAML for the editor to diff; it never writes to the workspace or runs the
+ * proposes a complete YAML for the editor to diff - it proposes its change to the server as
+ * anchored edits, which the server splices into the current document before answering, so the
+ * client contract is the same one it has always been; it never writes to the workspace or runs the
  * generators (the developer accepts the diff, then Saves and Generates as usual). Returns
  * {@code 412} when no API key is configured and {@code 502} when the upstream model call fails.
  *

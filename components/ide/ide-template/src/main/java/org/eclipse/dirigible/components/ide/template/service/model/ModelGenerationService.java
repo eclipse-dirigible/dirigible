@@ -54,7 +54,13 @@ public class ModelGenerationService {
     /** The folder every generation writes into. */
     private static final String GENERATION_FOLDER = "gen";
 
-    /** The extension of the descriptor recording what a model was generated with. */
+    /**
+     * The extension of the descriptor recording what a model was generated with. It is appended to the
+     * model file's whole name - {@code myapp.model.gen}, {@code myapp.glue.gen} - so that every
+     * generation of a project keeps its own record. Naming it after the base name alone made two model
+     * files of one project that differ only in extension write the same descriptor, and the surviving
+     * file described only the generation that ran last (#7057).
+     */
     private static final String DESCRIPTOR_EXTENSION = ".gen";
 
     /** The workspace service. */
@@ -66,17 +72,23 @@ public class ModelGenerationService {
     /** The generator. */
     private final ModelGenerator modelGenerator;
 
+    /** The per-generation consumed-attributes manifest. */
+    private final ConsumedAttributesAudit consumedAttributesAudit;
+
     /**
      * Instantiates a new model generation service.
      *
      * @param workspaceService the workspace service
      * @param publisherService the publisher service
      * @param modelGenerator the model generator
+     * @param consumedAttributesAudit the consumed-attributes manifest
      */
-    ModelGenerationService(WorkspaceService workspaceService, PublisherService publisherService, ModelGenerator modelGenerator) {
+    ModelGenerationService(WorkspaceService workspaceService, PublisherService publisherService, ModelGenerator modelGenerator,
+            ConsumedAttributesAudit consumedAttributesAudit) {
         this.workspaceService = workspaceService;
         this.publisherService = publisherService;
         this.modelGenerator = modelGenerator;
+        this.consumedAttributesAudit = consumedAttributesAudit;
     }
 
     /**
@@ -118,8 +130,39 @@ public class ModelGenerationService {
 
         List<GeneratedFile> files = new ArrayList<>(rendered.size() + 1);
         files.addAll(rendered);
-        files.add(new GeneratedFile(null, str(parameters, "fileName") + DESCRIPTOR_EXTENSION, JavaScriptJson.pretty(parameters)));
+        files.add(new GeneratedFile(null, path + DESCRIPTOR_EXTENSION, JavaScriptJson.pretty(parameters)));
         return files;
+    }
+
+    /**
+     * The per-generation consumed-attributes manifest for one model file: the attributes it sets that
+     * neither the template nor the generation stages read (dirigible #6543).
+     *
+     * <p>
+     * Run alongside a generation rather than inside it: an unread attribute costs the generated code a
+     * feature, not the generation its result, so it is reported and never thrown. The model text and
+     * the template sources are read exactly as {@link #render} reads them - the extensions folded in,
+     * the descriptor consulted with the request's parameters - so what is audited is what was generated
+     * from.
+     *
+     * @param workspace the workspace name
+     * @param project the project name
+     * @param path the project-relative path of the model file
+     * @param templateId the template's module path
+     * @param parameters the generation parameters from the request; not mutated
+     * @return one warning per unclaimed attribute, empty when everything the model sets is claimed
+     * @throws IOException when the model is missing
+     */
+    public List<String> auditConsumedAttributes(String workspace, String project, String path, String templateId,
+            Map<String, Object> parameters) throws IOException {
+        Workspace workspaceObject = requireWorkspace(workspace);
+        Project projectObject = requireProject(workspaceObject, workspace, project);
+        String modelText = augmentWithExtensions(readModel(projectObject, workspace, project, path), workspaceObject, project);
+        // A copy, and the standard parameters added before the descriptor is read: the order render()
+        // uses, so a composite descriptor assembles the same source list here as it did there.
+        Map<String, Object> descriptorParameters = parameters == null ? new LinkedHashMap<>() : new LinkedHashMap<>(parameters);
+        addStandardParameters(descriptorParameters, workspace, project, path, templateId);
+        return consumedAttributesAudit.audit(path, modelText, templateId, descriptorParameters);
     }
 
     /**

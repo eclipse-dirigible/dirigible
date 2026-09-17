@@ -9,11 +9,9 @@
  */
 package org.eclipse.dirigible.components.initializers.synchronizer.tenants;
 
-import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
+import org.eclipse.dirigible.components.base.synchronizer.MultitenantSynchronizers;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
 import org.eclipse.dirigible.components.base.tenant.TenantProvisioningException;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
@@ -32,7 +30,7 @@ class RetriggerSynchronizersTenantPostProvisioningStep implements TenantPostProv
     private static final Logger logger = LoggerFactory.getLogger(RetriggerSynchronizersTenantPostProvisioningStep.class);
 
     /** The multitenant synchronizers. */
-    private final List<Synchronizer<?, ?>> multitenantSynchronizers;
+    private final MultitenantSynchronizers multitenantSynchronizers;
 
     /** The definition service. */
     private final DefinitionService definitionService;
@@ -43,17 +41,15 @@ class RetriggerSynchronizersTenantPostProvisioningStep implements TenantPostProv
     /**
      * Instantiates a new retrigger synchronizers tenant post provisioning step.
      *
-     * @param synchronizers the synchronizers
+     * @param multitenantSynchronizers the multitenant synchronizers
      * @param definitionService the definition service
      * @param synchronizationProcessor the synchronization processor
      */
-    RetriggerSynchronizersTenantPostProvisioningStep(List<Synchronizer<?, ?>> synchronizers, DefinitionService definitionService,
+    RetriggerSynchronizersTenantPostProvisioningStep(MultitenantSynchronizers multitenantSynchronizers, DefinitionService definitionService,
             SynchronizationProcessor synchronizationProcessor) {
         this.definitionService = definitionService;
         this.synchronizationProcessor = synchronizationProcessor;
-        this.multitenantSynchronizers = synchronizers.stream()
-                                                     .filter(Synchronizer::multitenantExecution)
-                                                     .collect(Collectors.toList());
+        this.multitenantSynchronizers = multitenantSynchronizers;
     }
 
     /**
@@ -63,10 +59,10 @@ class RetriggerSynchronizersTenantPostProvisioningStep implements TenantPostProv
      */
     @Override
     public void execute() throws TenantProvisioningException {
-        logger.info("Registered [{}] multitenant synchronizers: [{}]", multitenantSynchronizers.size(), multitenantSynchronizers);
-        Set<String> multitenantArtifactTypes = multitenantSynchronizers.stream()
-                                                                       .map(Synchronizer::getArtefactType)
-                                                                       .collect(Collectors.toSet());
+        logger.info("Registered [{}] multitenant synchronizers: [{}]", multitenantSynchronizers.getSynchronizers()
+                                                                                               .size(),
+                multitenantSynchronizers.getSynchronizers());
+        Set<String> multitenantArtifactTypes = multitenantSynchronizers.getArtefactTypes();
         logger.info("Changing checksums for definitions with types in [{}]", multitenantArtifactTypes);
         definitionService.updateChecksums(StringUtils.EMPTY, multitenantArtifactTypes);
 

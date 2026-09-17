@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.sdk.utils;
 
+import java.nio.charset.StandardCharsets;
 import org.eclipse.dirigible.components.api.utils.Base64Facade;
 
 /**
@@ -16,6 +17,9 @@ import org.eclipse.dirigible.components.api.utils.Base64Facade;
  * {@code decode} overloads handle the common String &harr; byte[] cases; the {@code Native} pair
  * returns / accepts byte arrays on both sides for callers that already work in bytes (avoiding the
  * intermediate {@link String} allocation).
+ * <p>
+ * A {@link String} argument is always text: {@link #encode(String)} encodes its UTF-8 bytes and
+ * {@link #decode(String)} reads base64 text, so {@code decode(encode(text))} round-trips.
  * <p>
  * Prefer this over {@link java.util.Base64} when you want behaviour identical to the TS / JS
  * surface — the underlying facade uses Apache Commons Codec, which produces unchunked output (no
@@ -25,8 +29,14 @@ public final class Base64 {
 
     private Base64() {}
 
+    /**
+     * Base64-encodes the UTF-8 bytes of the given text.
+     *
+     * @param input the text to encode
+     * @return the base64 representation
+     */
     public static String encode(String input) {
-        return Base64Facade.encode(input);
+        return Base64Facade.encode(input.getBytes(StandardCharsets.UTF_8));
     }
 
     public static String encode(byte[] input) {

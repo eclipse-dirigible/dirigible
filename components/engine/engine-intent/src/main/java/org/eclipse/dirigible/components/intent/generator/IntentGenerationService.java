@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
@@ -38,6 +39,14 @@ import org.springframework.stereotype.Component;
  * {@code .intent} file itself, code files, and the {@code gen/} / {@code custom/} subfolders (only
  * direct child resources are considered). Removing a process / form / report / seed from the intent
  * therefore removes its model file on the next Generate instead of leaving a stale artefact around.
+ *
+ * <p>
+ * A pass that is REFUSED writes nothing: an {@link IntentValidationException} out of any generator
+ * rolls back what the earlier ones already wrote before it leaves as a 422 (dirigible #7227). The
+ * generators run in {@code @Order}, so without that a check placed in a late generator would leave
+ * a half-generated model set in the workspace - e.g. the {@code .edm}/{@code .model} and a
+ * {@code .bpmn} carrying a {@code Resolve<...>} service task whose handler the refused glue pass
+ * never generated. Refusing at generation must cost the developer no more than refusing at parse.
  */
 @Component
 public class IntentGenerationService {
@@ -106,12 +115,33 @@ public class IntentGenerationService {
      *         has structural problems
      */
     public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
+        return generate(yaml, projectRoot, projectName, workspaceName, fallbackName, false);
+    }
+
+    /**
+     * The same pass, optionally as the declared BOOTSTRAP of a mutual cross-model cycle (dirigible
+     * #6539): a {@code generates} whose target model has not been generated yet is skipped, and named
+     * in the returned issues, instead of failing the whole Generate. Nothing else is relaxed - see
+     * {@link BootstrapRequiredException}.
+     *
+     * @param yaml the raw {@code .intent} document
+     * @param projectRoot repository path of the target project root
+     * @param projectName the target project name
+     * @param workspaceName the workspace the project lives in
+     * @param fallbackName base name used for single-file outputs when the YAML omits {@code name:}
+     * @param bootstrap whether an unresolvable cross-model create-from may be skipped
+     * @return the files written and scrubbed
+     * @throws org.eclipse.dirigible.components.intent.parser.IntentValidationException if the document
+     *         has structural problems
+     */
+    public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            boolean bootstrap) {
         IntentModel model = IntentParser.parse(yaml);
         IntentGenerationContext context =
-                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository);
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, false, bootstrap);
         context.setSettings(loadOrScaffoldSettings(context));
-        LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", IntentNaming.baseName(context), projectRoot,
-                generators.size());
+        LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", LoggedValue.of(IntentNaming.baseName(context)),
+                LoggedValue.of(projectRoot), generators.size());
         // The shape this project declared BEFORE the pass. Compared against what the pass writes, it is
         // what makes a removal visible - see the impact report below.
         String modelFileName = IntentNaming.baseName(context) + ".model";
@@ -122,9 +152,15 @@ public class IntentGenerationService {
             } catch (IntentValidationException e) {
                 // A fatal authoring error the developer must fix (e.g. an unresolvable cross-model
                 // dependency) - surface it to the caller (-> 422), do NOT isolate it like a generator bug.
+                // The pass is refused AS A WHOLE (dirigible #7227): the generators run in @Order, so a
+                // check in a later one would otherwise leave the earlier ones' output behind - a
+                // half-generated model set next to the 422, and nothing scrubs it (the scrub below is
+                // never reached). Undo this pass's writes so the workspace is exactly what it was, the
+                // way a parse-time refusal leaves it.
+                context.rollbackWrittenFiles();
                 throw e;
             } catch (RuntimeException e) {
-                LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), projectName, e);
+                LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), LoggedValue.of(projectName), e);
             }
         }
         // A member this pass dropped invalidates the committed generated code of every project that
@@ -133,12 +169,76 @@ public class IntentGenerationService {
         try {
             CrossModelImpactSupport.reportRemovals(context, shapeBefore, modelFileName);
         } catch (RuntimeException e) {
-            LOGGER.error("Cross-model impact report failed for project [{}]", projectName, e);
+            LOGGER.error("Cross-model impact report failed for project [{}]", LoggedValue.of(projectName), e);
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
         runCodeGenerations(plan, workspaceName, projectName);
-        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, context.getIssues());
+        auditConsumedAttributes(context, plan, workspaceName, projectName);
+        // The developer-facing warnings carry BOTH kinds: the actionable issues and the advisories.
+        // Only the assistant's dry run keeps them apart (see dryRun below).
+        List<String> warnings = new ArrayList<>(context.getIssues());
+        warnings.addAll(context.getAdvisories());
+        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, warnings);
+    }
+
+    /**
+     * Run the generation pass for VALIDATION only: every generator executes and reports against the
+     * same context a real Generate would get, but nothing is written and nothing is scrubbed (dirigible
+     * #6956). This is the band the parser legitimately cannot see - a document that parses but whose
+     * generation would drop glue, or would be refused by a generation-time check.
+     *
+     * <p>
+     * A generator throwing {@link IntentValidationException} - fatal on a real Generate (422) - is
+     * collected here instead: the caller wants the complete list of what generation would object to,
+     * not the first objection.
+     *
+     * <p>
+     * The project coordinates may all be {@code null} - a proposal that belongs to no project yet, the
+     * AI assistant's case. Reads then find nothing (developer-owned files are treated as absent), and
+     * cross-model references resolve by naming convention rather than against a real owner model
+     * ({@code CrossModelSupport} skips its strict checks for unresolved targets) - deliberately, so a
+     * dependency that only exists in some workspace never produces a false "cannot be resolved" issue
+     * for the repair loop to burn a round on.
+     *
+     * @param yaml the raw {@code .intent} document; must already parse (the caller handles
+     *        {@link IntentValidationException} from the parse separately)
+     * @param projectRoot repository path of the target project root, or {@code null} when the document
+     *        belongs to no project
+     * @param projectName the target project name, or {@code null}
+     * @param workspaceName the workspace, or {@code null}
+     * @param fallbackName base name for single-file outputs when the YAML omits {@code name:}
+     * @return the actionable issues a real generation pass would report - advisories that no change to
+     *         this document can address are deliberately excluded
+     */
+    public List<String> dryRun(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
+        IntentModel model = IntentParser.parse(yaml);
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository, true);
+        context.setSettings(loadSettingsReadOnly(context));
+        for (IntentTargetGenerator generator : generators) {
+            try {
+                generator.generate(context);
+            } catch (IntentValidationException e) {
+                e.getIssues()
+                 .forEach(context::addIssue);
+            } catch (RuntimeException e) {
+                // The same isolation the real pass applies to a generator bug: one broken slice must
+                // not silence what the other generators have to say about the document.
+                LOGGER.error("Intent generator [{}] failed during a dry run", generator.name(), e);
+            }
+        }
+        return context.getIssues();
+    }
+
+    /**
+     * Validation-only pass for a document with no project context - the AI assistant's proposals.
+     *
+     * @param yaml the raw {@code .intent} document
+     * @return the actionable issues a real generation pass would report
+     */
+    public List<String> dryRun(String yaml) {
+        return dryRun(yaml, null, null, null, "app");
     }
 
     /**
@@ -168,10 +268,52 @@ public class IntentGenerationService {
                 modelGenerationService.generate(workspaceName, projectName, path, templateId, parameters);
                 entry.put("generated", Boolean.TRUE);
             } catch (IOException | RuntimeException e) {
-                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", sanitizeForLog(projectName), sanitizeForLog(path),
-                        sanitizeForLog(templateId), e);
+                LOGGER.error("Failed to generate code from [{}/{}] with template [{}]", LoggedValue.of(projectName), LoggedValue.of(path),
+                        LoggedValue.of(templateId), e);
                 entry.put("generated", Boolean.FALSE);
                 entry.put("error", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Report the attributes this pass wrote into a {@code .model} that the template it just ran reads
+     * nowhere (dirigible #6543).
+     *
+     * <p>
+     * This is the band nothing else covers. The parser sees an attribute it knows; the generation
+     * writes it; the code generation succeeds - and if no template source reads it, the behaviour the
+     * author asked for is simply absent from the generated code, with every step green. A stale
+     * registry template and producer/consumer drift both land here.
+     *
+     * <p>
+     * Reported as an advisory, not an issue: the fix is almost always in the template or the generator,
+     * so the assistant's repair loop must not spend a round rewriting the document over it, while the
+     * developer still sees it in the generate response. Only {@code .model} entries are audited - the
+     * glue / form / report recipes consume model files of an entirely different shape.
+     *
+     * @param context the pass context, collecting the advisories
+     * @param plan the code-generation plan that has just run
+     * @param workspaceName the workspace the project lives in
+     * @param projectName the project the models were written into
+     */
+    private void auditConsumedAttributes(IntentGenerationContext context, List<Map<String, Object>> plan, String workspaceName,
+            String projectName) {
+        for (Map<String, Object> entry : plan) {
+            String path = String.valueOf(entry.get("path"));
+            if (!path.endsWith(".model") || !Boolean.TRUE.equals(entry.get("generated"))) {
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parameters = (Map<String, Object>) entry.get("parameters");
+            try {
+                modelGenerationService.auditConsumedAttributes(workspaceName, projectName, path, String.valueOf(entry.get("templateId")),
+                        parameters)
+                                      .forEach(context::addAdvisory);
+            } catch (IOException | RuntimeException e) {
+                // The audit is a report about a generation that already happened - it never costs the
+                // pass its result.
+                LOGGER.error("Consumed-attributes audit failed for [{}/{}]", LoggedValue.of(projectName), LoggedValue.of(path), e);
             }
         }
     }
@@ -214,20 +356,41 @@ public class IntentGenerationService {
      */
     private IntentSettings loadOrScaffoldSettings(IntentGenerationContext context) {
         String fileName = IntentNaming.baseName(context) + ".settings";
-        String path = context.getProjectRoot() + "/" + fileName;
-        var resource = repository.getResource(path);
-        if (resource.exists()) {
-            try {
-                return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
-            } catch (RuntimeException e) {
-                LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", fileName, e);
-                return IntentSettings.scaffold(context.getModel());
-            }
+        IntentSettings existing = readSettings(context, fileName);
+        if (existing != null) {
+            return existing;
         }
         IntentSettings settings = IntentSettings.scaffold(context.getModel());
         context.writeModelFile(fileName, settings.toJson());
-        LOGGER.info("Scaffolded initial settings [{}/{}]", context.getProjectRoot(), fileName);
+        LOGGER.info("Scaffolded initial settings [{}/{}]", LoggedValue.of(context.getProjectRoot()), LoggedValue.of(fileName));
         return settings;
+    }
+
+    /**
+     * The settings a dry run works with: the project's real {@code .settings} when there is a project
+     * to read them from, else an in-memory scaffold. Never writes - the scaffold-and-write of a first
+     * real Generate is exactly the side effect a dry run must not have.
+     */
+    private IntentSettings loadSettingsReadOnly(IntentGenerationContext context) {
+        IntentSettings existing =
+                context.getProjectRoot() == null ? null : readSettings(context, IntentNaming.baseName(context) + ".settings");
+        return existing != null ? existing : IntentSettings.scaffold(context.getModel());
+    }
+
+    /**
+     * The parsed project settings, or {@code null} when absent (or unreadable - defaults then apply).
+     */
+    private IntentSettings readSettings(IntentGenerationContext context, String fileName) {
+        var resource = repository.getResource(context.getProjectRoot() + "/" + fileName);
+        if (!resource.exists()) {
+            return null;
+        }
+        try {
+            return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", LoggedValue.of(fileName), e);
+            return IntentSettings.scaffold(context.getModel());
+        }
     }
 
     /**
@@ -246,9 +409,9 @@ public class IntentGenerationService {
             try {
                 repository.removeResource(projectRoot + "/" + fileName);
                 scrubbed.add(fileName);
-                LOGGER.info("Scrubbed stale intent output [{}/{}]", projectRoot, fileName);
+                LOGGER.info("Scrubbed stale intent output [{}/{}]", LoggedValue.of(projectRoot), LoggedValue.of(fileName));
             } catch (RuntimeException e) {
-                LOGGER.error("Failed to scrub stale intent output [{}/{}]", projectRoot, fileName, e);
+                LOGGER.error("Failed to scrub stale intent output [{}/{}]", LoggedValue.of(projectRoot), LoggedValue.of(fileName), e);
             }
         }
         return scrubbed;
@@ -257,20 +420,6 @@ public class IntentGenerationService {
     private static boolean isIntentOwned(String fileName) {
         int dot = fileName.lastIndexOf('.');
         return dot >= 0 && INTENT_OWNED_EXTENSIONS.contains(fileName.substring(dot));
-    }
-
-    /**
-     * Strip CR/LF (and stray control characters) from a value that arrives in a user-controlled URL
-     * segment before it reaches the log, so a crafted request cannot forge log entries.
-     *
-     * @param value the value
-     * @return the value, with anything that could break a log line replaced
-     */
-    private static String sanitizeForLog(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return value.replaceAll("[\\r\\n\\t]", "_");
     }
 
 }

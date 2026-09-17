@@ -45,8 +45,12 @@ public abstract class TableConstraint {
     @Expose
     protected String[] columns;
 
-    /** The constraints. */
-    @OneToOne(fetch = FetchType.EAGER, optional = false)
+    /**
+     * The constraints. Many-to-one on purpose: one table's {@link TableConstraints} owns a list of
+     * uniques, a list of foreign keys and a list of checks. A {@code @OneToOne} here made Hibernate put
+     * a unique index on the join column, so a table could carry at most one of each.
+     */
+    @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "CONSTRAINTS_ID", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
     @JsonIgnore

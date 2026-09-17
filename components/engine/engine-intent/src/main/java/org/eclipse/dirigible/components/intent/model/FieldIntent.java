@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Single attribute on an {@link EntityIntent}. {@link #type} carries a logical type string
@@ -23,6 +25,28 @@ public class FieldIntent {
 
     private String name;
     private String type;
+    /**
+     * Optional display label, replacing the humanized field name in every generated surface: the form
+     * input's caption, the list column header, the read-only details block. It seeds the generated
+     * en-US catalog entry for the property, so a translation of it is authored the same way as any
+     * other label. Use it for what humanizing a name cannot produce - an acronym ({@code nationalId} as
+     * "National ID", not "National Id"), a unit, a term of art.
+     */
+    private String label;
+    /**
+     * Optional label variants keyed by ISO 3166-1 alpha-2 <b>country</b> code, resolved from the
+     * tenant's country ({@code DIRIGIBLE_APPLICATION_COUNTRY}) rather than from the language the user
+     * reads the UI in.
+     *
+     * <p>
+     * A national identification number is called ЕГН in Bulgaria and Steuer-ID in Germany: which term
+     * applies is a property of the company, not of the reader. Keying such a label off the language
+     * catalogs gets it wrong in both directions - an English-speaking accountant at a Bulgarian company
+     * sees the generic term, their Bulgarian colleague the local one, on the same record (dirigible
+     * #6424). The variant therefore overrides the label for EVERY language, and {@link #label} (or the
+     * humanized name) remains the fallback for a country that declares none.
+     */
+    private Map<String, String> countryLabels = new LinkedHashMap<>();
     private boolean required;
     private boolean primaryKey;
     private boolean generated;
@@ -120,6 +144,20 @@ public class FieldIntent {
      */
     private Boolean major;
     /**
+     * Whether this string field participates in the sibling <code>&lt;TABLE&gt;_LANG</code> translation
+     * table of a {@code multilingual} entity. Defaults to {@code true} - on a multilingual entity every
+     * character-typed property is translatable, which is right for a label and wrong for a <b>key</b>:
+     * a code a determination rule matches on, a business key an arrival resolves a relation by. Such a
+     * value is not text to be translated but the identity of the row, and translating it breaks the
+     * match silently - the read overlay hands the UI the translated value, saving the form writes it
+     * back into the BASE column, and from then on nothing matches the literal the model was authored
+     * with (dirigible #6545). {@code translatable: false} keeps the field out of the language table
+     * altogether, so it has no translation to overlay anywhere: not in a read, not in a report column,
+     * not in a translation seed. {@code Boolean} (nullable) so an unset value keeps the default-true
+     * behaviour.
+     */
+    private Boolean translatable;
+    /**
      * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
      * 12 = full). Emitted as the property's {@code widgetSize}; the Harmonia form maps it to
      * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
@@ -188,6 +226,22 @@ public class FieldIntent {
 
     public void setType(String type) {
         this.type = type;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public Map<String, String> getCountryLabels() {
+        return countryLabels;
+    }
+
+    public void setCountryLabels(Map<String, String> countryLabels) {
+        this.countryLabels = countryLabels == null ? new LinkedHashMap<>() : countryLabels;
     }
 
     public boolean isRequired() {
@@ -351,6 +405,45 @@ public class FieldIntent {
     /** Whether this field is a list-table column - defaults to true when {@code major} is unset. */
     public boolean isMajor() {
         return major == null || major;
+    }
+
+    public Boolean getTranslatable() {
+        return translatable;
+    }
+
+    public void setTranslatable(Boolean translatable) {
+        this.translatable = translatable;
+    }
+
+    /**
+     * Whether the field is translatable at all - defaults to true when {@code translatable} is unset.
+     *
+     * @return false only when {@code translatable: false} is authored
+     */
+    public boolean isTranslatable() {
+        return translatable == null || translatable;
+    }
+
+    /**
+     * Whether a {@code multilingual} entity's language table carries a column for this field - the one
+     * predicate every consumer of the translation overlay must agree on: the schema template that EMITS
+     * the language column, the report generator that overlays it, the CSVIM generator that seeds it,
+     * and the parser that refuses a translation seeding what has no column. A character-typed field
+     * that is neither the primary key (the language row's own reference to the base row) nor calculated
+     * (assigned by the repository on every write) nor marked {@code translatable: false}.
+     *
+     * <p>
+     * Says nothing about the owning entity: a field of a non-multilingual entity has no language table
+     * to have a column in, so the caller pairs this with {@code entity.isMultilingual()}.
+     *
+     * @return true when the field's value can carry a per-language translation
+     */
+    public boolean hasLanguageColumn() {
+        if (primaryKey || isCalculated() || !isTranslatable()) {
+            return false;
+        }
+        String logical = type == null ? "string" : type.toLowerCase(java.util.Locale.ROOT);
+        return "string".equals(logical) || "text".equals(logical);
     }
 
     public String getDefaultValue() {

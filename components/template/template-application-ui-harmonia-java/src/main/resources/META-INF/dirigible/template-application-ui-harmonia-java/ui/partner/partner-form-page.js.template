@@ -28,12 +28,15 @@ document.addEventListener('alpine:init', () => {
     mode: 'create',
     id: null,
     error: null,
+    // The single property a rejected save NAMED ("The 'Name' property is required"), else null -
+    // drives :aria-invalid on that one control (see applyApiError).
+    fieldError: null,
     saving: false,
     deleteOpen: false,
     deleteBusy: false,
     form: {
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && $property.name != "ProcessIds" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name")
       ${property.name}: #if($property.widgetType == "CHECKBOX")false#elseif($property.widgetType == "MULTISELECT")[]#{else}''#end,
 #end
 #end
@@ -41,7 +44,7 @@ document.addEventListener('alpine:init', () => {
     options: {},
 
     apiPath: '/${javaPerspectiveName}/${name}PartnerController',
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
     // controller's GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed
@@ -63,7 +66,7 @@ document.addEventListener('alpine:init', () => {
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
-#if($immutableStatusProperty || $immutableAlways)
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
             this.mutable = !m || m.mutable !== false;
@@ -90,8 +93,10 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
           this.state = 'default';
+          // What the server holds is what every exit compares the buffer against (issue #7359).
+          this.markPristine();
         } catch (e) {
-          this.error = (e && e.message) || 'Could not load the record.';
+          this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load the record.');
           this.state = 'error';
         }
 #if($partnerChildren && $partnerChildren.size() > 0)
@@ -106,7 +111,15 @@ document.addEventListener('alpine:init', () => {
           if (v !== null) this.form[key] = v;
         }
         this.state = 'default';
+        // Create mode: the blank form plus the query-param prefills is where the user started;
+        // anything typed after this is an unsaved change (issue #7359).
+        this.markPristine();
       }
+    },
+
+    // The guard dialog's Discard when the user is STAYING on the page: re-read the record.
+    async reloadForm() {
+      await this.init();
     },
 
     queryParam(name) {
@@ -168,18 +181,38 @@ document.addEventListener('alpine:init', () => {
       return payload;
     },
 
+    // A rejected save that NAMES one of this form's properties ("The 'Name' property is required")
+    // marks that one control (fieldError -> aria-invalid) and repeats the server's own reason;
+    // anything else - a fault, a refusal naming nothing this form owns - keeps the generic banner.
+    // Mirrors baseFormPage.applyApiError / the line dialog's applyItemError (#7062/#7152); never the
+    // developer-facing e.message.
+    applyApiError(e, fallback) {
+      const named = App.services.apiErrors.namedProperty(e, Object.keys(this.form));
+      if (named) {
+        this.fieldError = named;
+        this.error = App.services.apiErrors.messageWithLabels(e, {});
+        return;
+      }
+      this.fieldError = null;
+      this.error = App.services.apiErrors.refusalMessageFor(e, fallback);
+    },
+
     async save() {
       this.saving = true;
       this.error = null;
+      this.fieldError = null;
       try {
         if (this.mode === 'edit') {
           await App.services.api.put(this.apiPath + '/' + this.id, this.toPayload());
         } else {
           await App.services.api.post(this.apiPath, this.toPayload());
         }
+        // The write landed, so there is nothing left to protect - clear the guard before the page
+        // navigates itself, or it would veto its own route change (issue #7359).
+        this.clearPristine();
         this.goBack();
       } catch (e) {
-        this.error = (e && e.message) || 'Could not save.';
+        this.applyApiError(e, 'Could not save.');
       } finally {
         this.saving = false;
       }
@@ -190,16 +223,21 @@ document.addEventListener('alpine:init', () => {
       try {
         await App.services.api.delete(this.apiPath + '/' + this.id);
         this.deleteOpen = false;
+        this.clearPristine();
         this.goBack();
       } catch (e) {
-        this.error = (e && e.message) || 'Could not delete.';
+        this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not delete.');
         this.deleteOpen = false;
       } finally {
         this.deleteBusy = false;
       }
     },
 
-    goBack() {
+    // A form with unsaved edits asks before it is abandoned (issue #7359); a clean one leaves
+    // silently, as before. Back and Cancel both come through here.
+    goBack() { this.guardExit(() => this.leavePage()); },
+
+    leavePage() {
       const returnTo = this.queryParam('returnTo');
       if (returnTo) { this.navigate(returnTo); return; }
 #if($partnerParent)
@@ -292,11 +330,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     addChild(child) {
-      this.navigate('/partner/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
-          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
+          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit')));
     },
     editChild(child, id) {
-      this.navigate('/partner/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit'));
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/partner/${name}/' + this.id + '/edit')));
     },
     onChildEventClick(child, e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
@@ -311,7 +349,7 @@ document.addEventListener('alpine:init', () => {
         q += '&' + encodeURIComponent(child.calendar.start) + '='
            + encodeURIComponent(d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()));
       }
-      this.navigate('/partner/' + child.name + '/create' + q);
+      this.guardExit(() => this.navigate('/partner/' + child.name + '/create' + q));
     },
 #end
   }));

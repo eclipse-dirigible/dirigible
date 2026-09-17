@@ -12,6 +12,7 @@ package org.eclipse.dirigible.database.sql.builders;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.SqlException;
 import org.eclipse.dirigible.database.sql.builders.schema.DropSchemaBuilder;
+import org.eclipse.dirigible.database.sql.builders.user.DropUserBuilder;
 import org.eclipse.dirigible.database.sql.builders.sequence.DropSequenceBuilder;
 import org.eclipse.dirigible.database.sql.builders.synonym.DropSynonymBuilder;
 import org.eclipse.dirigible.database.sql.builders.table.DropConstraintBuilder;
@@ -95,6 +96,16 @@ public class DropBranchingBuilder extends AbstractSqlBuilder {
      */
     public DropSynonymBuilder publicSynonym(String synonym) {
         return synonym(synonym);
+    }
+
+    /**
+     * User.
+     *
+     * @param userId the user id
+     * @return the drop user builder
+     */
+    public DropUserBuilder user(String userId) {
+        return new DropUserBuilder(this.getDialect(), userId);
     }
 
     /**

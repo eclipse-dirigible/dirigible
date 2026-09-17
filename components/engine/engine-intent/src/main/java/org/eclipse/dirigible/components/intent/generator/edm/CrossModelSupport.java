@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
@@ -78,15 +79,27 @@ public final class CrossModelSupport {
      *        the model was not resolved. A cross-model {@code generates} SOURCE needs it to render the
      *        {@code sourceStatus} completion hook, which reads the same fact off
      *        {@code RelationIntent.isEntityStatus()} in the local case
+     * @param propertyRelations the target's to-one property name → the entity it references (the
+     *        owner's {@code relationshipEntityName}); {@code null} when the model was not resolved. A
+     *        consumer that binds to a property of a FOREIGN entity as a foreign key (a roll-up over a
+     *        cross-model child) needs it to check that the property really points at the entity it
+     *        expects - a property that resolves but references something else would silently key the
+     *        aggregate on the wrong rows
      * @param translatedProperties the target's translatable property names (PascalCase) - the columns
      *        its sibling <code>&lt;TABLE&gt;_LANG</code> table carries, empty when the target is not
      *        {@code multilingual} or the model was not resolved. A consumer reading the target's
      *        columns directly (a report SELECT) needs it to overlay the caller's language the way the
      *        target's own repository does
+     * @param propertyTypes the target's property name -&gt; JDBC data type (the owner's
+     *        {@code dataType}), the only place a consumer can learn what SHAPE a cross-model column is
+     *        compared in - a {@code where} moment on a {@code DATE} column must be a
+     *        {@code CURRENT_DATE}, or the query fails to bind on every tick (issue #7393); {@code null}
+     *        when the model was not resolved - callers then skip the check
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
-            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Set<String> translatedProperties) {
+            java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
+            java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes) {
     }
 
     @SuppressWarnings("unchecked")
@@ -113,7 +126,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, defaults);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -165,7 +178,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         ItemsChildInfo fromRegistry = readItemsChild(repository, registryPath, masterEntity);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -222,7 +235,7 @@ public final class CrossModelSupport {
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        String registryPath = registryModelPath(uses);
         RelatedSourceInfo fromRegistry = readRelatedSource(repository, registryPath, sourceEntity, referencedEntity, via);
         if (fromRegistry != null) {
             return fromRegistry;
@@ -256,7 +269,8 @@ public final class CrossModelSupport {
             Map<String, Object> body = (Map<String, Object>) root.get("model");
             entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for related register source [{}]", modelPath, sourceEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for related register source [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(sourceEntity), e);
             return null;
         }
         if (entities == null) {
@@ -424,7 +438,8 @@ public final class CrossModelSupport {
             return new ItemsChildInfo(false, null, masterEntity, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(),
                     java.util.Map.of());
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model items child of [{}]", modelPath, masterEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model items child of [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(masterEntity), e);
         }
         return null;
     }
@@ -464,10 +479,14 @@ public final class CrossModelSupport {
                 String labelField = "Name";
                 java.util.Set<String> propertyNames = null;
                 java.util.Map<String, String> propertyWidgets = null;
+                java.util.Map<String, String> propertyRelations = null;
+                java.util.Map<String, String> propertyTypes = null;
                 String statusProperty = null;
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
                     propertyWidgets = new java.util.LinkedHashMap<>();
+                    propertyRelations = new java.util.LinkedHashMap<>();
+                    propertyTypes = new java.util.LinkedHashMap<>();
                     for (Map<String, Object> p : properties) {
                         if ("true".equals(String.valueOf(p.get("dataPrimaryKey")))) {
                             keyField = str(p.get("name"), keyField);
@@ -477,9 +496,17 @@ public final class CrossModelSupport {
                         String propertyName = str(p.get("name"), null);
                         if (propertyName != null) {
                             propertyNames.add(propertyName);
+                            String dataType = str(p.get("dataType"), null);
+                            if (dataType != null) {
+                                propertyTypes.put(propertyName, dataType);
+                            }
                             String widget = str(p.get("widgetType"), null);
                             if (widget != null) {
                                 propertyWidgets.put(propertyName, widget);
+                            }
+                            String references = str(p.get("relationshipEntityName"), null);
+                            if (references != null) {
+                                propertyRelations.put(propertyName, references);
                             }
                             // The EntityStatus FK is the one the edm generator gave the DOCUMENT_STATUS
                             // widget (EdmIntentGenerator: isEntityStatus() ? DOCUMENT_STATUS : DROPDOWN),
@@ -494,11 +521,12 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty,
-                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties));
+                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
+                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes);
             }
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
+                    LoggedValue.of(targetEntity), e);
         }
         return null;
     }
@@ -507,8 +535,8 @@ public final class CrossModelSupport {
      * The properties a multilingual entity's sibling <code>&lt;TABLE&gt;_LANG</code> table carries a
      * column for - mirroring exactly what the schema template emits there: the character-typed
      * properties that are neither the primary key, nor a foreign key, nor calculated, nor an audit
-     * column. A consumer that reads the base table directly can only overlay a property that actually
-     * has a language column.
+     * column, nor marked {@code translatable: false} (a key, not a label). A consumer that reads the
+     * base table directly can only overlay a property that actually has a language column.
      *
      * @param multilingual whether the entity keeps per-language values at all
      * @param properties the entity's model properties
@@ -526,7 +554,7 @@ public final class CrossModelSupport {
             boolean audit = !"NONE".equals(str(property.get("auditType"), "NONE"));
             if (name == null || !character || audit || "true".equals(String.valueOf(property.get("dataPrimaryKey")))
                     || "true".equals(String.valueOf(property.get("isCalculatedProperty")))
-                    || property.get("relationshipEntityName") != null) {
+                    || "false".equals(String.valueOf(property.get("translatable"))) || property.get("relationshipEntityName") != null) {
                 continue;
             }
             translated.add(name);
@@ -561,8 +589,47 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null,
-                java.util.Set.of());
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
+                java.util.Set.of(), null);
+    }
+
+    /**
+     * The repository path of the owner model's PUBLISHED copy under the registry - the second of the
+     * two equally valid sources {@link #resolve} reads, and the only one a prebuilt, prepackaged module
+     * ever has.
+     *
+     * @param uses the {@code uses:} entry naming the owner model
+     * @return the registry-absolute path of the owner's {@code .model}
+     */
+    private static String registryModelPath(UsesIntent uses) {
+        return IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + uses.resolveProject() + "/" + uses.getModel() + ".model";
+    }
+
+    /**
+     * Whether the owner model's {@code .model} FILE is readable from either source - the workspace copy
+     * or the published one. This is the "the dependency has not been generated yet" question, and it is
+     * deliberately narrower than {@link #resolve} succeeding: a model that IS there but declares no
+     * such entity is an authoring error, and must keep failing loudly even where the absence is
+     * tolerated (the {@code generates} bootstrap pass, dirigible #6539).
+     *
+     * @param context the generation context; without a repository or a project root there is nothing to
+     *        read from and resolution falls back to convention rather than failing, so the answer is
+     *        {@code true}
+     * @param uses the {@code uses:} entry naming the owner model
+     * @return {@code true} when either source has the owner's {@code .model}
+     */
+    public static boolean ownerModelExists(IntentGenerationContext context, UsesIntent uses) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return true;
+        }
+        IRepository repository = context.getRepository();
+        String workspacePath = siblingModelPath(context.getProjectRoot(), uses.resolveProject(), uses.getModel());
+        if (workspacePath != null && repository.getResource(workspacePath)
+                                               .exists()) {
+            return true;
+        }
+        return repository.getResource(registryModelPath(uses))
+                         .exists();
     }
 
     /**

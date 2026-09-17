@@ -39,4 +39,17 @@ public final class TestContexts {
     public static IntentGenerationContext context(IntentModel model, IRepository repository, String projectRoot, String fallbackName) {
         return new IntentGenerationContext(model, projectRoot, "proj", "workspace", fallbackName, repository);
     }
+
+    /**
+     * A repository-backed context running as the declared BOOTSTRAP pass of a mutual cross-model cycle
+     * (dirigible #6539).
+     *
+     * @param model the parsed intent model
+     * @param repository the repository the context reads and writes through
+     * @param projectRoot the repository-absolute project root
+     * @return the context
+     */
+    public static IntentGenerationContext bootstrapContext(IntentModel model, IRepository repository, String projectRoot) {
+        return new IntentGenerationContext(model, projectRoot, "proj", "workspace", "app", repository, false, true);
+    }
 }

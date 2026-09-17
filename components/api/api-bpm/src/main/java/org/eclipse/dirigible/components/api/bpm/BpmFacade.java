@@ -148,6 +148,23 @@ public class BpmFacade implements InitializingBean {
     }
 
     /**
+     * Whether a process instance is still running in the current tenant - it exists in the runtime (not
+     * only in history) and has not ended. A blank, unknown or already-completed instance id is simply
+     * not running: this is a question, never an error.
+     *
+     * @param processInstanceId the process instance id
+     * @return true when the instance is live
+     */
+    public static boolean isProcessRunning(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return false;
+        }
+        return BpmFacade.get()
+                        .getBpmProviderFlowable()
+                        .getProcessInstance(processInstanceId) != null;
+    }
+
+    /**
      * Get a variable in the process execution context.
      *
      * @param processInstanceId the process instance id
