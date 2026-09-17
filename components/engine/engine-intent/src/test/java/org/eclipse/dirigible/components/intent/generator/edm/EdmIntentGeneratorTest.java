@@ -306,7 +306,7 @@ class EdmIntentGeneratorTest {
                 entities:
                   - name: SalesInvoice
                     duplicable:
-                      defaults: { date: now, note: "Copy", period: now }
+                      defaults: { date: now, note: "Copy", period: now, recordedAt: now }
                       reset: [due]
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -314,6 +314,7 @@ class EdmIntentGeneratorTest {
                       - { name: due, type: date, calculatedActionOnCreate: custom.DueDate }
                       - { name: note, type: string }
                       - { name: period, type: month }
+                      - { name: recordedAt, type: timestamp }
                   - name: SalesInvoiceItem
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -329,7 +330,7 @@ class EdmIntentGeneratorTest {
         assertEquals(List.of("Due"), invoice.get("duplicateReset"), "a reset is carried as the GENERATED property name");
 
         List<Map<String, Object>> defaults = (List<Map<String, Object>>) invoice.get("duplicateDefaults");
-        assertEquals(3, defaults.size(), "every default reaches the template, in authored order");
+        assertEquals(4, defaults.size(), "every default reaches the template, in authored order");
         assertEquals("Date", defaults.get(0)
                                      .get("name"));
         assertEquals("date", defaults.get(0)
@@ -345,6 +346,13 @@ class EdmIntentGeneratorTest {
         assertEquals("month", defaults.get(2)
                                       .get("shape"),
                 "a month field gets the YYYY-MM shape, not a full date");
+        // #7396: the shape is the AUTHORED type, not a narrowing of it - a timestamp property binds a
+        // java.time.Instant, which the YYYY-MM-DD of a `date` shape does not fill.
+        assertEquals("RecordedAt", defaults.get(3)
+                                           .get("name"));
+        assertEquals("timestamp", defaults.get(3)
+                                          .get("shape"),
+                "a timestamp field gets the instant shape, not a date");
 
         // Both keys are structured, so they must be written as JSON attributes rather than dropped -
         // what the .edm cannot say is lost on the next modeler save (#6826).

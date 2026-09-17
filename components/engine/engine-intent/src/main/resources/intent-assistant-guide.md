@@ -806,18 +806,18 @@ value and respect a present one. Say so with the object form:
 
 `reset:` is for a field that HAS a create-time rule (a `calculatedActionOnCreate`, a `defaultValue`)
 and must be handed back to it; `defaults:` is for a field that has none, where the copy needs a value
-stated here. `now` is today in the field's own shape (a `date` field -> `YYYY-MM-DD`, a `month` field
--> `YYYY-MM`, a `week` field -> `YYYY-Www`), the same token `generates.defaults` takes; any other
-value is a literal coerced to the property's type. Both keys name the entity's own fields and to-one
-relations - no `relation.field` paths.
+stated here. `now` is the current moment in the field's own shape (a `date` field -> `YYYY-MM-DD`, a
+`timestamp` field -> the ISO instant, a `month` field -> `YYYY-MM`, a `week` field -> `YYYY-Www`), the
+same token `generates.defaults` takes; any other value is a literal coerced to the property's type.
+Both keys name the entity's own fields and to-one relations - no `relation.field` paths.
 
 Refused at parse: a name that is neither a field nor a to-one relation of the entity; one that is
 already dropped anyway (the primary key, the `number:` field, the `function: EntityStatus` relation,
 a `readOnly` or an `aggregate` field) - naming it would let you believe you control something the
 Duplicate decided long before reading the block; the same name in both lists; `now` on a property
-that is not a date / month / week; and a `reset` on a **required** field with neither a
-`defaultValue` nor a create-time rule, which would make every duplicate fail on the server's own
-"field is required".
+that does not hold a moment (not a date / timestamp / month / week); and a `reset` on a **required**
+field with neither a `defaultValue` nor a create-time rule, which would make every duplicate fail on
+the server's own "field is required".
 
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
@@ -3111,8 +3111,8 @@ EmployeeTimesheet for each active employee". Per matching row, a new target reco
 saved through the target's generated repository, so its create-time logic (document numbering, status
 init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
 `entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
-`now` (rendered in the target field's own shape - date / `YYYY-MM` month / `YYYY-Www` week) or a
-literal. The target may live in another model via `uses:` (same as `generates`).
+`now` (rendered in the target field's own shape - date / instant / `YYYY-MM` month / `YYYY-Www` week)
+or a literal. The target may live in another model via `uses:` (same as `generates`).
 
 ```yaml
 schedules:

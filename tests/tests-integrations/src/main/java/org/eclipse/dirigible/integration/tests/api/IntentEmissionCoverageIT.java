@@ -736,15 +736,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Reorder
                 function: Document
                 duplicable:
-                  defaults: { orderedOn: now, period: now, comment: "Copy" }
+                  defaults: { orderedOn: now, period: now, recordedAt: now, comment: "Copy" }
                   reset: [note]
                 fields:
-                  - { name: id,        type: integer, primaryKey: true, generated: true }
-                  - { name: reference, type: string, length: 40, function: DocumentTitle }
-                  - { name: orderedOn, type: date, required: true }
-                  - { name: period,    type: month }
-                  - { name: note,      type: string, length: 100 }
-                  - { name: comment,   type: string, length: 100 }
+                  - { name: id,         type: integer, primaryKey: true, generated: true }
+                  - { name: reference,  type: string, length: 40, function: DocumentTitle }
+                  - { name: orderedOn,  type: date, required: true }
+                  - { name: period,     type: month }
+                  - { name: recordedAt, type: timestamp }
+                  - { name: note,       type: string, length: 100 }
+                  - { name: comment,    type: string, length: 100 }
               - name: ReorderItem
                 function: DocumentItem
                 fields:
@@ -2789,6 +2790,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "now on a date field must be written as today in that field's shape");
         assertTrue(reorderDoc.contains("header['Period'] = this.todayAs('month');"),
                 "now on a month field must be the YYYY-MM shape, not a full date");
+        // #7396: the same rule one shape further - a timestamp property binds a java.time.Instant, so
+        // the copy carries the full ISO instant, not the local YYYY-MM-DD a `date` shape produces.
+        assertTrue(reorderDoc.contains("header['RecordedAt'] = this.todayAs('timestamp');"),
+                "now on a timestamp field must be written in the timestamp shape, not narrowed to a date");
+        assertTrue(reorderDoc.contains("if (shape === 'timestamp') return now.toISOString();"),
+                "todayAs must render a timestamp as the ISO instant the backend binds for a java.time.Instant");
         assertTrue(reorderDoc.contains("header['Comment'] = \"Copy\";"), "a literal default must reach the page quoted");
         assertTrue(reorderDoc.contains("todayAs(shape)") && reorderDoc.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
                 "todayAs must build from the LOCAL calendar fields - toISOString is UTC, so a copy made in the evening"

@@ -52,6 +52,7 @@ class DuplicableIntentTest {
                   - { name: total, type: decimal, aggregate: true }
                   - { name: printedAt, type: date, readOnly: true }
                   - { name: period, type: month }
+                  - { name: recordedAt, type: timestamp }
                 relations:
                   - { name: customer, kind: manyToOne, to: Customer, required: true }
                   - { name: status, kind: manyToOne, to: SalesInvoiceStatus, function: EntityStatus }
@@ -139,7 +140,7 @@ class DuplicableIntentTest {
 
     @Test
     void nowOnANonDateFieldIsRejected() {
-        assertIssue(objectForm("defaults: { note: now }"), "now is today in the field's own shape");
+        assertIssue(objectForm("defaults: { note: now }"), "now is the current moment in the field's own shape");
     }
 
     @Test
@@ -148,6 +149,26 @@ class DuplicableIntentTest {
 
         assertEquals(Map.of("period", "now"), invoice.getDuplicable()
                                                      .getDefaults());
+    }
+
+    /**
+     * #7396: a {@code timestamp} property holds exactly the kind of value {@code now} means - it
+     * differs from a {@code date} only in precision, and the copy is made now in both cases - but the
+     * check listed the three shapes it had a renderer for and refused the one value an author would
+     * write there, leaving a {@code calculatedActionOnCreate} class as the only way to say it.
+     */
+    @Test
+    void nowOnATimestampFieldIsAccepted() {
+        EntityIntent invoice = entity(IntentParser.parse(objectForm("defaults: { recordedAt: now }")), "SalesInvoice");
+
+        assertEquals(Map.of("recordedAt", "now"), invoice.getDuplicable()
+                                                         .getDefaults());
+    }
+
+    /** A default on a to-one relation assigns its raw foreign key, so `now` is still not a value. */
+    @Test
+    void nowOnARelationIsStillRejected() {
+        assertIssue(objectForm("defaults: { customer: now }"), "now is the current moment in the field's own shape");
     }
 
     @Test
