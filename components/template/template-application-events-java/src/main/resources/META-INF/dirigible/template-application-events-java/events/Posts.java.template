@@ -20,8 +20,11 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * - idempotent by ${backRef}: if ${into} rows already back-reference this source, it is a no-op;
  * - all writes go through the generated ${into} repository (so its own create logic fires), and the
  *   rows one source event derives are ONE transaction, so the back-reference either finds the whole
- *   post or finds nothing at all - a tick that fails part-way leaves nothing behind to be mistaken
- *   for a finished post (dirigible #7179).
+ *   post or finds nothing at all - a tick that fails part-way leaves no ROWS behind to be mistaken
+ *   for a finished post (dirigible #7179). What the unit does not cover, exactly as in Posting and
+ *   Generate: a ${into} carrying number: or history: true allocates its document number before the
+ *   insert and writes its trail after it, each on its own connection, so a refused tick can consume
+ *   a number and record the attempt - append-only records of what was tried, not business state.
  */
 @Component("${javaGenFolderName}_${className}Post")
 public class ${className}Post implements MessageHandler {
