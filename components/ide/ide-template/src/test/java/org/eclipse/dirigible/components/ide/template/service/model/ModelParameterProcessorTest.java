@@ -548,6 +548,33 @@ class ModelParameterProcessorTest {
         assertEquals("Status", ModelValues.asMaps(guards.get(0))
                                           .get(0)
                                           .get("property"));
+        // ...and BOTH reach the delete list, whatever the gate says about the write half (#7372): a
+        // delete is nobody's transition, so there is no repository-side write for a gated check to sit
+        // on, and the removal of a guarded row is the largest of the three changes the panel hides.
+        assertEquals(2, ModelValues.asList(entity.get("deleteChecks"))
+                                   .size());
+    }
+
+    /**
+     * A check kind that is about the VALUES a write carries has nothing to say about a delete, so only
+     * forbidWhen lands in the delete list - an unguarded entity generates byte-identically (#7372).
+     */
+    @Test
+    void noOtherCheckKindReachesTheDeleteList() {
+        Map<String, Object> exactlyOne = new LinkedHashMap<>();
+        exactlyOne.put("kind", "exactlyOne");
+        Map<String, Object> required = new LinkedHashMap<>();
+        required.put("kind", "requiredWhen");
+        Map<String, Object> items = new LinkedHashMap<>();
+        items.put("kind", "itemsMin");
+        items.put("status", "2");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(exactlyOne, required, items));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(0, ModelValues.asList(entity.get("deleteChecks"))
+                                   .size());
     }
 
     @Test

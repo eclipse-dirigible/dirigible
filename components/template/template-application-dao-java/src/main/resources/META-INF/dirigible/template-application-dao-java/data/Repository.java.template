@@ -1055,7 +1055,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
 #end
             if (${check.guardJavaExpression}) {
-                throw new ValidationException("${check.message}");
+                throw new ValidationException("${check.messageJavaLiteral}");
             }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field
