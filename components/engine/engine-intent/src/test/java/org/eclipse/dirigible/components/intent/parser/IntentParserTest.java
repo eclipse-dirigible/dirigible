@@ -959,6 +959,80 @@ class IntentParserTest {
                 "requires the entity to declare a `function: EntityStatus` relation");
     }
 
+    /**
+     * An {@code agree} check relates the two records a JUNCTION row links: both must point at the same
+     * third thing (dirigible #7409). Nothing in the DSL could say it, so a payment of one customer was
+     * allocated against another customer's invoice, in another currency, and the write answered 200 -
+     * every module carrying the shape closed it with a hand-written Java guard class instead.
+     */
+    @Test
+    void agreeChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Currency
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: integer }
+                      - { name: note, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: InvoicePayment
+                    checks:
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer,
+                          message: "This payment belongs to a different customer than the invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: customerPayment, kind: manyToOne, to: CustomerPayment }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(4)
+                                        .getChecks()
+                                        .get(0);
+        assertEquals(List.of("salesInvoice", "customerPayment"), check.getRelations());
+        assertEquals("customer", check.getOnProperty());
+        assertNull(check.getWhenNull());
+
+        // A scalar both targets declare agrees too, and so does an explicit whenNull.
+        IntentParser.parse(yaml.replace("onProperty: customer", "onProperty: note, whenNull: refuse"));
+
+        assertCompareIssue(yaml.replace("relations: [salesInvoice, customerPayment]", "relations: [salesInvoice]"),
+                "requires `relations`: exactly two");
+        assertCompareIssue(yaml.replace("relations: [salesInvoice, customerPayment]", "relations: [salesInvoice, salesInvoice]"),
+                "twice - a relation always agrees with itself");
+        assertCompareIssue(yaml.replace(", onProperty: customer", ""), "requires `onProperty`");
+        assertCompareIssue(yaml.replace("onProperty: customer", "on: customer"), "spell it `onProperty`");
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: supplier"), "has no field or to-one relation [supplier]");
+        // A decimal is not compared for equality by anybody who means it - the line a condition draws.
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: total"), "the values an equality is exact on");
+        // ...nor may the two sides be different kinds of value: the boxed comparison is always false.
+        assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: reference"), "both sides must be the same kind of value");
+        assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, whenNull: maybe,"), "unknown `whenNull`");
+        assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, status: 1,"), "cannot carry a `status` gate");
+    }
+
     private static void assertCompareIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()

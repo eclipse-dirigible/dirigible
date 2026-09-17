@@ -325,6 +325,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: number, type: string, length: 100, number: { series: Emission Receipt, stampOn: create } }
                   - { name: note,   type: string, length: 200 }
 
+              # checks: agree (#7409) - the two records a JUNCTION row links must point at the same
+              # third thing. No check kind could say it (compare relates two values of ONE row, the
+              # parent-child kinds a child to its own parent), so every module carrying the shape - a
+              # payment allocated against an invoice of another customer, in another currency - closed
+              # it with a hand-written Java guard class. Both readings of an unset side are emitted:
+              # the default skips (requiredness is the relation's own declaration), refuse rejects.
+              - name: EntryLink
+                checks:
+                  - { kind: agree, relations: [doc, entry], onProperty: Status,
+                      message: "The document and the entry are not in the same state" }
+                  - { kind: agree, relations: [entry, storno], onProperty: Status, whenNull: refuse,
+                      message: "An entry and its storno must be in the same state" }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: doc,    kind: manyToOne, to: Doc }
+                  - { name: entry,  kind: manyToOne, to: Entry }
+                  - { name: storno, kind: manyToOne, to: Entry }
+
               - name: EntryLine
                 checks:
                   - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
@@ -2317,6 +2336,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // guard is emitted for forbidWhen alone - Doc carries an ungated requiredWhen and no forbidWhen.
         assertFalse(docController.contains("requireDeletable"),
                 "only forbidWhen reaches the delete verb - a requiredWhen is about the content of a write, got: " + docController);
+        // checks: agree (#7409): both sides are ONE HOP away, so the generated controller loads each
+        // related record by its foreign key and compares the property they must share - the rule a
+        // hand-written guard class used to carry. The two readings of an unset side are both emitted:
+        // the default skips the comparison, `whenNull: refuse` rejects the write.
+        String linkController = contentOf("gen/emission/api/entrylink/EntryLinkController.java");
+        assertTrue(
+                linkController.contains("DocRepository().findById(hop0Fk)") && linkController.contains("Object agreeLeft = (hop0 == null")
+                        && linkController.contains("agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)")
+                        && linkController.contains("The document and the entry are not in the same state"),
+                "an agree check must load both sides and refuse a disagreement on the REST controller, got: " + linkController);
+        assertTrue(
+                linkController.contains("agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)")
+                        && linkController.contains("An entry and its storno must be in the same state"),
+                "whenNull: refuse must reject an unset side too, got: " + linkController);
+
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
         assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),

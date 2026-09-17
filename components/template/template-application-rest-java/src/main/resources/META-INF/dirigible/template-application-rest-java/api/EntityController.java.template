@@ -954,6 +954,26 @@ public class ${name}Controller {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
             }
         }
+#elseif($check.kind == "agree")
+## The two records a junction row links must point at the same third thing (intent `checks: agree`,
+## #7409) - the same customer, the same currency, the same company. Each side is one hop away, so both
+## records are loaded by their foreign key first; an unset side is skipped unless the check says to
+## refuse it, because requiredness is the relation's own declaration.
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object agreeLeft = ${check.leftExpression};
+            Object agreeRight = ${check.rightExpression};
+#if($check.whenNull == "refuse")
+            if (agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)) {
+#else
+            if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
+#end
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            }
+        }
 #elseif($check.kind == "compare")
 ## A value of the row compared with a second one (intent `checks: compare`) - another field of the
 ## SAME row, or a LITERAL (#7338: the positive quantity, the percentage at most 100, the date that is

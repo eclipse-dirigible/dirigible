@@ -1438,6 +1438,66 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * An {@code agree} check emits BOTH sides as one hop each, sharing the walker - so the two records
+     * are loaded once, by foreign key, and the comparison is between two properties of records neither
+     * of which is the one being written (dirigible #7409).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void agreeChecksEmitBothSidesAndTheirLoads() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: InvoicePayment
+                    checks:
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer,
+                          message: "This payment belongs to a different customer than the invoice" }
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer, whenNull: refuse }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: customerPayment, kind: manyToOne, to: CustomerPayment }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "InvoicePayment").get("checks");
+        assertEquals(2, checks.size());
+
+        Map<String, Object> agree = checks.get(0);
+        assertEquals("(hop0 == null ? null : hop0.Customer)", agree.get("leftExpression"));
+        assertEquals("(hop1 == null ? null : hop1.Customer)", agree.get("rightExpression"));
+        assertEquals("SalesInvoice.Customer", agree.get("leftLabel"));
+        assertEquals("CustomerPayment.Customer", agree.get("rightLabel"));
+        assertEquals("skip", agree.get("whenNull"));
+        assertEquals("This payment belongs to a different customer than the invoice", agree.get("message"));
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) agree.get("pathLoads");
+        assertEquals(2, loads.size(), "each side is loaded once: " + loads);
+        assertEquals("entity.SalesInvoice", loads.get(0)
+                                                 .get("sourceExpression"));
+        assertEquals("entity.CustomerPayment", loads.get(1)
+                                                    .get("sourceExpression"));
+
+        // An unauthored message still says what disagreed - only the declaration knows.
+        Map<String, Object> refusing = checks.get(1);
+        assertEquals("refuse", refusing.get("whenNull"));
+        assertEquals("The Sales Invoice and the Customer Payment must have the same Customer", refusing.get("message"));
+    }
+
+    /**
      * A guard on a TO-ONE is compared numerically, not with a boxed equality (#7237). The foreign-key
      * column is typed from the target's key, and for a cross-model target that key is only readable
      * from the owner's {@code .model}, where a {@code long} is as legal as an {@code integer} - an

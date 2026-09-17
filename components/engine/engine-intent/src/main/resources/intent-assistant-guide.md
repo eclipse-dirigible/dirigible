@@ -551,6 +551,20 @@ field may declare:
     "a submitted request covers at least one day" without forbidding the draft still being filled
     in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
     approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
+  - `{ kind: agree, relations: [SalesInvoice, CustomerPayment], onProperty: Customer, message: "..." }`
+    (#7409): the two records a JUNCTION row links must point at the same third thing - **this is how
+    "a payment may only be allocated against an invoice of the same customer, in the same currency"
+    is declared.** `relations:` names exactly two distinct to-one relations of the entity and
+    `onProperty:` the property BOTH their targets declare - one of their to-one relations (compared
+    by its foreign key: the same `Customer`, the same `Currency`, the same `Company`) or a scalar
+    field an equality is exact on (a string, an integer, a boolean). A cross-model target resolves
+    through its `uses:` owner like every other path. Enforced on every user write (400 with the
+    message), so it takes no `status:` gate. **The key is `onProperty`, never `on`** - YAML reads a
+    bare `on` as the boolean `true`, so that spelling never arrives and is refused by name. An unset
+    side is skipped by default (`whenNull: skip` - the relation's own `required:` is what makes it
+    mandatory); `whenNull: refuse` rejects the write instead. Reach for this instead of writing the
+    rule as a `calculatedActionOnCreate`/`OnUpdate` guard class - it is the shape every
+    allocation, transfer, timesheet and assignment entity carries.
   - `{ kind: requiredWhen, field: driver, when: "Status == IDENTIFIED", status: IDENTIFIED, message: "..." }`
     (#7094): a **conditionally required** value - `field` must be present whenever `when` holds.
     `field` is the entity's own field or a one-hop `Relation.field`; `when` is a guard (see *the event
