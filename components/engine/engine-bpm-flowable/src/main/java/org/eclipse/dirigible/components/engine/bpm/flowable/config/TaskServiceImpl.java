@@ -183,8 +183,7 @@ class TaskServiceImpl implements TaskService {
 
     @Override
     public void completeTask(String taskId, String variables) {
-        Map<String, Object> processVariables = GsonHelper.fromJson(variables, HashMap.class);
-        completeTask(taskId, processVariables);
+        completeTask(taskId, ProcessVariables.fromJson(variables));
     }
 
     @Override

@@ -68,7 +68,7 @@ public record TaskSubject(String url, String id, List<Field> fields) {
     public static TaskSubject from(Map<String, Object> variables) {
         String declaration = text(variables.get(SUBJECT_FIELDS));
         String url = text(variables.get(ENTITY_URL));
-        String id = text(variables.get(ENTITY_ID));
+        String id = key(variables.get(ENTITY_ID));
         if (declaration == null || url == null || id == null) {
             return null;
         }
@@ -99,6 +99,26 @@ public record TaskSubject(String url, String id, List<Field> fields) {
             }
         }
         return fields.isEmpty() ? null : new TaskSubject(url, id, fields);
+    }
+
+    /**
+     * The record's key, as the whole number it is (issue #7373). An instance started before the
+     * variable store stopped widening an untyped JSON number to a {@code Double} carries the key as
+     * {@code 33.0}, and the generated controller's integer path parameter refuses that - so the card
+     * could not load the record it exists to show. Anything that is not an integral number is read as
+     * it stands.
+     *
+     * @param value the raw {@code __entityId} variable
+     * @return the key as text, or null when there is none
+     */
+    private static String key(Object value) {
+        if (value instanceof Double || value instanceof Float) {
+            double raw = ((Number) value).doubleValue();
+            if (Double.isFinite(raw) && raw == Math.rint(raw)) {
+                return String.valueOf((long) raw);
+            }
+        }
+        return text(value);
     }
 
     private static String text(Object value) {

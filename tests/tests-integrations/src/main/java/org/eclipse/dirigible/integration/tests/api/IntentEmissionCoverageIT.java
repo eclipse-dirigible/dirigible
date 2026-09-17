@@ -5419,7 +5419,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("find { it.name == 'Confirm' }.subject.url", notNullValue())
-                                                 .body("find { it.name == 'Confirm' }.subject.fields.property", hasItem("Name")),
+                                                 .body("find { it.name == 'Confirm' }.subject.fields.property", hasItem("Name"))
+                                                 // ...and the record's key is the WHOLE number the generated controller's
+                                                 // integer path parameter accepts (#7373): started as an untyped JSON
+                                                 // number it used to reach the variable store as a Double, so the locator
+                                                 // read "1.0" and the card could not load the record it exists to show.
+                                                 .body("find { it.name == 'Confirm' }.subject.id",
+                                                         org.hamcrest.Matchers.matchesPattern("\\d+")),
                 30);
 
         // ...and the record knows about the instance that task belongs to: the trigger stamped the
