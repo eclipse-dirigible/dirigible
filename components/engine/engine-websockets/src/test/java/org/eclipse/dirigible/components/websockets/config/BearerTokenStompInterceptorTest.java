@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -39,8 +40,9 @@ import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 
 /**
- * A bearer CONNECT authenticates the session in place, an expired token ends it, and everything
- * else is left to the handshake.
+ * A bearer CONNECT authenticates the session in place and gives it the token's deadline, an expired
+ * token refuses what the client sends, a DISCONNECT is never refused, and everything else is left
+ * to the handshake.
  */
 class BearerTokenStompInterceptorTest {
 
@@ -48,6 +50,8 @@ class BearerTokenStompInterceptorTest {
 
     private final ObjectProvider<BearerTokenAuthenticator> authenticatorProvider = mock(ObjectProvider.class);
     private final BearerTokenAuthenticator authenticator = mock(BearerTokenAuthenticator.class);
+    private final ObjectProvider<BearerTokenStompSessionTerminator> terminatorProvider = mock(ObjectProvider.class);
+    private final BearerTokenStompSessionTerminator terminator = mock(BearerTokenStompSessionTerminator.class);
     private final MessageChannel channel = mock(MessageChannel.class);
     private final Authentication jane = new TestingAuthenticationToken("jane", "n/a", "ROLE_DEVELOPER");
     private final Map<String, Object> sessionAttributes = new ConcurrentHashMap<>();
@@ -56,7 +60,8 @@ class BearerTokenStompInterceptorTest {
 
     @BeforeEach
     void setUp() {
-        interceptor = new BearerTokenStompInterceptor(authenticatorProvider);
+        when(terminatorProvider.getObject()).thenReturn(terminator);
+        interceptor = new BearerTokenStompInterceptor(authenticatorProvider, terminatorProvider);
     }
 
     @Test
@@ -81,6 +86,7 @@ class BearerTokenStompInterceptorTest {
         assertSame(connect, result, "the CONNECT accessor is mutable, so the user goes on the frame itself");
         assertSame(jane, SimpMessageHeaderAccessor.getUser(result.getHeaders()));
         assertEquals(expiresAt, sessionAttributes.get(BearerTokenStompInterceptor.EXPIRES_AT_ATTRIBUTE));
+        verify(terminator).endAt("session-1", "jane", expiresAt);
     }
 
     @Test
@@ -102,6 +108,7 @@ class BearerTokenStompInterceptorTest {
         assertSame(jane, SimpMessageHeaderAccessor.getUser(interceptor.preSend(stomp, channel)
                                                                       .getHeaders()));
         assertNull(sessionAttributes.get(BearerTokenStompInterceptor.EXPIRES_AT_ATTRIBUTE), "a token without expiry records none");
+        verifyNoInteractions(terminator);
     }
 
     @Test
@@ -152,6 +159,27 @@ class BearerTokenStompInterceptorTest {
 
         assertThrows(CredentialsExpiredException.class, () -> interceptor.preSend(frame(StompCommand.SUBSCRIBE, null, true), channel));
         assertThrows(CredentialsExpiredException.class, () -> interceptor.preSend(frame(StompCommand.SEND, null, true), channel));
+    }
+
+    @Test
+    void aDisconnectIsNeverRefusedAndEndsTheDeadline() {
+        // Spring sends a DISCONNECT itself when the connection closes, so that the broker drops the
+        // session's subscriptions - refused, the broker would keep them for good
+        sessionAttributes.put(BearerTokenStompInterceptor.EXPIRES_AT_ATTRIBUTE, Instant.now()
+                                                                                       .minusSeconds(1));
+        Message<byte[]> disconnect = frame(StompCommand.DISCONNECT, null, true);
+
+        assertSame(disconnect, interceptor.preSend(disconnect, channel));
+        verify(terminator).sessionEnded("session-1");
+    }
+
+    @Test
+    void aDisconnectOfASessionWithoutATokenIsLeftAlone() {
+        Message<byte[]> disconnect = frame(StompCommand.DISCONNECT, null, true);
+
+        assertSame(disconnect, interceptor.preSend(disconnect, channel));
+        verify(terminator).sessionEnded("session-1");
+        verifyNoInteractions(authenticatorProvider);
     }
 
     @Test

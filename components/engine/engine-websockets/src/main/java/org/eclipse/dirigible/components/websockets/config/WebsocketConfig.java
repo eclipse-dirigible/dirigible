@@ -38,11 +38,11 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * A client is either the browser session that opened the handshake or a bearer token presented in
  * the {@code Authorization} header of the CONNECT frame - the shape an external frontend uses,
  * since a native application has no cookie and a cross-origin page cannot set headers on a
- * WebSocket handshake. Every frame is then authorized: a CONNECT needs a principal, a client may
- * subscribe to its own {@code /user/queue} destinations only and send to the application
- * destinations under {@code /ws} only. Nothing else passes - in particular no anonymous client, no
- * subscription to a queue the broker addresses another user by, and no direct publish to a broker
- * destination.
+ * WebSocket handshake - and a session opened with a token ends when the token does. Every frame is
+ * then authorized: a CONNECT needs a principal, a client may subscribe to its own
+ * {@code /user/queue} destinations only and send to the application destinations under {@code /ws}
+ * only. Nothing else passes - in particular no anonymous client, no subscription to a queue the
+ * broker addresses another user by, and no direct publish to a broker destination.
  *
  * <p>
  * The handshake accepts the configured cross-origin origins; unconfigured it stays same-origin, as
@@ -60,16 +60,21 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final ObjectProvider<BearerTokenAuthenticator> bearerTokenAuthenticator;
 
+    private final ObjectProvider<BearerTokenStompSessionTerminator> sessionTerminator;
+
     /**
      * Instantiates a new websocket config.
      *
      * @param processor the processor
      * @param bearerTokenAuthenticator the authenticator of bearer tokens, present on the profiles that
      *        accept them
+     * @param sessionTerminator ends a bearer session when its token expires
      */
-    public WebsocketConfig(WebsocketProcessor processor, ObjectProvider<BearerTokenAuthenticator> bearerTokenAuthenticator) {
+    public WebsocketConfig(WebsocketProcessor processor, ObjectProvider<BearerTokenAuthenticator> bearerTokenAuthenticator,
+            ObjectProvider<BearerTokenStompSessionTerminator> sessionTerminator) {
         this.processor = processor;
         this.bearerTokenAuthenticator = bearerTokenAuthenticator;
+        this.sessionTerminator = sessionTerminator;
     }
 
     /**
@@ -121,8 +126,8 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new BearerTokenStompInterceptor(bearerTokenAuthenticator), new SecurityContextChannelInterceptor(),
-                new AuthorizationChannelInterceptor(inboundAuthorization()));
+        registration.interceptors(new BearerTokenStompInterceptor(bearerTokenAuthenticator, sessionTerminator),
+                new SecurityContextChannelInterceptor(), new AuthorizationChannelInterceptor(inboundAuthorization()));
     }
 
     /**

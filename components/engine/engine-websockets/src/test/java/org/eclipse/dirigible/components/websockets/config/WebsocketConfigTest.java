@@ -51,7 +51,7 @@ class WebsocketConfigTest {
 
     @BeforeEach
     void setUp() {
-        config = new WebsocketConfig(mock(WebsocketProcessor.class), mock(ObjectProvider.class));
+        config = new WebsocketConfig(mock(WebsocketProcessor.class), mock(ObjectProvider.class), mock(ObjectProvider.class));
         when(registry.addEndpoint("/stomp")).thenReturn(endpoint, sockJsEndpoint);
         when(sockJsEndpoint.withSockJS()).thenReturn(mock(SockJsServiceRegistration.class));
     }
@@ -104,8 +104,12 @@ class WebsocketConfigTest {
     void theBearerAuthenticatorIsResolvedLazily() {
         ObjectProvider<BearerTokenAuthenticator> provider = mock(ObjectProvider.class);
 
-        new WebsocketConfig(mock(WebsocketProcessor.class), provider).configureClientInboundChannel(mock(ChannelRegistration.class));
+        ObjectProvider<BearerTokenStompSessionTerminator> terminator = mock(ObjectProvider.class);
+
+        new WebsocketConfig(mock(WebsocketProcessor.class), provider, terminator).configureClientInboundChannel(
+                mock(ChannelRegistration.class));
 
         verify(provider, never()).getIfAvailable();
+        verify(terminator, never()).getObject();
     }
 }

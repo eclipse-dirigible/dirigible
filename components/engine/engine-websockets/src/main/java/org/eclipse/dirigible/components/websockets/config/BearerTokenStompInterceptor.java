@@ -36,11 +36,15 @@ import org.springframework.security.authentication.CredentialsExpiredException;
  * the same rules the HTTP chain applies to the token, and the resulting identity becomes the user
  * of the session - set on the frame's own header accessor, which at this point is still mutable and
  * carries the callback that records the user for every later frame of the session. The token's
- * expiry is kept in the session attributes, and once it passes every further frame is refused, so
- * the connection lives no longer than the token that opened it.
+ * expiry is kept in the session attributes, and once it passes every further frame the client sends
+ * is refused; {@link BearerTokenStompSessionTerminator} ends the session at that instant as well,
+ * so a client that only listens is not kept beyond it either. The connection lives no longer than
+ * the token that opened it.
  *
  * <p>
- * A frame without the header is left alone: a browser session is authenticated by the handshake. An
+ * A DISCONNECT is never refused: Spring sends one itself when the connection closes, so that the
+ * broker drops the session's subscriptions, and a refusal would leave it holding them. A frame
+ * without the header is left alone: a browser session is authenticated by the handshake. An
  * {@code Authorization} header on any other frame is ignored. On a profile without a
  * {@link BearerTokenAuthenticator} a bearer CONNECT is refused. The header value is never logged.
  */
@@ -56,13 +60,20 @@ class BearerTokenStompInterceptor implements ChannelInterceptor {
 
     private final ObjectProvider<BearerTokenAuthenticator> authenticator;
 
+    private final ObjectProvider<BearerTokenStompSessionTerminator> sessionTerminator;
+
     /**
      * Instantiates the interceptor.
      *
      * @param authenticator the authenticator of bearer tokens, present on the profiles that accept them
+     * @param sessionTerminator ends a bearer session when its token expires - resolved on first use,
+     *        because it depends on the broker beans that the configuration registering this interceptor
+     *        contributes to
      */
-    BearerTokenStompInterceptor(ObjectProvider<BearerTokenAuthenticator> authenticator) {
+    BearerTokenStompInterceptor(ObjectProvider<BearerTokenAuthenticator> authenticator,
+            ObjectProvider<BearerTokenStompSessionTerminator> sessionTerminator) {
         this.authenticator = authenticator;
+        this.sessionTerminator = sessionTerminator;
     }
 
     /**
@@ -84,6 +95,11 @@ class BearerTokenStompInterceptor implements ChannelInterceptor {
             if (authorization != null) {
                 authenticate(accessor, authorization);
             }
+            return message;
+        }
+        if (command == StompCommand.DISCONNECT) {
+            sessionTerminator.getObject()
+                             .sessionEnded(accessor.getSessionId());
             return message;
         }
         refuseWhenExpired(accessor.getSessionAttributes());
@@ -112,13 +128,18 @@ class BearerTokenStompInterceptor implements ChannelInterceptor {
             throw new AuthenticationServiceException("Bearer tokens are not supported by the active security profile");
         }
         AuthenticatedBearerToken authenticated = bearerTokenAuthenticator.authenticate(token);
-        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
-        if (sessionAttributes != null && authenticated.expiresAt() != null) {
-            sessionAttributes.put(EXPIRES_AT_ATTRIBUTE, authenticated.expiresAt());
+        String user = authenticated.authentication()
+                                   .getName();
+        Instant expiresAt = authenticated.expiresAt();
+        if (expiresAt != null) {
+            Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+            if (sessionAttributes != null) {
+                sessionAttributes.put(EXPIRES_AT_ATTRIBUTE, expiresAt);
+            }
+            sessionTerminator.getObject()
+                             .endAt(accessor.getSessionId(), user, expiresAt);
         }
-        LOGGER.debug("Authenticated the STOMP session [{}] of user [{}] by a bearer token", accessor.getSessionId(),
-                authenticated.authentication()
-                             .getName());
+        LOGGER.debug("Authenticated the STOMP session [{}] of user [{}] by a bearer token", accessor.getSessionId(), user);
         accessor.setUser(authenticated.authentication());
     }
 

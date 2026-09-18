@@ -433,6 +433,24 @@ class ExternalFrontendIT extends IntegrationTest {
     }
 
     @Test
+    void aBearerStompSessionEndsWhenItsTokenDoes() throws Exception {
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+        String shortLived = identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.expirationTime(Date.from(Instant.now()
+                                                                                                                                .plusSeconds(
+                                                                                                                                        10))));
+        StompSession session = connect(shortLived, ORIGIN, handler);
+        subscribe(session, "/user/queue/reply/it");
+        awaitSubscription("jane", "/user/queue/reply/it");
+
+        // the client sends nothing more - the expiry of its token alone ends the session, with the
+        // answer every refused frame gets
+        assertEquals("Unauthorized", handler.errors.poll(30, TimeUnit.SECONDS));
+        Awaitility.await()
+                  .atMost(10, TimeUnit.SECONDS)
+                  .until(() -> !session.isConnected());
+    }
+
+    @Test
     void anAnonymousStompConnectIsRefused() throws Exception {
         RecordingSessionHandler handler = new RecordingSessionHandler();
 
