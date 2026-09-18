@@ -103,6 +103,15 @@ public class TenantExtractor {
      * session cookie rides along: the token proves an identity of its own, and running it in the tenant
      * another identity selected would let a page holding both act across the two.
      *
+     * <p>
+     * That decision reads the bare header, not an authenticated principal: the filter running this
+     * precedes authentication on the chains that add it (basic, snowflake, keycloak), so there is no
+     * principal yet. It holds because a tenant can be selected on the cognito and keycloak chains only,
+     * and both answer a request carrying an invalid bearer token with 401 before anything else runs - a
+     * header can never move an authenticated session into another tenant. Selecting a tenant on a
+     * bearer request is not supported yet: such a request runs in the default tenant with the user's
+     * global roles.
+     *
      * @param request the request
      * @return the selected tenant, or the default tenant
      */

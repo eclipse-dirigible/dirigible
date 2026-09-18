@@ -107,7 +107,7 @@ public class CognitoTenantFilter extends OncePerRequestFilter {
     }
 
     private boolean isMember(String tenantAttribute, Tenant currentTenant, HttpServletResponse response) throws IOException {
-        if (tenantAttribute == null || tenantAttribute.equals("")) {
+        if (tenantAttribute == null || tenantAttribute.isEmpty()) {
             forbidden("User is not assigned to any tenant", response);
             return false;
         }

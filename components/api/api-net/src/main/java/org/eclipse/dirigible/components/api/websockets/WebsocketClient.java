@@ -27,8 +27,10 @@ import org.eclipse.dirigible.repository.api.RepositoryPath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.converter.MappingJackson2MessageConverter;
+import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
 import org.springframework.messaging.simp.stomp.StompSessionHandler;
+import org.springframework.web.socket.WebSocketHttpHeaders;
 import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.messaging.WebSocketStompClient;
@@ -58,17 +60,35 @@ public class WebsocketClient {
     /** The javascript service. */
     private final JavascriptService javascriptService;
 
+    /** The headers of the STOMP CONNECT frame. */
+    private final Map<String, String> connectHeaders;
+
     /**
-     * Instantiates a new websocket client.
+     * Instantiates a new websocket client that connects with a bare CONNECT frame.
      *
      * @param uri the uri
      * @param javascriptService the javascript service
      * @param handler the handler
      */
     public WebsocketClient(String uri, JavascriptService javascriptService, String handler) {
+        this(uri, javascriptService, handler, Map.of());
+    }
+
+    /**
+     * Instantiates a new websocket client.
+     *
+     * @param uri the uri
+     * @param javascriptService the javascript service
+     * @param handler the handler
+     * @param connectHeaders the headers of the STOMP CONNECT frame - a Dirigible {@code /stomp}
+     *        endpoint needs {@code Authorization: Bearer <token>} there, since an anonymous CONNECT is
+     *        refused
+     */
+    public WebsocketClient(String uri, JavascriptService javascriptService, String handler, Map<String, String> connectHeaders) {
         this.uri = uri;
         this.javascriptService = javascriptService;
         this.handler = handler;
+        this.connectHeaders = Map.copyOf(connectHeaders);
     }
 
     /**
@@ -85,7 +105,9 @@ public class WebsocketClient {
         WebSocketStompClient stompClient = new WebSocketStompClient(new SockJsClient(transports));
         stompClient.setMessageConverter(new MappingJackson2MessageConverter());
         StompSessionHandler sessionHandler = new ClientStompSessionHandler();
-        session = stompClient.connectAsync(uri, sessionHandler)
+        StompHeaders headers = new StompHeaders();
+        connectHeaders.forEach(headers::add);
+        session = stompClient.connectAsync(uri, (WebSocketHttpHeaders) null, headers, sessionHandler)
                              .get();
         return session;
     }

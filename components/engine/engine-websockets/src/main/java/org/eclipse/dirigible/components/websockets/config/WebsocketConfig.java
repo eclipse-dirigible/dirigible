@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -42,11 +43,15 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * then authorized: a CONNECT needs a principal, a client may subscribe to its own
  * {@code /user/queue} destinations only and send to the application destinations under {@code /ws}
  * only. Nothing else passes - in particular no anonymous client, no subscription to a queue the
- * broker addresses another user by, and no direct publish to a broker destination.
+ * broker addresses another user by, and no direct publish to a broker destination. A DISCONNECT
+ * alone always passes: a client leaving is let go, and Spring sends one itself when a connection
+ * closes, the refused ones included.
  *
  * <p>
  * The handshake accepts the configured cross-origin origins; unconfigured it stays same-origin, as
- * it always was.
+ * it always was. The endpoint answers its own CORS: the platform's CORS filter leaves
+ * {@code /stomp/**} alone (see {@link CorsConfigurationSourceProvider}), so the SockJS transports
+ * answer with the credentials SockJS clients require.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -136,7 +141,11 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
      * @return the authorization manager of the inbound channel
      */
     static AuthorizationManager<Message<?>> inboundAuthorization() {
+        // a DISCONNECT is let through first: Spring sends one itself when a connection closes, a refused
+        // CONNECT's included, and refusing it only leaves a stack trace behind
         return MessageMatcherDelegatingAuthorizationManager.builder()
+                                                           .simpTypeMatchers(SimpMessageType.DISCONNECT)
+                                                           .permitAll()
                                                            .nullDestMatcher()
                                                            .authenticated()
                                                            .simpSubscribeDestMatchers("/user/queue/**")

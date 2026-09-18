@@ -84,6 +84,8 @@ public class ProgrammaticRequestMatcher implements RequestMatcher {
     public boolean matches(HttpServletRequest request) {
         String secFetchMode = request.getHeader(SEC_FETCH_MODE_HEADER);
         if (secFetchMode != null) {
+            // a navigation is one whatever else it carries - a bearer token on a navigation is still
+            // answered 401, by the entry point the resource server registers for every bearer request
             return !NAVIGATE.equalsIgnoreCase(secFetchMode);
         }
         if (XML_HTTP_REQUEST.equalsIgnoreCase(request.getHeader(REQUESTED_WITH_HEADER))) {

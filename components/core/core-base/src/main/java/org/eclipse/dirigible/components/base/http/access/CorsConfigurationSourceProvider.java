@@ -15,12 +15,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -40,6 +41,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Configured, the listed origins get exactly what the configuration grants, and the OAuth2 login
  * chains, which have no CORS otherwise, enable it through {@link CorsSecurityConfigurator}. A
  * configuration that cannot be safe is refused at boot rather than served.
+ *
+ * <p>
+ * The STOMP endpoint under {@code /stomp} is left out either way: it checks origins itself, against
+ * the same list, and its SockJS transports answer their own CORS.
  */
 public class CorsConfigurationSourceProvider {
 
@@ -53,12 +58,6 @@ public class CorsConfigurationSourceProvider {
      */
     private static final String WILDCARD_HOST = "wildcard.invalid";
     private static final String NULL_ORIGIN = "null";
-    /**
-     * A port pattern at the end of an origin pattern: Spring's list ({@code :[8080,8081]},
-     * {@code :[*]}) or a bare wildcard ({@code :*}). It says nothing about which hosts the pattern
-     * reaches and is no URI port, so it is dropped before a pattern is checked.
-     */
-    private static final Pattern PORT_PATTERN = Pattern.compile(":(\\*|\\[[^\\]]*\\])$");
     private static final Set<String> SUPPORTED_METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     private static final Set<String> NATIVE_SHELL_SCHEMES = Set.of("tauri", "capacitor", "ionic");
     private static final long MAX_AGE_WARNING_THRESHOLD_SECONDS = 86_400;
@@ -87,7 +86,7 @@ public class CorsConfigurationSourceProvider {
     }
 
     /**
-     * Builds the configuration source for every path.
+     * Builds the configuration source for every path but the STOMP endpoint's.
      *
      * @return the configuration source
      * @throws InvalidConfigException when the configured combination cannot be safe
@@ -98,7 +97,12 @@ public class CorsConfigurationSourceProvider {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
 
-        return source;
+        // the STOMP endpoint checks origins itself, against the same list, and its SockJS transports
+        // answer their own CORS - with credentials, as SockJS clients require. An answer already on the
+        // response pre-empts theirs, so the platform's stays off these paths
+        RequestMatcher stomp = PathPatternRequestMatcher.withDefaults()
+                                                        .matcher(HttpSecurityURIConfigurator.STOMP_PATTERN);
+        return request -> stomp.matches(request) ? null : source.getCorsConfiguration(request);
     }
 
     private static CorsConfiguration unconfigured() {
@@ -242,13 +246,27 @@ public class CorsConfigurationSourceProvider {
      * @return the URI, or {@code null} for a pattern that is not one
      */
     private static URI parsePattern(String origin) {
-        String withoutPortPattern = PORT_PATTERN.matcher(origin)
-                                                .replaceFirst("");
         try {
-            return new URI(withoutPortPattern.replace(WILDCARD, WILDCARD_HOST));
+            return new URI(withoutPortPattern(origin).replace(WILDCARD, WILDCARD_HOST));
         } catch (URISyntaxException ex) {
             LOGGER.debug("Origin [{}] is not a URI and cannot be checked", origin, ex);
             return null;
         }
+    }
+
+    /**
+     * Drops a port pattern from the end of an origin pattern: Spring's list ({@code :[8080]},
+     * {@code :[*]}) or a bare wildcard ({@code :*}). It says nothing about which hosts the pattern
+     * reaches and is no URI port, so it goes before a pattern is checked.
+     */
+    private static String withoutPortPattern(String origin) {
+        if (origin.endsWith(":*")) {
+            return origin.substring(0, origin.length() - 2);
+        }
+        int list = origin.lastIndexOf(":[");
+        if (list >= 0 && origin.indexOf(']', list) == origin.length() - 1) {
+            return origin.substring(0, list);
+        }
+        return origin;
     }
 }

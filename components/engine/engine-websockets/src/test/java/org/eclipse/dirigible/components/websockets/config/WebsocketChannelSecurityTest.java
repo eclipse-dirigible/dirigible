@@ -27,7 +27,7 @@ import org.springframework.security.core.authority.AuthorityUtils;
 
 /**
  * The rules every client frame is held to: a principal to connect, the own user queue to subscribe
- * to, the application destinations to send to - and nothing else.
+ * to, the application destinations to send to - and nothing else, except leaving.
  */
 class WebsocketChannelSecurityTest {
 
@@ -63,9 +63,15 @@ class WebsocketChannelSecurityTest {
 
     @Test
     void housekeepingFramesNeedAPrincipalToo() {
-        assertGranted(jane, frame(StompCommand.DISCONNECT, null));
         assertGranted(jane, frame(StompCommand.UNSUBSCRIBE, null));
-        assertDenied(anonymous, frame(StompCommand.DISCONNECT, null));
+        assertDenied(anonymous, frame(StompCommand.UNSUBSCRIBE, null));
+    }
+
+    @Test
+    void aDisconnectIsNeverRefused() {
+        assertGranted(jane, frame(StompCommand.DISCONNECT, null));
+        // Spring sends a DISCONNECT itself when a connection closes - after a refused anonymous CONNECT too
+        assertGranted(anonymous, frame(StompCommand.DISCONNECT, null));
     }
 
     private void assertGranted(Authentication authentication, Message<byte[]> frame) {

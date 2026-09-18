@@ -53,15 +53,16 @@ import java.util.stream.Stream;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.api.websockets.WebsocketsFacade;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Named;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -322,7 +323,7 @@ class ExternalFrontendIT extends IntegrationTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("refusedTokens")
-    void aTokenThatFailsValidationIsRefused(String reason, String token) {
+    void aTokenThatFailsValidationIsRefused(String token) {
         api().auth()
              .oauth2(token)
              .when()
@@ -335,21 +336,20 @@ class ExternalFrontendIT extends IntegrationTest {
              .body("message", not(equalTo("Authentication required")));
     }
 
-    static Stream<Arguments> refusedTokens() {
+    static Stream<Named<String>> refusedTokens() {
         return Stream.of(
-                Arguments.of("issued for another client",
+                Named.of("issued for another client",
                         identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.audience("another-client"))),
-                Arguments.of("issued by another realm",
+                Named.of("issued by another realm",
                         identityProvider.idToken("jane", DEVELOPER_GROUPS,
                                 claims -> claims.issuer("https://elsewhere.example.org/realms/it"))),
-                Arguments.of("expired", identityProvider.idToken("jane", DEVELOPER_GROUPS,
+                Named.of("expired", identityProvider.idToken("jane", DEVELOPER_GROUPS,
                         claims -> claims.expirationTime(Date.from(Instant.now()
                                                                          .minusSeconds(120))))),
-                Arguments.of("without the user name",
+                Named.of("without the user name",
                         identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("preferred_username", null))),
-                Arguments.of("a refresh token",
-                        identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("typ", "Refresh"))),
-                Arguments.of("not a token at all", "not-a-token"));
+                Named.of("a refresh token", identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.claim("typ", "Refresh"))),
+                Named.of("not a token at all", "not-a-token"));
     }
 
     // --- the hosted login keeps working without a session per request -------------------------
@@ -487,6 +487,47 @@ class ExternalFrontendIT extends IntegrationTest {
                 () -> connect(identityProvider.idToken("jane", DEVELOPER_GROUPS), UNLISTED_ORIGIN, new RecordingSessionHandler()));
     }
 
+    @Test
+    void aSockJsTransportRequestFromTheListedOriginIsAnsweredWithCredentials() {
+        // SockJS's XHR transports send credentials and need the answer to allow them - the STOMP endpoint
+        // answers its own CORS, whatever the platform's configuration says about credentials
+        api().header("Origin", ORIGIN)
+             .when()
+             .get("/stomp/info")
+             .then()
+             .statusCode(200)
+             .header("Access-Control-Allow-Origin", ORIGIN)
+             .header("Access-Control-Allow-Credentials", "true");
+    }
+
+    @Test
+    void aSockJsTransportRequestFromAnUnlistedOriginIsRefused() {
+        api().header("Origin", UNLISTED_ORIGIN)
+             .when()
+             .get("/stomp/info")
+             .then()
+             .statusCode(403);
+    }
+
+    @Test
+    void thePlatformsOwnClientConnectsWithABearerToken() throws Exception {
+        // the websockets API of a script reaches a Dirigible broker with the CONNECT headers it is given
+        StompSession session = WebsocketsFacade.createWebsocket(stompUrl(), PROJECT + "/ws-handler",
+                Map.of("Authorization", "Bearer " + identityProvider.idToken("jane", DEVELOPER_GROUPS)));
+        try {
+            assertTrue(session.isConnected());
+            // the client subscribes to its user queue on connect - the broker knows it as jane
+            awaitSubscription("jane", "/user/queue/reply");
+        } finally {
+            session.disconnect();
+        }
+    }
+
+    @Test
+    void thePlatformsOwnClientIsRefusedWithoutOne() {
+        assertThrows(ExecutionException.class, () -> WebsocketsFacade.createWebsocket(stompUrl(), PROJECT + "/ws-handler"));
+    }
+
     // --- POST /login/token ---------------------------------------------------------------------
 
     @Test
@@ -616,6 +657,10 @@ class ExternalFrontendIT extends IntegrationTest {
         return given().port(port);
     }
 
+    private String stompUrl() {
+        return "ws://localhost:" + port + "/stomp";
+    }
+
     private StompSession connect(String token, String origin, RecordingSessionHandler handler) throws Exception {
         WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
         client.setMessageConverter(new org.springframework.messaging.converter.StringMessageConverter());
@@ -626,7 +671,7 @@ class ExternalFrontendIT extends IntegrationTest {
         if (token != null) {
             connectHeaders.add("Authorization", "Bearer " + token);
         }
-        return client.connectAsync("ws://localhost:" + port + "/stomp", handshakeHeaders, connectHeaders, handler)
+        return client.connectAsync(stompUrl(), handshakeHeaders, connectHeaders, handler)
                      .get(15, TimeUnit.SECONDS);
     }
 

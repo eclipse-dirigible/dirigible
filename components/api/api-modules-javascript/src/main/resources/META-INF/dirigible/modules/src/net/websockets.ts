@@ -21,7 +21,10 @@
  * // Create a new WebSocket client connection
  * const client = Websockets.createWebsocket("ws://example.com/socket", "myHandler");
  * client.send("Hello, WebSocket!");
- * 
+ *
+ * // A Dirigible broker needs the CONNECT frame authenticated
+ * const dirigible = Websockets.createWebsocket("wss://dirigible.example.com/stomp", "myHandler", { Authorization: "Bearer " + idToken });
+ *
  * // Access event details in an 'onmessage' handler
  * if (Websockets.isOnMessage()) {
  *     const message = Websockets.getMessage();
@@ -46,10 +49,14 @@ export class Websockets {
 	 *
 	 * @param uri The target WebSocket URI (e.g., 'ws://example.com/socket').
 	 * @param handler The identifier or path of the script handling the WebSocket events.
+	 * @param connectHeaders Headers of the STOMP CONNECT frame. A Dirigible '/stomp' endpoint needs
+	 *        'Authorization: Bearer <token>' there - an anonymous CONNECT is refused.
 	 * @returns A wrapper object for the new WebSocket session.
 	 */
-	public static createWebsocket(uri: string, handler: string): WebsocketClient {
-		const session = WebsocketsFacade.createWebsocket(uri, handler);
+	public static createWebsocket(uri: string, handler: string, connectHeaders?: { [name: string]: string }): WebsocketClient {
+		const session = connectHeaders
+			? WebsocketsFacade.createWebsocket(uri, handler, JSON.stringify(connectHeaders))
+			: WebsocketsFacade.createWebsocket(uri, handler);
 		return new WebsocketClient(session, uri, handler);
 	}
 

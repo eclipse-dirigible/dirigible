@@ -27,6 +27,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 /**
  * Unconfigured, the historical wildcard shape stays - without credentials. Configured, the origins
@@ -91,6 +92,24 @@ class CorsConfigurationSourceProviderTest {
         assertEquals(List.of("Content-Type", "X-Custom"), configuration.getAllowedHeaders());
         assertEquals(List.of("X-Total-Count", "Content-Disposition"), configuration.getExposedHeaders());
         assertEquals(600L, configuration.getMaxAge());
+    }
+
+    @Test
+    void theStompEndpointIsLeftToItsOwnOriginCheck() {
+        assertStompPathsHaveNoConfiguration();
+
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com");
+
+        assertStompPathsHaveNoConfiguration();
+        assertNotNull(configuration(), "every other path keeps the platform's configuration");
+    }
+
+    private static void assertStompPathsHaveNoConfiguration() {
+        CorsConfigurationSource source = CorsConfigurationSourceProvider.get();
+        for (String path : List.of("/stomp", "/stomp/info", "/stomp/123/abc/xhr_streaming")) {
+            assertNull(source.getCorsConfiguration(new MockHttpServletRequest("GET", path)),
+                    "the STOMP endpoint answers its own CORS: " + path);
+        }
     }
 
     @ParameterizedTest
