@@ -87,6 +87,17 @@ class CsvimProcessorIdentitySqlTest {
     }
 
     @Test
+    void aLoggedIdentifierCarriesNoLineTerminatorAndNoTab() {
+        // CWE-117: these names are logged and are user-influenced, so nothing that can start a new log
+        // line or fake a column may survive. \R covers the Unicode terminators an ASCII class misses.
+        assertThat(CsvimProcessor.sanitize("OR\r\nDERS")).isEqualTo("OR_DERS");
+        assertThat(CsvimProcessor.sanitize("OR\u0085DE\u2028RS\u2029")).isEqualTo("OR_DE_RS_");
+        assertThat(CsvimProcessor.sanitize("OR\tDERS")).isEqualTo("OR_DERS");
+        assertThat(CsvimProcessor.sanitize(TENANT_SCHEMA)).isEqualTo(TENANT_SCHEMA);
+        assertThat(CsvimProcessor.sanitize(null)).isNull();
+    }
+
+    @Test
     void theMssqlIdentityInsertToggleAddressesTheTenantSchemaToo() {
         assertThat(CsvimProcessor.identityInsertSql(TENANT_SCHEMA, TABLE, true)).isEqualTo(
                 "SET IDENTITY_INSERT [" + TENANT_SCHEMA + "].[ORDERS] ON");

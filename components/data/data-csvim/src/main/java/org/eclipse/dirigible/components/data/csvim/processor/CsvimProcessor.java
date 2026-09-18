@@ -492,11 +492,17 @@ public class CsvimProcessor {
     }
 
     /**
-     * Strip CR / LF / TAB so a (still user-influenced) value can be passed to {@code logger.*} without
-     * splitting / spoofing the log structure.
+     * Strip line breaks and tabs so a (still user-influenced) value can be passed to {@code logger.*}
+     * without splitting / spoofing the log structure. The line-break pass is {@code \R} rather than a
+     * {@code [\r\n]} character class on purpose: it covers every Unicode line terminator (NEL, LS, PS)
+     * instead of only the ASCII two, and it is the shape static analysis recognises as a CWE-117
+     * sanitizer - a hand-rolled class reads as no sanitizer at all and leaves a log-injection finding
+     * on every call site.
      */
-    private static String sanitize(String value) {
-        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
+    static String sanitize(String value) {
+        return value == null ? null
+                : value.replaceAll("\\R", "_")
+                       .replace('\t', '_');
     }
 
     private boolean isDefaultDataSource(String dataSourceName) {
