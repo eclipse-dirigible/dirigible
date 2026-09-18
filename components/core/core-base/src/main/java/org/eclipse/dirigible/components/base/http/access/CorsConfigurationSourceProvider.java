@@ -46,6 +46,11 @@ public class CorsConfigurationSourceProvider {
     private static final Logger LOGGER = LoggerFactory.getLogger(CorsConfigurationSourceProvider.class);
 
     private static final String WILDCARD = "*";
+    /**
+     * Stands in for the wildcard while a pattern is parsed; {@code .invalid} is reserved, so no real
+     * host reads like it.
+     */
+    private static final String WILDCARD_HOST = "wildcard.invalid";
     private static final String NULL_ORIGIN = "null";
     private static final Set<String> SUPPORTED_METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     private static final Set<String> NATIVE_SHELL_SCHEMES = Set.of("tauri", "capacitor", "ionic");
@@ -133,9 +138,12 @@ public class CorsConfigurationSourceProvider {
             throw new InvalidConfigException("The [null] origin cannot be allowed: it is what sandboxed frames, file pages and redirects"
                     + " present, so it identifies no site at all", DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
         }
-        if (allowCredentials && origins.contains(WILDCARD)) {
+        List<String> everyOrigin = origins.stream()
+                                          .filter(CorsConfigurationSourceProvider::matchesEveryOrigin)
+                                          .toList();
+        if (allowCredentials && !everyOrigin.isEmpty()) {
             throw new InvalidConfigException(
-                    "Credentials cannot be allowed for every origin [" + WILDCARD + "]: any site a logged in"
+                    "Credentials cannot be allowed for every origin " + everyOrigin + ": any site a logged in"
                             + " user visits could then call the platform with that user's session",
                     DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey());
         }
@@ -174,6 +182,19 @@ public class CorsConfigurationSourceProvider {
     }
 
     /**
+     * Whether an origin pattern matches every origin: the bare wildcard, or a pattern whose host is
+     * nothing but the wildcard ({@code https://*}, {@code *://*:8080}) - as good as the bare one for
+     * whoever wants to reach the platform from a page of their own.
+     */
+    static boolean matchesEveryOrigin(String origin) {
+        if (WILDCARD.equals(origin)) {
+            return true;
+        }
+        URI uri = parsePattern(origin);
+        return uri != null && WILDCARD_HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    /**
      * Whether an origin (pattern) reaches the platform over a channel nobody on the path can read:
      * https, a native application shell scheme, or plain http on the local machine only.
      */
@@ -181,12 +202,8 @@ public class CorsConfigurationSourceProvider {
         if (WILDCARD.equals(origin)) {
             return false;
         }
-        URI uri;
-        try {
-            // a pattern host such as *.example.com is not a valid URI host - substitute before parsing
-            uri = new URI(origin.replace(WILDCARD, "wildcard"));
-        } catch (URISyntaxException ex) {
-            LOGGER.debug("Origin [{}] is not a URI and cannot be checked for transport security", origin, ex);
+        URI uri = parsePattern(origin);
+        if (uri == null) {
             return false;
         }
         String scheme = uri.getScheme() == null ? ""
@@ -200,5 +217,20 @@ public class CorsConfigurationSourceProvider {
                      .toLowerCase(Locale.ROOT);
         return "http".equals(scheme)
                 && ("localhost".equals(host) || host.endsWith(".localhost") || "127.0.0.1".equals(host) || "[::1]".equals(host));
+    }
+
+    /**
+     * Parses an origin pattern as a URI, the wildcard replaced by a host label no real origin carries
+     * (a pattern host such as {@code *.example.com} is not a valid URI host).
+     *
+     * @return the URI, or {@code null} for a pattern that is not one
+     */
+    private static URI parsePattern(String origin) {
+        try {
+            return new URI(origin.replace(WILDCARD, WILDCARD_HOST));
+        } catch (URISyntaxException ex) {
+            LOGGER.debug("Origin [{}] is not a URI and cannot be checked", origin, ex);
+            return null;
+        }
     }
 }

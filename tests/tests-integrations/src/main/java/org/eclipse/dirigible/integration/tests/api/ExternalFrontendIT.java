@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -64,6 +65,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -110,6 +112,7 @@ import io.restassured.specification.RequestSpecification;
  */
 @ActiveProfiles("keycloak")
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Import(ExternalFrontendITConfig.class)
 class ExternalFrontendIT extends IntegrationTest {
 
     private static final String ORIGIN = "https://app.example.com";
@@ -119,7 +122,7 @@ class ExternalFrontendIT extends IntegrationTest {
     private static final String PROJECT = "external-frontend-it";
     private static final String WHOAMI = "/services/js/" + PROJECT + "/whoami.mjs";
     private static final String WORKSPACES = "/services/ide/workspaces";
-    private static final List<String> DEVELOPER_GROUPS = List.of("DEVELOPER", "it-reader");
+    static final List<String> DEVELOPER_GROUPS = List.of("DEVELOPER", "it-reader");
     private static final List<String> READER_GROUPS = List.of("it-reader");
     private static final String BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
     private static final String AXIOS_ACCEPT = "application/json, text/plain, */*";
@@ -140,7 +143,8 @@ class ExternalFrontendIT extends IntegrationTest {
             }));
             """;
 
-    private static MockIdentityProvider identityProvider;
+    /** Read by {@link ExternalFrontendITConfig}'s stub provider, which signs its tokens here. */
+    static MockIdentityProvider identityProvider;
     private static ThreadPoolTaskScheduler stompScheduler;
 
     @LocalServerPort
@@ -532,15 +536,60 @@ class ExternalFrontendIT extends IntegrationTest {
              .header("Set-Cookie", nullValue());
     }
 
+    // --- POST /login/native creates the session it needs --------------------------------------
+
     @Test
-    void anExchangeForAnUnknownRegistrationIsABadRequest() {
-        api().auth()
-             .oauth2(identityProvider.idToken("jane", DEVELOPER_GROUPS))
-             .queryParam("registrationId", "nope")
+    void theNativeLoginMintsASessionOnDemand() {
+        // the chain creates a session only when one is needed, so the login request arrives without
+        // one - the login itself must create the session its cookie names
+        Response login = api().contentType(ContentType.JSON)
+                              .body("{\"username\":\"jane\",\"password\":\"correct horse\"}")
+                              .when()
+                              .post("/login/native");
+        login.then()
+             .statusCode(200)
+             .body("outcome", equalTo("AUTHENTICATED"));
+        String session = login.getCookie("JSESSIONID");
+        assertNotNull(session, "the login answers with the session cookie");
+
+        // the revalidation filter finds the authorized client the login registered and lets the
+        // session through; the roles are the ones of the user's groups
+        api().cookie("JSESSIONID", session)
+             .header("Sec-Fetch-Mode", "cors")
              .when()
-             .post("/login/token")
+             .get(WORKSPACES)
              .then()
-             .statusCode(400);
+             .statusCode(200);
+        api().cookie("JSESSIONID", session)
+             .when()
+             .get(WHOAMI)
+             .then()
+             .statusCode(200)
+             .body("name", equalTo("jane"))
+             .body("reader", equalTo(true));
+    }
+
+    @Test
+    void theNativeLoginReplacesThePreLoginSessionId() {
+        String preLoginSession = api().redirects()
+                                      .follow(false)
+                                      .when()
+                                      .get("/oauth2/authorization/keycloak")
+                                      .getCookie("JSESSIONID");
+        assertNotNull(preLoginSession, "the authorization request is kept in a session");
+
+        Response login = api().cookie("JSESSIONID", preLoginSession)
+                              .contentType(ContentType.JSON)
+                              .body("{\"username\":\"jane\",\"password\":\"correct horse\"}")
+                              .when()
+                              .post("/login/native");
+        login.then()
+             .statusCode(200)
+             .body("outcome", equalTo("AUTHENTICATED"));
+
+        String session = login.getCookie("JSESSIONID");
+        assertNotNull(session, "a pre-login session must not keep the id it was known under");
+        assertNotEquals(preLoginSession, session);
     }
 
     // --- helpers -------------------------------------------------------------------------------

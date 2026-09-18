@@ -29,11 +29,15 @@ import org.springframework.util.StringUtils;
  *
  * <p>
  * The two token kinds are held to different rules, on purpose. An ID token is what an external
- * frontend sends to act as a user, so it is verified like a login: audience, principal claim, the
- * groups it carries. An access token is what a machine client has always sent, so its rules are the
- * ones that applied before this class existed - issuer and signature - plus an audience check only
- * where the deployment configures audiences. No token accepted before is refused without a
- * configuration change; roles derived from groups are never granted without an audience check.
+ * frontend sends to act as a user, so it is verified like a login - issued for this deployment
+ * (audience), naming its user in the principal claim, carrying a verified address where the address
+ * is the name - and it grants the roles of its groups. Before this class existed an ID token passed
+ * on signature and expiry alone and yielded {@code sub} with no group roles; that handling is gone:
+ * an ID token minted for another client, or lacking the principal claim, is now refused, and one
+ * that passes names its user by the principal claim. An access token keeps the rules that applied
+ * before - signature and expiry, now also the issuer - plus an audience check only where the
+ * deployment configures audiences. Roles derived from groups are never granted without an audience
+ * check.
  *
  * @param provider the identity provider the tokens come from
  * @param jwkSetUri the JWKS endpoint the signatures are verified against

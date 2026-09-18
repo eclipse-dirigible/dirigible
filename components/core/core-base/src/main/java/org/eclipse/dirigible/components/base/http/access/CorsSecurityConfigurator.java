@@ -13,6 +13,7 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.CorsConfigurer;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,9 +22,10 @@ import org.springframework.stereotype.Component;
  * <p>
  * Every chain applies the custom configurators before its URL matrix, so one bean reaches the
  * basic, snowflake and OAuth2 login chains alike without a per-profile edit. The chains that always
- * had CORS (basic, snowflake) get the same source their own bean returns; the OAuth2 chains gain
- * it. An unconfigured deployment changes nothing here: a CORS filter without a matching
- * configuration answers every preflight with 403, which is not what a chain without CORS did.
+ * had CORS (basic, snowflake) already resolve the same source through their own bean and are left
+ * alone - configuring it twice would only validate and warn twice; the OAuth2 chains gain it. An
+ * unconfigured deployment changes nothing here: a CORS filter without a matching configuration
+ * answers every preflight with 403, which is not what a chain without CORS did.
  *
  * <p>
  * Inside the chain the CORS filter runs ahead of authorization, so a preflight from a configured
@@ -46,6 +48,10 @@ class CorsSecurityConfigurator implements CustomSecurityConfigurator {
     public void configure(HttpSecurity http) throws Exception {
         if (!CorsConfigurationSourceProvider.isConfigured()) {
             LOGGER.debug("No cross-origin origins are configured in [{}].", DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+            return;
+        }
+        if (http.getConfigurer(CorsConfigurer.class) != null) {
+            LOGGER.debug("The security chain configures CORS itself - the configured origins reach it through its own source.");
             return;
         }
         LOGGER.info("Cross-origin requests are accepted from {}.", CorsConfigurationSourceProvider.allowedOriginPatterns());

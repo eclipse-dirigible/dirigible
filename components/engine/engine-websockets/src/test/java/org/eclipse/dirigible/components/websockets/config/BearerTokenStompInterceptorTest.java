@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.websockets.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -85,16 +84,13 @@ class BearerTokenStompInterceptorTest {
     }
 
     @Test
-    void anImmutableConnectGetsTheUserOnACopy() {
-        when(authenticatorProvider.getIfAvailable()).thenReturn(authenticator);
-        when(authenticator.authenticate(TOKEN)).thenReturn(new AuthenticatedBearerToken(jane, null));
+    void anImmutableConnectIsRefusedRatherThanHalfAuthenticated() {
+        // not the shape Spring's STOMP handler produces: a user set on a copy would reach this frame
+        // only, and every later frame of the session would run anonymous
         Message<byte[]> connect = frame(StompCommand.CONNECT, "bearer " + TOKEN, false);
 
-        Message<?> result = interceptor.preSend(connect, channel);
-
-        assertNotSame(connect, result);
-        assertSame(jane, SimpMessageHeaderAccessor.getUser(result.getHeaders()));
-        assertNull(sessionAttributes.get(BearerTokenStompInterceptor.EXPIRES_AT_ATTRIBUTE), "a token without expiry records none");
+        assertThrows(IllegalStateException.class, () -> interceptor.preSend(connect, channel));
+        verifyNoInteractions(authenticatorProvider);
     }
 
     @Test
@@ -105,6 +101,7 @@ class BearerTokenStompInterceptorTest {
 
         assertSame(jane, SimpMessageHeaderAccessor.getUser(interceptor.preSend(stomp, channel)
                                                                       .getHeaders()));
+        assertNull(sessionAttributes.get(BearerTokenStompInterceptor.EXPIRES_AT_ATTRIBUTE), "a token without expiry records none");
     }
 
     @Test

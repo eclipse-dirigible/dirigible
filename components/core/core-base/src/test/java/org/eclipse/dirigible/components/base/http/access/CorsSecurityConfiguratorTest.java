@@ -13,12 +13,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.CorsConfigurer;
 
 /**
  * CORS reaches a chain only once origins are configured: a CORS filter without a matching
@@ -43,9 +45,22 @@ class CorsSecurityConfiguratorTest {
     @Test
     void configuredOriginsEnableCors() throws Exception {
         DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com");
+        when(http.getConfigurer(CorsConfigurer.class)).thenReturn(null);
 
         new CorsSecurityConfigurator().configure(http);
 
         verify(http).cors(any());
+    }
+
+    @Test
+    void aChainThatConfiguresCorsItselfIsLeftAlone() throws Exception {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com");
+        when(http.getConfigurer(CorsConfigurer.class)).thenReturn(mock(CorsConfigurer.class));
+
+        new CorsSecurityConfigurator().configure(http);
+
+        // basic and snowflake resolve the same source through their own bean - a second application
+        // would only validate and warn twice
+        verify(http, never()).cors(any());
     }
 }

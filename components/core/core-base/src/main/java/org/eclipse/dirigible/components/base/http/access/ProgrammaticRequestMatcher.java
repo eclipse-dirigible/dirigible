@@ -34,6 +34,12 @@ import jakarta.servlet.http.HttpServletRequest;
  * an {@code Accept} header that prefers JSON - what axios and most REST clients send. A plain
  * {@code Accept: *&#47;*} does not count, so a client sending nothing specific keeps the redirect a
  * browser would get.
+ *
+ * <p>
+ * The first two signals are set by browsers, the last two by any client. A chain whose alternative
+ * to the 401 is a redirect wants all four; a chain whose alternative is already a 401 with a
+ * challenge (basic) wants {@link #ofBrowserScripts() the browser signals only}: there the client
+ * signals could only cost a challenge-based client its challenge and gain nothing.
  */
 public class ProgrammaticRequestMatcher implements RequestMatcher {
 
@@ -43,6 +49,30 @@ public class ProgrammaticRequestMatcher implements RequestMatcher {
     private static final String XML_HTTP_REQUEST = "XMLHttpRequest";
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String JSON_SUBTYPE_SUFFIX = "+json";
+
+    private final boolean clientSignals;
+
+    /**
+     * The matcher of every programmatic request: the browser signals and the client signals.
+     */
+    public ProgrammaticRequestMatcher() {
+        this(true);
+    }
+
+    private ProgrammaticRequestMatcher(boolean clientSignals) {
+        this.clientSignals = clientSignals;
+    }
+
+    /**
+     * The matcher of browser scripts only - the fetch metadata and the XHR marker. A bearer token or a
+     * JSON-preferring {@code Accept} header does not count, so a client that authenticates after a
+     * challenge keeps getting one.
+     *
+     * @return the matcher
+     */
+    public static ProgrammaticRequestMatcher ofBrowserScripts() {
+        return new ProgrammaticRequestMatcher(false);
+    }
 
     /**
      * Matches.
@@ -58,6 +88,9 @@ public class ProgrammaticRequestMatcher implements RequestMatcher {
         }
         if (XML_HTTP_REQUEST.equalsIgnoreCase(request.getHeader(REQUESTED_WITH_HEADER))) {
             return true;
+        }
+        if (!clientSignals) {
+            return false;
         }
         if (isBearerAuthorization(request.getHeader(HttpHeaders.AUTHORIZATION))) {
             return true;

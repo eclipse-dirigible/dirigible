@@ -23,7 +23,6 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
-import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -82,13 +81,24 @@ class BearerTokenStompInterceptor implements ChannelInterceptor {
         StompCommand command = accessor.getCommand();
         if (command == StompCommand.CONNECT || command == StompCommand.STOMP) {
             String authorization = accessor.getFirstNativeHeader(HttpHeaders.AUTHORIZATION);
-            return authorization == null ? message : authenticate(message, accessor, authorization);
+            if (authorization != null) {
+                authenticate(accessor, authorization);
+            }
+            return message;
         }
         refuseWhenExpired(accessor.getSessionAttributes());
         return message;
     }
 
-    private Message<?> authenticate(Message<?> message, StompHeaderAccessor accessor, String authorization) {
+    private void authenticate(StompHeaderAccessor accessor, String authorization) {
+        if (!accessor.isMutable()) {
+            // Spring's STOMP handler keeps the CONNECT accessor mutable until the immutable-headers
+            // interceptor it appends last has run. A user set on a copy would reach this frame only
+            // and every later frame of the session would run anonymous - so refuse to wire it up
+            // half way rather than authenticate a single frame
+            throw new IllegalStateException("The CONNECT frame of the STOMP session [" + accessor.getSessionId()
+                    + "] carries immutable headers, so the bearer identity cannot be recorded for the session");
+        }
         if (!authorization.regionMatches(true, 0, BEARER_PREFIX, 0, BEARER_PREFIX.length())) {
             throw new BadCredentialsException("Unsupported authorization scheme");
         }
@@ -109,17 +119,7 @@ class BearerTokenStompInterceptor implements ChannelInterceptor {
         LOGGER.debug("Authenticated the STOMP session [{}] of user [{}] by a bearer token", accessor.getSessionId(),
                 authenticated.authentication()
                              .getName());
-        if (accessor.isMutable()) {
-            accessor.setUser(authenticated.authentication());
-            return message;
-        }
-        // not the shape Spring's STOMP handler produces - the user set on a copy reaches this frame
-        // but is not recorded for the session, so later frames of it would be anonymous
-        LOGGER.warn("The CONNECT frame of the STOMP session [{}] carries immutable headers; the bearer identity applies to this frame only",
-                accessor.getSessionId());
-        StompHeaderAccessor copy = StompHeaderAccessor.wrap(message);
-        copy.setUser(authenticated.authentication());
-        return MessageBuilder.createMessage(message.getPayload(), copy.getMessageHeaders());
+        accessor.setUser(authenticated.authentication());
     }
 
     private static void refuseWhenExpired(Map<String, Object> sessionAttributes) {

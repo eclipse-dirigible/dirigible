@@ -11,7 +11,9 @@ package org.eclipse.dirigible.components.security.oauth2.login;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,7 +61,7 @@ import jakarta.servlet.http.HttpSession;
  *
  * <p>
  * The second entry,
- * {@link #establishSession(ClientRegistration, JwtAuthenticationToken, String, HttpServletRequest, HttpServletResponse)},
+ * {@link #establishSession(String, JwtAuthenticationToken, String, HttpServletRequest, HttpServletResponse)},
  * mints the session of {@code POST /login/token} from a bearer ID token the resource server already
  * validated.
  */
@@ -68,6 +70,8 @@ class NativeLoginSessionInitializer {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeLoginSessionInitializer.class);
+
+    private static final String ROLE_PREFIX = "ROLE_";
 
     private final ObjectProvider<OAuth2AuthorizedClientService> authorizedClientService;
     private final ObjectProvider<GrantedAuthoritiesMapper> userAuthoritiesMapper;
@@ -134,20 +138,20 @@ class NativeLoginSessionInitializer {
      * {@link OAuth2SessionRevalidationFilter#SESSION_EXPIRES_AT_ATTRIBUTE} tells the revalidation
      * filter.
      *
-     * @param registration the client registration the session is filed under
+     * @param registrationId the client registration the session is filed under
      * @param idTokenAuthentication the validated ID token and the authorities derived from it
      * @param principalClaim the claim the user name was read from
      * @param request the request
      * @param response the response
      * @return the instant the session ends
      */
-    Instant establishSession(ClientRegistration registration, JwtAuthenticationToken idTokenAuthentication, String principalClaim,
+    Instant establishSession(String registrationId, JwtAuthenticationToken idTokenAuthentication, String principalClaim,
             HttpServletRequest request, HttpServletResponse response) {
         Jwt jwt = idTokenAuthentication.getToken();
         OidcIdToken idToken = new OidcIdToken(jwt.getTokenValue(), jwt.getIssuedAt(), jwt.getExpiresAt(), jwt.getClaims());
-        Collection<GrantedAuthority> authorities = idTokenAuthentication.getAuthorities();
+        Collection<GrantedAuthority> authorities = roleAuthorities(idTokenAuthentication.getAuthorities());
         OidcUser oidcUser = new DefaultOidcUser(authorities, idToken, principalClaim);
-        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(oidcUser, authorities, registration.getRegistrationId());
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(oidcUser, authorities, registrationId);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
         HttpSession carriedSession = request.getSession(false);
@@ -158,8 +162,20 @@ class NativeLoginSessionInitializer {
         saveContext(authentication, request, response);
         session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, jwt.getExpiresAt());
         LOGGER.debug("Established a session from a bearer ID token for user [{}] on registration [{}], ending at [{}]",
-                authentication.getName(), registration.getRegistrationId(), jwt.getExpiresAt());
+                authentication.getName(), registrationId, jwt.getExpiresAt());
         return jwt.getExpiresAt();
+    }
+
+    /**
+     * The roles among a bearer's authorities. A bearer authentication also carries the marker of how
+     * the request was authenticated ({@code FACTOR_BEARER}) - a fact about that request, not a role of
+     * the user, and carried into the session it would read as one.
+     */
+    private static Collection<GrantedAuthority> roleAuthorities(Collection<GrantedAuthority> authorities) {
+        return authorities.stream()
+                          .filter(authority -> authority.getAuthority() != null && authority.getAuthority()
+                                                                                            .startsWith(ROLE_PREFIX))
+                          .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private void saveContext(OAuth2AuthenticationToken authentication, HttpServletRequest request, HttpServletResponse response) {

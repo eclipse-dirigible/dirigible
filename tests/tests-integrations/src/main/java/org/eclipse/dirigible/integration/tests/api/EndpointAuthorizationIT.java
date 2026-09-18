@@ -11,7 +11,6 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
@@ -132,21 +131,6 @@ class EndpointAuthorizationIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(403),
                 PLAIN_USER, PASSWORD);
-    }
-
-    /**
-     * A script that prefers JSON and is not authenticated gets a plain 401 - not the
-     * {@code WWW-Authenticate: Basic} challenge, which would make the browser pop its own login dialog
-     * before the script sees the answer.
-     */
-    @Test
-    void a_json_client_without_credentials_gets_a_plain_401() {
-        given().accept("application/json, text/plain, */*")
-               .when()
-               .get("/services/core/configurations")
-               .then()
-               .statusCode(401)
-               .header("WWW-Authenticate", nullValue());
     }
 
     /**

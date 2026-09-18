@@ -55,12 +55,12 @@ public class BasicSecurityConfig {
             // default Basic entry point's `WWW-Authenticate: Basic` challenge makes the BROWSER pop
             // its native login dialog before any script sees the response (the generated apps poll
             // the inbox every 30s, so an idle tab surfaced the dialog "out of nowhere"). Browser
-            // navigations don't match and keep the normal Basic/form login flow. The matcher is the
-            // one the OAuth2 chains use, so a client sending a bearer token or preferring JSON gets
-            // the same answer on every profile; the plain status stays because this profile has no
-            // bearer scheme to challenge with.
+            // navigations don't match and keep the normal Basic/form login flow. Only the BROWSER
+            // signals count here: a non-browser client (a bearer token, a JSON Accept header) gets
+            // a 401 either way, and the challenge is what a client that authenticates after a
+            // challenge (java.net.http with an Authenticator, curl --anyauth) needs to log in at all.
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                    new ProgrammaticRequestMatcher()));
+                    ProgrammaticRequestMatcher.ofBrowserScripts()));
 
         httpSecurityURIConfigurator.configure(http);
 

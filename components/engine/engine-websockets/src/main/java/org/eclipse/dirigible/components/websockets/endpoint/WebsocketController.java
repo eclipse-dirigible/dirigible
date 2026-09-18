@@ -91,7 +91,7 @@ public class WebsocketController {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
             }
-            return new OutputMessage(message.getFrom(), e.getMessage(), time);
+            return new OutputMessage(message.getFrom(), PROCESSING_FAILED, time);
         }
     }
 

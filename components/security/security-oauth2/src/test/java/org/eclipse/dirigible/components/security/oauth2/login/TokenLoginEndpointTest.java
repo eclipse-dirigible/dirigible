@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.security.oauth2.login;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -41,16 +39,13 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.client.registration.ClientRegistration;
-import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
-import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Unit tests for {@link TokenLoginEndpoint} - a session is minted only from a validated bearer ID
- * token, on a profile that supports bearer tokens, under a known client registration.
+ * token, on a profile that supports bearer tokens, under the profile's default client registration.
  */
 @ExtendWith(MockitoExtension.class)
 class TokenLoginEndpointTest {
@@ -61,34 +56,18 @@ class TokenLoginEndpointTest {
     private ObjectProvider<ResourceServerJwtSupport> jwtSupportProvider;
 
     @Mock
-    private ObjectProvider<ClientRegistrationRepository> clientRegistrationRepositoryProvider;
-
-    @Mock
     private ResourceServerJwtSupport jwtSupport;
-
-    @Mock
-    private ClientRegistrationRepository clientRegistrationRepository;
 
     @Mock
     private NativeLoginSessionInitializer sessionInitializer;
 
     private TokenLoginEndpoint endpoint;
-    private ClientRegistration registration;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
 
     @BeforeEach
     void setUp() {
-        endpoint = new TokenLoginEndpoint(jwtSupportProvider, clientRegistrationRepositoryProvider, sessionInitializer);
-        registration = ClientRegistration.withRegistrationId(REGISTRATION_ID)
-                                         .clientId("client-id")
-                                         .clientSecret("client-secret")
-                                         .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
-                                         .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}")
-                                         .authorizationUri("https://idp.example.org/oauth2/authorize")
-                                         .tokenUri("https://idp.example.org/oauth2/token")
-                                         .userNameAttributeName("email")
-                                         .build();
+        endpoint = new TokenLoginEndpoint(jwtSupportProvider, sessionInitializer);
         request = new MockHttpServletRequest("POST", "/login/token");
         response = new MockHttpServletResponse();
     }
@@ -99,15 +78,13 @@ class TokenLoginEndpointTest {
     }
 
     @Test
-    void aValidatedIdTokenMintsTheSession() {
+    void aValidatedIdTokenMintsTheSessionUnderTheDefaultRegistration() {
         stubSupport();
-        when(clientRegistrationRepositoryProvider.getIfAvailable()).thenReturn(clientRegistrationRepository);
-        when(clientRegistrationRepository.findByRegistrationId(REGISTRATION_ID)).thenReturn(registration);
         JwtAuthenticationToken idTokenAuthentication = authenticate(jwt("id"));
         Instant expiresAt = Instant.parse("2026-09-17T12:00:00Z");
-        when(sessionInitializer.establishSession(registration, idTokenAuthentication, "email", request, response)).thenReturn(expiresAt);
+        when(sessionInitializer.establishSession(REGISTRATION_ID, idTokenAuthentication, "email", request, response)).thenReturn(expiresAt);
 
-        ResponseEntity<Map<String, Object>> result = endpoint.login(null, request, response);
+        ResponseEntity<Map<String, Object>> result = endpoint.login(request, response);
 
         assertEquals(HttpStatus.OK, result.getStatusCode());
         assertEquals("AUTHENTICATED", result.getBody()
@@ -117,26 +94,10 @@ class TokenLoginEndpointTest {
     }
 
     @Test
-    void anExplicitRegistrationIsHonoured() {
-        stubSupport();
-        ClientRegistration other = ClientRegistration.withClientRegistration(registration)
-                                                     .registrationId("acme")
-                                                     .build();
-        when(clientRegistrationRepositoryProvider.getIfAvailable()).thenReturn(clientRegistrationRepository);
-        when(clientRegistrationRepository.findByRegistrationId("acme")).thenReturn(other);
-        JwtAuthenticationToken idTokenAuthentication = authenticate(jwt("id"));
-        when(sessionInitializer.establishSession(other, idTokenAuthentication, "email", request, response)).thenReturn(Instant.now());
-
-        endpoint.login("acme", request, response);
-
-        verify(sessionInitializer).establishSession(other, idTokenAuthentication, "email", request, response);
-    }
-
-    @Test
     void withoutABearerTokenNothingIsMinted() {
         when(jwtSupportProvider.getIfAvailable()).thenReturn(jwtSupport);
 
-        ResponseEntity<Map<String, Object>> result = endpoint.login(null, request, response);
+        ResponseEntity<Map<String, Object>> result = endpoint.login(request, response);
 
         assertEquals(HttpStatus.UNAUTHORIZED, result.getStatusCode());
         assertEquals("Bearer", result.getHeaders()
@@ -152,7 +113,7 @@ class TokenLoginEndpointTest {
         setAuthentication(
                 new UsernamePasswordAuthenticationToken("admin", "n/a", List.of(new SimpleGrantedAuthority("ROLE_ADMINISTRATOR"))));
 
-        ResponseEntity<Map<String, Object>> result = endpoint.login(null, request, response);
+        ResponseEntity<Map<String, Object>> result = endpoint.login(request, response);
 
         assertEquals(HttpStatus.UNAUTHORIZED, result.getStatusCode());
         verifyNoInteractions(sessionInitializer);
@@ -163,7 +124,7 @@ class TokenLoginEndpointTest {
         stubSupport();
         authenticate(jwt("access"));
 
-        ResponseEntity<Map<String, Object>> result = endpoint.login(null, request, response);
+        ResponseEntity<Map<String, Object>> result = endpoint.login(request, response);
 
         assertEquals(HttpStatus.FORBIDDEN, result.getStatusCode());
         assertEquals("ID_TOKEN_REQUIRED", result.getBody()
@@ -172,24 +133,11 @@ class TokenLoginEndpointTest {
     }
 
     @Test
-    void anUnknownRegistrationIsABadRequest() {
-        stubSupport();
-        when(clientRegistrationRepositoryProvider.getIfAvailable()).thenReturn(clientRegistrationRepository);
-        when(clientRegistrationRepository.findByRegistrationId("nope")).thenReturn(null);
-        authenticate(jwt("id"));
-
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> endpoint.login("nope", request, response));
-
-        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
-        verifyNoInteractions(sessionInitializer);
-    }
-
-    @Test
     void withoutBearerSupportTheEndpointAnswersNotFound() {
         when(jwtSupportProvider.getIfAvailable()).thenReturn(null);
         authenticate(jwt("id"));
 
-        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> endpoint.login(null, request, response));
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class, () -> endpoint.login(request, response));
 
         assertEquals(HttpStatus.NOT_FOUND, exception.getStatusCode());
         verifyNoInteractions(sessionInitializer);

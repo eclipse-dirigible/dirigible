@@ -19,7 +19,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.Message;
-import org.springframework.messaging.simp.SimpMessageType;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.security.authorization.AuthorizationManager;
@@ -139,8 +138,6 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
                                                            .authenticated()
                                                            .simpMessageDestMatchers("/ws/**")
                                                            .authenticated()
-                                                           .simpTypeMatchers(SimpMessageType.MESSAGE, SimpMessageType.SUBSCRIBE)
-                                                           .denyAll()
                                                            .anyMessage()
                                                            .denyAll()
                                                            .build();

@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.security.oauth2.login;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -48,6 +49,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import jakarta.servlet.http.HttpSession;
 
@@ -160,16 +162,40 @@ class NativeLoginSessionInitializerTest {
     }
 
     @Test
+    void theNativeLoginCreatesTheSessionWhenTheRequestCarriesNone() {
+        // the OAuth2 chains create a session only when one is needed, so a login request arrives
+        // without one - the login itself has to create the session its cookie will name
+        NativeLoginSessionInitializer realRepositoryInitializer = new NativeLoginSessionInitializer(authorizedClientServiceProvider,
+                userAuthoritiesMapperProvider, idTokenDecoderFactory, new HttpSessionSecurityContextRepository());
+        when(idTokenDecoderFactory.createDecoder(registration)).thenReturn(jwtDecoder);
+        when(jwtDecoder.decode("id-token")).thenReturn(idToken());
+        when(authorizedClientServiceProvider.getObject()).thenReturn(authorizedClientService);
+        when(userAuthoritiesMapperProvider.getIfAvailable()).thenReturn(null);
+        assertNull(request.getSession(false));
+
+        realRepositoryInitializer.establishSession(registration, new NativeLoginTokens("id-token", "access-token", null, 3600L), request,
+                response);
+
+        HttpSession session = request.getSession(false);
+        assertNotNull(session, "the login must create the session");
+        SecurityContext saved = (SecurityContext) session.getAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY);
+        assertNotNull(saved, "the session must hold the security context the cookie stands for");
+        assertEquals("jane.doe@example.org", saved.getAuthentication()
+                                                  .getName());
+        verify(authorizedClientService).saveAuthorizedClient(any(), any());
+    }
+
+    @Test
     void aBearerIdTokenMintsAFreshSessionThatEndsWithTheToken() {
         request.getSession(true)
                .setAttribute("selected-tenant", "acme");
         String carriedSessionId = request.getSession(false)
                                          .getId();
         Jwt jwt = idToken();
-        JwtAuthenticationToken idTokenAuthentication =
-                new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER")), "jane.doe@example.org");
+        JwtAuthenticationToken idTokenAuthentication = new JwtAuthenticationToken(jwt,
+                List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER"), new SimpleGrantedAuthority("FACTOR_BEARER")), "jane.doe@example.org");
 
-        Instant expiresAt = initializer.establishSession(registration, idTokenAuthentication, "email", request, response);
+        Instant expiresAt = initializer.establishSession(REGISTRATION_ID, idTokenAuthentication, "email", request, response);
 
         assertEquals(jwt.getExpiresAt(), expiresAt);
         HttpSession session = request.getSession(false);
@@ -184,6 +210,9 @@ class NativeLoginSessionInitializerTest {
         assertEquals(REGISTRATION_ID, authentication.getAuthorizedClientRegistrationId());
         assertTrue(authentication.getAuthorities()
                                  .contains(new SimpleGrantedAuthority("ROLE_DEVELOPER")));
+        assertFalse(authentication.getAuthorities()
+                                  .contains(new SimpleGrantedAuthority("FACTOR_BEARER")),
+                "how the request authenticated is not a role of the user");
         assertEquals("id-token", ((OidcUser) authentication.getPrincipal()).getIdToken()
                                                                            .getTokenValue());
         verify(securityContextRepository).saveContext(any(SecurityContext.class), any(), any());
@@ -194,7 +223,7 @@ class NativeLoginSessionInitializerTest {
     void aBearerIdTokenMintsASessionWhereNoneWasCarried() {
         JwtAuthenticationToken idTokenAuthentication = new JwtAuthenticationToken(idToken(), List.of(), "jane.doe@example.org");
 
-        initializer.establishSession(registration, idTokenAuthentication, "email", request, response);
+        initializer.establishSession(REGISTRATION_ID, idTokenAuthentication, "email", request, response);
 
         assertNotNull(request.getSession(false));
         assertNotNull(request.getSession(false)

@@ -93,14 +93,26 @@ class CorsConfigurationSourceProviderTest {
         assertEquals(600L, configuration.getMaxAge());
     }
 
-    @Test
-    void credentialsForEveryOriginAreRefused() {
-        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com,*");
+    @ParameterizedTest
+    @ValueSource(strings = {"https://app.example.com,*", "https://*", "*://*", "https://*:8080", "HTTPS://*"})
+    void credentialsForEveryOriginAreRefused(String origins) {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(origins);
         DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
 
         InvalidConfigException exception = assertThrows(InvalidConfigException.class, CorsConfigurationSourceProvider::get);
 
         assertEquals(DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey(), exception.getConfigKey());
+    }
+
+    @Test
+    void everyOriginPatternsAreToldFromNarrowOnes() {
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*"));
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*"));
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*://*"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.example.com"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://app.example.com"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("capacitor://localhost"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("not a uri"));
     }
 
     @Test

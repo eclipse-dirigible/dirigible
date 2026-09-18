@@ -99,6 +99,31 @@ class ProgrammaticRequestMatcherTest {
     }
 
     @Test
+    void theBrowserOnlyMatcherKeepsTheBrowserSignals() {
+        ProgrammaticRequestMatcher browserScripts = ProgrammaticRequestMatcher.ofBrowserScripts();
+        MockHttpServletRequest fetch = request();
+        fetch.addHeader("Sec-Fetch-Mode", "cors");
+        MockHttpServletRequest xhr = request();
+        xhr.addHeader("X-Requested-With", "XMLHttpRequest");
+
+        assertTrue(browserScripts.matches(fetch));
+        assertTrue(browserScripts.matches(xhr));
+    }
+
+    @Test
+    void theBrowserOnlyMatcherIgnoresTheClientSignals() {
+        ProgrammaticRequestMatcher browserScripts = ProgrammaticRequestMatcher.ofBrowserScripts();
+        MockHttpServletRequest bearer = request();
+        bearer.addHeader("Authorization", "Bearer eyJ...");
+        MockHttpServletRequest json = request();
+        json.addHeader("Accept", "application/json, text/plain, */*");
+
+        // a client that authenticates after a challenge must keep getting one
+        assertFalse(browserScripts.matches(bearer));
+        assertFalse(browserScripts.matches(json));
+    }
+
+    @Test
     void theBearerCheckIsCaseInsensitiveAndNeedsTheScheme() {
         assertTrue(ProgrammaticRequestMatcher.isBearerAuthorization("Bearer abc"));
         assertTrue(ProgrammaticRequestMatcher.isBearerAuthorization("BEARER abc"));
