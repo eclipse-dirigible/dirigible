@@ -119,8 +119,17 @@
                 <!-- The id is only worth a line of its own when it is not what the name already says. -->
                 <span class="text-sm text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id"
                       x-text="tenant.id"></span>
-                <span x-show="!tenant.provisionedHere" class="text-sm text-muted-foreground">
+                <!-- Two reasons, two sentences. Waiting ends the first one and never ends the second,
+                     so they must not share a line: this instance knows the tenant and is still working
+                     on it, or it has never been told the tenant exists. The second says only that much
+                     - what is actually wrong is in the server log, where the operator who can fix it
+                     will look. Anything the page does not recognise falls to the generic wording. -->
+                <span x-show="tenant.state === 'PREPARING'" class="text-sm text-muted-foreground">
                   Being prepared. Try again in a few minutes.
+                </span>
+                <span x-show="!tenant.provisionedHere && tenant.state !== 'PREPARING'"
+                      class="text-sm text-muted-foreground">
+                  Not available. Contact your administrator.
                 </span>
               </span>
               <svg x-h-lucide role="presentation" data-lucide="arrow-right" class="size-4 text-muted-foreground flex-none"
@@ -218,7 +227,10 @@
                           this.goHome();
                           return;
                       }
-                      this.error = this.messageFor(r.status, 'Could not enter ' + tenant.name + '.');
+                      // The refusal carries which of the two 409s this is; without it the message
+                      // would contradict the tile the user just pressed.
+                      const refusal = await r.json().catch(() => null);
+                      this.error = this.messageFor(r.status, 'Could not enter ' + tenant.name + '.', refusal);
                       // The state may have moved on - a tenant lost, or one finished provisioning.
                       await this.loadTenants();
                   } catch (e) {
@@ -229,12 +241,14 @@
                   }
               },
 
-              messageFor(status, fallback) {
+              messageFor(status, fallback, refusal) {
                   switch (status) {
                       case 401: return 'Your session has expired. Reload the page to sign in again.';
                       case 403: return 'You are no longer assigned to this tenant.';
                       case 404: return 'This application does not let users select a tenant.';
-                      case 409: return 'This tenant is still being prepared. Try again in a few minutes.';
+                      case 409: return refusal && refusal.reason === 'UNKNOWN_HERE'
+                          ? 'This tenant is not available. Contact your administrator.'
+                          : 'This tenant is still being prepared. Try again in a few minutes.';
                       default: return fallback;
                   }
               },

@@ -146,7 +146,8 @@ class TenantSelectionFilterTest {
         when(tenantSelectionManager.assignmentsOf(any())).thenReturn(
                 assignments(Map.of(ACME, Set.of("Owner"), GLOBEX, Set.of("User")), Set.of()));
         when(tenantSelectionManager.availableTenants(any())).thenReturn(
-                List.of(new TenantOption(ACME, "Acme Ltd", true), new TenantOption(GLOBEX, "Globex", true)));
+                List.of(new TenantOption(ACME, "Acme Ltd", true, TenantOption.State.READY),
+                        new TenantOption(GLOBEX, "Globex", true, TenantOption.State.READY)));
 
         filter.doFilter(request, response, chain);
 

@@ -27,8 +27,13 @@ public class TenantSelectionException extends RuntimeException {
     public enum Reason {
         /** The groups of the user do not grant the tenant in this application. */
         NOT_A_MEMBER,
-        /** The tenant exists for the user, but this instance has not provisioned it yet. */
+        /** The tenant is registered here, but this instance has not finished provisioning it. */
         NOT_PROVISIONED_HERE,
+        /**
+         * The tenant is not registered in this instance at all, so nothing here is preparing it and the
+         * refusal will not resolve itself by waiting.
+         */
+        UNKNOWN_HERE,
         /** The request is not an interactive session that could hold a selection. */
         NOT_AN_INTERACTIVE_SESSION
     }

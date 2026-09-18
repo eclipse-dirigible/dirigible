@@ -112,11 +112,13 @@ public class TenantSelectionManager {
      */
     public List<TenantOption> availableTenants(Authentication authentication) {
         List<TenantOption> options = new ArrayList<>();
+        String user = authentication == null ? null : authentication.getName();
         for (String tenantId : assignmentsOf(authentication).tenantIds()) {
             Optional<Tenant> tenant = tenantService.findById(tenantId);
             String name = tenant.map(Tenant::getName)
                                 .orElse(tenantId);
-            options.add(new TenantOption(tenantId, name, isProvisioned(tenant)));
+            TenantOption.State state = stateOf(tenant, tenantId, user);
+            options.add(new TenantOption(tenantId, name, TenantOption.State.READY == state, state));
         }
         return options;
     }
@@ -147,7 +149,8 @@ public class TenantSelectionManager {
      * @param tenantId the tenant to enter
      * @return the role names the user now has
      * @throws TenantSelectionException if the user's groups do not grant the tenant, if this instance
-     *         has not provisioned it, or if the request carries no interactive session
+     *         does not know it or has not provisioned it, or if the request carries no interactive
+     *         session
      */
     public Set<String> selectTenant(HttpServletRequest request, HttpServletResponse response, String tenantId) {
         Authentication authentication = SecurityContextHolder.getContext()
@@ -162,7 +165,13 @@ public class TenantSelectionManager {
             throw new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, tenantId,
                     "User [" + authentication.getName() + "] is not assigned to tenant [" + tenantId + "] of this application");
         }
-        if (!isProvisioned(tenantService.findById(tenantId))) {
+        Optional<Tenant> tenant = tenantService.findById(tenantId);
+        if (tenant.isEmpty()) {
+            warnUnknownTenant(tenantId, authentication.getName());
+            throw new TenantSelectionException(TenantSelectionException.Reason.UNKNOWN_HERE, tenantId,
+                    "Tenant [" + tenantId + "] is not registered in this application");
+        }
+        if (!isProvisioned(tenant)) {
             throw new TenantSelectionException(TenantSelectionException.Reason.NOT_PROVISIONED_HERE, tenantId,
                     "Tenant [" + tenantId + "] is not provisioned in this application yet");
         }
@@ -249,5 +258,39 @@ public class TenantSelectionManager {
     private boolean isProvisioned(Optional<Tenant> tenant) {
         return tenant.filter(found -> TenantStatus.PROVISIONED == found.getStatus())
                      .isPresent();
+    }
+
+    /**
+     * What this instance knows about a tenant a user's groups grant them.
+     *
+     * @param tenant the registration, empty when there is none
+     * @param tenantId the tenant id the groups name
+     * @param user the user the groups belong to, for the log
+     * @return the state
+     */
+    private TenantOption.State stateOf(Optional<Tenant> tenant, String tenantId, String user) {
+        if (tenant.isEmpty()) {
+            warnUnknownTenant(tenantId, user);
+            return TenantOption.State.UNKNOWN;
+        }
+        return isProvisioned(tenant) ? TenantOption.State.READY : TenantOption.State.PREPARING;
+    }
+
+    /**
+     * Reports a tenant the identity provider grants and this instance has never been told about.
+     *
+     * <p>
+     * At WARN because nothing here will resolve it on its own and the user cannot act on it: the group
+     * is real, the tenant is not, and only an operator can tell which of the two is wrong. The picker
+     * is rendered on sign-in and on an explicit switch, so this does not sit on a hot path.
+     *
+     * @param tenantId the tenant the groups name
+     * @param user the user the groups belong to
+     */
+    private void warnUnknownTenant(String tenantId, String user) {
+        LOGGER.warn(
+                "User [{}] is granted tenant [{}] of application [{}] by their groups, but no such tenant is registered in this instance,"
+                        + " so it cannot be entered. Either it was never provisioned here, or its registration was lost.",
+                user, tenantId, DirigibleConfig.APP_ID.getStringValue());
     }
 }
