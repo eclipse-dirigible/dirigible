@@ -9,10 +9,9 @@
  */
 package org.eclipse.dirigible.components.tenants.security;
 
-import jakarta.servlet.http.HttpServletRequest;
-
 import org.eclipse.dirigible.components.base.http.access.CorsConfigurationSourceProvider;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
+import org.eclipse.dirigible.components.base.http.access.ProgrammaticRequestMatcher;
 import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -56,30 +55,16 @@ public class BasicSecurityConfig {
             // default Basic entry point's `WWW-Authenticate: Basic` challenge makes the BROWSER pop
             // its native login dialog before any script sees the response (the generated apps poll
             // the inbox every 30s, so an idle tab surfaced the dialog "out of nowhere"). Browser
-            // navigations don't match and keep the normal Basic/form login flow.
+            // navigations don't match and keep the normal Basic/form login flow. The matcher is the
+            // one the OAuth2 chains use, so a client sending a bearer token or preferring JSON gets
+            // the same answer on every profile; the plain status stays because this profile has no
+            // bearer scheme to challenge with.
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
-                    BasicSecurityConfig::isProgrammaticRequest));
+                    new ProgrammaticRequestMatcher()));
 
         httpSecurityURIConfigurator.configure(http);
 
         return http.build();
-    }
-
-    /**
-     * Whether the request comes from script (fetch / XMLHttpRequest) rather than a browser navigation:
-     * every modern browser stamps programmatic requests with a {@code Sec-Fetch-Mode} other than
-     * {@code navigate}; the {@code X-Requested-With} header is the legacy client-sent marker kept as a
-     * fallback.
-     *
-     * @param request the inbound request
-     * @return true for a programmatic request
-     */
-    private static boolean isProgrammaticRequest(HttpServletRequest request) {
-        String secFetchMode = request.getHeader("Sec-Fetch-Mode");
-        if (secFetchMode != null) {
-            return !"navigate".equalsIgnoreCase(secFetchMode);
-        }
-        return "XMLHttpRequest".equalsIgnoreCase(request.getHeader("X-Requested-With"));
     }
 
     /**

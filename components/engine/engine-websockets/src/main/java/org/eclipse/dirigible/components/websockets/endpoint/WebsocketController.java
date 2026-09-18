@@ -95,12 +95,15 @@ public class WebsocketController {
         }
     }
 
+    /** What a client is told about a failure - the reason is in the log, not the client's business. */
+    static final String PROCESSING_FAILED = "The message could not be processed";
+
     /**
      * Handle exception.
      *
      * @param endpoint the endpoint
      * @param throwable the throwable
-     * @return the string
+     * @return the message the client is told
      */
     @MessageExceptionHandler
     @SendToUser("/queue/errors/{endpoint}")
@@ -121,7 +124,7 @@ public class WebsocketController {
                 logger.error(e.getMessage(), e);
             }
         }
-        return throwable.getMessage();
+        return PROCESSING_FAILED;
     }
 
 }

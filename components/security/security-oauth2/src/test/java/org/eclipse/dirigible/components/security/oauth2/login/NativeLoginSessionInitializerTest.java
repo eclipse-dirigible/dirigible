@@ -22,6 +22,7 @@ import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 import java.util.List;
+import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,11 +42,14 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.context.SecurityContextRepository;
+import jakarta.servlet.http.HttpSession;
 
 /**
  * Unit tests for {@link NativeLoginSessionInitializer} - the ID token validation, the session
@@ -153,6 +157,48 @@ class NativeLoginSessionInitializerTest {
 
         assertNotEquals(preLoginSessionId, request.getSession(false)
                                                   .getId());
+    }
+
+    @Test
+    void aBearerIdTokenMintsAFreshSessionThatEndsWithTheToken() {
+        request.getSession(true)
+               .setAttribute("selected-tenant", "acme");
+        String carriedSessionId = request.getSession(false)
+                                         .getId();
+        Jwt jwt = idToken();
+        JwtAuthenticationToken idTokenAuthentication =
+                new JwtAuthenticationToken(jwt, List.of(new SimpleGrantedAuthority("ROLE_DEVELOPER")), "jane.doe@example.org");
+
+        Instant expiresAt = initializer.establishSession(registration, idTokenAuthentication, "email", request, response);
+
+        assertEquals(jwt.getExpiresAt(), expiresAt);
+        HttpSession session = request.getSession(false);
+        assertNotNull(session);
+        assertNotEquals(carriedSessionId, session.getId(), "the state of a carried cookie must not migrate into the token's identity");
+        assertNull(session.getAttribute("selected-tenant"));
+        assertEquals(expiresAt, session.getAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE));
+
+        OAuth2AuthenticationToken authentication = (OAuth2AuthenticationToken) SecurityContextHolder.getContext()
+                                                                                                    .getAuthentication();
+        assertEquals("jane.doe@example.org", authentication.getName());
+        assertEquals(REGISTRATION_ID, authentication.getAuthorizedClientRegistrationId());
+        assertTrue(authentication.getAuthorities()
+                                 .contains(new SimpleGrantedAuthority("ROLE_DEVELOPER")));
+        assertEquals("id-token", ((OidcUser) authentication.getPrincipal()).getIdToken()
+                                                                           .getTokenValue());
+        verify(securityContextRepository).saveContext(any(SecurityContext.class), any(), any());
+        verifyNoInteractions(authorizedClientServiceProvider, authorizedClientService);
+    }
+
+    @Test
+    void aBearerIdTokenMintsASessionWhereNoneWasCarried() {
+        JwtAuthenticationToken idTokenAuthentication = new JwtAuthenticationToken(idToken(), List.of(), "jane.doe@example.org");
+
+        initializer.establishSession(registration, idTokenAuthentication, "email", request, response);
+
+        assertNotNull(request.getSession(false));
+        assertNotNull(request.getSession(false)
+                             .getAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE));
     }
 
     @Test

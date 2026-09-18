@@ -143,6 +143,20 @@ class TenantExtractorTest {
     }
 
     @Test
+    void aBearerTokenRequestIgnoresTheTenantSelectedInTheSession() {
+        useStrategy("TOKEN_GROUPS");
+        HttpServletRequest request = requestWithSelectedTenant(TENANT_ID);
+        when(request.getHeader("Authorization")).thenReturn("Bearer some-token");
+
+        Optional<Tenant> tenant = newExtractor().determineTenant(request);
+
+        assertTrue(tenant.orElseThrow()
+                         .isDefault(),
+                "the token proves an identity of its own and must not run in the tenant a cookie's identity selected");
+        verify(tenantService, never()).findById(anyString());
+    }
+
+    @Test
     void aTenantThatIsNotProvisionedYetCannotBeEntered() {
         useStrategy("TOKEN_GROUPS");
         org.eclipse.dirigible.components.tenants.domain.Tenant tenantEntity = provisionedTenant();

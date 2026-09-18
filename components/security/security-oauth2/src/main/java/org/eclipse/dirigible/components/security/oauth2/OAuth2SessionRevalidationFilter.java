@@ -67,8 +67,20 @@ import jakarta.servlet.http.HttpSession;
  * <p>
  * Sessions whose authorized client carries no refresh token (e.g. GitHub OAuth apps with
  * non-expiring tokens) cannot be re-validated and are passed through unchanged.
+ *
+ * <p>
+ * A session minted from a bearer ID token ({@code POST /login/token}) holds no tokens to refresh
+ * with and is governed by the token instead: it carries the token's expiry in
+ * {@link #SESSION_EXPIRES_AT_ATTRIBUTE} and is terminated once that instant passes. Such a session
+ * never reaches the authorized-client path - the in-memory client store is keyed by principal name,
+ * so registering one would displace the tokens of the same user's browser session.
  */
 public class OAuth2SessionRevalidationFilter extends OncePerRequestFilter {
+
+    /**
+     * Session attribute holding the {@link Instant} a session minted from a bearer token ends.
+     */
+    public static final String SESSION_EXPIRES_AT_ATTRIBUTE = OAuth2SessionRevalidationFilter.class.getName() + ".EXPIRES_AT";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(OAuth2SessionRevalidationFilter.class);
@@ -135,9 +147,29 @@ public class OAuth2SessionRevalidationFilter extends OncePerRequestFilter {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();
         if (authentication instanceof OAuth2AuthenticationToken oauth2Authentication) {
-            revalidate(oauth2Authentication, request, response);
+            Instant sessionExpiresAt = sessionExpiresAt(request);
+            if (sessionExpiresAt != null) {
+                terminateWhenExpired(oauth2Authentication, sessionExpiresAt, request);
+            } else {
+                revalidate(oauth2Authentication, request, response);
+            }
         }
         chain.doFilter(request, response);
+    }
+
+    private static Instant sessionExpiresAt(HttpServletRequest request) {
+        HttpSession session = request.getSession(false);
+        return session != null && session.getAttribute(SESSION_EXPIRES_AT_ATTRIBUTE) instanceof Instant expiresAt ? expiresAt : null;
+    }
+
+    private static void terminateWhenExpired(OAuth2AuthenticationToken authentication, Instant expiresAt, HttpServletRequest request) {
+        if (Instant.now()
+                   .isBefore(expiresAt)) {
+            return;
+        }
+        LOGGER.info("The token the session of user [{}] was minted from expired at [{}] - terminating the session",
+                authentication.getName(), expiresAt);
+        terminateSession(request);
     }
 
     private void revalidate(OAuth2AuthenticationToken authentication, HttpServletRequest request, HttpServletResponse response) {

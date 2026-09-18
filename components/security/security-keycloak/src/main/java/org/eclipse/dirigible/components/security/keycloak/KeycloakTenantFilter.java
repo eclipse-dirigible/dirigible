@@ -19,9 +19,13 @@ import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.IdentityProvider;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.TokenKind;
 import org.eclipse.dirigible.components.tenants.tenant.TenantExtractor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import jakarta.servlet.FilterChain;
@@ -35,6 +39,9 @@ import jakarta.servlet.http.HttpServletResponse;
 @Profile("keycloak")
 @Component
 public class KeycloakTenantFilter extends OncePerRequestFilter {
+
+    /** The claim naming the tenants a user of the shared realm belongs to. */
+    private static final String TENANT_CLAIM = "custom:tenant";
 
     /** The tenant service. */
     private final TenantExtractor tenantExtractor;
@@ -75,28 +82,43 @@ public class KeycloakTenantFilter extends OncePerRequestFilter {
 
             Principal principal = request.getUserPrincipal();
             if (principal instanceof OAuth2AuthenticationToken oauthToken) {
-                String tenantAttribute = oauthToken.getPrincipal()
-                                                   .getAttribute("custom:tenant");
-                if (tenantAttribute == null || tenantAttribute.equals("")) {
-                    forbidden("User is not assigned to any tenant", response);
+                if (!isMember(oauthToken.getPrincipal()
+                                        .getAttribute(TENANT_CLAIM),
+                        currentTenant.get(), response)) {
                     return;
                 }
-                Set<String> userTenants = new HashSet<>(Arrays.asList(tenantAttribute.split(","))
-                                                              .stream()
-                                                              .map(e -> e.trim())
-                                                              .collect(Collectors.toList()));
-                if (!userTenants.contains(currentTenant.get()
-                                                       .getSubdomain())) {
-                    forbidden("User is not member of the [" + currentTenant.get()
-                                                                           .getName()
-                            + " | " + currentTenant.get()
-                                                   .getSubdomain()
-                            + "] tenant", response);
+            } else if (principal instanceof JwtAuthenticationToken jwtToken) {
+                // a bearer ID token identifies a user, who must belong to the tenant like a logged in
+                // one; an access token of a machine client carries no tenant and passes as it always
+                // did, unless it does name tenants - then it is held to them
+                Jwt jwt = jwtToken.getToken();
+                String tenantClaim = jwt.getClaimAsString(TENANT_CLAIM);
+                boolean idToken = TokenKind.of(jwt, IdentityProvider.KEYCLOAK)
+                                           .filter(TokenKind.ID::equals)
+                                           .isPresent();
+                if ((idToken || tenantClaim != null) && !isMember(tenantClaim, currentTenant.get(), response)) {
                     return;
                 }
             }
         }
         chain.doFilter(request, response);
+    }
+
+    private boolean isMember(String tenantAttribute, Tenant currentTenant, HttpServletResponse response) throws IOException {
+        if (tenantAttribute == null || tenantAttribute.equals("")) {
+            forbidden("User is not assigned to any tenant", response);
+            return false;
+        }
+        Set<String> userTenants = new HashSet<>(Arrays.asList(tenantAttribute.split(","))
+                                                      .stream()
+                                                      .map(e -> e.trim())
+                                                      .collect(Collectors.toList()));
+        if (!userTenants.contains(currentTenant.getSubdomain())) {
+            forbidden("User is not member of the [" + currentTenant.getName() + " | " + currentTenant.getSubdomain() + "] tenant",
+                    response);
+            return false;
+        }
+        return true;
     }
 
     /**

@@ -35,6 +35,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -42,6 +43,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 /**
  * Establishes the standard platform session from the tokens a {@link NativeLoginProvider} obtained
@@ -54,6 +56,12 @@ import jakarta.servlet.http.HttpServletResponse;
  * against session fixation, and the tokens are registered as an {@link OAuth2AuthorizedClient} so
  * {@link OAuth2SessionRevalidationFilter} governs the session lifetime exactly as for a hosted
  * login. Tokens never reach the browser - the client receives only the session cookie.
+ *
+ * <p>
+ * The second entry,
+ * {@link #establishSession(ClientRegistration, JwtAuthenticationToken, String, HttpServletRequest, HttpServletResponse)},
+ * mints the session of {@code POST /login/token} from a bearer ID token the resource server already
+ * validated.
  */
 @Component
 class NativeLoginSessionInitializer {
@@ -106,14 +114,59 @@ class NativeLoginSessionInitializer {
             // session-fixation protection: never keep the id a pre-login session was known under
             request.changeSessionId();
         }
-        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
-        securityContext.setAuthentication(authentication);
-        SecurityContextHolder.setContext(securityContext);
-        securityContextRepository.saveContext(securityContext, request, response);
+        saveContext(authentication, request, response);
 
         registerAuthorizedClient(registration, authentication, tokens);
         LOGGER.debug("Established a native login session for user [{}] on registration [{}]", authentication.getName(),
                 registration.getRegistrationId());
+    }
+
+    /**
+     * Establishes the session for the user a bearer ID token identifies - the token the resource server
+     * has already validated and turned into the platform identity, so the session gets exactly the name
+     * and the roles the bearer request had.
+     *
+     * <p>
+     * The session is a fresh one: whatever session the request carried is invalidated first, because
+     * its state (a selected tenant, application attributes) belongs to whoever held that cookie, not to
+     * the identity the token proves. No tokens are registered for it - there is nothing to refresh with
+     * - and it ends when the token does, which
+     * {@link OAuth2SessionRevalidationFilter#SESSION_EXPIRES_AT_ATTRIBUTE} tells the revalidation
+     * filter.
+     *
+     * @param registration the client registration the session is filed under
+     * @param idTokenAuthentication the validated ID token and the authorities derived from it
+     * @param principalClaim the claim the user name was read from
+     * @param request the request
+     * @param response the response
+     * @return the instant the session ends
+     */
+    Instant establishSession(ClientRegistration registration, JwtAuthenticationToken idTokenAuthentication, String principalClaim,
+            HttpServletRequest request, HttpServletResponse response) {
+        Jwt jwt = idTokenAuthentication.getToken();
+        OidcIdToken idToken = new OidcIdToken(jwt.getTokenValue(), jwt.getIssuedAt(), jwt.getExpiresAt(), jwt.getClaims());
+        Collection<GrantedAuthority> authorities = idTokenAuthentication.getAuthorities();
+        OidcUser oidcUser = new DefaultOidcUser(authorities, idToken, principalClaim);
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(oidcUser, authorities, registration.getRegistrationId());
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+        HttpSession carriedSession = request.getSession(false);
+        if (carriedSession != null) {
+            carriedSession.invalidate();
+        }
+        HttpSession session = request.getSession(true);
+        saveContext(authentication, request, response);
+        session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, jwt.getExpiresAt());
+        LOGGER.debug("Established a session from a bearer ID token for user [{}] on registration [{}], ending at [{}]",
+                authentication.getName(), registration.getRegistrationId(), jwt.getExpiresAt());
+        return jwt.getExpiresAt();
+    }
+
+    private void saveContext(OAuth2AuthenticationToken authentication, HttpServletRequest request, HttpServletResponse response) {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
     }
 
     private OidcIdToken validateIdToken(ClientRegistration registration, String idTokenValue) {

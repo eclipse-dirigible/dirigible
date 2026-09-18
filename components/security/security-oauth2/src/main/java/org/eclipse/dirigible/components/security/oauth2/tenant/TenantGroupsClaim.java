@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.security.oauth2.tenant;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -115,6 +116,19 @@ public class TenantGroupsClaim {
             }
         }
         return groups;
+    }
+
+    /**
+     * Reads the groups out of the claims of a token, from a claim named explicitly - the same reading
+     * as for a login, so a claim that is not a collection warns and yields nothing on both paths.
+     *
+     * @param claims the claims; may be {@code null}
+     * @param claimName the claim to read
+     * @param userName the user the token identifies, for the log
+     * @return the group names, never {@code null}
+     */
+    static Set<String> readGroups(Map<String, Object> claims, String claimName, String userName) {
+        return null == claims ? Set.of() : toGroups(claims.get(claimName), claimName, userName);
     }
 
     private static Set<String> toGroups(Object claimValue, String claimName, String userName) {
