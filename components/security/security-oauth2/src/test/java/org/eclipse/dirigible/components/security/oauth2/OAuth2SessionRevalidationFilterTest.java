@@ -169,6 +169,32 @@ class OAuth2SessionRevalidationFilterTest {
     }
 
     @Test
+    void leavesATokenMintedSessionAloneBeforeItsDeadline() throws Exception {
+        session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, Instant.now()
+                                                                                                  .plusSeconds(300));
+
+        filter.doFilter(request, response, chain);
+
+        verifyNoInteractions(authorizedClientService, refreshTokenResponseClient);
+        assertChainContinuedWith(authentication);
+        assertFalse(session.isInvalid());
+    }
+
+    @Test
+    void terminatesATokenMintedSessionOnceItsDeadlinePassed() throws Exception {
+        session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, Instant.now()
+                                                                                                  .minusSeconds(1));
+
+        filter.doFilter(request, response, chain);
+
+        assertTrue(session.isInvalid());
+        assertNull(SecurityContextHolder.getContext()
+                                        .getAuthentication());
+        verifyNoInteractions(authorizedClientService, refreshTokenResponseClient);
+        assertChainContinued();
+    }
+
+    @Test
     void terminatesSessionWhenAuthorizedClientIsMissing() throws Exception {
         when(authorizedClientService.loadAuthorizedClient(REGISTRATION_ID, PRINCIPAL_NAME)).thenReturn(null);
 

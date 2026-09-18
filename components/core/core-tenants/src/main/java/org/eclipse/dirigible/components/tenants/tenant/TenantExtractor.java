@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.http.access.ProgrammaticRequestMatcher;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
@@ -38,6 +39,8 @@ public class TenantExtractor {
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantExtractor.class);
 
     private static final List<String> HOST_HEADERS = List.of("host", "x-forwarded-host");
+
+    private static final String AUTHORIZATION_HEADER = "Authorization";
 
     /** The Constant TENANT_SUBDOMAIN_PATTERN. */
     private static final Pattern TENANT_SUBDOMAIN_PATTERN = Pattern.compile(DirigibleConfig.TENANT_SUBDOMAIN_REGEX.getStringValue());
@@ -95,10 +98,29 @@ public class TenantExtractor {
      * longer resolves must not lock the user out of the instance. The host is never consulted in this
      * mode, so one host serves every tenant.
      *
+     * <p>
+     * A request authenticating with a bearer token lands in the default tenant as well, whatever
+     * session cookie rides along: the token proves an identity of its own, and running it in the tenant
+     * another identity selected would let a page holding both act across the two.
+     *
+     * <p>
+     * That decision reads the bare header, not an authenticated principal: the filter running this
+     * precedes authentication on the chains that add it (basic, snowflake, keycloak), so there is no
+     * principal yet. It holds because a tenant can be selected on the cognito and keycloak chains only,
+     * and both answer a request carrying an invalid bearer token with 401 before anything else runs - a
+     * header can never move an authenticated session into another tenant. Selecting a tenant on a
+     * bearer request is not supported yet: such a request runs in the default tenant with the user's
+     * global roles.
+     *
      * @param request the request
      * @return the selected tenant, or the default tenant
      */
     private Optional<Tenant> determineSelectedTenant(HttpServletRequest request) {
+        if (ProgrammaticRequestMatcher.isBearerAuthorization(request.getHeader(AUTHORIZATION_HEADER))) {
+            LOGGER.debug("The request authenticates with a bearer token, so a tenant selected in a session does not apply."
+                    + " Will return the default tenant.");
+            return Optional.of(TenantImpl.getDefaultTenant());
+        }
         HttpSession session = request.getSession(false);
         Object selectedTenantId =
                 session == null ? null : session.getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE);

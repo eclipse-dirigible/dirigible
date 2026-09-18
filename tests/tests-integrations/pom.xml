@@ -68,6 +68,15 @@
             <artifactId>spring-security-test</artifactId>
             <scope>compile</scope>
         </dependency>
+        <!-- ExternalFrontendIT runs an in-process OpenID Connect provider that signs its tokens and
+             serves the JWKS with Nimbus (com.nimbusds.*), which this artifact carries. It arrives
+             transitively through the application as well; declared so the contract is visible. Gson,
+             which writes the provider's answers, is inherited from the parent pom. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+            <scope>compile</scope>
+        </dependency>
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-junit-jupiter</artifactId>

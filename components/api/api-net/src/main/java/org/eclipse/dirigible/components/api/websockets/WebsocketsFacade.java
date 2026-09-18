@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 
@@ -23,6 +24,8 @@ import org.eclipse.dirigible.components.engine.javascript.service.JavascriptServ
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.stomp.StompSession;
+
+import com.google.gson.reflect.TypeToken;
 
 
 /**
@@ -61,12 +64,51 @@ public class WebsocketsFacade {
      */
     public static final StompSession createWebsocket(String uri, String handler)
             throws DeploymentException, IOException, InterruptedException, ExecutionException {
+        return createWebsocket(uri, handler, Map.of());
+    }
+
+    /**
+     * Create a new Websocket by a given URI and Handler, connecting with the given STOMP CONNECT
+     * headers.
+     *
+     * @param uri the URI
+     * @param handler the handler
+     * @param connectHeaders the headers of the CONNECT frame - a Dirigible {@code /stomp} endpoint
+     *        needs {@code Authorization: Bearer <token>} there, since an anonymous CONNECT is refused
+     * @return the Websocket Session object
+     * @throws DeploymentException in case of an error
+     * @throws IOException in case of an error
+     * @throws InterruptedException the interrupted exception
+     * @throws ExecutionException the execution exception
+     */
+    public static final StompSession createWebsocket(String uri, String handler, Map<String, String> connectHeaders)
+            throws DeploymentException, IOException, InterruptedException, ExecutionException {
         if (logger.isDebugEnabled()) {
             logger.debug("Connecting to " + uri);
         }
-        WebsocketClient client = new WebsocketClient(uri, JavascriptService.get(), handler);
-        StompSession session = client.connect();
-        return session;
+        WebsocketClient client = new WebsocketClient(uri, JavascriptService.get(), handler, connectHeaders);
+        return client.connect();
+    }
+
+    /**
+     * Create a new Websocket by a given URI and Handler, connecting with the STOMP CONNECT headers
+     * given as a JSON object - the form the scripting API passes them in.
+     *
+     * @param uri the URI
+     * @param handler the handler
+     * @param connectHeadersJson the headers of the CONNECT frame as a JSON object of strings; blank for
+     *        none
+     * @return the Websocket Session object
+     * @throws DeploymentException in case of an error
+     * @throws IOException in case of an error
+     * @throws InterruptedException the interrupted exception
+     * @throws ExecutionException the execution exception
+     */
+    public static final StompSession createWebsocket(String uri, String handler, String connectHeadersJson)
+            throws DeploymentException, IOException, InterruptedException, ExecutionException {
+        Map<String, String> connectHeaders = connectHeadersJson == null || connectHeadersJson.isBlank() ? Map.of()
+                : GsonHelper.fromJson(connectHeadersJson, new TypeToken<Map<String, String>>() {});
+        return createWebsocket(uri, handler, connectHeaders);
     }
 
     /**

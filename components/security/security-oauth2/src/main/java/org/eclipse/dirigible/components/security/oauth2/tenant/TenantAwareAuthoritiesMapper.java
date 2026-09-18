@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -24,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 /**
  * Maps the groups of a logged in user to authorities, the way the configured tenant resolution
@@ -90,6 +92,22 @@ public class TenantAwareAuthoritiesMapper implements GrantedAuthoritiesMapper {
      */
     @Override
     public Collection<? extends GrantedAuthority> mapAuthorities(Collection<? extends GrantedAuthority> authorities) {
+        return mapGroups(claimName -> TenantGroupsClaim.readGroups(authorities, claimName));
+    }
+
+    /**
+     * Maps the groups of a bearer ID token to authorities, by the same rules the login applies to the
+     * groups of the ID token it receives - so a user gets the same roles whichever way the token
+     * arrives.
+     *
+     * @param jwt the validated ID token
+     * @return the granted authorities, never {@code null}
+     */
+    public Set<GrantedAuthority> authoritiesOf(Jwt jwt) {
+        return mapGroups(claimName -> TenantGroupsClaim.readGroups(jwt.getClaims(), claimName, jwt.getSubject()));
+    }
+
+    private Set<GrantedAuthority> mapGroups(Function<String, Set<String>> groupsOfClaim) {
         if (trialModeEnabled) {
             LOGGER.debug("Trial enabled - returning all available system roles for the current user.");
             return AuthoritiesUtil.toAuthorities(Arrays.stream(Roles.values())
@@ -97,10 +115,10 @@ public class TenantAwareAuthoritiesMapper implements GrantedAuthoritiesMapper {
                                                        .collect(Collectors.toSet()));
         }
         if (TenantResolutionStrategy.fromConfiguration() != TenantResolutionStrategy.TOKEN_GROUPS) {
-            Set<String> providerGroups = TenantGroupsClaim.readGroups(authorities, providerGroupsClaim);
+            Set<String> providerGroups = groupsOfClaim.apply(providerGroupsClaim);
             return providerGroups.isEmpty() ? Collections.emptySet() : AuthoritiesUtil.toAuthorities(providerGroups);
         }
-        Set<String> groups = groupsClaim.groupsOf(authorities);
+        Set<String> groups = groupsOfClaim.apply(groupsClaim.getName());
         if (groups.isEmpty()) {
             LOGGER.debug("No groups found in claim [{}] of the current user.", groupsClaim.getName());
             return Collections.emptySet();

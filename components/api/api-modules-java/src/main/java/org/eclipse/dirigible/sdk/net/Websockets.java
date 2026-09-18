@@ -12,6 +12,7 @@ package org.eclipse.dirigible.sdk.net;
 import jakarta.websocket.DeploymentException;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import org.eclipse.dirigible.components.api.websockets.WebsocketClient;
 import org.eclipse.dirigible.components.api.websockets.WebsocketsFacade;
@@ -34,6 +35,24 @@ public final class Websockets {
     public static StompSession createWebsocket(String uri, String handler)
             throws DeploymentException, IOException, InterruptedException, ExecutionException {
         return WebsocketsFacade.createWebsocket(uri, handler);
+    }
+
+    /**
+     * Connects with the given STOMP CONNECT headers - a Dirigible {@code /stomp} endpoint needs
+     * {@code Authorization: Bearer <token>} there, since an anonymous CONNECT is refused.
+     *
+     * @param uri the endpoint
+     * @param handler the registry path of the handler script
+     * @param connectHeaders the headers of the CONNECT frame
+     * @return the STOMP session
+     * @throws DeploymentException in case of an error
+     * @throws IOException in case of an error
+     * @throws InterruptedException the interrupted exception
+     * @throws ExecutionException the execution exception
+     */
+    public static StompSession createWebsocket(String uri, String handler, Map<String, String> connectHeaders)
+            throws DeploymentException, IOException, InterruptedException, ExecutionException {
+        return WebsocketsFacade.createWebsocket(uri, handler, connectHeaders);
     }
 
     public static List<WebsocketClient> getClients() {

@@ -27,8 +27,6 @@ public class ClientStompSessionHandler extends StompSessionHandlerAdapter {
         logger.info("New session established : " + session.getSessionId());
         session.subscribe("/user/queue/reply", this);
         logger.info("Subscribed to /user/queue/reply");
-        session.send("/ws/stomp", getHelloMessage());
-        logger.info("Message sent to websocket server");
     }
 
     @Override
@@ -45,18 +43,6 @@ public class ClientStompSessionHandler extends StompSessionHandlerAdapter {
     public void handleFrame(StompHeaders headers, Object payload) {
         Message msg = (Message) payload;
         logger.info("Received : " + msg.getText() + " from : " + msg.getFrom());
-    }
-
-    /**
-     * A sample message instance.
-     *
-     * @return instance of <code>Message</code>
-     */
-    private Message getHelloMessage() {
-        Message msg = new Message();
-        msg.setFrom("Dirigible");
-        msg.setText("Hello!");
-        return msg;
     }
 
 }
