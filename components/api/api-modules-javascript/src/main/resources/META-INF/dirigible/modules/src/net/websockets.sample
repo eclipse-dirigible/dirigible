@@ -6,12 +6,18 @@ const handler = "my-project/ws-handler"
 function initialize() {
     console.log("Connect to: " + uri);
     let websocket = websockets.createWebsocket(uri, handler);
-    websocket.send("hello");
+    // the second argument is the STOMP destination the broker routes
+    websocket.send("hello", "/app/echo");
 }
 
 initialize();
 
 websockets.getClientByHandler(handler).close();
+
+
+// a Dirigible broker authenticates the CONNECT frame and routes /ws/stomp/<endpoint>
+let dirigible = websockets.createWebsocket("wss://dirigible.example.com/stomp", handler, { Authorization: "Bearer " + idToken });
+dirigible.send("hello", "/ws/stomp/my-endpoint");
 
 
 // my-endpoint.websocket
@@ -27,6 +33,16 @@ websockets.getClientByHandler(handler).close();
 // from web browser
 // ----------------
 
-let ws = new WebSocket("ws://localhost:8080/websockets/v4/service/my-endpoint");
-ws.send('hello');
+import { Client } from "/webjars/stomp__stompjs/esm6/index.js";
 
+// a page served by the platform authenticates by its session cookie; a page on a listed origin
+// authenticates with connectHeaders: { Authorization: "Bearer " + idToken }
+const client = new Client({
+    brokerURL: `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/stomp`,
+    onConnect: () => {
+        client.subscribe("/user/queue/reply/my-endpoint", (message) => console.log(message.body));
+        client.subscribe("/user/queue/errors/my-endpoint", (error) => console.error(error.body));
+        client.publish({ destination: "/ws/stomp/my-endpoint", body: JSON.stringify({ from: "me", text: "hello" }) });
+    }
+});
+client.activate();

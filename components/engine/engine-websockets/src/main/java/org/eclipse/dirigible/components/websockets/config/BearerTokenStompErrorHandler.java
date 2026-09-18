@@ -52,9 +52,12 @@ class BearerTokenStompErrorHandler extends StompSubProtocolErrorHandler {
         StompHeaderAccessor clientHeaderAccessor =
                 clientMessage != null ? MessageHeaderAccessor.getAccessor(clientMessage, StompHeaderAccessor.class) : null;
         // a refused token or a denied destination is something an operator should see without turning
-        // debug on; the refusal closes the connection, so there is one line per refused session
-        LOGGER.info("Refusing a STOMP frame [{}] of session [{}]", clientHeaderAccessor != null ? clientHeaderAccessor.getCommand() : null,
-                clientHeaderAccessor != null ? clientHeaderAccessor.getSessionId() : null, cause);
+        // debug on; the refusal closes the connection, so there is one line per refused session. The
+        // endpoint is public, so the stack trace of every refused anonymous attempt stays at debug
+        StompCommand command = clientHeaderAccessor != null ? clientHeaderAccessor.getCommand() : null;
+        String sessionId = clientHeaderAccessor != null ? clientHeaderAccessor.getSessionId() : null;
+        LOGGER.info("Refusing a STOMP frame [{}] of session [{}]: {}", command, sessionId, cause.getMessage());
+        LOGGER.debug("The STOMP frame [{}] of session [{}] was refused", command, sessionId, cause);
 
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.ERROR);
         accessor.setMessage(UNAUTHORIZED);

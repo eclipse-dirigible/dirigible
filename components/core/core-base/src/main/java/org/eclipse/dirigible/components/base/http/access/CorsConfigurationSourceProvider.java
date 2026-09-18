@@ -14,7 +14,9 @@ import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
@@ -44,7 +46,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  *
  * <p>
  * The STOMP endpoint under {@code /stomp} is left out either way: it checks origins itself, against
- * the same list, and its SockJS transports answer their own CORS.
+ * the configured origins that name a host ({@link #stompOriginPatterns()}), and its SockJS
+ * transports answer their own CORS.
  */
 public class CorsConfigurationSourceProvider {
 
@@ -83,6 +86,37 @@ public class CorsConfigurationSourceProvider {
      */
     public static List<String> allowedOriginPatterns() {
         return DirigibleConfig.CORS_ALLOWED_ORIGINS.getListValue();
+    }
+
+    /**
+     * The configured origin patterns the STOMP handshake may accept: those that name a host.
+     *
+     * <p>
+     * HTTP may grant every origin without credentials - no cookie travels on such a request, so a
+     * wildcard there serves bearer clients and nothing else. A WebSocket handshake carries the session
+     * cookie whatever the CORS configuration says about credentials, and the handshake principal
+     * becomes the STOMP user. A pattern reaching every origin ({@code *}, {@code https://*}) or one
+     * that cannot be told to name a host ({@code h*}, which Spring matches against the whole origin
+     * string) would therefore let any page open a STOMP session as a logged in user. Such patterns are
+     * left out, with one warning, and the handshake stays same-origin when nothing is left. A concrete
+     * origin or a narrow pattern ({@code https://*.example.com}) is the operator's explicit trust
+     * decision and passes.
+     *
+     * @return the patterns, empty when none is configured or none names a host
+     */
+    public static List<String> stompOriginPatterns() {
+        Map<Boolean, List<String>> byNamingAHost = allowedOriginPatterns().stream()
+                                                                          .collect(Collectors.partitioningBy(
+                                                                                  CorsConfigurationSourceProvider::namesAHost));
+        if (!byNamingAHost.get(false)
+                          .isEmpty()) {
+            LOGGER.warn(
+                    "Some patterns in [{}] name no host and are not applied to the STOMP handshake: a WebSocket handshake carries"
+                            + " the session cookie, so such a pattern would let any page open a STOMP session as a logged in user. A"
+                            + " cross-origin STOMP client needs an origin that names its host.",
+                    DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+        }
+        return byNamingAHost.get(true);
     }
 
     /**
@@ -159,11 +193,11 @@ public class CorsConfigurationSourceProvider {
                     DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey());
         }
         List<String> uncheckable = origins.stream()
-                                          .filter(origin -> !WILDCARD.equals(origin) && parsePattern(origin) == null)
+                                          .filter(origin -> !WILDCARD.equals(origin) && !namesAHost(origin))
                                           .toList();
         if (allowCredentials && !uncheckable.isEmpty()) {
             throw new InvalidConfigException("Credentials cannot be allowed for origin patterns that cannot be checked " + uncheckable
-                    + ": a pattern that is not an origin may match any", DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+                    + ": a pattern that names no host may match any origin", DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
         }
         if (allowCredentials && headers.contains(WILDCARD)) {
             throw new InvalidConfigException("Credentials cannot be allowed together with every request header [" + WILDCARD + "]",
@@ -210,6 +244,16 @@ public class CorsConfigurationSourceProvider {
         }
         URI uri = parsePattern(origin);
         return uri != null && WILDCARD_HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    /**
+     * Whether an origin pattern names a host: it parses as a URI whose host is more than the wildcard.
+     * {@code https://*.example.com} and {@code capacitor://localhost} do; {@code *}, {@code https://*}
+     * and a scheme-less {@code h*} - which Spring matches against the whole origin string - do not.
+     */
+    static boolean namesAHost(String origin) {
+        URI uri = parsePattern(origin);
+        return uri != null && uri.getHost() != null && !WILDCARD_HOST.equalsIgnoreCase(uri.getHost());
     }
 
     /**

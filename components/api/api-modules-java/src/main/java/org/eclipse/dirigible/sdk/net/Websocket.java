@@ -51,8 +51,9 @@ public @interface Websocket {
     String name();
 
     /**
-     * URL endpoint suffix used by the client to connect, e.g. {@code "chat"} maps to
-     * {@code /websockets/stomp/chat}.
+     * The endpoint suffix the client addresses, e.g. {@code "chat"}: clients connect to the
+     * {@code /stomp} endpoint (STOMP over WebSocket or SockJS), send to {@code /ws/stomp/chat} and
+     * receive on {@code /user/queue/reply/chat}.
      */
     String endpoint();
 

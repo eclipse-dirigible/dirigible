@@ -37,8 +37,9 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration;
 
 /**
- * The configured origins reach both STOMP registrations before the SockJS one is created, and the
- * inbound channel authenticates before it authorizes.
+ * The configured origins that name a host reach both STOMP registrations before the SockJS one is
+ * created - a wildcard never does, since the handshake carries the session cookie - and the inbound
+ * channel authenticates before it authorizes.
  */
 @SuppressWarnings("unchecked")
 class WebsocketConfigTest {
@@ -81,6 +82,33 @@ class WebsocketConfigTest {
         InOrder inOrder = inOrder(sockJsEndpoint);
         inOrder.verify(sockJsEndpoint)
                .setAllowedOriginPatterns("https://app.example.com", "capacitor://localhost");
+        inOrder.verify(sockJsEndpoint)
+               .withSockJS();
+    }
+
+    @Test
+    void anEveryOriginPatternKeepsTheSameOriginHandshake() {
+        // the wildcard serves bearer clients over HTTP; a WebSocket handshake carries the session cookie,
+        // so applying it to the STOMP endpoint would let any page open a session as a logged in user
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("*");
+
+        config.registerStompEndpoints(registry);
+
+        verify(endpoint, never()).setAllowedOriginPatterns(any(String[].class));
+        verify(sockJsEndpoint, never()).setAllowedOriginPatterns(any(String[].class));
+        verify(sockJsEndpoint).withSockJS();
+    }
+
+    @Test
+    void onlyTheOriginsNamingAHostReachBothRegistrations() {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://*, https://app.example.com, h*");
+
+        config.registerStompEndpoints(registry);
+
+        verify(endpoint).setAllowedOriginPatterns("https://app.example.com");
+        InOrder inOrder = inOrder(sockJsEndpoint);
+        inOrder.verify(sockJsEndpoint)
+               .setAllowedOriginPatterns("https://app.example.com");
         inOrder.verify(sockJsEndpoint)
                .withSockJS();
     }

@@ -146,6 +146,58 @@ class CorsConfigurationSourceProviderTest {
     }
 
     @Test
+    void patternsNamingAHostAreToldFromTheRest() {
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("https://app.example.com"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("https://*.example.com"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("*://*.example.com"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("https://*.example.com:[8080]"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("capacitor://localhost"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("http://localhost:5173"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("HTTPS://*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*:[*]"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*:*"));
+        // Spring matches a pattern against the whole origin string, so these reach (nearly) every origin
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("h*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("*/*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("*.example.com"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("not a uri"));
+    }
+
+    @Test
+    void theStompHandshakeGetsTheOriginsThatNameAHost() {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(
+                "https://app.example.com, https://*.example.com:[8080], capacitor://localhost, *, https://*, h*, not a uri");
+
+        assertEquals(List.of("https://app.example.com", "https://*.example.com:[8080]", "capacitor://localhost"),
+                CorsConfigurationSourceProvider.stompOriginPatterns());
+        assertEquals(7, CorsConfigurationSourceProvider.allowedOriginPatterns()
+                                                       .size(),
+                "the HTTP side keeps every configured pattern");
+    }
+
+    @Test
+    void unconfiguredTheStompHandshakeGetsNothing() {
+        assertTrue(CorsConfigurationSourceProvider.stompOriginPatterns()
+                                                  .isEmpty());
+    }
+
+    @Test
+    void credentialsForASchemelessPatternAreRefused() {
+        // Spring compiles h* to h.* and full-matches it against the origin, so it admits
+        // https://evil.example
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com,h*");
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
+
+        InvalidConfigException exception = assertThrows(InvalidConfigException.class, CorsConfigurationSourceProvider::get);
+
+        assertEquals(DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey(), exception.getConfigKey());
+        assertTrue(exception.getMessage()
+                            .contains("h*"));
+    }
+
+    @Test
     void credentialsForANarrowPatternWithAPortListAreAllowed() {
         // one port only: the configuration value is split on commas, so a list of several ports never
         // arrives in one piece

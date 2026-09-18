@@ -33,7 +33,7 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 
 /**
  * The STOMP broker of the platform: the {@code /stomp} endpoint (raw and SockJS), the simple broker
- * behind {@code /queue} and {@code /topic}, and the rules a client is held to.
+ * behind {@code /queue}, and the rules a client is held to.
  *
  * <p>
  * A client is either the browser session that opened the handshake or a bearer token presented in
@@ -48,10 +48,12 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * closes, the refused ones included.
  *
  * <p>
- * The handshake accepts the configured cross-origin origins; unconfigured it stays same-origin, as
- * it always was. The endpoint answers its own CORS: the platform's CORS filter leaves
- * {@code /stomp/**} alone (see {@link CorsConfigurationSourceProvider}), so the SockJS transports
- * answer with the credentials SockJS clients require.
+ * The handshake accepts the configured cross-origin origins that name a host - a wildcard never
+ * reaches it, since a handshake carries the session cookie (see
+ * {@link CorsConfigurationSourceProvider#stompOriginPatterns()}); unconfigured it stays
+ * same-origin, as it always was. The endpoint answers its own CORS: the platform's CORS filter
+ * leaves {@code /stomp/**} alone (see {@link CorsConfigurationSourceProvider}), so the SockJS
+ * transports answer with the credentials SockJS clients require.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -98,7 +100,8 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void configureMessageBroker(final MessageBrokerRegistry config) {
-        config.enableSimpleBroker("/queue/", "/topic/");
+        // user destinations resolve to /queue/<name>-user<session>; nothing publishes to a topic
+        config.enableSimpleBroker("/queue/");
         config.setApplicationDestinationPrefixes("/ws");
     }
 
@@ -112,8 +115,8 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setErrorHandler(new BearerTokenStompErrorHandler());
         StompWebSocketEndpointRegistration endpoint = registry.addEndpoint("/stomp");
         StompWebSocketEndpointRegistration sockJsEndpoint = registry.addEndpoint("/stomp");
-        if (CorsConfigurationSourceProvider.isConfigured()) {
-            List<String> origins = CorsConfigurationSourceProvider.allowedOriginPatterns();
+        List<String> origins = CorsConfigurationSourceProvider.stompOriginPatterns();
+        if (!origins.isEmpty()) {
             LOGGER.info("The STOMP handshake accepts the origins {}.", origins);
             String[] originPatterns = origins.toArray(String[]::new);
             endpoint.setAllowedOriginPatterns(originPatterns);

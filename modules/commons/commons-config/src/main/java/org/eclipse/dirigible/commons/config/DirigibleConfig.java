@@ -197,7 +197,8 @@ public enum DirigibleConfig {
      * {@code tauri://localhost} or {@code capacitor://localhost}, that may call the platform from
      * another origin. Unset, the OAuth2 login profiles (cognito, keycloak, github) answer no
      * cross-origin request at all, while the basic profile keeps granting every origin - without
-     * credentials.
+     * credentials. The STOMP handshake accepts those that name a host - a wildcard origin never reaches
+     * it, since a WebSocket handshake carries the session cookie.
      */
     CORS_ALLOWED_ORIGINS("DIRIGIBLE_CORS_ALLOWED_ORIGINS", null),
 

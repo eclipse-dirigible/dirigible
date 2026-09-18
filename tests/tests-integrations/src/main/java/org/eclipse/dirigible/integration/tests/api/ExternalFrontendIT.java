@@ -67,6 +67,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpHeaders;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompFrameHandler;
@@ -433,6 +434,37 @@ class ExternalFrontendIT extends IntegrationTest {
     }
 
     @Test
+    void aCookieSessionConnectsWithoutABearerHeader() throws Exception {
+        // the pages the platform serves - every shipped websocket page - authenticate their STOMP session
+        // by the handshake cookie alone, and the CONNECT gate must keep that open
+        String session = api().auth()
+                              .oauth2(identityProvider.idToken("jane", DEVELOPER_GROUPS))
+                              .when()
+                              .post("/login/token")
+                              .getCookie("JSESSIONID");
+        assertNotNull(session, "the exchange answers with the session cookie");
+        WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
+        handshakeHeaders.add(HttpHeaders.COOKIE, "JSESSIONID=" + session);
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+
+        StompSession stomp = connect(handshakeHeaders, new StompHeaders(), handler);
+        try {
+            BlockingQueue<String> inbox = subscribe(stomp, "/user/queue/reply/it");
+            awaitSubscription("jane", "/user/queue/reply/it");
+            Awaitility.await()
+                      .atMost(15, TimeUnit.SECONDS)
+                      .pollInterval(500, TimeUnit.MILLISECONDS)
+                      .untilAsserted(() -> {
+                          messagingTemplate.convertAndSendToUser("jane", "/queue/reply/it", "hello cookie");
+                          assertEquals("hello cookie", inbox.poll(500, TimeUnit.MILLISECONDS), "the handshake cookie is the STOMP user");
+                      });
+            assertTrue(handler.errors.isEmpty());
+        } finally {
+            stomp.disconnect();
+        }
+    }
+
+    @Test
     void aBearerStompSessionEndsWhenItsTokenDoes() throws Exception {
         RecordingSessionHandler handler = new RecordingSessionHandler();
         String shortLived = identityProvider.idToken("jane", DEVELOPER_GROUPS, claims -> claims.expirationTime(Date.from(Instant.now()
@@ -662,15 +694,20 @@ class ExternalFrontendIT extends IntegrationTest {
     }
 
     private StompSession connect(String token, String origin, RecordingSessionHandler handler) throws Exception {
-        WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
-        client.setMessageConverter(new org.springframework.messaging.converter.StringMessageConverter());
-        client.setTaskScheduler(stompScheduler);
         WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
         handshakeHeaders.setOrigin(origin);
         StompHeaders connectHeaders = new StompHeaders();
         if (token != null) {
             connectHeaders.add("Authorization", "Bearer " + token);
         }
+        return connect(handshakeHeaders, connectHeaders, handler);
+    }
+
+    private StompSession connect(WebSocketHttpHeaders handshakeHeaders, StompHeaders connectHeaders, RecordingSessionHandler handler)
+            throws Exception {
+        WebSocketStompClient client = new WebSocketStompClient(new StandardWebSocketClient());
+        client.setMessageConverter(new org.springframework.messaging.converter.StringMessageConverter());
+        client.setTaskScheduler(stompScheduler);
         return client.connectAsync(stompUrl(), handshakeHeaders, connectHeaders, handler)
                      .get(15, TimeUnit.SECONDS);
     }

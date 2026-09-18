@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.security.oauth2.resourceserver;
 
+import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,6 +22,8 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.eclipse.dirigible.components.base.http.access.AuthenticatedBearerToken;
 import org.eclipse.dirigible.components.base.http.access.BearerTokenAuthenticator;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
@@ -35,6 +41,7 @@ import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jose.jws.SignatureAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtClaimNames;
 import org.springframework.security.oauth2.jwt.JwtClaimValidator;
@@ -47,6 +54,11 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationProvider;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.util.StringUtils;
+
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
 
 /**
  * Everything a login profile needs to accept bearer tokens by the rules of its
@@ -69,6 +81,13 @@ import org.springframework.util.StringUtils;
  * the rules that applied before: identified by {@code sub}, authorities from its scopes, audience
  * checked only where audiences are configured. A token of any other kind, or of a kind the
  * deployment does not accept, is refused.
+ *
+ * <p>
+ * The signing keys come from the provider's JWKS endpoint through Nimbus: cached for five minutes,
+ * refreshed when a token names a key the cache does not hold, and at most once every thirty seconds
+ * - a burst of tokens carrying unknown key ids costs one call to the provider, not one per token,
+ * while a genuine key rotation is picked up within that interval. Every asymmetric signature
+ * algorithm is accepted, a token being verified only against a key the provider publishes for it.
  */
 public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
 
@@ -80,6 +99,21 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
 
     /** The claim stating whether the e-mail address of an ID token was verified by the provider. */
     static final String EMAIL_VERIFIED_CLAIM = "email_verified";
+
+    /**
+     * The signature algorithms accepted: every asymmetric one, since a token is verified only against a
+     * key the provider publishes for it. HMAC has no place with a public key set - a shared-secret
+     * algorithm over a published key is the classic algorithm-confusion attack.
+     */
+    static final Set<SignatureAlgorithm> ASYMMETRIC_ALGORITHMS = Set.of(SignatureAlgorithm.RS256, SignatureAlgorithm.RS384,
+            SignatureAlgorithm.RS512, SignatureAlgorithm.PS256, SignatureAlgorithm.PS384, SignatureAlgorithm.PS512,
+            SignatureAlgorithm.ES256, SignatureAlgorithm.ES384, SignatureAlgorithm.ES512);
+
+    /**
+     * Connect and read timeout of a JWKS fetch. Nimbus's half-second default is too tight for a cold
+     * TLS handshake to a cloud provider; Spring's own source had no bound at all.
+     */
+    private static final int JWKS_TIMEOUT_MILLIS = 5_000;
 
     private static final OAuth2Error KIND_NOT_ACCEPTED = new OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN, "Token kind is not accepted",
             "https://tools.ietf.org/html/rfc6750#section-3.1");
@@ -99,7 +133,8 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
     public ResourceServerJwtSupport(ResourceServerJwtSettings settings,
             Converter<Jwt, Collection<GrantedAuthority>> scopeAuthoritiesConverter, TenantAwareAuthoritiesMapper groupAuthoritiesMapper) {
         this.settings = settings;
-        this.decoder = NimbusJwtDecoder.withJwkSetUri(settings.jwkSetUri())
+        this.decoder = NimbusJwtDecoder.withJwkSource(jwkSource(settings.jwkSetUri()))
+                                       .jwsAlgorithms(algorithms -> algorithms.addAll(ASYMMETRIC_ALGORITHMS))
                                        .build();
         this.decoder.setJwtValidator(kindAwareValidator());
         this.authenticationConverter = new KindAwareAuthenticationConverter(scopeAuthoritiesConverter, groupAuthoritiesMapper);
@@ -151,6 +186,28 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
                                                                                                                   .getExpiresAt()
                 : null;
         return new AuthenticatedBearerToken(authentication, expiresAt);
+    }
+
+    /**
+     * The keys the signatures are verified against, fetched from the JWKS endpoint: cached for five
+     * minutes, refreshed when a token names a key the cache does not hold - at most once every thirty
+     * seconds, which Spring's own source switches off - and retried once when a fetch fails.
+     */
+    private static JWKSource<SecurityContext> jwkSource(String jwkSetUri) {
+        URL url;
+        try {
+            url = new URI(jwkSetUri).toURL();
+        } catch (URISyntaxException | MalformedURLException | IllegalArgumentException ex) {
+            throw new InvalidConfigException("The JWKS endpoint [" + jwkSetUri + "] of the bearer tokens is not a URL: " + ex.getMessage(),
+                    DirigibleConfig.OAUTH2_JWT_JWK_SET_URI.getKey());
+        }
+        return JWKSourceBuilder.<SecurityContext>create(url,
+                new DefaultResourceRetriever(JWKS_TIMEOUT_MILLIS, JWKS_TIMEOUT_MILLIS, JWKSourceBuilder.DEFAULT_HTTP_SIZE_LIMIT))
+                               .cache(true)
+                               .refreshAheadCache(false)
+                               .rateLimited(true)
+                               .retrying(true)
+                               .build();
     }
 
     private OAuth2TokenValidator<Jwt> kindAwareValidator() {

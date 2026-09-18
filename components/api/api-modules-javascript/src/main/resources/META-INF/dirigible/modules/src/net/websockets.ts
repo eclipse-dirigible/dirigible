@@ -18,12 +18,13 @@
  * ```ts
  * import { Websockets } from "@aerokit/sdk/net";
  * 
- * // Create a new WebSocket client connection
+ * // Create a new WebSocket client connection and send to a STOMP destination of the broker
  * const client = Websockets.createWebsocket("ws://example.com/socket", "myHandler");
- * client.send("Hello, WebSocket!");
+ * client.send("Hello, WebSocket!", "/app/greetings");
  *
- * // A Dirigible broker needs the CONNECT frame authenticated
+ * // A Dirigible broker needs the CONNECT frame authenticated; its application destinations are /ws/stomp/<endpoint>
  * const dirigible = Websockets.createWebsocket("wss://dirigible.example.com/stomp", "myHandler", { Authorization: "Bearer " + idToken });
+ * dirigible.send("hello", "/ws/stomp/my-endpoint");
  *
  * // Access event details in an 'onmessage' handler
  * if (Websockets.isOnMessage()) {
@@ -176,13 +177,16 @@ class WebsocketClient {
 	/**
 	 * Sends a text message over the WebSocket connection.
 	 * @param text The message to send.
+	 * @param destination The STOMP destination the message is sent to. A Dirigible broker routes its
+	 *        application destinations '/ws/stomp/<endpoint>' to the handler of that endpoint. Without
+	 *        it the connection URI is sent as the destination, which no broker routes anywhere.
 	 */
-	public send(text: string): void {
+	public send(text: string, destination?: string): void {
 		if (!this._session || this._session === null) {
 			console.error("Websocket Session is null. Message not sent.");
 			return;
 		}
-		this._session.send(this.uri, text);
+		this._session.send(destination ?? this.uri, text);
 	};
 
 	/**

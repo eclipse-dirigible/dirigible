@@ -21,8 +21,6 @@ import org.eclipse.dirigible.components.websockets.service.WebsocketProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -40,11 +38,6 @@ public class WebsocketController {
 
     /** The processor. */
     private final WebsocketProcessor processor;
-
-    /** The client outbound channel. */
-    @Autowired
-    @Qualifier("clientOutboundChannel")
-    private MessageChannel clientOutboundChannel;
 
     /**
      * Instantiates a new websockets service.
