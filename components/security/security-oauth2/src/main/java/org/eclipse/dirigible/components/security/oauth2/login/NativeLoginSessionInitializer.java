@@ -152,13 +152,14 @@ class NativeLoginSessionInitializer {
         Collection<GrantedAuthority> authorities = roleAuthorities(idTokenAuthentication.getAuthorities());
         OidcUser oidcUser = new DefaultOidcUser(authorities, idToken, principalClaim);
         OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(oidcUser, authorities, registrationId);
-        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
         HttpSession carriedSession = request.getSession(false);
         if (carriedSession != null) {
             carriedSession.invalidate();
         }
         HttpSession session = request.getSession(true);
+        // the details record the session id, so they are built once the session they describe exists
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
         saveContext(authentication, request, response);
         session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, jwt.getExpiresAt());
         LOGGER.debug("Established a session from a bearer ID token for user [{}] on registration [{}], ending at [{}]",

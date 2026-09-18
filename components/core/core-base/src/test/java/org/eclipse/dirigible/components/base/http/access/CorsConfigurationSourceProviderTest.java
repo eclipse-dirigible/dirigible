@@ -114,7 +114,7 @@ class CorsConfigurationSourceProviderTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"https://app.example.com,*", "https://*", "*://*", "https://*:8080", "HTTPS://*", "https://*:[*]", "*://*:[*]",
-            "https://*:*", "https://*:[8080]"})
+            "https://*:*", "https://*:[8080]", "https://**", "https://*.*", "*://*.*:[*]"})
     void credentialsForEveryOriginAreRefused(String origins) {
         DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(origins);
         DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
@@ -131,6 +131,11 @@ class CorsConfigurationSourceProviderTest {
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*://*"));
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*:[*]"), "a port pattern is no URI port, but hides nothing");
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*:*"));
+        // Spring turns every * into .*, so a host made of wildcards alone reaches every origin too
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://**"));
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.*"));
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*://*.*:[*]"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.com"), "narrow by the operator's own choice");
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.example.com"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.example.com:[8080,8081]"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://app.example.com"));
@@ -153,11 +158,16 @@ class CorsConfigurationSourceProviderTest {
         assertTrue(CorsConfigurationSourceProvider.namesAHost("https://*.example.com:[8080]"));
         assertTrue(CorsConfigurationSourceProvider.namesAHost("capacitor://localhost"));
         assertTrue(CorsConfigurationSourceProvider.namesAHost("http://localhost:5173"));
+        assertTrue(CorsConfigurationSourceProvider.namesAHost("https://*.com"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("*"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("HTTPS://*"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*:[*]"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*:*"));
+        // a host of wildcards alone names nothing, however many of them it strings together
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("https://**"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("https://*.*"));
+        assertFalse(CorsConfigurationSourceProvider.namesAHost("*://*.*:[*]"));
         // Spring matches a pattern against the whole origin string, so these reach (nearly) every origin
         assertFalse(CorsConfigurationSourceProvider.namesAHost("h*"));
         assertFalse(CorsConfigurationSourceProvider.namesAHost("*/*"));
@@ -168,11 +178,11 @@ class CorsConfigurationSourceProviderTest {
     @Test
     void theStompHandshakeGetsTheOriginsThatNameAHost() {
         DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(
-                "https://app.example.com, https://*.example.com:[8080], capacitor://localhost, *, https://*, h*, not a uri");
+                "https://app.example.com, https://*.example.com:[8080], capacitor://localhost, *, https://*, https://*.*, h*, not a uri");
 
         assertEquals(List.of("https://app.example.com", "https://*.example.com:[8080]", "capacitor://localhost"),
                 CorsConfigurationSourceProvider.stompOriginPatterns());
-        assertEquals(7, CorsConfigurationSourceProvider.allowedOriginPatterns()
+        assertEquals(8, CorsConfigurationSourceProvider.allowedOriginPatterns()
                                                        .size(),
                 "the HTTP side keeps every configured pattern");
     }

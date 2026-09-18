@@ -19,7 +19,6 @@ import static org.mockito.Mockito.when;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
@@ -449,9 +448,8 @@ class ResourceServerJwtSupportTest {
     @Test
     void aTokenSignedWithASharedSecretIsRefused() throws Exception {
         // HMAC over a published key is the algorithm-confusion attack - the algorithm is not accepted at
-        // all
-        byte[] secret = new byte[32];
-        new SecureRandom().nextBytes(secret);
+        // all, so any 256-bit secret does
+        byte[] secret = "a-shared-secret-of-thirty-two-bytes!".getBytes(StandardCharsets.UTF_8);
         String token = sign(new JWSHeader.Builder(JWSAlgorithm.HS256).keyID(KEY_ID)
                                                                      .build(),
                 new MACSigner(secret), COGNITO_ISSUER, claims -> claims.claim("token_use", "access")

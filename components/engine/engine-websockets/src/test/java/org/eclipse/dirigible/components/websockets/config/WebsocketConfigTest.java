@@ -25,6 +25,8 @@ import org.eclipse.dirigible.components.websockets.service.WebsocketProcessor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
@@ -86,11 +88,13 @@ class WebsocketConfigTest {
                .withSockJS();
     }
 
-    @Test
-    void anEveryOriginPatternKeepsTheSameOriginHandshake() {
-        // the wildcard serves bearer clients over HTTP; a WebSocket handshake carries the session cookie,
-        // so applying it to the STOMP endpoint would let any page open a session as a logged in user
-        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("*");
+    @ParameterizedTest
+    @ValueSource(strings = {"*", "https://*", "https://**", "https://*.*"})
+    void anEveryOriginPatternKeepsTheSameOriginHandshake(String origins) {
+        // a wildcard serves bearer clients over HTTP; a WebSocket handshake carries the session cookie,
+        // so applying it to the STOMP endpoint would let any page open a session as a logged in user -
+        // however the wildcard is spelled
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(origins);
 
         config.registerStompEndpoints(registry);
 

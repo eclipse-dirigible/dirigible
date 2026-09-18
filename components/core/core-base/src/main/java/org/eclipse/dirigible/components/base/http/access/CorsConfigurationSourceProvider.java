@@ -95,12 +95,12 @@ public class CorsConfigurationSourceProvider {
      * HTTP may grant every origin without credentials - no cookie travels on such a request, so a
      * wildcard there serves bearer clients and nothing else. A WebSocket handshake carries the session
      * cookie whatever the CORS configuration says about credentials, and the handshake principal
-     * becomes the STOMP user. A pattern reaching every origin ({@code *}, {@code https://*}) or one
-     * that cannot be told to name a host ({@code h*}, which Spring matches against the whole origin
-     * string) would therefore let any page open a STOMP session as a logged in user. Such patterns are
-     * left out, with one warning, and the handshake stays same-origin when nothing is left. A concrete
-     * origin or a narrow pattern ({@code https://*.example.com}) is the operator's explicit trust
-     * decision and passes.
+     * becomes the STOMP user. A pattern reaching every origin ({@code *}, {@code https://*},
+     * {@code https://*.*}) or one that cannot be told to name a host ({@code h*}, which Spring matches
+     * against the whole origin string) would therefore let any page open a STOMP session as a logged in
+     * user. Such patterns are left out, with one warning, and the handshake stays same-origin when
+     * nothing is left. A concrete origin or a narrow pattern ({@code https://*.example.com}) is the
+     * operator's explicit trust decision and passes.
      *
      * @return the patterns, empty when none is configured or none names a host
      */
@@ -235,25 +235,39 @@ public class CorsConfigurationSourceProvider {
 
     /**
      * Whether an origin pattern matches every origin: the bare wildcard, or a pattern whose host is
-     * nothing but the wildcard ({@code https://*}, {@code *://*:8080}) - as good as the bare one for
-     * whoever wants to reach the platform from a page of their own.
+     * nothing but wildcards ({@code https://*}, {@code *://*:8080}, and just as well {@code https://**}
+     * or {@code https://*.*}, since Spring turns every {@code *} into {@code .*}) - as good as the bare
+     * one for whoever wants to reach the platform from a page of their own.
      */
     static boolean matchesEveryOrigin(String origin) {
         if (WILDCARD.equals(origin)) {
             return true;
         }
         URI uri = parsePattern(origin);
-        return uri != null && WILDCARD_HOST.equalsIgnoreCase(uri.getHost());
+        return uri != null && uri.getHost() != null && !namesAHost(uri);
     }
 
     /**
-     * Whether an origin pattern names a host: it parses as a URI whose host is more than the wildcard.
-     * {@code https://*.example.com} and {@code capacitor://localhost} do; {@code *}, {@code https://*}
-     * and a scheme-less {@code h*} - which Spring matches against the whole origin string - do not.
+     * Whether an origin pattern names a host: it parses as a URI whose host is more than wildcards.
+     * {@code https://*.example.com} and {@code capacitor://localhost} do; {@code *}, {@code https://*},
+     * {@code https://**}, {@code https://*.*} and a scheme-less {@code h*} - which Spring matches
+     * against the whole origin string - do not.
      */
     static boolean namesAHost(String origin) {
         URI uri = parsePattern(origin);
-        return uri != null && uri.getHost() != null && !WILDCARD_HOST.equalsIgnoreCase(uri.getHost());
+        return uri != null && uri.getHost() != null && namesAHost(uri);
+    }
+
+    /**
+     * Whether the host of a parsed pattern is more than wildcards: with every wildcard stand-in
+     * removed, a letter or digit must be left. {@code *.example.com} leaves {@code .example.com};
+     * {@code **} and {@code *.*} leave nothing but separators.
+     */
+    private static boolean namesAHost(URI uri) {
+        return uri.getHost()
+                  .replace(WILDCARD_HOST, "")
+                  .chars()
+                  .anyMatch(Character::isLetterOrDigit);
     }
 
     /**
