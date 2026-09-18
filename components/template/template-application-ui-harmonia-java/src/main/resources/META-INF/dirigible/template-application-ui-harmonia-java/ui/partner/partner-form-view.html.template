@@ -20,9 +20,12 @@
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
-<div x-data="${name}PartnerFormPage" class="vbox size-full">
+<div x-data="${name}PartnerFormPage" class="vbox w-full">
 
-  <div x-h-toolbar data-variant="transparent">
+  <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
+       form never shows through, pinned to the top on scroll (the page root grows with its content).
+       Title + status on the left; the dismiss + submit + Back on the right. -->
+  <div x-h-toolbar data-variant="clear" class="sticky top-0 z-10 border-b border-border">
     <span x-h-toolbar-title class="shrink-0"
           x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}')"></span>
 #if($statusProp != "")
@@ -36,7 +39,16 @@
     <div x-h-toolbar-spacer></div>
     <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
-    <button x-h-button data-variant="transparent" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
+    <!-- Delete (edit only), then Cancel/Discard + Save, then Back. -->
+    <button x-h-button data-variant="negative" class="shrink-0" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
+    <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
+    <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" :disabled="saving" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+    <button x-h-button data-variant="primary" class="shrink-0"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving || (mode === 'edit' &amp;&amp; !isDirty())">
+      <span x-show="saving" x-h-spinner></span>
+      <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
+    </button>
+    <!-- Back: navigation away, to the right of the form actions. -->
+    <button x-h-button data-variant="transparent" class="shrink-0" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>
 
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
@@ -213,18 +225,6 @@
     </template>
 #end
 
-    <div class="hbox gap-2" style="max-width: 900px">
-      <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="deleteOpen = true"
-              x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
-      <div class="flex-1"></div>
-      <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
-      <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
-              x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end @click="save()" :disabled="saving || (mode === 'edit' &amp;&amp; !isDirty())">
-        <span x-show="saving" x-h-spinner></span>
-        <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
-      </button>
-    </div>
   </div>
 
   <!-- Delete confirmation. The dialog MUST be nested inside the overlay (not a sibling) or it is
