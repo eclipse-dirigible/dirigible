@@ -41,8 +41,10 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
     private static final String PARAM_2_ID = "param2Id";
     private static final String PARAM_1_VALUE = "string-param-value";
     private static final String PARAM_2_VALUE = "777";
+    // A process variable started as a whole number stays whole (#7373), so the task logs the value the
+    // form sent - not the widened "777.0" the platform's default Gson used to produce.
     public static final String EXPECTED_TASK_LOGGED_MESSAGE =
-            "Hello World! Process variables: {param1=" + PARAM_1_VALUE + ", param2=" + PARAM_2_VALUE + ".0}";
+            "Hello World! Process variables: {param1=" + PARAM_1_VALUE + ", param2=" + PARAM_2_VALUE + "}";
     private static final String TRIGGER_BUTTON_TEXT = "Trigger";
 
     private LogsAsserter consoleLogAsserter;

@@ -173,7 +173,13 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             tenantSelectionManager.selectTenant(request, response, tenantId);
             return true;
         } catch (TenantSelectionException ex) {
-            LOGGER.info("The only tenant [{}] of user [{}] cannot be entered: {}", tenantId, authentication.getName(), ex.getMessage());
+            // A tenant this instance does not know is not a wait-and-retry: the user is left on a picker
+            // holding one tile they can never press, and only an operator can resolve it.
+            if (TenantSelectionException.Reason.UNKNOWN_HERE == ex.getReason()) {
+                LOGGER.warn("The only tenant [{}] of user [{}] cannot be entered: {}", tenantId, authentication.getName(), ex.getMessage());
+            } else {
+                LOGGER.info("The only tenant [{}] of user [{}] cannot be entered: {}", tenantId, authentication.getName(), ex.getMessage());
+            }
             return false;
         }
     }
