@@ -101,7 +101,19 @@ class TenantSelectionManagerTest {
         List<TenantOption> tenants = manager.availableTenants(SecurityContextHolder.getContext()
                                                                                    .getAuthentication());
 
-        assertThat(tenants).containsExactly(new TenantOption(ACME, "Acme Ltd", true), new TenantOption(GLOBEX, GLOBEX, false));
+        assertThat(tenants).containsExactly(new TenantOption(ACME, "Acme Ltd", true, TenantOption.State.READY),
+                new TenantOption(GLOBEX, GLOBEX, false, TenantOption.State.UNKNOWN));
+    }
+
+    @Test
+    void aRegisteredTenantThatIsStillProvisioningIsOfferedAsPreparingNotAsUnknown() {
+        authenticate("acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.INITIAL)));
+
+        List<TenantOption> tenants = manager.availableTenants(SecurityContextHolder.getContext()
+                                                                                   .getAuthentication());
+
+        assertThat(tenants).containsExactly(new TenantOption(ACME, "Acme Ltd", false, TenantOption.State.PREPARING));
     }
 
     @Test
@@ -162,6 +174,16 @@ class TenantSelectionManagerTest {
                                                                                .extracting("reason")
                                                                                .isEqualTo(
                                                                                        TenantSelectionException.Reason.NOT_PROVISIONED_HERE);
+    }
+
+    @Test
+    void aTenantThisInstanceDoesNotKnowAtAllIsRefusedForItsOwnReason() {
+        authenticate("acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> manager.selectTenant(request, response, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                               .extracting("reason")
+                                                                               .isEqualTo(TenantSelectionException.Reason.UNKNOWN_HERE);
     }
 
     @Test

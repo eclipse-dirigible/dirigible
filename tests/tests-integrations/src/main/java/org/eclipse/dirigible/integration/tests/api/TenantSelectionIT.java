@@ -85,6 +85,9 @@ class TenantSelectionIT extends IntegrationTest {
     private static final String GROUPS_CLAIM = "groups";
     private static final String USER = "owner@example.com";
 
+    /** A tenant id no test ever registers: the identity provider knows it, this instance does not. */
+    private static final String STRANGER_TENANT = "tenant-that-was-never-registered";
+
     /**
      * A group that carries no tenant, so it is a global role. It has to be a group: in this mode the
      * authorities of a session are recomputed from the groups, so nothing else survives a request.
@@ -147,7 +150,43 @@ class TenantSelectionIT extends IntegrationTest {
            .andExpect(jsonPath("$.selectedTenantId").doesNotExist())
            .andExpect(jsonPath("$.tenants.length()").value(2))
            .andExpect(jsonPath("$.tenants[?(@.id=='" + provisionedTenant.getId() + "')].provisionedHere", contains(true)))
-           .andExpect(jsonPath("$.tenants[?(@.id=='" + tenantAwaitingProvisioning.getId() + "')].provisionedHere", contains(false)));
+           .andExpect(jsonPath("$.tenants[?(@.id=='" + provisionedTenant.getId() + "')].state", contains("READY")))
+           .andExpect(jsonPath("$.tenants[?(@.id=='" + tenantAwaitingProvisioning.getId() + "')].provisionedHere", contains(false)))
+           // Registered here, so it really is being prepared - the one case where telling the user to
+           // wait is true.
+           .andExpect(jsonPath("$.tenants[?(@.id=='" + tenantAwaitingProvisioning.getId() + "')].state", contains("PREPARING")));
+    }
+
+    /**
+     * A group naming a tenant this instance was never told about.
+     *
+     * <p>
+     * It must not be offered as {@code PREPARING}: nothing here is preparing it, so a user waiting for
+     * it waits forever. The entry is still listed - a membership the identity provider granted is not
+     * something to hide - but it says only that it is unavailable, and the server log carries what an
+     * operator needs.
+     */
+    @Test
+    void aTenantThisInstanceNeverRegisteredIsOfferedAsUnknown() throws Exception {
+        mvc.perform(get(TENANT_SELECTION_ENDPOINT).with(authentication(userOf(STRANGER_TENANT + "." + APP_ID + ".Owner"))))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.tenants.length()").value(1))
+           .andExpect(jsonPath("$.tenants[0].id").value(STRANGER_TENANT))
+           // No row, so no name to join - the id stands in for it.
+           .andExpect(jsonPath("$.tenants[0].name").value(STRANGER_TENANT))
+           .andExpect(jsonPath("$.tenants[0].provisionedHere").value(false))
+           .andExpect(jsonPath("$.tenants[0].state").value("UNKNOWN"));
+    }
+
+    @Test
+    void selectingATenantThisInstanceNeverRegisteredIsRefusedWithItsOwnReason() throws Exception {
+        mvc.perform(post(TENANT_SELECTION_ENDPOINT).with(authentication(userOf(STRANGER_TENANT + "." + APP_ID + ".Owner")))
+                                                   .contentType(MediaType.APPLICATION_JSON)
+                                                   .content("{\"tenantId\":\"" + STRANGER_TENANT + "\"}"))
+           // The same status as a tenant that is merely unfinished, deliberately: the status is the
+           // contract, the reason is what tells a client which of the two it got.
+           .andExpect(status().isConflict())
+           .andExpect(jsonPath("$.reason").value("UNKNOWN_HERE"));
     }
 
     /**

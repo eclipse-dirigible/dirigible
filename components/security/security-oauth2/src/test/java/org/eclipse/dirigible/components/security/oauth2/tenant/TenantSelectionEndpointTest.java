@@ -72,7 +72,8 @@ class TenantSelectionEndpointTest {
     void theStateListsTheTenantsAndTheSelection() {
         when(tenantSelectionManager.selectedTenantId(request)).thenReturn(ACME);
         when(tenantSelectionManager.availableTenants(any())).thenReturn(
-                List.of(new TenantOption(ACME, "Acme Ltd", true), new TenantOption("globex", "globex", false)));
+                List.of(new TenantOption(ACME, "Acme Ltd", true, TenantOption.State.READY),
+                        new TenantOption("globex", "globex", false, TenantOption.State.UNKNOWN)));
 
         ResponseEntity<TenantSelectionState> state = endpoint.state(request);
 
@@ -115,6 +116,9 @@ class TenantSelectionEndpointTest {
     void aRefusalCarriesTheStatusOfItsReason() {
         assertThat(refusalStatus(TenantSelectionException.Reason.NOT_A_MEMBER)).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(refusalStatus(TenantSelectionException.Reason.NOT_PROVISIONED_HERE)).isEqualTo(HttpStatus.CONFLICT);
+        // Same status as NOT_PROVISIONED_HERE, deliberately: the status is the contract, the reason is
+        // what tells the two apart - one ends by waiting and the other never does.
+        assertThat(refusalStatus(TenantSelectionException.Reason.UNKNOWN_HERE)).isEqualTo(HttpStatus.CONFLICT);
         assertThat(refusalStatus(TenantSelectionException.Reason.NOT_AN_INTERACTIVE_SESSION)).isEqualTo(HttpStatus.UNAUTHORIZED);
 
         ResponseEntity<TenantSelectionRefusal> refusal = endpoint.onRefusedSelection(
@@ -123,6 +127,11 @@ class TenantSelectionEndpointTest {
                           .reason()).isEqualTo("NOT_PROVISIONED_HERE");
         assertThat(refusal.getBody()
                           .message()).isEqualTo("not provisioned yet");
+
+        ResponseEntity<TenantSelectionRefusal> unknown = endpoint.onRefusedSelection(
+                new TenantSelectionException(TenantSelectionException.Reason.UNKNOWN_HERE, ACME, "not registered"));
+        assertThat(unknown.getBody()
+                          .reason()).isEqualTo("UNKNOWN_HERE");
     }
 
     @Test

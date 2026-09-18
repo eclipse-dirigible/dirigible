@@ -110,7 +110,7 @@ public class TenantSelectionEndpoint {
         LOGGER.info("Refused tenant selection [{}]: {}", exception.getTenantId(), exception.getMessage());
         HttpStatus status = switch (exception.getReason()) {
             case NOT_A_MEMBER -> HttpStatus.FORBIDDEN;
-            case NOT_PROVISIONED_HERE -> HttpStatus.CONFLICT;
+            case NOT_PROVISIONED_HERE, UNKNOWN_HERE -> HttpStatus.CONFLICT;
             case NOT_AN_INTERACTIVE_SESSION -> HttpStatus.UNAUTHORIZED;
         };
         return ResponseEntity.status(status)
