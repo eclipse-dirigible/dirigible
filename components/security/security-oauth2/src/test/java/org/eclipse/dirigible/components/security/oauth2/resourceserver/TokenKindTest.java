@@ -42,8 +42,8 @@ class TokenKindTest {
     void keycloakReadsTyp() {
         assertEquals(Optional.of(TokenKind.ID), TokenKind.of(jwt("typ", "ID"), IdentityProvider.KEYCLOAK));
         assertEquals(Optional.of(TokenKind.ACCESS), TokenKind.of(jwt("typ", "Bearer"), IdentityProvider.KEYCLOAK));
-        assertEquals(Optional.of(TokenKind.ACCESS), TokenKind.of(jwt("scope", "openid"), IdentityProvider.KEYCLOAK),
-                "a token typed nothing keeps the access token rules that applied before");
+        assertEquals(Optional.empty(), TokenKind.of(jwt("scope", "openid"), IdentityProvider.KEYCLOAK),
+                "Keycloak types every token it issues, so one typed nothing is not Keycloak's and has no kind here");
         assertEquals(Optional.empty(), TokenKind.of(jwt("typ", "Refresh"), IdentityProvider.KEYCLOAK));
         assertEquals(Optional.empty(), TokenKind.of(jwt("typ", "Offline"), IdentityProvider.KEYCLOAK));
         assertEquals(Optional.empty(), TokenKind.of(jwt("typ", "id"), IdentityProvider.KEYCLOAK));

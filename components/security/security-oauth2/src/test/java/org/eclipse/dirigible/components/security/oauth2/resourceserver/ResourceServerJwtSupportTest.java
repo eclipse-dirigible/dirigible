@@ -325,10 +325,16 @@ class ResourceServerJwtSupportTest {
                                                               .audience(CLIENT_ID));
         String untyped = sign(COGNITO_ISSUER, claims -> claims.audience(CLIENT_ID)
                                                               .claim("scope", M2M_SCOPES));
+        // what an ID token of another issuer the profile was pointed at looks like: no typ, an
+        // audience and a user - read as an access token it would pass on signature and issuer alone
+        String untypedKeycloak = sign(KEYCLOAK_ISSUER, claims -> claims.audience(CLIENT_ID)
+                                                                       .claim("preferred_username", "jane")
+                                                                       .claim("scope", M2M_SCOPES));
 
         assertRefused(keycloak(), refresh, "kind");
         assertRefused(cognito(), unknown, "kind");
         assertRefused(cognito(), untyped, "kind");
+        assertRefused(keycloak(), untypedKeycloak, "kind");
     }
 
     @Test

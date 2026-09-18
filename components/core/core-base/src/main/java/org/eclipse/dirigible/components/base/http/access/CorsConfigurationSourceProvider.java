@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
@@ -52,6 +53,12 @@ public class CorsConfigurationSourceProvider {
      */
     private static final String WILDCARD_HOST = "wildcard.invalid";
     private static final String NULL_ORIGIN = "null";
+    /**
+     * A port pattern at the end of an origin pattern: Spring's list ({@code :[8080,8081]},
+     * {@code :[*]}) or a bare wildcard ({@code :*}). It says nothing about which hosts the pattern
+     * reaches and is no URI port, so it is dropped before a pattern is checked.
+     */
+    private static final Pattern PORT_PATTERN = Pattern.compile(":(\\*|\\[[^\\]]*\\])$");
     private static final Set<String> SUPPORTED_METHODS = Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
     private static final Set<String> NATIVE_SHELL_SCHEMES = Set.of("tauri", "capacitor", "ionic");
     private static final long MAX_AGE_WARNING_THRESHOLD_SECONDS = 86_400;
@@ -147,6 +154,13 @@ public class CorsConfigurationSourceProvider {
                             + " user visits could then call the platform with that user's session",
                     DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey());
         }
+        List<String> uncheckable = origins.stream()
+                                          .filter(origin -> !WILDCARD.equals(origin) && parsePattern(origin) == null)
+                                          .toList();
+        if (allowCredentials && !uncheckable.isEmpty()) {
+            throw new InvalidConfigException("Credentials cannot be allowed for origin patterns that cannot be checked " + uncheckable
+                    + ": a pattern that is not an origin may match any", DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+        }
         if (allowCredentials && headers.contains(WILDCARD)) {
             throw new InvalidConfigException("Credentials cannot be allowed together with every request header [" + WILDCARD + "]",
                     DirigibleConfig.CORS_ALLOWED_HEADERS.getKey());
@@ -221,13 +235,17 @@ public class CorsConfigurationSourceProvider {
 
     /**
      * Parses an origin pattern as a URI, the wildcard replaced by a host label no real origin carries
-     * (a pattern host such as {@code *.example.com} is not a valid URI host).
+     * (a pattern host such as {@code *.example.com} is not a valid URI host) and a trailing port
+     * pattern dropped ({@code https://*:[*]} reaches every https origin exactly as {@code https://*}
+     * does).
      *
      * @return the URI, or {@code null} for a pattern that is not one
      */
     private static URI parsePattern(String origin) {
+        String withoutPortPattern = PORT_PATTERN.matcher(origin)
+                                                .replaceFirst("");
         try {
-            return new URI(origin.replace(WILDCARD, WILDCARD_HOST));
+            return new URI(withoutPortPattern.replace(WILDCARD, WILDCARD_HOST));
         } catch (URISyntaxException ex) {
             LOGGER.debug("Origin [{}] is not a URI and cannot be checked", origin, ex);
             return null;

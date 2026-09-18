@@ -94,7 +94,8 @@ class CorsConfigurationSourceProviderTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"https://app.example.com,*", "https://*", "*://*", "https://*:8080", "HTTPS://*"})
+    @ValueSource(strings = {"https://app.example.com,*", "https://*", "*://*", "https://*:8080", "HTTPS://*", "https://*:[*]", "*://*:[*]",
+            "https://*:*", "https://*:[8080]"})
     void credentialsForEveryOriginAreRefused(String origins) {
         DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue(origins);
         DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
@@ -109,7 +110,10 @@ class CorsConfigurationSourceProviderTest {
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*"));
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*"));
         assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("*://*"));
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*:[*]"), "a port pattern is no URI port, but hides nothing");
+        assertTrue(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*:*"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.example.com"));
+        assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://*.example.com:[8080,8081]"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("https://app.example.com"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("capacitor://localhost"));
         assertFalse(CorsConfigurationSourceProvider.matchesEveryOrigin("not a uri"));
@@ -120,6 +124,38 @@ class CorsConfigurationSourceProviderTest {
         DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("*");
 
         assertEquals(List.of("*"), configuration().getAllowedOriginPatterns());
+    }
+
+    @Test
+    void credentialsForANarrowPatternWithAPortListAreAllowed() {
+        // one port only: the configuration value is split on commas, so a list of several ports never
+        // arrives in one piece
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://*.example.com:[8080]");
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
+
+        CorsConfiguration configuration = configuration();
+
+        assertEquals(List.of("https://*.example.com:[8080]"), configuration.getAllowedOriginPatterns());
+        assertTrue(configuration.getAllowCredentials());
+    }
+
+    @Test
+    void credentialsForAPatternThatCannotBeCheckedAreRefused() {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com,https://*.example.com:[8080");
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
+
+        InvalidConfigException exception = assertThrows(InvalidConfigException.class, CorsConfigurationSourceProvider::get);
+
+        assertEquals(DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey(), exception.getConfigKey());
+        assertTrue(exception.getMessage()
+                            .contains("https://*.example.com:[8080"));
+    }
+
+    @Test
+    void aPatternThatCannotBeCheckedIsAllowedWithoutCredentials() {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("not a uri");
+
+        assertEquals(List.of("not a uri"), configuration().getAllowedOriginPatterns());
     }
 
     @ParameterizedTest
@@ -157,6 +193,7 @@ class CorsConfigurationSourceProviderTest {
     void transportSecurityIsRecognized() {
         assertTrue(CorsConfigurationSourceProvider.isTransportSecure("https://app.example.com"));
         assertTrue(CorsConfigurationSourceProvider.isTransportSecure("https://*.example.com"));
+        assertTrue(CorsConfigurationSourceProvider.isTransportSecure("https://*.example.com:[*]"));
         assertTrue(CorsConfigurationSourceProvider.isTransportSecure("tauri://localhost"));
         assertTrue(CorsConfigurationSourceProvider.isTransportSecure("capacitor://localhost"));
         assertTrue(CorsConfigurationSourceProvider.isTransportSecure("http://localhost:5173"));

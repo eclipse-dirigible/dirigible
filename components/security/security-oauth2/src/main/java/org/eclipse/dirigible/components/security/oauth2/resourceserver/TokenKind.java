@@ -23,7 +23,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
  * The kinds of bearer tokens the platform tells apart, because they prove different things and are
  * held to different rules: an ID token identifies a user, an access token is the grant of a client.
  * Anything else an identity provider issues - a refresh token, an offline token - is never accepted
- * as a bearer token.
+ * as a bearer token, and neither is a token that does not say what it is.
  */
 public enum TokenKind {
 
@@ -83,9 +83,11 @@ public enum TokenKind {
     }
 
     private static Optional<TokenKind> ofKeycloak(String type) {
-        // a Keycloak access token is typed Bearer; a token typed nothing at all is read as one, so a
-        // realm whose mappers drop the claim keeps the access-token rules that applied before
-        if (type == null || "Bearer".equals(type)) {
+        // a Keycloak access token is typed Bearer, an ID token ID. Keycloak types every token it
+        // issues, so one typed nothing at all is not Keycloak's - typically the ID token of another
+        // issuer the profile was pointed at - and is refused rather than read as an access token,
+        // which would hand it the weaker rules of that kind
+        if ("Bearer".equals(type)) {
             return Optional.of(ACCESS);
         }
         if ("ID".equals(type)) {

@@ -142,6 +142,13 @@ public record ResourceServerJwtSettings(IdentityProvider provider, String jwkSet
 
         warnAboutPlainHttp(jwkSetUri, "JWKS endpoint");
         warnAboutPlainHttp(issuer, "issuer");
+        if (acceptedKinds.contains(TokenKind.ACCESS) && accessTokenAudiences.isEmpty()) {
+            LOGGER.warn(
+                    "Access tokens of [{}] are accepted without an audience check: every access token the issuer signs is a"
+                            + " credential here, whichever client it was issued to, and gets the roles its scopes map to. Set [{}] to the"
+                            + " clients whose tokens are meant for this deployment.",
+                    provider, DirigibleConfig.OAUTH2_JWT_AUDIENCES.getKey());
+        }
         LOGGER.info(
                 "Bearer tokens of [{}] are accepted: kinds {}, issuer [{}], ID token audiences {}, access token audiences {},"
                         + " principal claim of ID tokens [{}]",
