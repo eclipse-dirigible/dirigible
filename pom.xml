@@ -211,7 +211,7 @@
 
         <!-- AWS SDK v2 - the single line every software.amazon.awssdk artifact in the fat jar
              carries, imported as a BOM below so no consumer pins its own. -->
-        <awssdk.version>2.54.17</awssdk.version>
+        <awssdk.version>2.54.18</awssdk.version>
 
         <!-- QLDB -->
         <qldb.driver.version>2.3.1</qldb.driver.version>
