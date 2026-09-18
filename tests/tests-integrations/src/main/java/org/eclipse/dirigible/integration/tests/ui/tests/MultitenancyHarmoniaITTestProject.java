@@ -101,8 +101,10 @@ class MultitenancyHarmoniaITTestProject extends BaseMultitenantTestProject {
         boolean forceLogin = !tenant.isDefaultTenant();
         ide.login(forceLogin);
 
-        // The Harmonia shell renders a "Dashboard" entry in its Application sidebar group.
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Dashboard");
+        // The generated shell renders the model's own entity in its Entities sidebar group. The shared
+        // chrome's "Dashboard" is not usable as the marker: since #7412 the home route also names itself
+        // in the breadcrumb, so that word matches two spans and the finder requires exactly one.
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Book");
     }
 
     /**
