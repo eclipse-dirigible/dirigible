@@ -154,6 +154,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
+                  # The hop the Entry's gated requiredWhen reads - deliberately OPTIONAL, so that a
+                  # runtime refusal is reachable at all: a rule over a REQUIRED column of the related
+                  # row can never fire, which is how that check stayed source-text-only (#7238).
+                  - { name: taxCode, type: string, length: 20 }
                 relations:
                   - { name: Parent, kind: manyToOne, to: Account }
 
@@ -225,8 +229,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # requiredWhen (#7094), gated + over a relation hop: the value lives on the related
                   # account, so the generated repository loads it by FK before it can read it, and the
                   # rule only applies at the status the value is finally needed at.
-                  - { kind: requiredWhen, field: Account.name, when: "note == 'audited'", status: 2,
-                      message: "An audited entry must be booked against a named account" }
+                  - { kind: requiredWhen, field: Account.taxCode, when: "note == 'audited'", status: 2,
+                      message: "An audited entry must be booked against an account carrying a tax code" }
                   # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
                   # the two comparison families the generated code emits differently.
                   - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
@@ -320,6 +324,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: number, type: string, length: 100, number: { series: Emission Receipt, stampOn: create } }
                   - { name: note,   type: string, length: 200 }
+
+              # checks: agree (#7409) - the two records a JUNCTION row links must point at the same
+              # third thing. No check kind could say it (compare relates two values of ONE row, the
+              # parent-child kinds a child to its own parent), so every module carrying the shape - a
+              # payment allocated against an invoice of another customer, in another currency - closed
+              # it with a hand-written Java guard class. Both readings of an unset side are emitted:
+              # the default skips (requiredness is the relation's own declaration), refuse rejects.
+              - name: EntryLink
+                checks:
+                  - { kind: agree, relations: [doc, entry], onProperty: Status,
+                      message: "The document and the entry are not in the same state" }
+                  - { kind: agree, relations: [entry, storno], onProperty: Status, whenNull: refuse,
+                      message: "An entry and its storno must be in the same state" }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: doc,    kind: manyToOne, to: Doc }
+                  - { name: entry,  kind: manyToOne, to: Entry }
+                  - { name: storno, kind: manyToOne, to: Entry }
 
               - name: EntryLine
                 checks:
@@ -736,15 +759,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Reorder
                 function: Document
                 duplicable:
-                  defaults: { orderedOn: now, period: now, comment: "Copy" }
+                  defaults: { orderedOn: now, period: now, recordedAt: now, comment: "Copy" }
                   reset: [note]
                 fields:
-                  - { name: id,        type: integer, primaryKey: true, generated: true }
-                  - { name: reference, type: string, length: 40, function: DocumentTitle }
-                  - { name: orderedOn, type: date, required: true }
-                  - { name: period,    type: month }
-                  - { name: note,      type: string, length: 100 }
-                  - { name: comment,   type: string, length: 100 }
+                  - { name: id,         type: integer, primaryKey: true, generated: true }
+                  - { name: reference,  type: string, length: 40, function: DocumentTitle }
+                  - { name: orderedOn,  type: date, required: true }
+                  - { name: period,     type: month }
+                  - { name: recordedAt, type: timestamp }
+                  - { name: note,       type: string, length: 100 }
+                  - { name: comment,    type: string, length: 100 }
               - name: ReorderItem
                 function: DocumentItem
                 fields:
@@ -2208,7 +2232,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // invoice needs the customer's address"), and the condition is rendered against the guarded
         // property's declared type, because a boxed comparison across types is silently always-false.
         assertTrue(
-                entryRepository.contains("An audited entry must be booked against a named account")
+                entryRepository.contains("An audited entry must be booked against an account carrying a tax code")
                         && entryRepository.contains("AccountRepository().findById(hop0Fk)")
                         && entryRepository.contains("java.util.Objects.equals(entity.Note, \"audited\")"),
                 "checks: requiredWhen must load the hop, test the condition and refuse the empty value, got: " + entryRepository);
@@ -2312,6 +2336,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // guard is emitted for forbidWhen alone - Doc carries an ungated requiredWhen and no forbidWhen.
         assertFalse(docController.contains("requireDeletable"),
                 "only forbidWhen reaches the delete verb - a requiredWhen is about the content of a write, got: " + docController);
+        // checks: agree (#7409): both sides are ONE HOP away, so the generated controller loads each
+        // related record by its foreign key and compares the property they must share - the rule a
+        // hand-written guard class used to carry. The two readings of an unset side are both emitted:
+        // the default skips the comparison, `whenNull: refuse` rejects the write.
+        String linkController = contentOf("gen/emission/api/entrylink/EntryLinkController.java");
+        assertTrue(
+                linkController.contains("DocRepository().findById(hop0Fk)") && linkController.contains("Object agreeLeft = (hop0 == null")
+                        && linkController.contains("agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)")
+                        && linkController.contains("The document and the entry are not in the same state"),
+                "an agree check must load both sides and refuse a disagreement on the REST controller, got: " + linkController);
+        assertTrue(
+                linkController.contains("agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)")
+                        && linkController.contains("An entry and its storno must be in the same state"),
+                "whenNull: refuse must reject an unset side too, got: " + linkController);
+
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
         assertTrue(contentOf("gen/emission/api/bill/BillLineController.java").contains("requireMasterMutable"),
@@ -2789,6 +2828,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "now on a date field must be written as today in that field's shape");
         assertTrue(reorderDoc.contains("header['Period'] = this.todayAs('month');"),
                 "now on a month field must be the YYYY-MM shape, not a full date");
+        // #7396: the same rule one shape further - a timestamp property binds a java.time.Instant, so
+        // the copy carries the full ISO instant, not the local YYYY-MM-DD a `date` shape produces.
+        assertTrue(reorderDoc.contains("header['RecordedAt'] = this.todayAs('timestamp');"),
+                "now on a timestamp field must be written in the timestamp shape, not narrowed to a date");
+        assertTrue(reorderDoc.contains("if (shape === 'timestamp') return now.toISOString();"),
+                "todayAs must render a timestamp as the ISO instant the backend binds for a java.time.Instant");
         assertTrue(reorderDoc.contains("header['Comment'] = \"Copy\";"), "a literal default must reach the page quoted");
         assertTrue(reorderDoc.contains("todayAs(shape)") && reorderDoc.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
                 "todayAs must build from the LOCAL calendar fields - toISOString is UTC, so a copy made in the evening"
@@ -4595,6 +4640,102 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // checks: requiredWhen, GATED and reading a value one HOP away, at runtime (#7238). Doc's
+        // ungated twin above is the controller's; this is the other routing - no controller carries
+        // the rule, the repository enforces it at the gate status - and the hop is the reason the
+        // kind exists at all ("an e-mailed invoice needs the customer's address"). A source-text
+        // assertion cannot tell a gate that fires from one whose condition is never true, which is
+        // why the refusal, its authored message and the acceptance afterwards are asserted here.
+        AtomicInteger uncodedAccount = new AtomicInteger();
+        restAssuredExecutor.execute(() -> uncodedAccount.set(given().contentType("application/json")
+                                                                    .body("{\"Name\":\"Uncoded\"}")
+                                                                    .when()
+                                                                    .post(API + "/account/AccountController")
+                                                                    .then()
+                                                                    .statusCode(200)
+                                                                    .extract()
+                                                                    .path("Id")));
+        AtomicInteger auditedEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> auditedEntry.set(given().contentType("application/json")
+                                                                  .body("{\"Date\":\"2026-01-21\",\"Account\":" + uncodedAccount.get()
+                                                                          + ",\"Note\":\"audited\"}")
+                                                                  .when()
+                                                                  .post(API + "/entry/EntryController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        // Balanced lines, so the two document checks that gate on the same status are satisfied and
+        // the refusal below can only be the requiredWhen one.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + auditedEntry.get() + ",\"Debit\":30}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + auditedEntry.get() + ",\"Credit\":30}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + auditedEntry.get() + ",\"Date\":\"2026-01-21\",\"Account\":"
+                                                         + uncodedAccount.get() + ",\"Note\":\"audited\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryController/" + auditedEntry.get())
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString(
+                                                         "An audited entry must be booked against an account carrying a tax code")));
+        // ...and the condition is a CONDITION: an entry with no note reaches the same status against
+        // the SAME un-coded account, so what was just refused is the authored rule and not a
+        // `required` nobody declared.
+        AtomicInteger plainEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> plainEntry.set(given().contentType("application/json")
+                                                                .body("{\"Date\":\"2026-01-22\",\"Account\":" + uncodedAccount.get() + "}")
+                                                                .when()
+                                                                .post(API + "/entry/EntryController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + plainEntry.get() + ",\"Debit\":10}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Entry\":" + plainEntry.get() + ",\"Credit\":10}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + plainEntry.get() + ",\"Date\":\"2026-01-22\",\"Account\":"
+                                                         + uncodedAccount.get() + ",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryController/" + plainEntry.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // ...and the audited entry passes once the RELATED row carries the value. The ACCOUNT is
+        // amended, not the entry, which is what proves the gate reads the hop when the write is
+        // checked rather than a copy the entry took when it was created.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + uncodedAccount.get() + ",\"Name\":\"Uncoded\",\"TaxCode\":\"BG-42\"}")
+                                                 .when()
+                                                 .put(API + "/account/AccountController/" + uncodedAccount.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + auditedEntry.get() + ",\"Date\":\"2026-01-21\",\"Account\":"
+                                                         + uncodedAccount.get() + ",\"Note\":\"audited\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryController/" + auditedEntry.get())
+                                                 .then()
+                                                 .statusCode(200));
+
         // entity-level unique (#6763): the composite key exists in the database (the second insert
         // cannot land) AND the generated controller recognises which key was hit, so the caller is
         // told what collided instead of getting a 500. The third write flips one column, which must
@@ -5312,7 +5453,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("find { it.name == 'Confirm' }.subject.url", notNullValue())
-                                                 .body("find { it.name == 'Confirm' }.subject.fields.property", hasItem("Name")),
+                                                 .body("find { it.name == 'Confirm' }.subject.fields.property", hasItem("Name"))
+                                                 // ...and the record's key is the WHOLE number the generated controller's
+                                                 // integer path parameter accepts (#7373): started as an untyped JSON
+                                                 // number it used to reach the variable store as a Double, so the locator
+                                                 // read "1.0" and the card could not load the record it exists to show.
+                                                 .body("find { it.name == 'Confirm' }.subject.id",
+                                                         org.hamcrest.Matchers.matchesPattern("\\d+")),
                 30);
 
         // ...and the record knows about the instance that task belongs to: the trigger stamped the

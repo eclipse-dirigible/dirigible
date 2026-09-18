@@ -2248,6 +2248,46 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 checkMaps.add(checkMap);
                 continue;
             }
+            if ("agree".equals(check.getKind())) {
+                // A junction row's two relations must point at the same third thing (#7409). Both sides
+                // are ONE path each off the record - `<relation>.<onProperty>` - resolved through the
+                // shared walker, so the two loads are accumulated once per relation and a cross-model
+                // target reads like any other hop. No gate: two relations either agree or they do not,
+                // from the first save.
+                List<String> relations = check.getRelations();
+                if (relations == null || relations.size() != 2 || check.getOnProperty() == null) {
+                    continue; // the parser already reported it
+                }
+                ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                ResolvePathSupport.Path left = walker.resolve(relations.get(0) + "." + check.getOnProperty());
+                ResolvePathSupport.Path right = walker.resolve(relations.get(1) + "." + check.getOnProperty());
+                if (!left.resolved() || !right.resolved()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("leftExpression", left.expression());
+                checkMap.put("rightExpression", right.expression());
+                checkMap.put("leftLabel", left.label());
+                checkMap.put("rightLabel", right.label());
+                checkMap.put("whenNull", check.getWhenNull() == null || check.getWhenNull()
+                                                                             .isBlank() ? "skip"
+                                                                                     : check.getWhenNull()
+                                                                                            .trim()
+                                                                                            .toLowerCase(java.util.Locale.ROOT));
+                List<Map<String, Object>> pathLoads = pathLoadsOf(walker);
+                if (!pathLoads.isEmpty()) {
+                    checkMap.put("pathLoads", pathLoads);
+                }
+                if (check.getMessage() == null || check.getMessage()
+                                                       .isBlank()) {
+                    // A check with no authored message still has to say something the person who pressed
+                    // Save can act on, and only the declaration knows what disagreed.
+                    checkMap.put("message",
+                            "The " + IntentNaming.humanize(relations.get(0)) + " and the " + IntentNaming.humanize(relations.get(1))
+                                    + " must have the same " + IntentNaming.humanize(check.getOnProperty()));
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("forbidWhen".equals(check.getKind())) {
                 // The reject-twin of requiredWhen (#7275): the condition compiled to a Java boolean, but
                 // now a term may read a value ONE HOP away (`SalesInvoice.Status == PAID`) so a child can
@@ -3613,12 +3653,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return resets;
     }
 
+    /** The authored field types a {@code now} default renders in their own shape. */
+    private static final Set<String> NOW_SHAPES = Set.of("date", "timestamp", "month", "week");
+
     /**
      * The constants a Duplicate writes into the cloned header, as {@code {name, shape, js}} entries in
-     * authored order. {@code shape} is {@code date} / {@code month} / {@code week} for the {@code now}
-     * token - today in the field's own shape, rendered by the document page's {@code todayAs} helper
-     * against the LOCAL clock - and {@code literal} otherwise, where {@code js} carries the value
-     * already coerced to the property's type as a JavaScript literal.
+     * authored order. {@code shape} is {@code date} / {@code timestamp} / {@code month} / {@code week}
+     * for the {@code now} token - the current moment in the field's own shape, rendered by the document
+     * page's {@code todayAs} helper against the LOCAL clock - and {@code literal} otherwise, where
+     * {@code js} carries the value already coerced to the property's type as a JavaScript literal. The
+     * shape is the AUTHORED type, not a narrowing of it: a {@code timestamp} property binds a
+     * {@code java.time.Instant} on the server, which the {@code YYYY-MM-DD} a {@code date} shape
+     * produces does not fill (#7396).
      *
      * @param entity the duplicable document master
      * @return the entries, never null
@@ -3637,7 +3683,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             entry.put("name", IntentNaming.pascalCase(name.trim()));
             String type = duplicateDefaultType(entity, name.trim());
             if ("now".equals(value.trim())) {
-                entry.put("shape", "month".equals(type) || "week".equals(type) ? type : "date");
+                entry.put("shape", NOW_SHAPES.contains(type) ? type : "date");
                 entry.put("js", "");
             } else {
                 entry.put("shape", "literal");

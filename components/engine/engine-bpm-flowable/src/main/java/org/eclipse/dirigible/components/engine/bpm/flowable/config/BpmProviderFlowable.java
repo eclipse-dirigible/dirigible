@@ -24,7 +24,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.commons.io.IOUtils;
-import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
@@ -174,10 +173,7 @@ public class BpmProviderFlowable implements BpmProvider {
      * @return the process instance id
      */
     public String startProcess(String key, String businessKey, String parameters) {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> variables = GsonHelper.fromJson(parameters, HashMap.class);
-
-        return startProcess(key, businessKey, variables);
+        return startProcess(key, businessKey, ProcessVariables.fromJson(parameters));
     }
 
     public String startProcess(String key, String businessKey, Map<String, Object> variables) {

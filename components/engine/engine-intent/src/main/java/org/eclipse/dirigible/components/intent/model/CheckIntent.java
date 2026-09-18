@@ -24,6 +24,12 @@ import java.util.List;
  * enforced on every user write; with a {@link #status} gate it is the repository's, and holds when
  * the record is persisted carrying that status - "days &gt; 0 before SUBMITTED" rather than on the
  * first draft;</li>
+ * <li>{@code agree}: the two to-one {@link #relations} of a junction row must AGREE on
+ * {@link #onProperty} - the property both their targets declare (a payment allocated against an
+ * invoice of another customer, or in another currency, is the rule a hand-written guard class used
+ * to carry). Row-level, so it is enforced on every user write; {@link #whenNull} decides what an
+ * unset side means, and defaults to skipping (the relation's own {@code required} is what makes it
+ * mandatory);</li>
  * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
  * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
  * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
@@ -75,6 +81,25 @@ public class CheckIntent {
     private Object value;
     /** {@code itemsSumEqual}: the two numeric item fields whose sums must be equal. */
     private List<String> over;
+    /**
+     * {@code agree}: exactly two to-one relations of the entity - the two records the junction row
+     * links, which must point at the same {@link #onProperty}.
+     */
+    private List<String> relations;
+    /**
+     * {@code agree}: the property BOTH targets declare and must agree on - a to-one of theirs (compared
+     * by its foreign key: the same {@code Customer}, the same {@code Currency}) or a scalar field with
+     * an exact equality. Spelled {@code onProperty} and not {@code on}, because YAML 1.1 resolves a
+     * bare {@code on} key to the boolean {@code true} and the declaration would silently bind to
+     * nothing - the parser refuses that spelling by name rather than dropping it.
+     */
+    private String onProperty;
+    /**
+     * {@code agree}: what an unset side means - {@code skip} (the default: a row that does not carry
+     * both values yet has nothing to disagree about, and requiredness is its own declaration) or
+     * {@code refuse}.
+     */
+    private String whenNull;
     /** {@code itemsMin}: the minimum number of items. */
     private Integer count;
     /**
@@ -244,6 +269,30 @@ public class CheckIntent {
 
     public void setOver(List<String> over) {
         this.over = over;
+    }
+
+    public List<String> getRelations() {
+        return relations;
+    }
+
+    public void setRelations(List<String> relations) {
+        this.relations = relations;
+    }
+
+    public String getOnProperty() {
+        return onProperty;
+    }
+
+    public void setOnProperty(String onProperty) {
+        this.onProperty = onProperty;
+    }
+
+    public String getWhenNull() {
+        return whenNull;
+    }
+
+    public void setWhenNull(String whenNull) {
+        this.whenNull = whenNull;
     }
 
     public Integer getCount() {

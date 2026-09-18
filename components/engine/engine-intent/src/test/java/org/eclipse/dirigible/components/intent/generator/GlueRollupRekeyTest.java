@@ -61,8 +61,9 @@ class GlueRollupRekeyTest {
         assertEquals("Loan", rekey.get("childEntity"));
         assertEquals("Member", rekey.get("parentEntity"));
         // The recompute is keyed on the FK carried by the payload, so the SAME handler repairs the parent
-        // the child left (fed the previous row) and the one it moved into (fed the written row).
-        assertEquals("Criteria.create().eq(\"Member\", entity.Member)", rekey.get("criteriaExpression"));
+        // the child left (fed the previous row) and the one it moved into (fed the written row). The key
+        // is all the descriptor carries - the `Criteria` around it is the template layer's (issue #7406).
+        assertEquals("Member", rekey.get("fkProperty"));
         assertTrue(rollups.stream()
                           .map(r -> String.valueOf(r.get("topicSuffix")))
                           .toList()

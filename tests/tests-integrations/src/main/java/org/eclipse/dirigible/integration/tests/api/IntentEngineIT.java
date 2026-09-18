@@ -5462,14 +5462,21 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the orderUpdated notification bound to the -updated topic");
         assertTrue(glue.contains("\"toExpression\": \"\\\"ops@example.com\\\"\""),
                 "glue should carry the notification recipient as a Java string expression");
-        // Schedules: one per declarative schedule, carrying the cron + the typed Criteria expression.
+        // Schedules: one per declarative schedule, carrying the cron + the typed query CLAUSES.
         assertTrue(
                 glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
                 "glue should carry the staleOrders schedule with its cron");
+        // Issue #7406: the tick's filter is DATA here - the operator, the property and the reading of
+        // the value, the relative moment included - and the `Criteria` builder call is rendered from it
+        // by the template layer. The glue is the process description every template reads, Java and
+        // JavaScript alike; a builder call in it is a runtime package and a Java date API nothing but a
+        // Java template can interpret.
         assertTrue(
-                glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now()"
-                        + ".minus(java.time.Period.parse(\\\"P7D\\\")))"),
-                "glue should carry the schedule's typed Criteria expression, the relative moment included");
+                glue.contains("\"criteria\"") && glue.contains("\"op\": \"lt\"") && glue.contains("\"property\": \"OrderDate\"")
+                        && glue.contains("\"kind\": \"moment\"") && glue.contains("\"shape\": \"date\"")
+                        && glue.contains("\"offset\": \"P7D\"") && glue.contains("\"forward\": false"),
+                "glue should carry the schedule's query as typed clauses, the relative moment included");
+        assertFalse(glue.contains("Criteria.create()"), "no builder call belongs in the glue: " + glue);
         // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
         assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");

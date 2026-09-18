@@ -65,6 +65,20 @@ class TaskSubjectTest {
                                    .size());
     }
 
+    /**
+     * An instance started before the variable store stopped widening an untyped JSON number carries the
+     * key as a Double; the locator must still be the integer the generated controller's path parameter
+     * accepts, or the card cannot load the record (issue #7373).
+     */
+    @Test
+    void aKeyWidenedToADoubleStillReadsAsAWholeNumber() {
+        Map<String, Object> variables = variables();
+        variables.put("__entityId", 33.0d);
+
+        assertEquals("33", TaskSubject.from(variables)
+                                      .id());
+    }
+
     /** A hand-authored BPMN, or a deployment generated before #7077, declares no subject at all. */
     @Test
     void aProcessThatDeclaresNoSubjectHasNone() {

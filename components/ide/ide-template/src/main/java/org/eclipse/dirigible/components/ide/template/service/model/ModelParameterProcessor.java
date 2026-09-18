@@ -228,7 +228,9 @@ final class ModelParameterProcessor {
             resolveMessageLiteral(check);
             resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
-            if ("exactlyOne".equals(kind)) {
+            if ("exactlyOne".equals(kind) || "agree".equals(kind)) {
+                // Both hold from the first save and take no gate: one relates the row's own fields, the
+                // other the two records a junction row links (#7409).
                 rowChecks.add(check);
             } else if ("compare".equals(kind)) {
                 // A comparison is row-level unless it names the status it is enforced at - the same

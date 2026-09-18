@@ -551,12 +551,31 @@ field may declare:
     "a submitted request covers at least one day" without forbidding the draft still being filled
     in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
     approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
+  - `{ kind: agree, relations: [SalesInvoice, CustomerPayment], onProperty: Customer, message: "..." }`
+    (#7409): the two records a JUNCTION row links must point at the same third thing - **this is how
+    "a payment may only be allocated against an invoice of the same customer, in the same currency"
+    is declared.** `relations:` names exactly two distinct to-one relations of the entity and
+    `onProperty:` the property BOTH their targets declare - one of their to-one relations (compared
+    by its foreign key: the same `Customer`, the same `Currency`, the same `Company`) or a scalar
+    field an equality is exact on (a string, an integer, a boolean). A cross-model target resolves
+    through its `uses:` owner like every other path. Enforced on every user write (400 with the
+    message), so it takes no `status:` gate. **The key is `onProperty`, never `on`** - YAML reads a
+    bare `on` as the boolean `true`, so that spelling never arrives and is refused by name. An unset
+    side is skipped by default (`whenNull: skip` - the relation's own `required:` is what makes it
+    mandatory); `whenNull: refuse` rejects the write instead. Reach for this instead of writing the
+    rule as a `calculatedActionOnCreate`/`OnUpdate` guard class - it is the shape every
+    allocation, transfer, timesheet and assignment entity carries.
   - `{ kind: requiredWhen, field: driver, when: "Status == IDENTIFIED", status: IDENTIFIED, message: "..." }`
     (#7094): a **conditionally required** value - `field` must be present whenever `when` holds.
     `field` is the entity's own field or a one-hop `Relation.field`; `when` is a guard (see *the event
     axis*) over the record's own columns. This is how "a fine cannot be marked identified without a
     driver" is declared - the requiredness that `required: true` cannot express because the value is
-    legitimately empty earlier in the life of the record.
+    legitimately empty earlier in the life of the record. The `status:` gate is OPTIONAL, and its
+    PRESENCE is the routing: without one the rule holds on every user write (each generated
+    controller's `validate()`, a 400 with the authored message), with one the repository enforces it
+    when the record is persisted carrying that status - so a draft may still be filled in, and the
+    refusal reaches the person completing the task that sets the status rather than dead-lettering
+    as a process incident. A gated one needs the `function: EntityStatus` relation.
   - `{ kind: forbidWhen, when: "SalesInvoice.Status == PAID", message: "..." }` (#7275): the
     reject-twin - it refuses the write while its condition holds and reads no value, so it carries no
     `field`. Its one reach beyond `requiredWhen` is that a term may name a one-hop `Relation.field`, so
@@ -806,18 +825,18 @@ value and respect a present one. Say so with the object form:
 
 `reset:` is for a field that HAS a create-time rule (a `calculatedActionOnCreate`, a `defaultValue`)
 and must be handed back to it; `defaults:` is for a field that has none, where the copy needs a value
-stated here. `now` is today in the field's own shape (a `date` field -> `YYYY-MM-DD`, a `month` field
--> `YYYY-MM`, a `week` field -> `YYYY-Www`), the same token `generates.defaults` takes; any other
-value is a literal coerced to the property's type. Both keys name the entity's own fields and to-one
-relations - no `relation.field` paths.
+stated here. `now` is the current moment in the field's own shape (a `date` field -> `YYYY-MM-DD`, a
+`timestamp` field -> the ISO instant, a `month` field -> `YYYY-MM`, a `week` field -> `YYYY-Www`), the
+same token `generates.defaults` takes; any other value is a literal coerced to the property's type.
+Both keys name the entity's own fields and to-one relations - no `relation.field` paths.
 
 Refused at parse: a name that is neither a field nor a to-one relation of the entity; one that is
 already dropped anyway (the primary key, the `number:` field, the `function: EntityStatus` relation,
 a `readOnly` or an `aggregate` field) - naming it would let you believe you control something the
 Duplicate decided long before reading the block; the same name in both lists; `now` on a property
-that is not a date / month / week; and a `reset` on a **required** field with neither a
-`defaultValue` nor a create-time rule, which would make every duplicate fail on the server's own
-"field is required".
+that does not hold a moment (not a date / timestamp / month / week); and a `reset` on a **required**
+field with neither a `defaultValue` nor a create-time rule, which would make every duplicate fail on
+the server's own "field is required".
 
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
@@ -3111,8 +3130,8 @@ EmployeeTimesheet for each active employee". Per matching row, a new target reco
 saved through the target's generated repository, so its create-time logic (document numbering, status
 init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
 `entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
-`now` (rendered in the target field's own shape - date / `YYYY-MM` month / `YYYY-Www` week) or a
-literal. The target may live in another model via `uses:` (same as `generates`).
+`now` (rendered in the target field's own shape - date / instant / `YYYY-MM` month / `YYYY-Www` week)
+or a literal. The target may live in another model via `uses:` (same as `generates`).
 
 ```yaml
 schedules:

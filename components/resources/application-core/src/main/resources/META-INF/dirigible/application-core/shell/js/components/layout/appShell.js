@@ -37,6 +37,17 @@ document.addEventListener('alpine:init', () => {
     // A route template is being fetched - drives the toolbar's indefinite progress bar.
     routeLoading: false,
 
+    // THE PAGE CONTRACT IS PUBLIC ACROSS GENERATED VINTAGES. This file is served once, by absolute URL,
+    // to every generated shell (#6094) - and a project's index.html is rewritten only by an explicit
+    // Generate, so a platform upgrade swaps this runtime under pages generated months earlier. The
+    // names a page binds (properties in its Alpine expressions, the x-ref names reached for below)
+    // must therefore stay alive when they are renamed. A page generated before #7400 binds its split
+    // panel to `hiddenPanels.left`, its sheet to `isOpen` and carries `sidebarPanel` / `overlay` refs;
+    // dropping them left every deployed app's embedded iframe showing its own sidebar (#7427).
+    get hiddenPanels() { return { left: this.isSmallScreen || this.embedded }; },
+    get isOpen() { return this.showSidebarSheet; },
+    set isOpen(open) { this.showSidebarSheet = open; },
+
     currentPath: '',
 
     // Embedded mode: when this SPA is hosted inside the shared application shell (the platform
@@ -72,8 +83,10 @@ document.addEventListener('alpine:init', () => {
         // The sidebar is ONE element, moved between its wide-screen slot and the drawer. Embedded
         // mode has no navigation of its own (the host shell owns it), so it parks in the drawer -
         // which is closed, and whose trigger is hidden - at every width.
-        const home = isNarrow || this.embedded ? this.$refs.sidebarSheet : this.$refs.sidebarSlot;
-        home.appendChild(this.$refs.sidebar);
+        // The refs by their current names, else by the names a page generated before #7400 carries.
+        const sheet = this.$refs.sidebarSheet || this.$refs.overlay;
+        const slot = this.$refs.sidebarSlot || this.$refs.sidebarPanel;
+        (isNarrow || this.embedded ? sheet : slot).appendChild(this.$refs.sidebar);
       }, 1024);
     },
 

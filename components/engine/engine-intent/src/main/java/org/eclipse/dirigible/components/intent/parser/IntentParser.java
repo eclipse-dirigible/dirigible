@@ -326,6 +326,7 @@ public final class IntentParser {
         rejectRemovedNumberKeys(tree);
         rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
+        rejectCheckOn(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
@@ -718,9 +719,17 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code defaults} value: {@code now} is today in the field's own shape, so it is only meaningful
-     * on a field that HOLDS a date - the same rule and the same wording {@code generates.defaults}
-     * uses. Anything else is a literal, coerced to the property's type at generation.
+     * The field types a {@code now} default is meaningful on: the ones that HOLD the current moment,
+     * each rendered in its own shape. A {@code timestamp} is one of them - it differs from a
+     * {@code date} only in precision, and the copy of a document is made now in both cases (#7396).
+     */
+    private static final Set<String> NOW_FIELD_TYPES = Set.of("date", "timestamp", "month", "week");
+
+    /**
+     * A {@code defaults} value: {@code now} is the current moment in the field's own shape, so it is
+     * only meaningful on a field that HOLDS one - the same rule and the same wording
+     * {@code generates.defaults} uses. Anything else is a literal, coerced to the property's type at
+     * generation.
      */
     private static void validateDuplicableDefault(String subject, String name, String type, String value, List<String> issues) {
         if (value == null || value.isBlank()) {
@@ -731,9 +740,9 @@ public final class IntentParser {
             return;
         }
         String kind = type == null ? "" : type.toLowerCase(Locale.ROOT);
-        if (!"date".equals(kind) && !"month".equals(kind) && !"week".equals(kind)) {
-            issues.add(subject + " assigns [" + name + "] the value now, but that property is not a date - now is today in the field's own"
-                    + " shape, so it is only a value for a date / month / week field");
+        if (!NOW_FIELD_TYPES.contains(kind)) {
+            issues.add(subject + " assigns [" + name + "] the value now, but that property does not hold a moment - now is the current"
+                    + " moment in the field's own shape, so it is only a value for a date / timestamp / month / week field");
         }
     }
 
@@ -5448,6 +5457,10 @@ public final class IntentParser {
             validateCompareCheck(entity, check, subject, issues);
             return;
         }
+        if ("agree".equals(kind)) {
+            validateAgreeCheck(entity, check, byName, subject, issues);
+            return;
+        }
         if ("itemsSumEqual".equals(kind) || "itemsMin".equals(kind)) {
             EntityIntent items = compositionChildOf(entity, entities);
             if (items == null) {
@@ -5487,8 +5500,99 @@ public final class IntentParser {
             }
             return;
         }
-        issues.add(
-                subject + " has unknown kind - expected exactlyOne, compare, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
+        issues.add(subject
+                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
+    }
+
+    /**
+     * An {@code agree} check relates the two records a JUNCTION row links: both must point at the same
+     * third thing (dirigible #7409). An allocation carries a {@code SalesInvoice} and a
+     * {@code CustomerPayment}; nothing in the DSL could say that the payment's customer must be the
+     * invoice's, so a EUR payment of customer B was allocated against a USD invoice of customer A and
+     * the write answered 200. {@code compare} relates two values of ONE row and the parent-child kinds
+     * relate a child to its own parent - neither reaches across two different relations, which is why
+     * every module carrying this shape had to write the rule as a Java guard class instead.
+     *
+     * <p>
+     * {@code relations} names exactly two DISTINCT to-one relations of this entity, and
+     * {@code onProperty} the property BOTH their targets declare - resolved as the path
+     * {@code <relation>.<onProperty>} through the same walker every other path in the DSL uses, so a
+     * cross-model target reads too. The two terminals must be the same KIND of value: two foreign keys
+     * (the same customer, the same currency) or two fields of one exactly-comparable type. A decimal, a
+     * double or a date is deliberately not comparable here for the reason a condition does not compare
+     * them either - an equality on them is held by nobody who means it - and a terminal type that
+     * differs between the two sides is refused rather than compared across types, where the boxed
+     * comparison is silently always-false.
+     */
+    private static void validateAgreeCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        List<String> relations = check.getRelations();
+        if (relations == null || relations.size() != 2) {
+            issues.add(subject + " requires `relations`: exactly two to-one relations of [" + entity.getName() + "]");
+            return;
+        }
+        String on = check.getOnProperty();
+        if (on == null || on.isBlank()) {
+            issues.add(subject + " requires `onProperty`: the property both targets declare and must agree on");
+            return;
+        }
+        if (relations.get(0) != null && relations.get(0)
+                                                 .equalsIgnoreCase(relations.get(1))) {
+            issues.add(subject + " names [" + relations.get(0) + "] twice - a relation always agrees with itself");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " is row-level and cannot carry a `status` gate - two relations either agree or they do not,"
+                    + " from the first save");
+        }
+        String whenNull = whenNullOf(check);
+        if (!"skip".equals(whenNull) && !"refuse".equals(whenNull)) {
+            issues.add(subject + " has unknown `whenNull` [" + check.getWhenNull() + "] - expected skip or refuse");
+        }
+        // Both operands are walked as one path each, so an `onProperty` a target does not declare is
+        // reported by the walker in the vocabulary every other path failure uses.
+        ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        String[] terminals = new String[2];
+        for (int i = 0; i < 2; i++) {
+            String relation = relations.get(i);
+            if (relation == null || relation.isBlank()) {
+                issues.add(subject + " relations[" + i + "] is blank");
+                return;
+            }
+            ResolvePathSupport.Path path = walker.resolve(relation + "." + on);
+            if (!path.resolved()) {
+                issues.add(subject + " " + path.failure());
+                return;
+            }
+            terminals[i] = path.terminalType();
+        }
+        for (int i = 0; i < 2; i++) {
+            if (terminals[i] == null || ResolvePathSupport.RELATION_TERMINAL.equals(terminals[i])) {
+                continue; // a foreign key, or a cross-model terminal whose type is not known here
+            }
+            String type = CheckSupport.guardType(terminals[i]);
+            if (!CheckSupport.GUARD_TYPES.contains(type)) {
+                issues.add(subject + " agrees on [" + relations.get(i) + "." + on + "], a [" + terminals[i]
+                        + "] - two relations agree on a reference, a string, an integer or a boolean,"
+                        + " the values an equality is exact on");
+                return;
+            }
+        }
+        if (terminals[0] != null && terminals[1] != null && !CheckSupport.guardType(terminals[0])
+                                                                         .equals(CheckSupport.guardType(terminals[1]))) {
+            issues.add(subject + " compares [" + relations.get(0) + "." + on + "], a [" + terminals[0] + "], with [" + relations.get(1)
+                    + "." + on + "], a [" + terminals[1]
+                    + "] - both sides must be the same kind of value, or the comparison is always false");
+        }
+    }
+
+    /** An {@code agree} check's {@code whenNull}, normalised, defaulting to {@code skip}. */
+    private static String whenNullOf(CheckIntent check) {
+        return check.getWhenNull() == null || check.getWhenNull()
+                                                   .isBlank() ? "skip"
+                                                           : check.getWhenNull()
+                                                                  .trim()
+                                                                  .toLowerCase(java.util.Locale.ROOT);
     }
 
     /**
@@ -5845,6 +5949,38 @@ public final class IntentParser {
             if (lifecycle.containsKey("on") || lifecycle.containsKey(Boolean.TRUE)) {
                 issues.add("entity [" + entity.get("name")
                         + "] lifecycle declares `on` - the graph is always over the entity's function: EntityStatus relation; remove it");
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * An {@code agree} check names the shared property with {@code onProperty}, never {@code on}: YAML
+     * 1.1 resolves a bare {@code on} key to the boolean {@code true}, so the declaration would arrive
+     * as the key {@code true}, bind to nothing, and the check would generate with no property to agree
+     * on. The proposal that opened #7409 spelled it {@code on}, so authors and the assistant will write
+     * it - it is refused by name here, on the raw tree while the spelling still exists, rather than
+     * dropped silently.
+     *
+     * @param tree the raw parsed YAML
+     */
+    private static void rejectCheckOn(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("checks") instanceof List<?> checks)) {
+                continue;
+            }
+            for (Object checkNode : checks) {
+                if (checkNode instanceof Map<?, ?> check && (check.containsKey("on") || check.containsKey(Boolean.TRUE))) {
+                    issues.add("entity [" + entity.get("name") + "] check [" + check.get("kind")
+                            + "] declares `on` - YAML reads a bare `on` as the boolean true, so the key never arrives;"
+                            + " spell it `onProperty`");
+                }
             }
         }
         if (!issues.isEmpty()) {

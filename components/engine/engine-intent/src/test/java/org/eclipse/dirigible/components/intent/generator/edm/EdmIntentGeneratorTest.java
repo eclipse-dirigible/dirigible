@@ -306,7 +306,7 @@ class EdmIntentGeneratorTest {
                 entities:
                   - name: SalesInvoice
                     duplicable:
-                      defaults: { date: now, note: "Copy", period: now }
+                      defaults: { date: now, note: "Copy", period: now, recordedAt: now }
                       reset: [due]
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -314,6 +314,7 @@ class EdmIntentGeneratorTest {
                       - { name: due, type: date, calculatedActionOnCreate: custom.DueDate }
                       - { name: note, type: string }
                       - { name: period, type: month }
+                      - { name: recordedAt, type: timestamp }
                   - name: SalesInvoiceItem
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -329,7 +330,7 @@ class EdmIntentGeneratorTest {
         assertEquals(List.of("Due"), invoice.get("duplicateReset"), "a reset is carried as the GENERATED property name");
 
         List<Map<String, Object>> defaults = (List<Map<String, Object>>) invoice.get("duplicateDefaults");
-        assertEquals(3, defaults.size(), "every default reaches the template, in authored order");
+        assertEquals(4, defaults.size(), "every default reaches the template, in authored order");
         assertEquals("Date", defaults.get(0)
                                      .get("name"));
         assertEquals("date", defaults.get(0)
@@ -345,6 +346,13 @@ class EdmIntentGeneratorTest {
         assertEquals("month", defaults.get(2)
                                       .get("shape"),
                 "a month field gets the YYYY-MM shape, not a full date");
+        // #7396: the shape is the AUTHORED type, not a narrowing of it - a timestamp property binds a
+        // java.time.Instant, which the YYYY-MM-DD of a `date` shape does not fill.
+        assertEquals("RecordedAt", defaults.get(3)
+                                           .get("name"));
+        assertEquals("timestamp", defaults.get(3)
+                                          .get("shape"),
+                "a timestamp field gets the instant shape, not a date");
 
         // Both keys are structured, so they must be written as JSON attributes rather than dropped -
         // what the .edm cannot say is lost on the next modeler save (#6826).
@@ -1427,6 +1435,66 @@ class EdmIntentGeneratorTest {
         assertNull(ownField.get("pathLoads"));
         // No gate declared, so the rule holds on every user write and carries no status at all.
         assertNull(ownField.get("status"));
+    }
+
+    /**
+     * An {@code agree} check emits BOTH sides as one hop each, sharing the walker - so the two records
+     * are loaded once, by foreign key, and the comparison is between two properties of records neither
+     * of which is the one being written (dirigible #7409).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void agreeChecksEmitBothSidesAndTheirLoads() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: InvoicePayment
+                    checks:
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer,
+                          message: "This payment belongs to a different customer than the invoice" }
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer, whenNull: refuse }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: customerPayment, kind: manyToOne, to: CustomerPayment }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "InvoicePayment").get("checks");
+        assertEquals(2, checks.size());
+
+        Map<String, Object> agree = checks.get(0);
+        assertEquals("(hop0 == null ? null : hop0.Customer)", agree.get("leftExpression"));
+        assertEquals("(hop1 == null ? null : hop1.Customer)", agree.get("rightExpression"));
+        assertEquals("SalesInvoice.Customer", agree.get("leftLabel"));
+        assertEquals("CustomerPayment.Customer", agree.get("rightLabel"));
+        assertEquals("skip", agree.get("whenNull"));
+        assertEquals("This payment belongs to a different customer than the invoice", agree.get("message"));
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) agree.get("pathLoads");
+        assertEquals(2, loads.size(), "each side is loaded once: " + loads);
+        assertEquals("entity.SalesInvoice", loads.get(0)
+                                                 .get("sourceExpression"));
+        assertEquals("entity.CustomerPayment", loads.get(1)
+                                                    .get("sourceExpression"));
+
+        // An unauthored message still says what disagreed - only the declaration knows.
+        Map<String, Object> refusing = checks.get(1);
+        assertEquals("refuse", refusing.get("whenNull"));
+        assertEquals("The Sales Invoice and the Customer Payment must have the same Customer", refusing.get("message"));
     }
 
     /**

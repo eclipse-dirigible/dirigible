@@ -61,8 +61,7 @@ class GlueRollupCountTest {
         // Every variant carries the same op and recompute criteria - the update handler is not a
         // special case, it is the same idempotent read-modify-write of the affected parent.
         assertTrue(rollups.stream()
-                          .allMatch(r -> "count".equals(r.get("op"))
-                                  && "Criteria.create().eq(\"Member\", entity.Member)".equals(r.get("criteriaExpression"))),
+                          .allMatch(r -> "count".equals(r.get("op")) && "Member".equals(r.get("fkProperty"))),
                 "all handlers must recompute the same way: " + rollups);
     }
 }

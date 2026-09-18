@@ -693,8 +693,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // on the parent by the EDM generator (EdmIntentGenerator.displacedStatusProperty) under the
             // same name.
             base.put("statusDisplacedField", withStatus ? IntentNaming.displacedStatusProperty(rollup.getStatus()) : "");
-            // Recompute the value for the affected parent from the store on each child event.
-            base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
+            // Recompute the value for the affected parent from the store on each child event. The query
+            // is the foreign key alone, which the descriptor already carries - the template layer builds
+            // the `Criteria` from it rather than the glue carrying the builder call (issue #7406).
             // Handler name derives from the coalescing key (childEntity + parent-fk), NOT the roll-up name:
             // The generation pipeline groups every roll-up sharing (childEntity, fkProperty, event) into one
             // handler, so
@@ -1144,11 +1145,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                 temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget),
                                 relationProperties(crossModel ? null : byName.get(items.getTo()), itemTarget)));
                 e.put("itemLines", new ArrayList<>());
-                // The source-row rule (issue #7091), pre-rendered as the tail of the Criteria that
-                // already selects the source's item rows by their master foreign key - so the rows the
-                // rule excludes are never loaded, and a rule of no conditions renders the empty string
-                // and therefore the query this always ran.
-                e.put("itemWhere", ScheduleSupport.conditionChain(items.getWhere()));
+                // The source-row rule (issue #7091), as the clauses the template layer appends to the
+                // Criteria that already selects the source's item rows by their master foreign key - so
+                // the rows the rule excludes are never loaded, and a rule of no conditions appends
+                // nothing and therefore runs the query this always ran.
+                e.put("itemCriteria", ScheduleSupport.conditions(items.getWhere()));
                 e.put("itemRefuse", items.hasWhere() && items.hasRefuse() ? items.getRefuse() : "");
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
@@ -2562,7 +2563,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // expression (#7131). Numbered, so no authored name can collide with it.
                     assignment.put("local", "header" + (headerAssignments.size() + 1));
                     // ... and what a null one will still end up carrying once stored - the target
-                    // column's own default (see derivedDefault), plus whatever save() - or, on a
+                    // column's own default (see derivedDefaultValue), plus whatever save() - or, on a
                     // rewrite, update() - itself fills into the column afterwards (see putSaveTimeFill).
                     putDerivedDefault(assignment, creates, byName, entry.getKey());
                     putSaveTimeFill(assignment, creates, headerLines, true, entry.getKey(), posting.getName(), context);
@@ -2672,7 +2673,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (Boolean.TRUE.equals(compared.get("overwrittenOnSave"))) {
                     continue; // not compared at all, so it asks for neither helper
                 }
-                comparesAgainstDefaults = comparesAgainstDefaults || !"".equals(compared.get("derivedDefault"));
+                // A reading is present for every compared column and EMPTY where the column carries no
+                // default - the glue's "nothing to compare against" (issue #7406).
+                comparesAgainstDefaults =
+                        comparesAgainstDefaults || compared.get("derivedDefaultValue") instanceof Map<?, ?> reading && !reading.isEmpty();
                 comparesUnlessDerivedIsEmpty = comparesUnlessDerivedIsEmpty || Boolean.TRUE.equals(compared.get("compareOnlyWhenDerived"));
             }
             e.put("comparesAgainstDefaults", comparesAgainstDefaults);
@@ -2738,8 +2742,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * <p>
      * Two keys are written onto the assignment/comparison map:
      * <ul>
-     * <li>{@code derivedDefault} - the default as a Java literal for {@code same()}, which compares
-     * numbers by VALUE: a numeric default therefore needs no knowledge of the column's own Java type
+     * <li>{@code derivedDefaultValue} - the default READ against the column's kind, which the template
+     * layer renders the literal {@code same()} compares against from (issue #7406). {@code same()}
+     * compares numbers by VALUE, so a numeric default needs no knowledge of the column's own Java type
      * ({@code BigDecimal} stands in for all of them, exactly as the stored side is read back at
      * whatever scale the database chose). Empty when the column carries no default.</li>
      * <li>{@code compareOnlyWhenDerived} - {@code true} for a default with no Java literal to stand in
@@ -2757,7 +2762,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      */
     private static void putDerivedDefault(Map<String, Object> target, EntityIntent entity, Map<String, EntityIntent> byName,
             String authoredKey) {
-        target.put("derivedDefault", "");
+        // The reading, not the Java (issue #7406): what the column would have held is a value of the
+        // column's own kind, and the `new java.math.BigDecimal(...)` the comparison applies it through
+        // is the template layer's rendering of it.
+        target.put("derivedDefaultValue", Map.of());
         target.put("compareOnlyWhenDerived", false);
         String type = null;
         String defaultValue = null;
@@ -2794,7 +2802,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             case "INTEGER":
             case "BIGINT":
                 try {
-                    target.put("derivedDefault", "new java.math.BigDecimal(\"" + new java.math.BigDecimal(defaultValue.trim()) + "\")");
+                    target.put("derivedDefaultValue", reading("number", new java.math.BigDecimal(defaultValue.trim()).toString()));
                 } catch (NumberFormatException ex) {
                     // Not a number on a numeric column: the model is wrong and the repository's own
                     // default assignment is what will say so, at the create. The comparison keeps out
@@ -2805,7 +2813,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 return;
             case "BOOLEAN":
                 String flag = defaultValue.trim();
-                target.put("derivedDefault", "true".equalsIgnoreCase(flag) || "1".equals(flag) ? "Boolean.TRUE" : "Boolean.FALSE");
+                target.put("derivedDefaultValue", reading("boolean", Boolean.toString("true".equalsIgnoreCase(flag) || "1".equals(flag))));
                 return;
             default:
                 // A string default is authored either bare (what the item dialog seeds) or SQL-quoted
@@ -2818,7 +2826,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 // Always a QUOTED literal, even for a default that reads as a number: the column holds
                 // a string, and `same()` would compare a bare 0 against the stored "0" as unequal.
-                target.put("derivedDefault", '"' + JavaLiterals.escape(text) + '"');
+                target.put("derivedDefaultValue", reading("string", text));
                 return;
         }
     }
@@ -3774,8 +3782,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             .toString());
             base.put("countProperty", expansionCountProperty(master, expansion));
             base.put("countValue", expansionCountValue(master, expansion));
-            base.put("criteriaExpression",
-                    "Criteria.create().eq(\"" + fkProperty + "\", master." + IntentEntities.keyFieldName(master) + ")");
+            // The child set is queried by the master foreign key alone, which the descriptor already
+            // carries alongside the master's own key - the template layer builds the `Criteria` from the
+            // two rather than the glue carrying the builder call (issue #7406).
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
             expansions.add(rollupEntry(base, className + "OnCreate", ""));
             expansions.add(rollupEntry(base, className + "OnUpdate", "-updated"));
@@ -4270,7 +4279,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
             entry.put("attachKeyProperty", sourceCrossModel ? sourceTarget.keyField() : IntentEntities.keyFieldName(byName.get(entity)));
-            entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
+            // The tick's filter, as the CLAUSES it is (issue #7406) - the `Criteria` chain is rendered
+            // from them by the template layer, so the process description carries no builder call and no
+            // java.time.
+            entry.put("criteria", ScheduleSupport.criteria(schedule));
             // The attachment and deep-link keys are always present (empty for a generate schedule): an
             // undefined Velocity variable renders as its own name, so a template must never rely on
             // absence.
@@ -4951,7 +4963,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code run:} period bound is built from, and the marker that identifies which of a generate's
      * assignments is the date the run writes.
      */
-    private static final String TODAY = "java.time.LocalDate.now()";
+    /**
+     * The periods a {@code run:} key term ranges over - a {@code day} is a single date, not a range.
+     */
+    private static final java.util.Set<String> RANGED_PERIODS = java.util.Set.of("week", "month", "quarter", "year");
 
     /**
      * The pre-rendered terms of a scheduled generation's natural key (issues #7070, #7106): one
@@ -5052,25 +5067,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if ("day".equals(period)) {
             // A single day needs no range - and rendering it as one would make the generated guard say
             // `between(today, today)` where the author wrote `run: day`.
-            return term("property", property, "expr", TODAY);
+            return term("property", property, "period", "day");
         }
-        String lower = switch (period) {
-            case "week" -> TODAY + ".with(java.time.temporal.TemporalAdjusters.previousOrSame(java.time.DayOfWeek.MONDAY))";
-            case "month" -> TODAY + ".withDayOfMonth(1)";
-            case "quarter" -> TODAY + ".with(java.time.temporal.IsoFields.DAY_OF_QUARTER, 1)";
-            case "year" -> TODAY + ".withDayOfYear(1)";
-            default -> null;
-        };
-        if (lower == null) {
+        if (!RANGED_PERIODS.contains(period)) {
             return null;
         }
-        String upper = lower + switch (period) {
-            case "week" -> ".plusDays(6)";
-            case "month" -> ".plusMonths(1).minusDays(1)";
-            case "quarter" -> ".plusMonths(3).minusDays(1)";
-            default -> ".plusYears(1).minusDays(1)";
-        };
-        return term("kind", "range", "property", property, "lower", lower, "upper", upper);
+        // The PERIOD, not where it begins and ends (issue #7406): a month is what the author declared,
+        // and the calendar arithmetic that turns it into a range is the template layer's rendering of
+        // it - which is also the only place the two bounds can be kept derived from one another.
+        return term("kind", "range", "property", property, "period", period);
+    }
+
+    /**
+     * One neutral value reading - a kind and the text of the value, in that order (issue #7406). The
+     * glue carries these where it used to carry the Java literal rendered from them; the rendering
+     * moved to the template layer, which is the only layer that knows what language it is generating.
+     *
+     * @param kind the reading's kind
+     * @param text the value, as text - the spelling survives a JSON round-trip, a number's parsed value
+     *        does not
+     * @return the reading
+     */
+    private static Map<String, Object> reading(String kind, String text) {
+        Map<String, Object> reading = new LinkedHashMap<>();
+        reading.put("kind", kind);
+        reading.put("text", text);
+        return reading;
     }
 
     /**

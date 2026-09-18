@@ -110,7 +110,7 @@ class GlueGeneratesItemsWhereTest {
                                                    .get(0);
 
         assertEquals(true, g.get("hasItems"));
-        assertEquals(".eq(\"Status\", 3).gt(\"TotalHours\", 0)", g.get("itemWhere"));
+        assertEquals(".eq(\"Status\", 3).gt(\"TotalHours\", 0)", GlueRendering.itemWhere(g));
         // Skipping is the default: no message, so an unqualified row is simply left out.
         assertEquals("", g.get("itemRefuse"));
     }
@@ -132,7 +132,7 @@ class GlueGeneratesItemsWhereTest {
                 """)))
                                                    .get(0);
 
-        assertEquals(".eq(\"Status\", 3).gt(\"TotalHours\", 0)", g.get("itemWhere"));
+        assertEquals(".eq(\"Status\", 3).gt(\"TotalHours\", 0)", GlueRendering.itemWhere(g));
         assertEquals("Member timesheet is not approved", g.get("itemRefuse"));
     }
 
@@ -148,7 +148,7 @@ class GlueGeneratesItemsWhereTest {
                                                                    "- { field: closedOn, op: le, value: CURRENT_DATE }")))
                                                    .get(0);
 
-        assertEquals(".eq(\"Status\", 3).le(\"ClosedOn\", java.time.LocalDate.now())", g.get("itemWhere"));
+        assertEquals(".eq(\"Status\", 3).le(\"ClosedOn\", java.time.LocalDate.now())", GlueRendering.itemWhere(g));
     }
 
     /**
@@ -165,7 +165,7 @@ class GlueGeneratesItemsWhereTest {
                                                    .get(0);
 
         assertEquals(true, g.get("hasItems"));
-        assertEquals("", g.get("itemWhere"));
+        assertEquals("", GlueRendering.itemWhere(g));
         assertEquals("", g.get("itemRefuse"));
     }
 
@@ -326,7 +326,7 @@ class GlueGeneratesItemsWhereTest {
 
         assertEquals(true, g.get("crossModelSource"));
         assertEquals(true, g.get("hasItems"));
-        assertEquals(".eq(\"Status\", 3)", g.get("itemWhere"));
+        assertEquals(".eq(\"Status\", 3)", GlueRendering.itemWhere(g));
         // Read off the owner model, not guessed from the item's name.
         assertEquals("GoodsIssue", g.get("fromItemPerspective"));
         assertEquals("Id", g.get("fromItemPk"));
@@ -344,7 +344,7 @@ class GlueGeneratesItemsWhereTest {
         Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context)
                                                    .get(0);
 
-        assertEquals(".gt(\"Quantity\", 0)", g.get("itemWhere"));
+        assertEquals(".gt(\"Quantity\", 0)", GlueRendering.itemWhere(g));
     }
 
     /**
@@ -378,7 +378,7 @@ class GlueGeneratesItemsWhereTest {
         Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(context.getModel(), context)
                                                    .get(0);
 
-        assertEquals(".lt(\"IssuedOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P1M\")))", g.get("itemWhere"));
+        assertEquals(".lt(\"IssuedOn\", java.time.LocalDate.now().minus(java.time.Period.parse(\"P1M\")))", GlueRendering.itemWhere(g));
     }
 
     /**
