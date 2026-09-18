@@ -82,6 +82,29 @@
     </ul>
 #end
   </div>
+#if($hasProcess)
+  <!-- Action banner (issue #7434, option A): a highlighted "your step" strip directly under the sticky
+       bar, shown only when this record has an actionable BPM user task. It names the process and carries
+       one button per task, so the workflow action never competes with the form's Save/Cancel and the bar
+       stays pure form controls. Same visibility as before - edit AND preview whenever a task is
+       actionable; a record with no pending step renders no strip. -->
+  <template x-if="$store.processTasks.getTasks(form).length">
+    <div class="hbox items-center gap-3 py-3 px-8 w-full" x-show="(isEdit || isPreview) &amp;&amp; !isDialog"
+         style="background: color-mix(in srgb, var(--primary) 8%, transparent); border-left: 4px solid var(--primary);">
+      <svg role="presentation" x-h-lucide data-lucide="flag" class="text-primary shrink-0"></svg>
+      <div class="text-sm">
+        <span class="font-semibold text-foreground" x-text="$store.processTasks.processName($store.processTasks.getTasks(form)[0])"></span>
+        <span class="text-muted-foreground" x-text="' — ' + T('$projectName:${tprefix}.messages.workflowStep', 'your step')"></span>
+      </div>
+      <div class="flex-1"></div>
+      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
+        <button type="button" x-h-button data-variant="primary" class="shrink-0" @click="$store.processTasks.openTask(task)">
+          <svg role="presentation" x-h-lucide data-lucide="chevron-right"></svg><span x-text="$store.processTasks.taskName(task)"></span>
+        </button>
+      </template>
+    </div>
+  </template>
+#end
 
   <!-- Load failure (edit) -->
   <div x-show="state === 'load-failure'" x-h-info-page class="p-4">
@@ -508,29 +531,8 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly || $history == "true" || $hasProcess)
+#if($hasReadOnly || $history == "true")
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
-#if($hasProcess)
-      <!-- Workflow "next step" card (issue #7434, option A): the record's actionable BPM task(s) - the
-           next step in the record's lifecycle - as their own card at the TOP of the sidebar, styled
-           like Details, so the workflow action never competes with the form's Save/Cancel. Shown in
-           edit AND preview whenever the record has an actionable task; otherwise Details is first. -->
-      <template x-if="$store.processTasks.getTasks(form).length">
-        <div x-h-card>
-          <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.messages.workflowStep', 'Your next step')"></h3></div>
-          <div x-h-card-content>
-            <div class="vbox gap-3">
-              <span class="text-sm text-muted-foreground" x-text="$store.processTasks.processName($store.processTasks.getTasks(form)[0])"></span>
-              <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-                <button type="button" x-h-button data-variant="primary" class="w-full" @click="$store.processTasks.openTask(task)">
-                  <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
-                </button>
-              </template>
-            </div>
-          </div>
-        </div>
-      </template>
-#end
 #if($hasReadOnly)
       <div x-h-card>
         <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
