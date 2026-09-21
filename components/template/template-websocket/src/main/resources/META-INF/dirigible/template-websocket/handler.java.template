@@ -7,8 +7,9 @@ import org.eclipse.dirigible.sdk.net.WebsocketHandler;
 
 /**
  * An inbound WebSocket service. The endpoint returned by {@link #endpoint()} is the whole binding -
- * there is no separate descriptor file to keep in sync. Clients connect to
- * {@code /websockets/stomp/{{javaClassName}}}.
+ * there is no separate descriptor file to keep in sync. Clients connect to the {@code /stomp}
+ * endpoint (STOMP over WebSocket or SockJS), send to {@code /ws/stomp/{{javaClassName}}} and receive
+ * on {@code /user/queue/reply/{{javaClassName}}}.
  *
  * <p>
  * The bean name is qualified with the package so two projects can scaffold a WebSocket service of

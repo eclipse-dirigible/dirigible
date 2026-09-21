@@ -31,6 +31,11 @@ public class HttpSecurityURIConfigurator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HttpSecurityURIConfigurator.class);
 
+    /**
+     * The STOMP endpoint, raw and SockJS - public, since the CONNECT frame authenticates the session.
+     */
+    static final String STOMP_PATTERN = "/stomp/**";
+
     /** The Constant PUBLIC_PATTERNS. */
     private static final String[] PUBLIC_PATTERNS = { //
             "/", //
@@ -39,7 +44,7 @@ public class HttpSecurityURIConfigurator {
             "/index.html", //
             "/logout", //
             "/index-busy.html", //
-            "/stomp/**", //
+            STOMP_PATTERN, //
             "/error/**", //
             "/error.html", //
             "/favicon.ico", //

@@ -38,8 +38,9 @@ package org.eclipse.dirigible.sdk.net;
 public interface WebsocketHandler {
 
     /**
-     * The endpoint suffix this handler binds to, e.g. {@code "java-chat"} maps to
-     * {@code /websockets/stomp/java-chat}.
+     * The endpoint suffix this handler binds to, e.g. {@code "java-chat"}: clients connect to the
+     * {@code /stomp} endpoint (STOMP over WebSocket or SockJS), send to {@code /ws/stomp/java-chat} and
+     * receive on {@code /user/queue/reply/java-chat}.
      *
      * @return the endpoint suffix
      */

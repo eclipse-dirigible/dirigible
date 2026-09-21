@@ -108,15 +108,9 @@ public class TenantSelectionEndpoint {
     @ExceptionHandler(TenantSelectionException.class)
     public ResponseEntity<TenantSelectionRefusal> onRefusedSelection(TenantSelectionException exception) {
         LOGGER.info("Refused tenant selection [{}]: {}", exception.getTenantId(), exception.getMessage());
-        HttpStatus status = switch (exception.getReason()) {
-            case NOT_A_MEMBER -> HttpStatus.FORBIDDEN;
-            case NOT_PROVISIONED_HERE, UNKNOWN_HERE -> HttpStatus.CONFLICT;
-            case NOT_AN_INTERACTIVE_SESSION -> HttpStatus.UNAUTHORIZED;
-        };
-        return ResponseEntity.status(status)
-                             .body(new TenantSelectionRefusal(exception.getReason()
-                                                                       .name(),
-                                     exception.getMessage()));
+        return ResponseEntity.status(exception.getReason()
+                                              .httpStatus())
+                             .body(TenantSelectionRefusal.of(exception));
     }
 
     /**
@@ -161,5 +155,17 @@ public class TenantSelectionEndpoint {
      * @param message the human readable explanation
      */
     public record TenantSelectionRefusal(String reason, String message) {
+
+        /**
+         * The refusal a caller is answered with.
+         *
+         * @param exception the refusal
+         * @return the body
+         */
+        public static TenantSelectionRefusal of(TenantSelectionException exception) {
+            return new TenantSelectionRefusal(exception.getReason()
+                                                       .name(),
+                    exception.getMessage());
+        }
     }
 }

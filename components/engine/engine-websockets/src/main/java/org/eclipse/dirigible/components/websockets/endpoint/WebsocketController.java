@@ -21,8 +21,6 @@ import org.eclipse.dirigible.components.websockets.service.WebsocketProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageExceptionHandler;
 import org.springframework.messaging.handler.annotation.MessageMapping;
@@ -40,11 +38,6 @@ public class WebsocketController {
 
     /** The processor. */
     private final WebsocketProcessor processor;
-
-    /** The client outbound channel. */
-    @Autowired
-    @Qualifier("clientOutboundChannel")
-    private MessageChannel clientOutboundChannel;
 
     /**
      * Instantiates a new websockets service.
@@ -91,16 +84,19 @@ public class WebsocketController {
             if (logger.isErrorEnabled()) {
                 logger.error(e.getMessage(), e);
             }
-            return new OutputMessage(message.getFrom(), e.getMessage(), time);
+            return new OutputMessage(message.getFrom(), PROCESSING_FAILED, time);
         }
     }
+
+    /** What a client is told about a failure - the reason is in the log, not the client's business. */
+    static final String PROCESSING_FAILED = "The message could not be processed";
 
     /**
      * Handle exception.
      *
      * @param endpoint the endpoint
      * @param throwable the throwable
-     * @return the string
+     * @return the message the client is told
      */
     @MessageExceptionHandler
     @SendToUser("/queue/errors/{endpoint}")
@@ -121,7 +117,7 @@ public class WebsocketController {
                 logger.error(e.getMessage(), e);
             }
         }
-        return throwable.getMessage();
+        return PROCESSING_FAILED;
     }
 
 }

@@ -48,6 +48,8 @@ import org.springframework.security.oauth2.client.authentication.OAuth2Authentic
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.context.SecurityContextRepository;
 
 /**
@@ -197,6 +199,83 @@ class TenantSelectionManagerTest {
     }
 
     @Test
+    void aBearerSelectionIsToldWhereABearerRequestNamesItsTenant() {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(bearer(Set.of("DEVELOPER"), "acme.library.Owner", "DEVELOPER"));
+        SecurityContextHolder.setContext(securityContext);
+
+        assertThatThrownBy(() -> manager.selectTenant(request, response, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                               .hasMessageContaining(
+                                                                                       TenantSelectionConstants.TENANT_HEADER);
+    }
+
+    // --- a bearer request enters a tenant for its own duration --------------------------------
+
+    @Test
+    void aBearerRequestEntersATenantItsGroupsGrantWithTheRolesOfThatTenantOnTopOfItsOwn() {
+        // The token's authorities are the global roles plus whatever its scopes mapped to.
+        JwtAuthenticationToken bearer =
+                bearer(Set.of("DEVELOPER", "ReportsReader"), "acme.library.Owner", "acme.library.User", "globex.library.User", "DEVELOPER");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
+
+        BearerTenantSelection selection = manager.enterTenant(bearer, ACME);
+
+        assertThat(selection.tenant()
+                            .getId()).isEqualTo(ACME);
+        assertThat(selection.authentication()
+                            .getName()).isEqualTo("jane");
+        assertThat(selection.authentication()
+                            .getToken()).isSameAs(bearer.getToken());
+        assertThat(AuthoritiesUtil.toRoleNames(selection.authentication()
+                                                        .getAuthorities())).containsExactlyInAnyOrder("DEVELOPER", "ReportsReader", "Owner",
+                                                                "User");
+        // nothing is kept: the token itself is untouched, no session, no persisted context
+        assertThat(AuthoritiesUtil.toRoleNames(bearer.getAuthorities())).containsExactlyInAnyOrder("DEVELOPER", "ReportsReader");
+        assertThat(request.getSession()
+                          .getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE)).isNull();
+        verify(securityContextRepository, never()).saveContext(any(SecurityContext.class), any(), any());
+    }
+
+    @Test
+    void aBearerRequestIsRefusedATenantItsGroupsDoNotGrant() {
+        JwtAuthenticationToken bearer = bearer(Set.of(), "acme.library.Owner");
+
+        assertThatThrownBy(() -> manager.enterTenant(bearer, GLOBEX)).isInstanceOf(TenantSelectionException.class)
+                                                                     .extracting("reason")
+                                                                     .isEqualTo(TenantSelectionException.Reason.NOT_A_MEMBER);
+        verify(tenantService, never()).findById(any());
+    }
+
+    @Test
+    void aBearerRequestIsRefusedATenantThisInstanceHasNotProvisionedYet() {
+        JwtAuthenticationToken bearer = bearer(Set.of(), "acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.INITIAL)));
+
+        assertThatThrownBy(() -> manager.enterTenant(bearer, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                   .extracting("reason")
+                                                                   .isEqualTo(TenantSelectionException.Reason.NOT_PROVISIONED_HERE);
+    }
+
+    @Test
+    void aBearerRequestIsRefusedATenantThisInstanceDoesNotKnow() {
+        JwtAuthenticationToken bearer = bearer(Set.of(), "acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> manager.enterTenant(bearer, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                   .extracting("reason")
+                                                                   .isEqualTo(TenantSelectionException.Reason.UNKNOWN_HERE);
+    }
+
+    @Test
+    void theTenantsOfABearerTokenAreOfferedLikeALoginsAre() {
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
+
+        List<TenantOption> tenants = manager.availableTenants(bearer(Set.of(), "acme.library.Owner", "acme.bi.Owner", "DEVELOPER"));
+
+        assertThat(tenants).containsExactly(new TenantOption(ACME, "Acme Ltd", true, TenantOption.State.READY));
+    }
+
+    @Test
     void authoritiesLostToATokenRefreshAreReApplied() {
         authenticate("acme.library.Owner", "DEVELOPER");
         when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
@@ -260,6 +339,24 @@ class TenantSelectionManagerTest {
         SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
         securityContext.setAuthentication(authentication);
         SecurityContextHolder.setContext(securityContext);
+    }
+
+    /**
+     * An authenticated bearer ID token whose groups are the given ones, carrying the authorities the
+     * chain granted it.
+     */
+    private static JwtAuthenticationToken bearer(Set<String> currentRoles, String... groups) {
+        Jwt jwt = Jwt.withTokenValue("token")
+                     .header("alg", "RS256")
+                     .subject("sub-jane")
+                     .claim("typ", "ID")
+                     .claim("preferred_username", "jane")
+                     .claim(GROUPS_CLAIM, List.of(groups))
+                     .issuedAt(Instant.now())
+                     .expiresAt(Instant.now()
+                                       .plusSeconds(300))
+                     .build();
+        return new JwtAuthenticationToken(jwt, AuthoritiesUtil.toAuthorities(currentRoles), "jane");
     }
 
     private Set<String> currentRoleNames() {

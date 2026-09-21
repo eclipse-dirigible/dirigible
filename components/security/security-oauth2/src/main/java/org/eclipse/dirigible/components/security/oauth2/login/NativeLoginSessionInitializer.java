@@ -11,7 +11,9 @@ package org.eclipse.dirigible.components.security.oauth2.login;
 
 import java.time.Instant;
 import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.stream.Collectors;
 import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +37,7 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoderFactory;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -42,6 +45,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
 
 /**
  * Establishes the standard platform session from the tokens a {@link NativeLoginProvider} obtained
@@ -54,12 +58,20 @@ import jakarta.servlet.http.HttpServletResponse;
  * against session fixation, and the tokens are registered as an {@link OAuth2AuthorizedClient} so
  * {@link OAuth2SessionRevalidationFilter} governs the session lifetime exactly as for a hosted
  * login. Tokens never reach the browser - the client receives only the session cookie.
+ *
+ * <p>
+ * The second entry,
+ * {@link #establishSession(String, JwtAuthenticationToken, String, HttpServletRequest, HttpServletResponse)},
+ * mints the session of {@code POST /login/token} from a bearer ID token the resource server already
+ * validated.
  */
 @Component
 class NativeLoginSessionInitializer {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeLoginSessionInitializer.class);
+
+    private static final String ROLE_PREFIX = "ROLE_";
 
     private final ObjectProvider<OAuth2AuthorizedClientService> authorizedClientService;
     private final ObjectProvider<GrantedAuthoritiesMapper> userAuthoritiesMapper;
@@ -106,14 +118,72 @@ class NativeLoginSessionInitializer {
             // session-fixation protection: never keep the id a pre-login session was known under
             request.changeSessionId();
         }
-        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
-        securityContext.setAuthentication(authentication);
-        SecurityContextHolder.setContext(securityContext);
-        securityContextRepository.saveContext(securityContext, request, response);
+        saveContext(authentication, request, response);
 
         registerAuthorizedClient(registration, authentication, tokens);
         LOGGER.debug("Established a native login session for user [{}] on registration [{}]", authentication.getName(),
                 registration.getRegistrationId());
+    }
+
+    /**
+     * Establishes the session for the user a bearer ID token identifies - the token the resource server
+     * has already validated and turned into the platform identity, so the session gets exactly the name
+     * and the roles the bearer request had.
+     *
+     * <p>
+     * The session is a fresh one: whatever session the request carried is invalidated first, because
+     * its state (a selected tenant, application attributes) belongs to whoever held that cookie, not to
+     * the identity the token proves. No tokens are registered for it - there is nothing to refresh with
+     * - and it ends when the token does, which
+     * {@link OAuth2SessionRevalidationFilter#SESSION_EXPIRES_AT_ATTRIBUTE} tells the revalidation
+     * filter.
+     *
+     * @param registrationId the client registration the session is filed under
+     * @param idTokenAuthentication the validated ID token and the authorities derived from it
+     * @param principalClaim the claim the user name was read from
+     * @param request the request
+     * @param response the response
+     * @return the instant the session ends
+     */
+    Instant establishSession(String registrationId, JwtAuthenticationToken idTokenAuthentication, String principalClaim,
+            HttpServletRequest request, HttpServletResponse response) {
+        Jwt jwt = idTokenAuthentication.getToken();
+        OidcIdToken idToken = new OidcIdToken(jwt.getTokenValue(), jwt.getIssuedAt(), jwt.getExpiresAt(), jwt.getClaims());
+        Collection<GrantedAuthority> authorities = roleAuthorities(idTokenAuthentication.getAuthorities());
+        OidcUser oidcUser = new DefaultOidcUser(authorities, idToken, principalClaim);
+        OAuth2AuthenticationToken authentication = new OAuth2AuthenticationToken(oidcUser, authorities, registrationId);
+
+        HttpSession carriedSession = request.getSession(false);
+        if (carriedSession != null) {
+            carriedSession.invalidate();
+        }
+        HttpSession session = request.getSession(true);
+        // the details record the session id, so they are built once the session they describe exists
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+        saveContext(authentication, request, response);
+        session.setAttribute(OAuth2SessionRevalidationFilter.SESSION_EXPIRES_AT_ATTRIBUTE, jwt.getExpiresAt());
+        LOGGER.debug("Established a session from a bearer ID token for user [{}] on registration [{}], ending at [{}]",
+                authentication.getName(), registrationId, jwt.getExpiresAt());
+        return jwt.getExpiresAt();
+    }
+
+    /**
+     * The roles among a bearer's authorities. A bearer authentication also carries the marker of how
+     * the request was authenticated ({@code FACTOR_BEARER}) - a fact about that request, not a role of
+     * the user, and carried into the session it would read as one.
+     */
+    private static Collection<GrantedAuthority> roleAuthorities(Collection<GrantedAuthority> authorities) {
+        return authorities.stream()
+                          .filter(authority -> authority.getAuthority() != null && authority.getAuthority()
+                                                                                            .startsWith(ROLE_PREFIX))
+                          .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private void saveContext(OAuth2AuthenticationToken authentication, HttpServletRequest request, HttpServletResponse response) {
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(authentication);
+        SecurityContextHolder.setContext(securityContext);
+        securityContextRepository.saveContext(securityContext, request, response);
     }
 
     private OidcIdToken validateIdToken(ClientRegistration registration, String idTokenValue) {

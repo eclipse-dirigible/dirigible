@@ -31,6 +31,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
+import org.springframework.security.oauth2.jwt.Jwt;
 
 /**
  * The subdomain strategy keeps mapping every group of the identity provider's own claim, byte for
@@ -131,6 +132,37 @@ class TenantAwareAuthoritiesMapperTest {
     }
 
     @Test
+    void aBearerIdTokenIsMappedLikeTheLoginUnderTheSubdomainStrategy() {
+        Jwt jwt = jwt(COGNITO_CLAIM, List.of("DEVELOPER", "acme.library.Owner"));
+
+        Set<GrantedAuthority> fromToken = mapper(COGNITO_CLAIM).authoritiesOf(jwt);
+        Collection<? extends GrantedAuthority> fromLogin =
+                mapper(COGNITO_CLAIM).mapAuthorities(List.of(oidcAuthority(COGNITO_CLAIM, "DEVELOPER", "acme.library.Owner")));
+
+        assertThat(roleNames(fromToken)).containsExactlyInAnyOrder("DEVELOPER", "acme.library.Owner");
+        assertThat(fromToken).containsExactlyInAnyOrderElementsOf(fromLogin);
+    }
+
+    @Test
+    void aBearerIdTokenIsMappedLikeTheLoginUnderTheTokenGroupsStrategy() {
+        useTokenGroups();
+        Jwt jwt = jwt(COGNITO_CLAIM, List.of("DEVELOPER", "acme.library.Owner", "acme.bi.Owner"));
+
+        assertThat(roleNames(mapper(COGNITO_CLAIM).authoritiesOf(jwt))).containsExactly("DEVELOPER");
+        assertThat(mapper(COGNITO_CLAIM).authoritiesOf(jwt(COGNITO_CLAIM, List.of("acme.library.Owner")))).isEmpty();
+    }
+
+    @Test
+    void aBearerIdTokenWithoutTheClaimOrWithAStringClaimGrantsNothing() {
+        assertThat(mapper(COGNITO_CLAIM).authoritiesOf(jwt("some-other-claim", List.of("DEVELOPER")))).isEmpty();
+        assertThat(mapper(COGNITO_CLAIM).authoritiesOf(Jwt.withTokenValue("token")
+                                                          .header("alg", "RS256")
+                                                          .subject("user@example.com")
+                                                          .claim(COGNITO_CLAIM, "DEVELOPER")
+                                                          .build())).isEmpty();
+    }
+
+    @Test
     void trialModeGrantsEverySystemRole() {
         TenantAwareAuthoritiesMapper trialMapper =
                 new TenantAwareAuthoritiesMapper(new TenantGroupsClaim(COGNITO_CLAIM), COGNITO_CLAIM, true);
@@ -160,6 +192,17 @@ class TenantAwareAuthoritiesMapperTest {
                                                                              .plusSeconds(300),
                 Map.of("sub", "user@example.com", claimName, groups));
         return new OidcUserAuthority(idToken);
+    }
+
+    private static Jwt jwt(String claimName, List<String> groups) {
+        return Jwt.withTokenValue("token")
+                  .header("alg", "RS256")
+                  .subject("user@example.com")
+                  .claim(claimName, groups)
+                  .issuedAt(Instant.now())
+                  .expiresAt(Instant.now()
+                                    .plusSeconds(300))
+                  .build();
     }
 
     private static Set<String> roleNames(Collection<? extends GrantedAuthority> authorities) {

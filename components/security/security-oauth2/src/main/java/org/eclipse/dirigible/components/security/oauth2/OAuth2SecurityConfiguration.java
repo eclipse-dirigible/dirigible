@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.security.oauth2;
 
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
+import org.eclipse.dirigible.components.base.http.access.ProgrammaticRequestMatcher;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.BearerUnauthorizedEntryPoint;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -47,22 +49,29 @@ public class OAuth2SecurityConfiguration {
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
             OAuth2AuthorizedClientService authorizedClientService) throws Exception {
+        // registered ahead of the login and resource-server configurers, so it is the default of the
+        // delegating entry point: a script that is not authenticated gets a 401 it can act on instead
+        // of the redirect to the identity provider a browser navigation gets
+        BearerUnauthorizedEntryPoint bearerEntryPoint = new BearerUnauthorizedEntryPoint();
         http//
             .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService), AuthorizationFilter.class)
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
+            .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(bearerEntryPoint, new ProgrammaticRequestMatcher()))
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(Customizer.withDefaults())
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())))
+            .oauth2ResourceServer(oauth2 -> oauth2.authenticationEntryPoint(bearerEntryPoint)
+                                                  .jwt(jwt -> jwt.decoder(jwtDecoder())))
             // GitHub OAuth exposes no RP-initiated logout (no end-session endpoint), so only the local
             // session can be cleared here; an active github.com session may still re-authenticate silently.
             .logout(logout -> logout.deleteCookies("JSESSIONID")
                                     .invalidateHttpSession(true)
                                     .clearAuthentication(true)
                                     .logoutSuccessUrl("/"))
-            .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
+            // a bearer or anonymous request must not cost a session - only the login creates one
+            .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED));
 
         httpSecurityURIConfigurator.configure(http);
 

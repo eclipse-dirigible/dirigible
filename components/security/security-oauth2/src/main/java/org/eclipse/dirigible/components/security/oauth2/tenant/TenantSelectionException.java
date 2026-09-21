@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.security.oauth2.tenant;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * A tenant a user asked for cannot be entered.
  *
@@ -35,7 +37,22 @@ public class TenantSelectionException extends RuntimeException {
          */
         UNKNOWN_HERE,
         /** The request is not an interactive session that could hold a selection. */
-        NOT_AN_INTERACTIVE_SESSION
+        NOT_AN_INTERACTIVE_SESSION;
+
+        /**
+         * The status a programmatic caller is answered with. {@code NOT_PROVISIONED_HERE} and
+         * {@code UNKNOWN_HERE} share one deliberately: the status is the contract, the reason is what tells
+         * the two apart - one ends by waiting and the other never does.
+         *
+         * @return the HTTP status
+         */
+        public HttpStatus httpStatus() {
+            return switch (this) {
+                case NOT_A_MEMBER -> HttpStatus.FORBIDDEN;
+                case NOT_PROVISIONED_HERE, UNKNOWN_HERE -> HttpStatus.CONFLICT;
+                case NOT_AN_INTERACTIVE_SESSION -> HttpStatus.UNAUTHORIZED;
+            };
+        }
     }
 
     private final Reason reason;

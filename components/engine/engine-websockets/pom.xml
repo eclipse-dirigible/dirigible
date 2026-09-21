@@ -45,7 +45,13 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-api-net</artifactId>
 		</dependency>
-		
+
+		<!-- Security: authorization of the STOMP frames -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-messaging</artifactId>
+		</dependency>
+
     </dependencies>
     
     <properties>

@@ -14,7 +14,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
 
 /**
  * The Enum DirigibleConfig.
@@ -189,6 +191,77 @@ public enum DirigibleConfig {
      * sign-in UX. Blank keeps the standard redirect to the provider.
      */
     SECURITY_LOGIN_PAGE("DIRIGIBLE_SECURITY_LOGIN_PAGE", null),
+
+    /**
+     * Comma-separated origins, or origin patterns such as {@code https://*.example.com},
+     * {@code tauri://localhost} or {@code capacitor://localhost}, that may call the platform from
+     * another origin. Unset, the OAuth2 login profiles (cognito, keycloak, github) answer no
+     * cross-origin request at all, while the basic profile keeps granting every origin - without
+     * credentials. The STOMP handshake accepts those that name a host - a wildcard origin never reaches
+     * it, since a WebSocket handshake carries the session cookie.
+     */
+    CORS_ALLOWED_ORIGINS("DIRIGIBLE_CORS_ALLOWED_ORIGINS", null),
+
+    /**
+     * Whether a cross-origin request from a configured origin may carry cookies and HTTP
+     * authentication. Refused together with a wildcard origin. A bearer-token client does not need it.
+     */
+    CORS_ALLOW_CREDENTIALS("DIRIGIBLE_CORS_ALLOW_CREDENTIALS", Boolean.FALSE.toString()),
+
+    /** Comma-separated HTTP methods granted to the configured origins. */
+    CORS_ALLOWED_METHODS("DIRIGIBLE_CORS_ALLOWED_METHODS", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"),
+
+    /**
+     * Comma-separated request headers granted to the configured origins. {@code X-Tenant-Id} is the
+     * header a bearer request names its tenant with under the {@code TOKEN_GROUPS} tenant resolution
+     * strategy.
+     */
+    CORS_ALLOWED_HEADERS("DIRIGIBLE_CORS_ALLOWED_HEADERS", "Authorization,Content-Type,Accept,X-Requested-With,X-Tenant-Id"),
+
+    /** Comma-separated response headers a script of a configured origin may read. */
+    CORS_EXPOSED_HEADERS("DIRIGIBLE_CORS_EXPOSED_HEADERS", "Content-Disposition"),
+
+    /** Seconds a browser may cache the answer to a preflight request. */
+    CORS_MAX_AGE("DIRIGIBLE_CORS_MAX_AGE", "3600"),
+
+    /**
+     * Comma-separated kinds of bearer tokens the OAuth2 login profiles (cognito, keycloak) accept:
+     * {@code id} - an ID token identifies a user by the principal claim and grants the roles of the
+     * user's groups - and {@code access} - an access token of a machine client is identified by
+     * {@code sub} and grants the roles its scopes map to.
+     */
+    OAUTH2_JWT_TOKEN_KINDS("DIRIGIBLE_OAUTH2_JWT_TOKEN_KINDS", "id,access"),
+
+    /**
+     * Claim of a bearer ID token the user name is read from. Blank means the user-name attribute of the
+     * login profile ({@code email} on Cognito, {@code preferred_username} on Keycloak). An ID token
+     * without the claim is refused.
+     */
+    OAUTH2_JWT_PRINCIPAL_CLAIM("DIRIGIBLE_OAUTH2_JWT_PRINCIPAL_CLAIM", null),
+
+    /**
+     * Comma-separated audiences a bearer token must be issued for. An ID token is always checked -
+     * against the client id of the login profile when this is blank. An access token is checked only
+     * when this is set: a Cognito access token names its client in {@code client_id}, a Keycloak one
+     * carries the {@code aud} an audience mapper of the realm adds.
+     */
+    OAUTH2_JWT_AUDIENCES("DIRIGIBLE_OAUTH2_JWT_AUDIENCES", null),
+
+    /** Issuer a bearer token must carry. Blank means the issuer of the login profile. */
+    OAUTH2_JWT_ISSUER_URI("DIRIGIBLE_OAUTH2_JWT_ISSUER_URI", null),
+
+    /**
+     * JWKS endpoint the signatures of bearer tokens are verified against. Blank means the endpoint of
+     * the login profile.
+     */
+    OAUTH2_JWT_JWK_SET_URI("DIRIGIBLE_OAUTH2_JWT_JWK_SET_URI", null),
+
+    /**
+     * Whether a bearer ID token identified by its {@code email} claim must also carry
+     * {@code email_verified=true}. Cognito lets a user sign up with an address they do not own until it
+     * is verified, so an unverified address must not become an identity here.
+     */
+    OAUTH2_JWT_REQUIRE_VERIFIED_EMAIL("DIRIGIBLE_OAUTH2_JWT_REQUIRE_VERIFIED_EMAIL", Boolean.TRUE.toString()),
 
     /** Whether the Java LSP (JDT.LS) integration is enabled. */
     JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
@@ -444,5 +517,31 @@ public enum DirigibleConfig {
             throw new InvalidConfigException("Configuration with key [" + key + "] is empty", key);
         }
         return stringValue;
+    }
+
+    /**
+     * Gets a comma-separated value as a list: the entries trimmed, blank entries dropped, an unset
+     * value an empty list.
+     *
+     * @return the list value, never {@code null}
+     */
+    public List<String> getListValue() {
+        String stringValue = getStringValue();
+        if (StringUtils.isBlank(stringValue)) {
+            return List.of();
+        }
+        return Arrays.stream(stringValue.split(","))
+                     .map(String::trim)
+                     .filter(value -> !value.isEmpty())
+                     .toList();
+    }
+
+    /**
+     * Whether the value was configured explicitly, as opposed to the default value applying.
+     *
+     * @return true when the key is set in any configuration layer
+     */
+    public boolean isSet() {
+        return Configuration.get(key) != null;
     }
 }
