@@ -141,8 +141,10 @@
     },
     "settings": {
       "title": "Settings",
+      "preferences": "Preferences",
       "selectSetting": "Select a setting",
-      "selectSettingHint": "Choose a configuration entity on the left to manage it here.",
+      "selectSettingHint": "Choose a setting on the left to manage it here.",
+      "configuration": "Configuration",
       "configFor": "Configuration & nomenclature for {{name}}.",
       "configAll": "Configuration & nomenclature across all applications.",
       "regionLanguage": "Region & Language",
@@ -187,7 +189,9 @@
         "languages": "Application Languages",
         "cmsRoles": "Document access rules enforced",
         "msOfficeContentTypes": "Legacy Microsoft Office file types"
-      }
+      },
+      "backToList": "Back to the settings list",
+      "loadFailed": "Could not load this setting."
     },
     "apps": {
       "loading": "Loading applications...",
