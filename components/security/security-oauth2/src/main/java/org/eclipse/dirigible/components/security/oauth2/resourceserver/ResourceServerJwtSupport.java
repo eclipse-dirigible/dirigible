@@ -26,7 +26,6 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.eclipse.dirigible.components.base.http.access.AuthenticatedBearerToken;
 import org.eclipse.dirigible.components.base.http.access.BearerTokenAuthenticator;
-import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +80,13 @@ import com.nimbusds.jose.util.DefaultResourceRetriever;
  * the rules that applied before: identified by {@code sub}, authorities from its scopes, audience
  * checked only where audiences are configured. A token of any other kind, or of a kind the
  * deployment does not accept, is refused.
+ *
+ * <p>
+ * Under the {@code TOKEN_GROUPS} tenant resolution strategy the groups of an ID token yield its
+ * global roles only, exactly as a login's do: the roles of a tenant apply once a tenant is entered,
+ * which for a bearer request the tenant selection filter does per request, from the
+ * {@code X-Tenant-Id} header. A token whose groups grant tenants but no global role is therefore
+ * accepted here and refused by that filter when the request names no tenant.
  *
  * <p>
  * The signing keys come from the provider's JWKS endpoint through Nimbus: cached for five minutes,
@@ -288,14 +294,10 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
         private Collection<GrantedAuthority> idTokenAuthorities(Jwt jwt,
                 Converter<Jwt, Collection<GrantedAuthority>> scopeAuthoritiesConverter,
                 TenantAwareAuthoritiesMapper groupAuthoritiesMapper) {
-            Set<GrantedAuthority> groupAuthorities = groupAuthoritiesMapper.authoritiesOf(jwt);
-            if (groupAuthorities.isEmpty() && TenantResolutionStrategy.fromConfiguration() == TenantResolutionStrategy.TOKEN_GROUPS) {
-                // the tenant roles of such a user apply only once a tenant is selected, which a bearer
-                // request never does - a user with no global role has nothing here, as the tenant
-                // selection filter concludes for a session
-                throw new InvalidBearerTokenException("The token grants no role of this deployment");
-            }
-            Set<GrantedAuthority> authorities = new LinkedHashSet<>(groupAuthorities);
+            // under the token groups strategy these are the global roles only: the roles of a tenant
+            // are granted per request by the tenant selection filter, once the request names the
+            // tenant - the token itself cannot say which of the user's tenants a request is about
+            Set<GrantedAuthority> authorities = new LinkedHashSet<>(groupAuthoritiesMapper.authoritiesOf(jwt));
             Collection<GrantedAuthority> scopeAuthorities = scopeAuthoritiesConverter.convert(jwt);
             if (scopeAuthorities != null) {
                 authorities.addAll(scopeAuthorities);

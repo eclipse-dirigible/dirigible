@@ -14,16 +14,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSupport;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.TokenKind;
+import org.eclipse.dirigible.components.security.oauth2.tenant.TenantSelectionEndpoint.TenantSelectionRefusal;
+import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -36,21 +45,31 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * Makes sure an interactive request knows which tenant it is in.
+ * Makes sure a request knows which tenant it is in.
  *
  * <p>
- * A user of exactly one tenant is put into it without being asked. A user of several is sent to the
- * picker - a browser by redirect, anything programmatic by a {@code 409} naming the choices, so an
- * API client is told what to do rather than silently landing in the wrong tenant. A user of none is
- * let through if they have global roles (staff of the instance) and refused otherwise.
+ * An interactive session keeps its choice: a user of exactly one tenant is put into it without
+ * being asked. A user of several is sent to the picker - a browser by redirect, anything
+ * programmatic by a {@code 409} naming the choices, so an API client is told what to do rather than
+ * silently landing in the wrong tenant. A user of none is let through if they have global roles
+ * (staff of the instance) and refused otherwise.
  *
  * <p>
- * It runs <em>before</em> authorization on purpose: until a tenant is selected the user has no
- * tenant roles, so authorization would answer 403 before they ever saw the picker.
+ * A bearer request has no session to keep a choice in, so it names its tenant on every request, in
+ * the {@link TenantSelectionConstants#TENANT_HEADER} header. The tenant is validated against the
+ * token's own groups exactly as a session selection is, the roles the groups grant in it are added
+ * for this request only, and the rest of the chain runs in that tenant. Without the header the
+ * request stays in the default tenant with the token's global roles - and an ID token whose groups
+ * grant no global role is refused, as the session of such a user is: it has nothing to do there. An
+ * access token carries no groups and passes as it always did.
  *
  * <p>
- * Requests that carry no interactive session - machine-to-machine bearer tokens, anonymous
- * requests, basic authentication - pass through untouched; their tenant is the default one.
+ * It runs <em>before</em> authorization on purpose: until a tenant is entered the user has no
+ * tenant roles, so authorization would answer 403 before they ever saw the picker or the refusal.
+ *
+ * <p>
+ * Requests that carry neither an interactive session nor a bearer token - anonymous requests, basic
+ * authentication - pass through untouched; their tenant is the default one.
  */
 @Component
 public class TenantSelectionFilter extends OncePerRequestFilter {
@@ -89,6 +108,8 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
 
     private final TenantContext tenantContext;
 
+    private final ObjectProvider<ResourceServerJwtSupport> bearerTokenSupport;
+
     private final TenantResolutionStrategy resolutionStrategy;
 
     private final Gson gson;
@@ -98,10 +119,15 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
      *
      * @param tenantSelectionManager the tenant selection manager
      * @param tenantContext the tenant scope of the current execution
+     * @param bearerTokenSupport the bearer token rules of the login profile, present on the profiles
+     *        that accept bearer tokens - it tells an ID token, which identifies a user, from an access
+     *        token
      */
-    public TenantSelectionFilter(TenantSelectionManager tenantSelectionManager, TenantContext tenantContext) {
+    public TenantSelectionFilter(TenantSelectionManager tenantSelectionManager, TenantContext tenantContext,
+            ObjectProvider<ResourceServerJwtSupport> bearerTokenSupport) {
         this.tenantSelectionManager = tenantSelectionManager;
         this.tenantContext = tenantContext;
+        this.bearerTokenSupport = bearerTokenSupport;
         this.resolutionStrategy = TenantResolutionStrategy.fromConfiguration();
         this.gson = new GsonBuilder().serializeNulls()
                                      .create();
@@ -121,6 +147,10 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();
+        if (authentication instanceof JwtAuthenticationToken bearer) {
+            serveBearer(bearer, request, response, chain);
+            return;
+        }
         if (!(authentication instanceof OAuth2AuthenticationToken)) {
             chain.doFilter(request, response);
             return;
@@ -160,6 +190,90 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
     }
 
     /**
+     * Serves a bearer request in the tenant it names, or in the default tenant when it names none.
+     *
+     * @param bearer the authenticated bearer token
+     * @param request the request
+     * @param response the response
+     * @param chain the chain
+     * @throws ServletException the servlet exception
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void serveBearer(JwtAuthenticationToken bearer, HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        String tenantId = requestedTenant(request);
+        if (tenantId == null) {
+            if (isUserToken(bearer) && tenantSelectionManager.assignmentsOf(bearer)
+                                                             .globalRoles()
+                                                             .isEmpty()) {
+                LOGGER.warn("Bearer user [{}] holds no global role of this application and names no tenant in [{}].", bearer.getName(),
+                        TenantSelectionConstants.TENANT_HEADER);
+                response.sendError(HttpServletResponse.SC_FORBIDDEN, "User holds no global role of this application and the request"
+                        + " names no tenant in the [" + TenantSelectionConstants.TENANT_HEADER + "] header");
+                return;
+            }
+            chain.doFilter(request, response);
+            return;
+        }
+        BearerTenantSelection selection;
+        try {
+            selection = tenantSelectionManager.enterTenant(bearer, tenantId);
+        } catch (TenantSelectionException ex) {
+            refuse(response, ex);
+            return;
+        }
+        // The tenant scope of this request was opened as the default tenant's before the token was
+        // authenticated (see TenantExtractor), and the authorities are the token's global roles - both
+        // are replaced for the rest of the chain, which is all a bearer request lives for.
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(selection.authentication());
+        SecurityContextHolder.setContext(securityContext);
+        continueInTenant(selection.tenant(), request, response, chain);
+    }
+
+    /**
+     * The tenant a bearer request names, or {@code null} for none - a blank header counts as none.
+     */
+    private static String requestedTenant(HttpServletRequest request) {
+        String header = request.getHeader(TenantSelectionConstants.TENANT_HEADER);
+        if (header == null) {
+            return null;
+        }
+        String tenantId = header.trim();
+        return tenantId.isEmpty() ? null : tenantId;
+    }
+
+    /**
+     * Whether a bearer token identifies a user - an ID token - as opposed to the access token of a
+     * machine client, which carries no groups and is not held to having a tenant.
+     */
+    private boolean isUserToken(JwtAuthenticationToken bearer) {
+        ResourceServerJwtSupport support = bearerTokenSupport.getIfAvailable();
+        return support != null && support.settings()
+                                         .kindOf(bearer.getToken())
+                                         .filter(TokenKind.ID::equals)
+                                         .isPresent();
+    }
+
+    /**
+     * Answers a bearer request whose tenant cannot be entered, with the status and the body the
+     * selection endpoint answers a session's refused selection with.
+     *
+     * @param response the response
+     * @param refusal the refusal
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void refuse(HttpServletResponse response, TenantSelectionException refusal) throws IOException {
+        LOGGER.info("Refused the tenant [{}] a bearer request named: {}", refusal.getTenantId(), refusal.getMessage());
+        response.setStatus(refusal.getReason()
+                                  .httpStatus()
+                                  .value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter()
+                .write(gson.toJson(TenantSelectionRefusal.of(refusal)));
+    }
+
+    /**
      * A user of a single tenant is not asked which one.
      *
      * @param request the request
@@ -185,7 +299,7 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Runs the rest of the chain in the scope of a tenant.
+     * Runs the rest of the chain in the scope of a tenant this instance knows by id.
      *
      * @param tenantId the tenant to run in
      * @param request the request
@@ -196,11 +310,36 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
      */
     private void continueInTenant(String tenantId, HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
+        runScoped(() -> tenantContext.execute(tenantId, () -> {
+            chain.doFilter(request, response);
+            return null;
+        }));
+    }
+
+    /**
+     * Runs the rest of the chain in the scope of a tenant already resolved.
+     *
+     * @param tenant the tenant to run in
+     * @param request the request
+     * @param response the response
+     * @param chain the chain
+     * @throws ServletException the servlet exception
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void continueInTenant(Tenant tenant, HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+            throws ServletException, IOException {
+        runScoped(() -> tenantContext.execute(tenant, () -> {
+            chain.doFilter(request, response);
+            return null;
+        }));
+    }
+
+    /**
+     * Runs a scoped continuation of the chain, letting the chain's own exceptions through unchanged.
+     */
+    private static void runScoped(CallableResultAndException<Void, Exception> scoped) throws ServletException, IOException {
         try {
-            tenantContext.execute(tenantId, () -> {
-                chain.doFilter(request, response);
-                return null;
-            });
+            scoped.call();
         } catch (ServletException | IOException | RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {

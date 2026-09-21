@@ -10,17 +10,21 @@
 package org.eclipse.dirigible.components.tenants.tenant;
 
 /**
- * What the tenant selection of a user is stored under.
+ * What the tenant selection of a user is carried in.
  *
  * <p>
- * The selection is written by the identity provider side (which validates it against the user's
- * groups) and read here, when the tenant scope of a request is opened - hence a shared constant
- * rather than a literal on each side.
+ * A session's selection is written by the identity provider side (which validates it against the
+ * user's groups) and read here, when the tenant scope of a request is opened - hence a shared
+ * constant rather than a literal on each side. A bearer request has no session and names its tenant
+ * in a header instead, validated the same way once the token is authenticated.
  */
 public final class TenantSelectionConstants {
 
     /** The HTTP session attribute carrying the id of the tenant the user selected. */
     public static final String SELECTED_TENANT_ID_SESSION_ATTRIBUTE = "dirigible-selected-tenant-id";
+
+    /** The request header a bearer request names the tenant it wants to run in with. */
+    public static final String TENANT_HEADER = "X-Tenant-Id";
 
     private TenantSelectionConstants() {}
 }

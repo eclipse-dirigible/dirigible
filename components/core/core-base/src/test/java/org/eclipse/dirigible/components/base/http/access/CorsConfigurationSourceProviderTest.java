@@ -70,7 +70,8 @@ class CorsConfigurationSourceProviderTest {
         assertEquals(List.of("https://app.example.com", "capacitor://localhost"), configuration.getAllowedOriginPatterns());
         assertFalse(configuration.getAllowCredentials());
         assertEquals(List.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"), configuration.getAllowedMethods());
-        assertEquals(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With"), configuration.getAllowedHeaders());
+        assertEquals(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With", "X-Tenant-Id"),
+                configuration.getAllowedHeaders());
         assertEquals(List.of("Content-Disposition"), configuration.getExposedHeaders());
         assertEquals(3600L, configuration.getMaxAge());
     }

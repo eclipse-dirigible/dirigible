@@ -99,18 +99,19 @@ public class TenantExtractor {
      * mode, so one host serves every tenant.
      *
      * <p>
-     * A request authenticating with a bearer token lands in the default tenant as well, whatever
+     * A request authenticating with a bearer token is opened in the default tenant as well, whatever
      * session cookie rides along: the token proves an identity of its own, and running it in the tenant
-     * another identity selected would let a page holding both act across the two.
+     * another identity selected would let a page holding both act across the two. Such a request names
+     * the tenant it wants in the {@link TenantSelectionConstants#TENANT_HEADER} header, which the
+     * identity provider side reads once the token is authenticated - validated against the token's own
+     * groups, as a session selection is - and re-scopes the request into that tenant.
      *
      * <p>
-     * That decision reads the bare header, not an authenticated principal: the filter running this
-     * precedes authentication on the chains that add it (basic, snowflake, keycloak), so there is no
-     * principal yet. It holds because a tenant can be selected on the cognito and keycloak chains only,
-     * and both answer a request carrying an invalid bearer token with 401 before anything else runs - a
-     * header can never move an authenticated session into another tenant. Selecting a tenant on a
-     * bearer request is not supported yet: such a request runs in the default tenant with the user's
-     * global roles.
+     * The decision here reads the bare {@code Authorization} header, not an authenticated principal:
+     * the filter running this precedes authentication on the chains that add it (basic, snowflake,
+     * keycloak), so there is no principal yet. It holds because a tenant can be selected on the cognito
+     * and keycloak chains only, and both answer a request carrying an invalid bearer token with 401
+     * before anything else runs - a header can never move an authenticated session into another tenant.
      *
      * @param request the request
      * @return the selected tenant, or the default tenant

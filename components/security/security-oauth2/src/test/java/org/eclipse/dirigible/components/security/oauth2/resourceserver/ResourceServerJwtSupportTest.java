@@ -390,8 +390,13 @@ class ResourceServerJwtSupportTest {
                                                          .authentication()));
     }
 
+    /**
+     * The tenant roles of such a user apply once the request names a tenant, which the tenant selection
+     * filter grants per request - so the token is accepted here with no role, and refused there when
+     * the request names none.
+     */
     @Test
-    void underTheTokenGroupsStrategyAnIdTokenWithoutAGlobalRoleIsRefused() throws Exception {
+    void underTheTokenGroupsStrategyAnIdTokenWithoutAGlobalRoleIsAcceptedWithNoRole() throws Exception {
         useTokenGroups();
         String token = sign(COGNITO_ISSUER, claims -> claims.claim("token_use", "id")
                                                             .audience(CLIENT_ID)
@@ -399,7 +404,11 @@ class ResourceServerJwtSupportTest {
                                                             .claim("email_verified", true)
                                                             .claim("cognito:groups", List.of("acme.library.Owner")));
 
-        assertRefused(cognito(), token, "no role");
+        Authentication authentication = cognito().authenticate(token)
+                                                 .authentication();
+
+        assertEquals("jane.doe@example.org", authentication.getName());
+        assertEquals(Set.of(), roles(authentication));
     }
 
     // --- the chain path and the frame path agree ----------------------------------------------

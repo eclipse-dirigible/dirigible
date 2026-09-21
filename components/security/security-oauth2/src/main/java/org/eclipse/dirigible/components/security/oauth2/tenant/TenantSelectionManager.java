@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
+import org.eclipse.dirigible.components.tenants.tenant.TenantImpl;
 import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Component;
@@ -46,7 +48,9 @@ import jakarta.servlet.http.HttpServletResponse;
  * The selection is kept in the HTTP session, where the tenant scope of every following request
  * reads it, and the authorities of the session become the user's global roles plus the roles their
  * groups grant them <em>in that tenant</em>. Selecting again is how a user switches tenant: the
- * session attribute and the authorities are replaced together, with no re-login.
+ * session attribute and the authorities are replaced together, with no re-login. A bearer request
+ * has no session and names its tenant on every request instead - see
+ * {@link #enterTenant(JwtAuthenticationToken, String)}.
  *
  * <p>
  * The identity provider stays the authority on membership - a selection is only accepted when the
@@ -157,24 +161,11 @@ public class TenantSelectionManager {
                                                              .getAuthentication();
         if (!(authentication instanceof OAuth2AuthenticationToken oauth2Authentication)) {
             throw new TenantSelectionException(TenantSelectionException.Reason.NOT_AN_INTERACTIVE_SESSION, tenantId,
-                    "Only a logged in user can select a tenant");
+                    "Only a logged in user can select a tenant - a bearer request names its tenant in the ["
+                            + TenantSelectionConstants.TENANT_HEADER + "] header instead");
         }
         UserTenantAssignments assignments = assignmentsOf(authentication);
-        Set<String> tenantRoles = assignments.rolesFor(tenantId);
-        if (tenantRoles.isEmpty()) {
-            throw new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, tenantId,
-                    "User [" + authentication.getName() + "] is not assigned to tenant [" + tenantId + "] of this application");
-        }
-        Optional<Tenant> tenant = tenantService.findById(tenantId);
-        if (tenant.isEmpty()) {
-            warnUnknownTenant(tenantId, authentication.getName());
-            throw new TenantSelectionException(TenantSelectionException.Reason.UNKNOWN_HERE, tenantId,
-                    "Tenant [" + tenantId + "] is not registered in this application");
-        }
-        if (!isProvisioned(tenant)) {
-            throw new TenantSelectionException(TenantSelectionException.Reason.NOT_PROVISIONED_HERE, tenantId,
-                    "Tenant [" + tenantId + "] is not provisioned in this application yet");
-        }
+        enterableTenant(assignments, tenantId, authentication.getName());
         request.getSession()
                .setAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE, tenantId);
         Set<String> roles = rolesOf(assignments, tenantId);
@@ -182,6 +173,62 @@ public class TenantSelectionManager {
 
         LOGGER.info("User [{}] selected tenant [{}] and has roles [{}].", authentication.getName(), tenantId, roles);
         return roles;
+    }
+
+    /**
+     * Enters a tenant for the duration of one bearer request: validates the tenant exactly as a session
+     * selection is validated and hands back the authentication the request continues with - the token's
+     * own authorities plus the roles the user's groups grant in that tenant.
+     *
+     * <p>
+     * Nothing is stored: a bearer request carries no session, so the next request names its tenant
+     * again. The identity provider stays the authority on membership, as for a session.
+     *
+     * @param authentication the authenticated bearer token
+     * @param tenantId the tenant the request names
+     * @return the tenant to run the request in and the authentication to run it as
+     * @throws TenantSelectionException if the user's groups do not grant the tenant, or if this
+     *         instance does not know it or has not provisioned it
+     */
+    public BearerTenantSelection enterTenant(JwtAuthenticationToken authentication, String tenantId) {
+        UserTenantAssignments assignments = assignmentsOf(authentication);
+        Tenant tenant = enterableTenant(assignments, tenantId, authentication.getName());
+        Set<GrantedAuthority> authorities = new LinkedHashSet<>(authentication.getAuthorities());
+        authorities.addAll(AuthoritiesUtil.toAuthorities(assignments.rolesFor(tenantId)));
+        JwtAuthenticationToken entered = new JwtAuthenticationToken(authentication.getToken(), authorities, authentication.getName());
+        entered.setDetails(authentication.getDetails());
+
+        LOGGER.debug("Bearer user [{}] enters tenant [{}] with roles [{}] for this request.", authentication.getName(), tenantId,
+                AuthoritiesUtil.toRoleNames(authorities));
+        return new BearerTenantSelection(TenantImpl.createFromEntity(tenant), entered);
+    }
+
+    /**
+     * The tenant a user may enter: one their groups grant, registered here and provisioned.
+     *
+     * @param assignments what the user's groups say
+     * @param tenantId the tenant asked for
+     * @param user the user, for the messages
+     * @return the registration of the tenant
+     * @throws TenantSelectionException if the tenant cannot be entered
+     */
+    private Tenant enterableTenant(UserTenantAssignments assignments, String tenantId, String user) {
+        if (assignments.rolesFor(tenantId)
+                       .isEmpty()) {
+            throw new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, tenantId,
+                    "User [" + user + "] is not assigned to tenant [" + tenantId + "] of this application");
+        }
+        Optional<Tenant> tenant = tenantService.findById(tenantId);
+        if (tenant.isEmpty()) {
+            warnUnknownTenant(tenantId, user);
+            throw new TenantSelectionException(TenantSelectionException.Reason.UNKNOWN_HERE, tenantId,
+                    "Tenant [" + tenantId + "] is not registered in this application");
+        }
+        if (!isProvisioned(tenant)) {
+            throw new TenantSelectionException(TenantSelectionException.Reason.NOT_PROVISIONED_HERE, tenantId,
+                    "Tenant [" + tenantId + "] is not provisioned in this application yet");
+        }
+        return tenant.get();
     }
 
     /**

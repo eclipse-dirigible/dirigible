@@ -211,8 +211,12 @@ public enum DirigibleConfig {
     /** Comma-separated HTTP methods granted to the configured origins. */
     CORS_ALLOWED_METHODS("DIRIGIBLE_CORS_ALLOWED_METHODS", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"),
 
-    /** Comma-separated request headers granted to the configured origins. */
-    CORS_ALLOWED_HEADERS("DIRIGIBLE_CORS_ALLOWED_HEADERS", "Authorization,Content-Type,Accept,X-Requested-With"),
+    /**
+     * Comma-separated request headers granted to the configured origins. {@code X-Tenant-Id} is the
+     * header a bearer request names its tenant with under the {@code TOKEN_GROUPS} tenant resolution
+     * strategy.
+     */
+    CORS_ALLOWED_HEADERS("DIRIGIBLE_CORS_ALLOWED_HEADERS", "Authorization,Content-Type,Accept,X-Requested-With,X-Tenant-Id"),
 
     /** Comma-separated response headers a script of a configured origin may read. */
     CORS_EXPOSED_HEADERS("DIRIGIBLE_CORS_EXPOSED_HEADERS", "Content-Disposition"),

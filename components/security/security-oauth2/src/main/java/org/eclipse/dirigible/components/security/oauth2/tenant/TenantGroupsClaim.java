@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.stereotype.Component;
 
@@ -66,7 +67,8 @@ public class TenantGroupsClaim {
     }
 
     /**
-     * Reads the groups of an authenticated user.
+     * Reads the groups of an authenticated user - of a login, or of a bearer ID token, whose claims
+     * carry the same groups the login would have received.
      *
      * @param authentication the authentication; may be {@code null}
      * @return the group names, never {@code null}
@@ -79,6 +81,9 @@ public class TenantGroupsClaim {
             return toGroups(oidcUser.getClaims()
                                     .get(name),
                     name, authentication.getName());
+        }
+        if (authentication.getPrincipal() instanceof Jwt jwt) {
+            return readGroups(jwt.getClaims(), name, jwt.getSubject());
         }
         return groupsOf(authentication.getAuthorities());
     }

@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.containsStringIgnoringCase;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -119,8 +121,9 @@ class ExternalFrontendIT extends IntegrationTest {
 
     private static final String ORIGIN = "https://app.example.com";
     private static final String UNLISTED_ORIGIN = "https://evil.example.com";
-    private static final String CLIENT_ID = "external-frontend-it";
-    private static final String CLIENT_SECRET = "external-frontend-it-secret";
+    /** The platform's client at the mock provider - shared with the tests reusing the provider. */
+    static final String CLIENT_ID = "external-frontend-it";
+    static final String CLIENT_SECRET = "external-frontend-it-secret";
     private static final String PROJECT = "external-frontend-it";
     private static final String WHOAMI = "/services/js/" + PROJECT + "/whoami.mjs";
     private static final String WORKSPACES = "/services/ide/workspaces";
@@ -400,6 +403,42 @@ class ExternalFrontendIT extends IntegrationTest {
              .statusCode(200)
              .body("name", equalTo("jane"))
              .body("reader", equalTo(true));
+    }
+
+    // --- the hosted web app keeps working next to the external one -----------------------------
+
+    /**
+     * A browser sends {@code Origin} on every same-origin POST, PUT and DELETE as well. The CORS filter
+     * tells such a request from a cross-origin one by comparing the header with the scheme, host and
+     * port the request arrived on, so the writes of a page the platform serves itself never meet the
+     * origin list - a cookie session and a configured origin list coexist.
+     */
+    @Test
+    void aSameOriginWriteOfTheHostedAppIsNotACorsRequest() {
+        api().cookie("JSESSIONID", sessionOf("jane"))
+             .header("Origin", "http://localhost:" + port)
+             .when()
+             .post("/services/ide/workspaces/" + PROJECT)
+             .then()
+             .statusCode(anyOf(is(201), is(304)));
+    }
+
+    /**
+     * Behind a TLS-terminating proxy the request arrives over plain HTTP while the browser's
+     * {@code Origin} says https, so the same write reads as cross-origin from an origin that is not
+     * listed and is refused - reads keep working, which makes it look like an application bug. The
+     * remedy is to list the platform's own public origin, or to let the platform trust the forwarded
+     * headers ({@code server.forward-headers-strategy}). This pins the failure mode the documentation
+     * describes.
+     */
+    @Test
+    void behindAProxyTheHostedAppsOwnOriginHasToBeListed() {
+        api().cookie("JSESSIONID", sessionOf("jane"))
+             .header("Origin", "https://localhost")
+             .when()
+             .post("/services/ide/workspaces/" + PROJECT)
+             .then()
+             .statusCode(403);
     }
 
     // --- STOMP ---------------------------------------------------------------------------------
@@ -687,6 +726,20 @@ class ExternalFrontendIT extends IntegrationTest {
 
     private RequestSpecification api() {
         return given().port(port);
+    }
+
+    /**
+     * The cookie session of a user, minted from their ID token - what a page the platform serves
+     * carries.
+     */
+    private String sessionOf(String user) {
+        String session = api().auth()
+                              .oauth2(identityProvider.idToken(user, DEVELOPER_GROUPS))
+                              .when()
+                              .post("/login/token")
+                              .getCookie("JSESSIONID");
+        assertNotNull(session, "the exchange answers with the session cookie");
+        return session;
     }
 
     private String stompUrl() {
