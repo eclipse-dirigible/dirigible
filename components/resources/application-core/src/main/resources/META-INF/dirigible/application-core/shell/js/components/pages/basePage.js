@@ -27,6 +27,29 @@ function basePage() {
     refreshIcons() {},
 
     /**
+     * Sort relation-dropdown options by their displayed label, in place, returning the same array.
+     *
+     * A relation picker was rendered in whatever order the controller's unordered list call returned
+     * - database heap order, which drifts as rows are re-seeded and reads as a list that "restarts at
+     * A" several times over (issue #7464). This is the DEFAULT ordering for an otherwise unconfigured
+     * picker; a hierarchy picker's depth-indented options are built by hierarchizeOptions and never
+     * pass through here. Collation is locale-aware: the app's current language (localStorage, the same
+     * flag i18n and Accept-Language read) drives it, so a Bulgarian label list sorts in Bulgarian
+     * order, falling back to the runtime locale; numeric:true keeps "Item 2" before "Item 10".
+     */
+    sortOptions(options) {
+      const list = options || [];
+      let locale;
+      try {
+        locale = window.localStorage.getItem('codbex.harmonia.language') || undefined;
+      } catch (e) {
+        locale = undefined;
+      }
+      return list.sort((a, b) => String(a && a.text != null ? a.text : '')
+        .localeCompare(String(b && b.text != null ? b.text : ''), locale, { numeric: true, sensitivity: 'base' }));
+    },
+
+    /**
      * Re-read this component's data whenever a custom action finishes.
      *
      * The customActions store raises `harmonia:action-done` after every action it runs (a transition,

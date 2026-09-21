@@ -192,7 +192,7 @@ document.addEventListener('alpine:init', () => {
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty)
       try {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
-        loaded['${property.name}'] = (rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} }));
+        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} })));
       } catch (e) { loaded['${property.name}'] = []; }
 #end
 #end
@@ -435,7 +435,7 @@ document.addEventListener('alpine:init', () => {
         if (col.lookup && col.lookup.url) {
           try {
             const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
-            loaded[col.name] = (rows || []).map((r) => ({ value: r[col.lookup.key], text: r[col.lookup.text] }));
+            loaded[col.name] = this.sortOptions((rows || []).map((r) => ({ value: r[col.lookup.key], text: r[col.lookup.text] })));
           } catch (e) { loaded[col.name] = []; }
         }
       }
