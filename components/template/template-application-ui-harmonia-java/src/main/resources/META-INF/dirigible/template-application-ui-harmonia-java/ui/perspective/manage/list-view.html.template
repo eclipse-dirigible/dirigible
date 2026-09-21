@@ -8,7 +8,7 @@
 ## unrestricted property. The redaction applied to every response stays the authoritative one; this
 ## only keeps a permanently empty column off the page.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
-<div x-data="${name}ManageListPage" class="vbox size-full">
+<div x-data="${name}ManageListPage" class="vbox size-full" @keydown.escape.window="if (selected &amp;&amp; !deleteOpen) closeDetails()">
 
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
@@ -347,6 +347,9 @@
           <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
 #end
+          <!-- Close the detail panel: returns to the full-width list and clears the selection (Esc
+               does the same). Without it the panel could not be dismissed once opened (issue #7463). -->
+          <button x-h-button data-variant="transparent" data-size="sm" @click="closeDetails()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')" :title="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
 
 #if($hasProcess)

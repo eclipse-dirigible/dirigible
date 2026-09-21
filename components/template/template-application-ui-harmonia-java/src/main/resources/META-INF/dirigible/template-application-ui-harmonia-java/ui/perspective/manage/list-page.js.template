@@ -154,6 +154,9 @@ document.addEventListener('alpine:init', () => {
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
     selectRow(row)   { this.selected = row; this.refreshIcons(); this.syncSelectionUrl(row); },
+    // Dismiss the detail panel: drop the selection so the list returns to full width and the row
+    // highlight clears, and take the record id back out of the URL (issue #7463).
+    closeDetails()   { this.selected = null; this.refreshIcons(); this.syncSelectionUrl(null); },
     // Render a property value for the details pane. Jackson serializes java.time as arrays
     // (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
     // Render a date/datetime value through the instance Date/Timestamp patterns (shell format.js).
