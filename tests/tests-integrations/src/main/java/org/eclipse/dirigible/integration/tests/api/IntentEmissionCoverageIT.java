@@ -2703,6 +2703,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),
                 "the master toolbar must carry the Export and Print actions");
 
+        // The detail side panel's field pairs must stack into one column until the pane is wide enough
+        // (lg:) and each cell must shrink+wrap its value, so an email/phone value cannot overflow its
+        // column and overlap the neighbour at narrow browser widths (issue #7462).
+        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+            assertTrue(detailView.contains("grid grid-cols-1 lg:grid-cols-2"),
+                    "the detail panel must stack field pairs to one column below the lg breakpoint");
+            assertFalse(detailView.contains("grid grid-cols-1 sm:grid-cols-2"),
+                    "the detail panel must not keep the pre-#7462 sm: breakpoint that overlaps in a narrow pane");
+            assertTrue(detailView.contains("class=\"vbox min-w-0 wrap-anywhere\""),
+                    "each detail field cell must shrink and wrap its value so it never overflows the column");
+        }
+
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
         String claimMy = contentOf("gen/emission/api/claim/ClaimMyController.java");

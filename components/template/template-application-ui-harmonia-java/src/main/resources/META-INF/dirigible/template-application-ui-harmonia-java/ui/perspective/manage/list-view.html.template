@@ -377,14 +377,18 @@
         <div x-h-card class="m-4">
           <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
           <div x-h-card-content>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- Stack the field pairs into a single column until the pane is wide enough for two
+                 (lg:), and let every cell shrink and wrap its value (min-w-0 wrap-anywhere) so an
+                 unbreakable value - an email, a phone number - breaks onto a new line instead of
+                 overflowing its column and colliding with the neighbour (issue #7462). -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
 #foreach($property in $properties)
 ## ProcessIds is per-process at-most-once bookkeeping (Process=instanceId pairs) - plumbing with
 ## nothing to say to a reader, unlike ProcessId, which names the flow the record is in.
 #if(!$property.dataAutoIncrement && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabelJs)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
-          <div class="vbox"#visibleGate($property)>
+          <div class="vbox min-w-0 wrap-anywhere"#visibleGate($property)>
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DOCUMENT_STATUS")
             <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>
