@@ -19,6 +19,8 @@ import org.eclipse.dirigible.commons.process.execution.ProcessExecutionOptions;
 import org.eclipse.dirigible.commons.process.execution.ProcessExecutor;
 import org.eclipse.dirigible.commons.process.execution.output.OutputsPair;
 import org.eclipse.dirigible.commons.process.execution.output.ProcessResult;
+import org.eclipse.dirigible.components.api.security.UserFacade;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.springframework.stereotype.Component;
 
 /**
