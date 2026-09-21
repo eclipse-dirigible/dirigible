@@ -85,7 +85,10 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
 
     /**
      * What a request may need before a tenant is known: the picker itself and what it loads, the
-     * selection endpoint, authentication, error pages and the platform's own status surfaces.
+     * selection endpoint, authentication, error pages and the platform's own status surfaces. The
+     * prefixes match by {@code startsWith}, so the selection endpoint's entry also covers
+     * {@link CurrentTenantEndpoint} beneath it - deliberately: a shell asking where it is must be
+     * answered, not sent to choose.
      */
     private static final List<String> UNFILTERED_PREFIXES = List.of( //
             TENANT_SELECTION_PAGE, //

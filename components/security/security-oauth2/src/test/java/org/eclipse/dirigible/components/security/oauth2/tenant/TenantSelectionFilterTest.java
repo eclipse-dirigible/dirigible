@@ -372,6 +372,9 @@ class TenantSelectionFilterTest {
     void thePickerAndWhatItLoadsAreNotFiltered() {
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", TenantSelectionFilter.TENANT_SELECTION_PAGE))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/services/security/tenant-selection"))).isTrue();
+        // The current-tenant endpoint sits under the selection endpoint's path on purpose: a user who has
+        // not chosen yet is told they are in the default tenant, not answered with the 409.
+        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/services/security/tenant-selection/current"))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/webjars/codbex__harmonia/dist/harmonia.css"))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/services/js/platform-branding/branding.js"))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/logout"))).isTrue();

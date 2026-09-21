@@ -143,6 +143,9 @@
           </ol>
         </div>
 
+        <!-- The tenant this page runs in, with a switch where the user has another - the ONE fragment the
+             shared `tenant` store renders (shell/views/_tenant-menu.html); hidden on a single-tenant instance. -->
+        <div class="hbox items-center gap-2" x-show="$store.tenant.visible" x-cloak x-html="$store.tenant.markup"></div>
         <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
         <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                 :aria-label="$store.currentUser.name || 'Account'">
@@ -436,6 +439,7 @@
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
 
     <!-- 2. The diagram renderer, shared with the Intent Editor (loaded by absolute URL, no copy). -->

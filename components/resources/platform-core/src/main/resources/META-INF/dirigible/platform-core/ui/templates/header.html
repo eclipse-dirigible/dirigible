@@ -166,6 +166,26 @@
                     </bk-popover-body>
                 </bk-popover>
             </bk-shellbar-action>
+            <!-- The tenant this request runs in, with a switch where the user has another - the same state
+                 the Harmonia shells show in their header; hidden on a single-tenant instance. -->
+            <bk-shellbar-action ng-if="tenant.visible">
+                <bk-popover ng-if="tenant.hasMenu">
+                    <bk-popover-control>
+                        <bk-button id="tenant-menu-trigger" bk-shellbar-button glyph="sap-icon--building" label="{{tenant.current.name || tenant.current.id}}" is-menu="true"
+                            title="{{'switchTenant' | t:'Switch tenant'}}" aria-label="{{'switchTenant' | t:'Switch tenant'}}"></bk-button>
+                    </bk-popover-control>
+                    <bk-popover-body align="bottom-right" no-arrow="true" can-scroll="false">
+                        <bk-menu aria-label="{{'tenant' | t:'Tenant'}}" has-icons="true">
+                            <bk-menu-item ng-repeat="item in tenant.items track by item.id" title="{{item.name || item.id}}" left-icon-class="sap-icon--building"
+                                is-selected="item.id === tenant.current.id" is-disabled="item.state !== 'READY'" ng-click="switchTenant(item)"></bk-menu-item>
+                            <bk-menu-item has-separator="true" title="{{'tenantPicker' | t:'Open the tenant picker'}}" left-icon-class="sap-icon--action"
+                                ng-click="openTenantPicker()"></bk-menu-item>
+                        </bk-menu>
+                    </bk-popover-body>
+                </bk-popover>
+                <bk-button ng-if="!tenant.hasMenu" id="tenant-menu-trigger" bk-shellbar-button glyph="sap-icon--building" label="{{tenant.current.name || tenant.current.id}}"
+                    ng-disabled="true" title="{{tenantHint()}}" aria-label="{{'tenant' | t:'Tenant'}}"></bk-button>
+            </bk-shellbar-action>
             <bk-shellbar-action>
                 <bk-popover>
                     <bk-popover-control>
@@ -176,6 +196,10 @@
                             <div class="bk-padding--tiny bk-vbox bk-box--gap bk-border--bottom">
                                 <p class="bk-text--subtitle bk-font--normal fd-margin--none">{{'username' | t:'Username'}}:</p>
                                 <p class="fd-text">{{::username}}</p>
+                            </div>
+                            <div class="bk-padding--tiny bk-vbox bk-box--gap bk-border--bottom" ng-if="tenant.visible">
+                                <p class="bk-text--subtitle bk-font--normal fd-margin--none">{{'tenant' | t:'Tenant'}}:</p>
+                                <p class="fd-text">{{tenant.current.name || tenant.current.id}}</p>
                             </div>
                             <bk-button label="{{'logout' | t:'Logout'}}" state="transparent" glyph="sap-icon--log" aria-label="{{'logout' | t:'Logout'}}" ng-click="logout()"></bk-button>
                         </div>

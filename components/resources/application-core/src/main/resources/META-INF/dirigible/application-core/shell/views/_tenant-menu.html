@@ -1,0 +1,66 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!--
+  The tenant chip - the ONE copy of the header widget every shell mounts through x-html on the
+  shared `tenant` store (shell/js/stores/tenant.js). It renders in one of two shapes:
+   - a read-only badge naming the tenant, where there is nothing to switch to (a SUBDOMAIN
+     instance, a user of one tenant, staff in the default tenant); the tooltip says why;
+   - a button opening the menu of the offered tenants, where there is another one to show. A tenant
+     that cannot be entered is listed disabled with the picker's own words, the current one is
+     checked, and the full picker stays one click away.
+  Both shapes carry the same id so a test can find "the chip" whichever is rendered, and both are
+  gated on `visible` as well as the mount's x-show, so a single-tenant instance renders no chip
+  element at all rather than a hidden one. Every icon is an svg placeholder: the Lucide plugin
+  renders in place, so the bindings on it stay live.
+-->
+<template x-if="$store.tenant.visible && !$store.tenant.hasMenu">
+  <div id="tenant-menu-trigger" x-h-badge data-variant="outline" class="hbox items-center gap-1" :title="$store.tenant.hint">
+    <svg x-h-lucide role="presentation" data-lucide="building-2"></svg>
+    <span class="truncate max-w-xs" x-text="$store.tenant.label"></span>
+  </div>
+</template>
+<template x-if="$store.tenant.visible && $store.tenant.hasMenu">
+  <div class="hbox items-center gap-2">
+    <button id="tenant-menu-trigger" type="button" x-h-button x-h-menu-trigger.dropdown.chevron data-variant="outline" data-size="sm"
+            :title="$store.tenant.t('shell.tenant.switch', 'Switch tenant')">
+      <svg x-h-lucide role="presentation" data-lucide="building-2"></svg>
+      <span class="truncate max-w-xs" x-text="$store.tenant.label"></span>
+      <svg x-h-lucide role="presentation" data-lucide="chevron-down"></svg>
+    </button>
+    <ul id="tenant-menu" x-h-menu :aria-label="$store.tenant.t('shell.tenant.title', 'Tenant')" data-align="bottom-end">
+      <div x-h-menu-label x-text="$store.tenant.t('shell.tenant.title', 'Tenant')"></div>
+      <template x-for="tenant in $store.tenant.items" :key="tenant.id">
+        <!-- aria-disabled needs the explicit value: bound to null it is removed and the item stays usable. -->
+        <li x-h-menu-item :aria-disabled="tenant.state === 'READY' ? null : 'true'" @click="$store.tenant.switchTo(tenant)">
+          <svg x-h-lucide role="presentation" data-lucide="building-2"></svg>
+          <span class="vbox min-w-0 flex-1">
+            <span x-text="tenant.name || tenant.id"></span>
+            <!-- The id is only worth a line when it is not what the name already says. -->
+            <span class="text-xs text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id" x-text="tenant.id"></span>
+            <span class="text-xs text-muted-foreground" x-show="$store.tenant.stateText(tenant)" x-text="$store.tenant.stateText(tenant)"></span>
+          </span>
+          <svg x-h-lucide role="presentation" data-lucide="check" x-show="$store.tenant.isCurrent(tenant)"></svg>
+        </li>
+      </template>
+      <div x-h-menu-separator></div>
+      <li x-h-menu-item @click="$store.tenant.openPicker()">
+        <svg x-h-lucide role="presentation" data-lucide="external-link"></svg>
+        <span x-text="$store.tenant.t('shell.tenant.picker', 'Open the tenant picker')"></span>
+      </li>
+    </ul>
+  </div>
+</template>
+<!-- A refused switch, in the picker's words, beside the chip; cleared by the next attempt. -->
+<span x-h-badge data-variant="negative" role="alert" class="truncate max-w-xs" x-show="$store.tenant.error" x-cloak
+      :title="$store.tenant.error" x-text="$store.tenant.error"></span>

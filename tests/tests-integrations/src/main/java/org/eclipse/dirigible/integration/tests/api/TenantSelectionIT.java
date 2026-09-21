@@ -75,6 +75,7 @@ import org.springframework.test.web.servlet.MockMvc;
 class TenantSelectionIT extends IntegrationTest {
 
     private static final String TENANT_SELECTION_ENDPOINT = "/services/security/tenant-selection";
+    private static final String CURRENT_TENANT_ENDPOINT = TENANT_SELECTION_ENDPOINT + "/current";
     private static final String TENANT_CONFIGURATIONS_PATH = "/services/core/configurations/tenant";
 
     private static final String MARKER_KEY = "TENANT_SELECTION_IT_MARKER";
@@ -250,6 +251,83 @@ class TenantSelectionIT extends IntegrationTest {
                                                    .content("{\"tenantId\":\"" + tenantAwaitingProvisioning.getId() + "\"}"))
            .andExpect(status().isConflict())
            .andExpect(jsonPath("$.reason").value("NOT_PROVISIONED_HERE"));
+    }
+
+    /**
+     * The header chip asks where it is before the user has chosen, and must be answered rather than
+     * sent to choose: the path sits under the selection endpoint's, which the filter leaves alone.
+     * Until a choice is made the request runs in the default tenant, and the switch is offered.
+     */
+    @Test
+    void aUserWhoHasNotChosenYetIsInTheDefaultTenantAndOfferedTheSwitch() throws Exception {
+        mvc.perform(
+                get(CURRENT_TENANT_ENDPOINT).with(authentication(userOf(ownerOf(provisionedTenant), userOf(tenantAwaitingProvisioning)))))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.tenant.id").value(defaultTenant.getId()))
+           .andExpect(jsonPath("$.tenant.defaultTenant").value(true))
+           .andExpect(jsonPath("$.multitenant").value(true))
+           .andExpect(jsonPath("$.resolutionStrategy").value("TOKEN_GROUPS"))
+           .andExpect(jsonPath("$.switchable").value(true))
+           .andExpect(jsonPath("$.tenants.length()").value(2))
+           .andExpect(jsonPath("$.tenants[?(@.id=='" + provisionedTenant.getId() + "')].state", contains("READY")));
+    }
+
+    /**
+     * The chip follows the selection: once a tenant is entered, the very next request names it.
+     */
+    @Test
+    void theCurrentTenantFollowsTheSelection() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        Authentication user = userOf(ownerOf(provisionedTenant), userOf(tenantAwaitingProvisioning));
+
+        mvc.perform(post(TENANT_SELECTION_ENDPOINT).session(session)
+                                                   .with(authentication(user))
+                                                   .contentType(MediaType.APPLICATION_JSON)
+                                                   .content("{\"tenantId\":\"" + provisionedTenant.getId() + "\"}"))
+           .andExpect(status().isOk());
+
+        mvc.perform(get(CURRENT_TENANT_ENDPOINT).session(session)
+                                                .with(authentication(user)))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.tenant.id").value(provisionedTenant.getId()))
+           .andExpect(jsonPath("$.tenant.name").value(provisionedTenant.getName()))
+           .andExpect(jsonPath("$.tenant.defaultTenant").value(false))
+           // The other tenant is listed - it is being prepared, and the chip says so - but it is no
+           // switch target, so there is nothing to switch to right now.
+           .andExpect(jsonPath("$.switchable").value(false))
+           .andExpect(jsonPath("$.tenants.length()").value(2));
+    }
+
+    /**
+     * A user of exactly one tenant is put into it by the filter on their first page, without a picker;
+     * the chip then names that tenant and offers no menu.
+     */
+    @Test
+    void theOnlyTenantOfAUserIsEnteredAndNamedWithoutASwitch() throws Exception {
+        MockHttpSession session = new MockHttpSession();
+        Authentication user = userOf(ownerOf(provisionedTenant));
+
+        mvc.perform(get("/services/web/home/index.html").session(session)
+                                                        .with(authentication(user))
+                                                        .header(HttpHeaders.ACCEPT, MediaType.TEXT_HTML_VALUE))
+           .andExpect(status().isOk());
+
+        mvc.perform(get(CURRENT_TENANT_ENDPOINT).session(session)
+                                                .with(authentication(user)))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.tenant.id").value(provisionedTenant.getId()))
+           .andExpect(jsonPath("$.switchable").value(false))
+           .andExpect(jsonPath("$.tenants.length()").value(1));
+    }
+
+    @Test
+    void staffWithoutATenantAreToldTheyAreInTheDefaultTenant() throws Exception {
+        mvc.perform(get(CURRENT_TENANT_ENDPOINT).with(authentication(loggedInStaff(ADMINISTRATOR_GROUP))))
+           .andExpect(status().isOk())
+           .andExpect(jsonPath("$.tenant.id").value(defaultTenant.getId()))
+           .andExpect(jsonPath("$.tenant.defaultTenant").value(true))
+           .andExpect(jsonPath("$.switchable").value(false))
+           .andExpect(jsonPath("$.tenants.length()").value(0));
     }
 
     @Test

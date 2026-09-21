@@ -105,6 +105,10 @@ class MultitenancyHarmoniaITTestProject extends BaseMultitenantTestProject {
         // chrome's "Dashboard" is not usable as the marker: since #7412 the home route also names itself
         // in the breadcrumb, so that word matches two spans and the finder requires exactly one.
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Book");
+
+        // The generated shell names the tenant it runs in - the host's, under SUBDOMAIN resolution -
+        // through the chip the shared runtime mounts next to the user menu (#7459).
+        browser.assertElementExistsByIdAndContainsText("tenant-menu-trigger", tenant.getName());
     }
 
     /**
