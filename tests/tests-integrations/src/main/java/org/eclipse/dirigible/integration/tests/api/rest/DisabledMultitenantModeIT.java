@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api.rest;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +19,14 @@ public class DisabledMultitenantModeIT extends TenantDeterminationIT {
     @BeforeAll
     public static void setUp() {
         DirigibleConfig.MULTI_TENANT_MODE_ENABLED.setBooleanValue(false);
+    }
+
+    /**
+     * A single-tenant instance says so, which is what hides the shells' tenant chip.
+     */
+    @Test
+    void theCurrentTenantIsTheDefaultOneAndTheInstanceIsNotMultitenant() {
+        assertCurrentTenant(DirigibleTestTenant.createDefaultTenant(), false);
     }
 
     @Test

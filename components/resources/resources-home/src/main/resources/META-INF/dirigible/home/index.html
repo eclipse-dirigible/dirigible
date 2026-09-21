@@ -73,6 +73,9 @@
           <span>Auto</span>
         </li>
       </ul>
+      <!-- The tenant this page runs in, with a switch where the user has another - the ONE fragment the
+           shared `tenant` store renders (shell/views/_tenant-menu.html); hidden on a single-tenant instance. -->
+      <div class="hbox items-center gap-2" x-show="$store.tenant.visible" x-cloak x-html="$store.tenant.markup"></div>
       <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
       <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
         <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span>Log out</span>
@@ -139,6 +142,7 @@
 
     <!-- Instance branding (DIRIGIBLE_BRANDING_*): sets window.PlatformBranding before Alpine starts. -->
     <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
     <script src="./js/home.js" defer></script>
 
     <!-- Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->

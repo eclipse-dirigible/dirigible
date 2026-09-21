@@ -172,6 +172,10 @@
     },
     {
       "type": "SCRIPT",
+      "path": "/services/web/platform-core/ui/platform/tenant.js"
+    },
+    {
+      "type": "SCRIPT",
       "path": "/services/web/platform-core/ui/platform/shell.js"
     },
     {

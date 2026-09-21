@@ -20,6 +20,7 @@ if (window !== top) {
     .module("platformShell", [
       "ngCookies",
       "platformUser",
+      "platformTenant",
       "platformExtensions",
       "platformDialogs",
       "platformContextMenu",
@@ -83,6 +84,7 @@ if (window !== top) {
         $timeout,
         $http,
         User,
+        Tenant,
         Extensions,
         shellState,
         notifications,
@@ -131,6 +133,28 @@ if (window !== top) {
           User.getName().then((data) => {
             scope.username = data.data;
           });
+          // The tenant this request runs in, and the tenants the user could switch to - the same
+          // state the Harmonia shells render in their header. Hidden on a single-tenant instance;
+          // a menu only where there is another tenant to show.
+          scope.tenant = { visible: false, hasMenu: false, current: {}, items: [] };
+          Tenant.getState().then(
+            (result) => {
+              const state = result.data || {};
+              const current = state.tenant || {};
+              const items = Array.isArray(state.tenants) ? state.tenants : [];
+              scope.tenant = {
+                visible: !!state.multitenant && !!current.id,
+                hasMenu: items.some((tenant) => tenant.id !== current.id),
+                hostBound: state.resolutionStrategy === "SUBDOMAIN",
+                current: current,
+                items: items,
+              };
+            },
+            (reject) => {
+              // No chip rather than a chip that guesses; the shell works without it.
+              console.error("Could not load the current tenant", reject);
+            },
+          );
           scope.menus = {};
           scope.systemMenus = {
             help: undefined,
@@ -299,6 +323,52 @@ if (window !== top) {
 
           scope.logout = () => {
             location.replace("/logout");
+          };
+
+          scope.tenantHint = () => {
+            if (scope.tenant.hostBound)
+              return LocaleService.t(
+                "tenantOfHost",
+                "The tenant is determined by the host",
+              );
+            if (scope.tenant.current.defaultTenant)
+              return LocaleService.t(
+                "defaultTenant",
+                "The default tenant of this instance",
+              );
+            return LocaleService.t("tenant", "Tenant");
+          };
+
+          scope.switchTenant = (tenant) => {
+            if (
+              tenant.state !== "READY" ||
+              tenant.id === scope.tenant.current.id
+            )
+              return;
+            Tenant.select(tenant.id).then(
+              () => {
+                // The selection applies from the next request, and the perspective open now may
+                // not exist in the other tenant: land on the shell root.
+                location.replace(location.pathname);
+              },
+              (reject) => {
+                dialogHub.showAlert({
+                  type: AlertTypes.Error,
+                  title: LocaleService.t("switchTenant", "Switch tenant"),
+                  message:
+                    (reject.data && reject.data.message) ||
+                    LocaleService.t(
+                      "tenantSwitchFailed",
+                      "The tenant could not be switched.",
+                    ),
+                });
+                console.error(reject);
+              },
+            );
+          };
+
+          scope.openTenantPicker = () => {
+            location.assign("/tenant-selection.html?switch=true");
           };
 
           let to = 0;

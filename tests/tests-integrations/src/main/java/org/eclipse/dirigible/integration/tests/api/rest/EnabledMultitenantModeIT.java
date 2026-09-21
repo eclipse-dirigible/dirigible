@@ -53,6 +53,19 @@ public class EnabledMultitenantModeIT extends TenantDeterminationIT {
         testHealthIsAccessible("212.39.89.114", tenant1.getHost());
     }
 
+    /**
+     * What the shells' header chip reads: the tenant is the host's, and there is no switch to offer.
+     */
+    @Test
+    void theCurrentTenantIsTheOneOfTheHost() {
+        DirigibleTestTenant tenant = new DirigibleTestTenant("test-tenant-current");
+        createTenants(tenant);
+        waitForTenantProvisioning(tenant);
+
+        assertCurrentTenant(DirigibleTestTenant.createDefaultTenant(), true);
+        assertCurrentTenant(tenant, true);
+    }
+
     @Test
     void testUnregisteredTenantResolution() {
         testHealthIsNotAccessible("unregistered-tenant.localhost", null);
