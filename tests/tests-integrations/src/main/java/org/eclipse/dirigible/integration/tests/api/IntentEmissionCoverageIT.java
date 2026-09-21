@@ -2146,6 +2146,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String accountFormPage = contentOf("gen/emission/js/components/pages/Account/AccountFormPage.js");
         assertTrue(accountFormPage.contains("App.relatedFor('Account')"),
                 "the referenced entity's form page must read its registers from the runtime registry");
+        // Relation dropdown options are sorted by their displayed label (locale-aware), not left in the
+        // database's heap order (issue #7464): the plain form-page picker wraps its loaded options in
+        // the shared sortOptions helper.
+        assertTrue(accountFormPage.contains("this.sortOptions((rows"),
+                "a form relation dropdown must sort its options by label (issue #7464)");
         String accountForm = contentOf("gen/emission/views/Account/Account-form.html");
         assertTrue(accountForm.contains("relatedPanel(r, id)") && accountForm.contains("openRow(row)"),
                 "the referenced entity's form must render one related panel per register, whose only row action opens the source record");
@@ -3257,6 +3262,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "documentItemsLayout: chat must emit the message composer into the document view");
         String ticketPage = contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js");
         assertTrue(ticketPage.contains("sendMessage"), "the chat document page must emit the append-message composer handler");
+        // ...and the document-page picker path sorts its relation options the same way (issue #7464).
+        assertTrue(ticketPage.contains("this.sortOptions((rows"),
+                "a document relation dropdown must sort its options by label (issue #7464)");
         // The PERSONAL document of a chat entity renders the SAME thread + composer (never the
         // generic line-items table), writing through the personal items controller so ownership is
         // enforced server-side (the my-document chat parity class).

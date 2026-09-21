@@ -512,7 +512,7 @@ document.addEventListener('alpine:init', () => {
           parent: '${property.widgetHierarchyProperty}', leafOnly: true
         });
 #else
-        this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end }));
+        this.options${property.name} = this.sortOptions((rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })));
 #end
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -557,7 +557,7 @@ document.addEventListener('alpine:init', () => {
           conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
             { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
-        this.options${property.name} = (rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end }));
+        this.options${property.name} = this.sortOptions((rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })));
         if (adjust) {
           this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
         }
@@ -922,7 +922,7 @@ document.addEventListener('alpine:init', () => {
         if ((col.widget !== 'DROPDOWN' && col.widget !== 'MULTISELECT') || !col.lookup || this.itemOptions[col.name]) continue;
         try {
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
-          this.itemOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+          this.itemOptions[col.name] = this.sortOptions((rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] })));
           if (col.hier) {
             // Hierarchy column (leafOnly): the dialog chooser gets depth-indented leaves; the
             // items table label resolution above keeps the full set.
@@ -935,7 +935,7 @@ document.addEventListener('alpine:init', () => {
             const filtered = await App.services.api.post(col.lookup.url + '/search', {
               conditions: [{ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value }]
             }, { baseUrl: '' });
-            this.filteredOptions[col.name] = (filtered || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+            this.filteredOptions[col.name] = this.sortOptions((filtered || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] })));
           }
         } catch (e) {
           console.error('[${name}DocumentPage] failed to load item options for ' + col.name, e);
@@ -1011,7 +1011,7 @@ document.addEventListener('alpine:init', () => {
             const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
             if (col.filter) conditions.push({ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value });
             const rows = await App.services.api.post(col.lookup.url + '/search', { conditions }, { baseUrl: '' });
-            this.draftOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+            this.draftOptions[col.name] = this.sortOptions((rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] })));
             if (adjust) {
               this.draft[col.name] = this.draftOptions[col.name].length === 1 ? String(this.draftOptions[col.name][0].value) : '';
             }
