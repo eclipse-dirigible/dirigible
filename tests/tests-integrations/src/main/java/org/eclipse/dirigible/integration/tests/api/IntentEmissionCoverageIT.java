@@ -2698,6 +2698,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
+        // The per-column filter must debounce (~300ms) and must never blank the table or show the
+        // empty state while a POST /search is in flight - it keeps the settled rows and only settles
+        // the empty state on a query that returned zero rows (issue #7461).
+        assertTrue(unitManageView.contains("@input.debounce.300ms=\"applyServerFilter()\""),
+                "the per-column text filter must debounce applyServerFilter (~300ms), not query per keystroke");
+        assertFalse(unitManageView.contains("@input.debounce.400ms"), "the pre-#7461 400ms debounce must be gone");
+        assertTrue(unitManageList.contains("if (this.filtering) return this.items.length ? 'default' : 'loading'"),
+                "displayState must keep the settled view while a filter query is in flight, never the empty state");
+        assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
+                "applyServerFilter must discard a stale response superseded by a newer keystroke");
         assertTrue(campaignMasterPage.contains("exportRowsCsv(this.filteredMasters"),
                 "the master list must export its filtered rows as CSV");
         assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),

@@ -20,6 +20,9 @@
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+    <!-- A per-column filter query is in flight: the table keeps the previous rows (see displayState),
+         this spinner just signals the refresh so the empty state is never shown mid-query (#7461). -->
+    <span x-show="filtering" x-h-spinner aria-hidden="true"></span>
 #if($calendarView)
     <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
          this browse page lives at /${name}/list. -->
@@ -224,7 +227,7 @@
                     </template>
                     <input x-show="col.type !== 'fk' && col.type !== 'none' && col.type !== 'date'" x-model="columnFilters[col.name]"
                            type="text"
-                           @input.debounce.400ms="applyServerFilter()"
+                           @input.debounce.300ms="applyServerFilter()"
                            :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"
                            class="w-full text-sm rounded-md border border-border px-2 py-1" />
                   </th>
