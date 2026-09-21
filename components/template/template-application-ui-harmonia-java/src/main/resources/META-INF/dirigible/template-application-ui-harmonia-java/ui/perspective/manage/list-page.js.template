@@ -15,6 +15,12 @@ document.addEventListener('alpine:init', () => {
     state: 'loading',
     items: [],
     error: null,
+    // A per-column filter refresh (POST /search) is in flight. The table keeps showing the previous,
+    // settled rows while it runs, so a half-typed filter never flips the page to the "no records"
+    // empty state - that belongs only to a query that has actually returned zero rows (issue #7461).
+    // filterSeq discards a slow response that a newer keystroke has already superseded.
+    filtering: false,
+    filterSeq: 0,
     searchTerm: '',
     sortColumn: null,
     sortDirection: null,
@@ -217,6 +223,10 @@ document.addEventListener('alpine:init', () => {
     get displayState() {
       if (this.state === 'loading') return 'loading';
       if (this.state === 'error')   return 'error';
+      // While a per-column filter query is in flight, keep the last settled view: the previous rows
+      // stay on screen (only a spinner if there are none yet), never the empty/"no records" state,
+      // which belongs to a query that has already returned zero rows (issue #7461).
+      if (this.filtering) return this.items.length ? 'default' : 'loading';
       // With an active column filter, keep the table (and its filter row) visible even with 0 rows,
       // so the user can adjust/clear it — don't fall back to the "create your first record" empty state.
       if (this.items.length === 0)  return (this.hasActiveColumnFilters || this.searchTerm) ? 'no-results' : 'empty';
@@ -246,18 +256,27 @@ document.addEventListener('alpine:init', () => {
     // Reload the list from the backend: POST /search when any filter is set, else the full getAll.
     async applyServerFilter() {
       const conditions = this.buildConditions();
-      this.state = 'loading';
+      // Do NOT blank the table to a spinner (state = 'loading') here: that hides the filter row the
+      // user is typing into and would report an in-flight query as the empty state. Keep the settled
+      // rows visible and only swap them in once this response is the newest one (issue #7461).
+      const seq = ++this.filterSeq;
+      this.filtering = true;
       this.error = null;
       try {
-        this.items = conditions.length
+        const rows = conditions.length
           ? await App.services.api.post(this.apiPath + '/search', { conditions })
           : await App.services.api.getAll(this.apiPath);
+        if (seq !== this.filterSeq) return;   // a newer keystroke already superseded this response
+        this.items = rows;
         this.currentPage = 1;
         this.state = this.items.length === 0 ? 'empty' : 'default';
         if (this.selected) this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
       } catch (e) {
+        if (seq !== this.filterSeq) return;
         this.error = App.services.apiErrors.messageFor(e, 'Could not filter ${name}.');
         this.state = 'error';
+      } finally {
+        if (seq === this.filterSeq) this.filtering = false;
       }
       this.refreshIcons();
     },

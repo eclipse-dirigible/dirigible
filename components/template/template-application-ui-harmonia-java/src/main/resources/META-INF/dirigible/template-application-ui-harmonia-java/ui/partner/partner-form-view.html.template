@@ -161,10 +161,13 @@
 #if($hasReadOnly)
     <!-- Read-only / computed fields: values, not controls (shown when populated on edit). -->
     <div x-show="mode === 'edit'" x-h-card style="max-width: 900px">
-      <div x-h-card-content class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+      <!-- Field pairs stack into one column until the card is wide enough for two (lg:), and each
+           cell shrinks and wraps its value (min-w-0 wrap-anywhere) so an unbreakable value never
+           overflows its column into the neighbour at narrow widths (issue #7462). -->
+      <div x-h-card-content class="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-2">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE"))
-        <div class="vbox" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
+        <div class="vbox min-w-0 wrap-anywhere" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
           <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>
           <span class="text-sm" x-text="form.${property.name}"></span>
         </div>

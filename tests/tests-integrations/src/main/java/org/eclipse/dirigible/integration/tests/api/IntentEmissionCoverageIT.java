@@ -2698,10 +2698,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
+        // The per-column filter must debounce (~300ms) and must never blank the table or show the
+        // empty state while a POST /search is in flight - it keeps the settled rows and only settles
+        // the empty state on a query that returned zero rows (issue #7461).
+        assertTrue(unitManageView.contains("@input.debounce.300ms=\"applyServerFilter()\""),
+                "the per-column text filter must debounce applyServerFilter (~300ms), not query per keystroke");
+        assertFalse(unitManageView.contains("@input.debounce.400ms"), "the pre-#7461 400ms debounce must be gone");
+        assertTrue(unitManageList.contains("if (this.filtering) return this.items.length ? 'default' : 'loading'"),
+                "displayState must keep the settled view while a filter query is in flight, never the empty state");
+        assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
+                "applyServerFilter must discard a stale response superseded by a newer keystroke");
         assertTrue(campaignMasterPage.contains("exportRowsCsv(this.filteredMasters"),
                 "the master list must export its filtered rows as CSV");
         assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),
                 "the master toolbar must carry the Export and Print actions");
+
+        // The detail side panel's field pairs must stack into one column until the pane is wide enough
+        // (lg:) and each cell must shrink+wrap its value, so an email/phone value cannot overflow its
+        // column and overlap the neighbour at narrow browser widths (issue #7462).
+        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+            assertTrue(detailView.contains("grid grid-cols-1 lg:grid-cols-2"),
+                    "the detail panel must stack field pairs to one column below the lg breakpoint");
+            assertFalse(detailView.contains("grid grid-cols-1 sm:grid-cols-2"),
+                    "the detail panel must not keep the pre-#7462 sm: breakpoint that overlaps in a narrow pane");
+            assertTrue(detailView.contains("class=\"vbox min-w-0 wrap-anywhere\""),
+                    "each detail field cell must shrink and wrap its value so it never overflows the column");
+        }
 
         // The detail side panel must be dismissible: a close control in its toolbar plus Esc, both
         // wired to closeDetails() which clears the selection and returns to the full-width list (#7463).

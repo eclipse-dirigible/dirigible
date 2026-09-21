@@ -19,6 +19,22 @@
       "user": "User",
       "logout": "Log out"
     },
+    "tenant": {
+      "title": "Tenant",
+      "current": "The tenant you are working in",
+      "default": "The default tenant of this instance",
+      "hostBound": "The tenant is determined by the host",
+      "switch": "Switch tenant",
+      "picker": "Open the tenant picker",
+      "preparing": "Being prepared. Try again in a few minutes.",
+      "unavailable": "Not available. Contact your administrator.",
+      "switchFailed": "The tenant could not be switched.",
+      "sessionExpired": "Your session has expired. Reload the page to sign in again.",
+      "notAMember": "You are no longer assigned to this tenant.",
+      "notSelectable": "This application does not let users select a tenant.",
+      "stillPreparing": "This tenant is still being prepared. Try again in a few minutes.",
+      "notAvailable": "This tenant is not available. Contact your administrator."
+    },
     "theme": {
       "title": "Theme",
       "light": "Light",

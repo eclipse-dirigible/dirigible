@@ -269,6 +269,9 @@
               </ol>
             </div>
 
+            <!-- The tenant this page runs in, with a switch where the user has another - the ONE fragment the
+                 shared `tenant` store renders (shell/views/_tenant-menu.html); hidden on a single-tenant instance. -->
+            <div class="hbox items-center gap-2" x-show="$store.tenant.visible" x-cloak x-html="$store.tenant.markup"></div>
             <!-- Logged-in user: an avatar carrying the user's initials; the dropdown names them and
                  offers Log out. x-h-menu-label is a legal direct child of the menu, so the identity
                  line needs no presentational li wrapper. -->
@@ -630,6 +633,7 @@
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
