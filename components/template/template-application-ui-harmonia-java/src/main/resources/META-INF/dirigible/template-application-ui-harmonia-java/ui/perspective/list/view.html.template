@@ -8,7 +8,7 @@
 ## unrestricted property. The redaction applied to every response stays the authoritative one; this
 ## only keeps a control that could never show or save a value off the page.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
-<div x-data="${name}ListPage" class="vbox size-full">
+<div x-data="${name}ListPage" class="vbox size-full" @keydown.escape.window="if (selected) closeDetails()">
 
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}', '${name}')"></span>
@@ -174,6 +174,10 @@
       <div x-show="selected" class="vbox size-full overflow-auto">
         <div x-h-toolbar data-variant="transparent" data-size="sm">
           <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${name}') + ' #' + selectedId"></span>
+          <div x-h-toolbar-spacer></div>
+          <!-- Close the detail panel: returns to the full-width list and clears the selection (Esc
+               does the same). Without it the panel could not be dismissed once opened (issue #7463). -->
+          <button x-h-button data-variant="transparent" data-size="sm" @click="closeDetails()" :aria-label="T('$projectName:${tprefix}.defaults.close', 'Close')" :title="T('$projectName:${tprefix}.defaults.close', 'Close')"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
 
 #if($hasProcess)

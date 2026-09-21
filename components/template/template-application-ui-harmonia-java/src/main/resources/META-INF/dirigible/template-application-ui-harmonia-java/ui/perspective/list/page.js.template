@@ -71,6 +71,9 @@ document.addEventListener('alpine:init', () => {
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
     selectRow(row)   { this.selected = row; this.refreshIcons(); },
+    // Dismiss the detail panel: drop the selection so the list returns to full width and the row
+    // highlight clears (issue #7463).
+    closeDetails()   { this.selected = null; this.refreshIcons(); },
     // Render a date/datetime value through the instance Date/Timestamp patterns (shell format.js).
     displayValue(v, isDate) {
       return window.HarmoniaFormat.value(v, isDate);

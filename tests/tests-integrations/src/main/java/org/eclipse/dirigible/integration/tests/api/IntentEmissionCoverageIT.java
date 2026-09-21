@@ -2725,6 +2725,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "each detail field cell must shrink and wrap its value so it never overflows the column");
         }
 
+        // The detail side panel must be dismissible: a close control in its toolbar plus Esc, both
+        // wired to closeDetails() which clears the selection and returns to the full-width list (#7463).
+        assertTrue(campaignMasterPage.contains("closeDetails()"), "the master page must define closeDetails()");
+        assertTrue(unitManageList.contains("closeDetails()"), "the manage list page must define closeDetails()");
+        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+            assertTrue(detailView.contains("@click=\"closeDetails()\""),
+                    "the detail panel toolbar must carry a close control wired to closeDetails()");
+            assertTrue(detailView.contains("@keydown.escape.window"), "Esc must dismiss the detail panel");
+            assertTrue(detailView.contains("defaults.close"), "the close control must use the translated Close label");
+        }
+
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
         String claimMy = contentOf("gen/emission/api/claim/ClaimMyController.java");
