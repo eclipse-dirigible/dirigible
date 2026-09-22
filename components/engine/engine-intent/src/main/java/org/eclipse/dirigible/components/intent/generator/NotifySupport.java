@@ -97,13 +97,6 @@ public final class NotifySupport {
     /** The local the generated code holds the record a message is about in (a fan-out's ROW). */
     static final String ENTITY_LOCAL = "entity";
 
-    /**
-     * The run-time language fallback a render defaults to when the notify block declares neither
-     * {@code language:} nor {@code languageFrom:} - the first entry of the tenant-resolved application
-     * language set, read at send time. Shared with {@link SnapshotSupport}.
-     */
-    static final String DEFAULT_LANGUAGE_EXPRESSION = "org.eclipse.dirigible.sdk.print.Print.defaultLanguage()";
-
     private NotifySupport() {}
 
     /**
@@ -257,12 +250,13 @@ public final class NotifySupport {
      * A resolved print attachment: everything the generated code needs to render and name the PDF.
      *
      * @param entity the document entity whose print template is rendered
-     * @param languageExpression a Java expression yielding the template language code - a quoted
-     *        literal ({@code language:}), a null-safe read off the {@link #languageLoad} local
-     *        ({@code languageFrom:}), or the run-time application-language fallback
-     * @param fileNameExpression a Java expression for the attachment file name, evaluated against the
-     *        loaded record - the authored {@code fileName:} pattern, or, absent one, the document
-     *        number when the entity has one, else the entity name + id
+     * @param language the NEUTRAL reading of the template language code (issue #7425) - a literal
+     *        ({@code language:}), a null-safe read off the {@link #languageLoad} local
+     *        ({@code languageFrom:}), or the run-time application-language fallback; the template layer
+     *        renders the Java
+     * @param fileName the NEUTRAL reading of the attachment file name, read off the loaded record - the
+     *        authored {@code fileName:} pattern, or, absent one, the document number when the entity
+     *        has one, else the entity name + id
      * @param fileNameLoads the one-hop relation loads a {@code fileName:} pattern reads, on top of the
      *        ones the message text already needs - the caller merges them into the block's relation
      *        loads (they share the local named after the relation, so one load serves both)
@@ -272,7 +266,7 @@ public final class NotifySupport {
      *        instead of the record the block is about - the expressions then read the
      *        {@link #RECORD_LOCAL} local and the render happens once, outside the per-row loop
      */
-    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression,
+    public record PrintAttachment(String entity, Map<String, Object> language, Map<String, Object> fileName,
             List<NotificationSupport.RelationLoad> fileNameLoads, LanguageLoad languageLoad, boolean anchorScoped) {
 
         /** @return the authored {@code attach} value this attachment came from. */
@@ -483,7 +477,7 @@ public final class NotifySupport {
         // language shapes below can return an attachment.
         FileName fileName = fileName(notify, entity, local, anchorScoped, byName, compositionParents, crossModel);
         Language language = language(notify, entity, byName, compositionParents, crossModel);
-        return new PrintAttachment(entity.getName(), language.expression(), fileName.expression(), fileName.loads(), language.load(),
+        return new PrintAttachment(entity.getName(), language.reading(), fileName.reading(), fileName.loads(), language.load(),
                 anchorScoped);
     }
 
@@ -494,14 +488,14 @@ public final class NotifySupport {
      * @param report the declared report rendered
      * @param bindings the report's parameters bound from the record the message is about, in authored
      *        order - each an entry the generated code puts into the repository's filter map
-     * @param languageExpression a Java expression yielding the print-template language code, resolved
+     * @param language the NEUTRAL reading of the print-template language (issue #7425), resolved
      *        exactly as a document attachment's is
-     * @param fileNameExpression a Java expression for the attachment file name
+     * @param fileName the NEUTRAL reading of the attachment file name
      * @param loads the one-hop relation loads the bindings and the file name read, merged - the caller
      *        adds them to the block's own loads (they share the local named after the relation)
      * @param languageLoad the {@code languageFrom} relation load, or {@code null}
      */
-    public record ReportAttachment(String report, List<Binding> bindings, String languageExpression, String fileNameExpression,
+    public record ReportAttachment(String report, List<Binding> bindings, Map<String, Object> language, Map<String, Object> fileName,
             List<NotificationSupport.RelationLoad> loads, LanguageLoad languageLoad) {
 
         /**
@@ -577,8 +571,8 @@ public final class NotifySupport {
         for (NotificationSupport.RelationLoad load : fileName.loads()) {
             loads.put(load.local(), load);
         }
-        return new ReportAttachment(report.getName(), bindings, language.expression(), fileName.expression(),
-                new ArrayList<>(loads.values()), language.load());
+        return new ReportAttachment(report.getName(), bindings, language.reading(), fileName.reading(), new ArrayList<>(loads.values()),
+                language.load());
     }
 
     /**
@@ -591,13 +585,15 @@ public final class NotifySupport {
         FileNameSupport.Site site = new FileNameSupport.Site(entity, ENTITY_LOCAL, true, false);
         FileNameSupport.Resolved resolved = FileNameSupport.resolve(notify.getFileName(), site, byName, compositionParents, crossModel);
         if (resolved == null) {
-            return new FileName("\"" + report + " \" + " + FileNameSupport.numberOrId(entity, ENTITY_LOCAL) + " + \".pdf\"", List.of());
+            return new FileName(Readings.concat(
+                    List.of(Readings.string(report + " "), FileNameSupport.numberOrId(entity, ENTITY_LOCAL), Readings.string(".pdf")),
+                    false), List.of());
         }
-        return new FileName(resolved.expression() + " + \".pdf\"", resolved.loads());
+        return new FileName(Readings.concat(List.of(resolved.reading(), Readings.string(".pdf")), false), resolved.loads());
     }
 
-    /** A resolved render language: the Java expression, plus the relation load it reads (if any). */
-    private record Language(String expression, LanguageLoad load) {
+    /** A resolved render language: its reading, plus the relation load it reads (if any). */
+    private record Language(Map<String, Object> reading, LanguageLoad load) {
     }
 
     /**
@@ -609,19 +605,19 @@ public final class NotifySupport {
             Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         String literal = notify.getLanguage();
         if (literal != null && !literal.isBlank()) {
-            return new Language("\"" + literal.trim() + "\"", null);
+            return new Language(Readings.string(literal.trim()), null);
         }
         String path = notify.getLanguageFrom();
         if (path == null || path.isBlank()) {
-            return new Language(DEFAULT_LANGUAGE_EXPRESSION, null);
+            return new Language(Readings.defaultLanguage(), null);
         }
         return languageFrom(path.trim(), entity, byName, compositionParents, crossModel);
     }
 
     /**
-     * The resolved attachment file name: the Java expression plus the relation loads it reads.
+     * The resolved attachment file name: its reading plus the relation loads it reads.
      */
-    private record FileName(String expression, List<NotificationSupport.RelationLoad> loads) {
+    private record FileName(Map<String, Object> reading, List<NotificationSupport.RelationLoad> loads) {
     }
 
     /**
@@ -635,9 +631,10 @@ public final class NotifySupport {
         FileNameSupport.Site site = new FileNameSupport.Site(entity, local, !anchorScoped, false);
         FileNameSupport.Resolved resolved = FileNameSupport.resolve(notify.getFileName(), site, byName, compositionParents, crossModel);
         if (resolved == null) {
-            return new FileName(FileNameSupport.numberOrId(entity, local) + " + \".pdf\"", List.of());
+            return new FileName(Readings.concat(List.of(FileNameSupport.numberOrId(entity, local), Readings.string(".pdf")), false),
+                    List.of());
         }
-        return new FileName(resolved.expression() + " + \".pdf\"", resolved.loads());
+        return new FileName(Readings.concat(List.of(resolved.reading(), Readings.string(".pdf")), false), resolved.loads());
     }
 
     /**
@@ -690,9 +687,7 @@ public final class NotifySupport {
             load = new LanguageLoad(IntentNaming.pascalCase(relationName), relation.getTo(), IntentEntities.resolvePerspective(
                     relation.getTo(), compositionParents, IntentEntities.settingEntities(byName.values())), false, "");
         }
-        String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
-                + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
-        return new Language(expression, load);
+        return new Language(Readings.languageFrom("attachLanguageSource", pascalField), load);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {
@@ -711,8 +706,8 @@ public final class NotifySupport {
      * must never depend on a key being absent.
      *
      * @param attachment the resolved attachment, or {@code null} for a plain-text message
-     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguageExpression} /
-     *         {@code attachFileNameExpression} keys plus the {@code attachLanguage*} load coordinates
+     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguage} /
+     *         {@code attachFileName} keys plus the {@code attachLanguage*} load coordinates
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment) {
         return attachmentFields(attachment, null);
@@ -726,8 +721,7 @@ public final class NotifySupport {
      * @param attachment the resolved document attachment, or {@code null}
      * @param report the resolved report attachment, or {@code null}
      * @return the {@code attach} / {@code attachEntity} / {@code attachLanguage*} /
-     *         {@code attachFileNameExpression} keys, plus {@code attachReport} and
-     *         {@code attachReportBindings}
+     *         {@code attachFileName} keys, plus {@code attachReport} and {@code attachReportBindings}
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment, ReportAttachment report) {
         Map<String, Object> fields = new LinkedHashMap<>();
@@ -736,12 +730,10 @@ public final class NotifySupport {
         // repository rather than through a print feeder.
         fields.put("attach", attachment != null ? attachment.kind() : report != null ? ATTACH_REPORT : "");
         fields.put("attachEntity", attachment == null ? "" : attachment.entity());
-        String languageExpression =
-                attachment != null ? attachment.languageExpression() : report == null ? "" : report.languageExpression();
-        String fileNameExpression =
-                attachment != null ? attachment.fileNameExpression() : report == null ? "" : report.fileNameExpression();
-        fields.put("attachLanguageExpression", languageExpression);
-        fields.put("attachFileNameExpression", fileNameExpression);
+        // The render language and the file name as NEUTRAL readings (issue #7425), the template layer
+        // rendering the Java; an empty reading is the "no attachment" the templates read as "".
+        fields.put("attachLanguage", attachment != null ? attachment.language() : report == null ? Map.of() : report.language());
+        fields.put("attachFileName", attachment != null ? attachment.fileName() : report == null ? Map.of() : report.fileName());
         LanguageLoad load = attachment != null ? attachment.languageLoad() : report == null ? null : report.languageLoad();
         fields.put("attachLanguageFkProperty", load == null ? "" : load.fkProperty());
         fields.put("attachLanguageTargetEntity", load == null ? "" : load.targetEntity());

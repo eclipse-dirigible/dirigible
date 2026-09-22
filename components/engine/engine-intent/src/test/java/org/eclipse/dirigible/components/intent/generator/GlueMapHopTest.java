@@ -101,7 +101,7 @@ class GlueMapHopTest {
     private static String expressionFor(String yaml, String targetProp) {
         return assignmentsOf(yaml).stream()
                                   .filter(a -> targetProp.equals(a.get("targetProp")))
-                                  .map(a -> String.valueOf(a.get("expr")))
+                                  .map(a -> String.valueOf(GlueRendering.expr(a)))
                                   .findFirst()
                                   .orElseThrow(
                                           () -> new AssertionError("no assignment for [" + targetProp + "] in " + assignmentsOf(yaml)));
@@ -288,7 +288,7 @@ class GlueMapHopTest {
         List<Map<String, Object>> loads = (List<Map<String, Object>>) schedule.get("relationLoads");
         assertEquals(1, loads.size(), "got: " + loads);
         assertTrue(assignments.stream()
-                              .anyMatch(a -> "(vehicle == null ? null : vehicle.PlateNumber)".equals(a.get("expr"))),
+                              .anyMatch(a -> "(vehicle == null ? null : vehicle.PlateNumber)".equals(GlueRendering.expr(a))),
                 "got: " + assignments);
     }
 

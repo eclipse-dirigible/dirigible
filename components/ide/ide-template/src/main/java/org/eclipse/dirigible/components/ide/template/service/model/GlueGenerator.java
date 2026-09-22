@@ -181,7 +181,8 @@ class GlueGenerator {
      */
     private static void bindTrigger(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "entity", "perspective", "keyProperty", "businessKeyProperty", "generateBusinessKey", "topicSuffix",
-                "guardExpression", "subjectFields", "personalFkProperty", "personalIdentityProperty");
+                "subjectFields", "personalFkProperty", "personalIdentityProperty");
+        bindEventGuard(context, item);
         context.put("javaPerspective", sanitize(item, "perspective"));
         // The identity repository the listener resolves a personal task assignee through. A
         // cross-model target resolves against the owner model's generation folder.
@@ -299,8 +300,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindTimerLoader(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "process", "handler", "ownerEntity", "ownerPerspective", "ownerKeyProperty", "ownerKeyAccessor", "variable",
-                "dueExpression");
+        copy(context, item, "process", "handler", "ownerEntity", "ownerPerspective", "ownerKeyProperty", "ownerKeyAccessor", "variable");
+        bindExpression(context, item, "due", "dueExpression", false);
         context.put("javaOwnerPerspective", sanitize(item, "ownerPerspective"));
     }
 
@@ -314,7 +315,8 @@ class GlueGenerator {
      */
     private static void bindWait(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "className", "messageName", "eventEntity", "eventPerspective", "eventKeyProperty", "topicSuffix",
-                "guardExpression", "viaFkProperty", "parentEntity", "parentPerspective");
+                "viaFkProperty", "parentEntity", "parentPerspective");
+        bindEventGuard(context, item);
         context.put("javaEventPerspective", sanitize(item, "eventPerspective"));
         context.put("javaParentPerspective", sanitize(item, "parentPerspective"));
     }
@@ -379,9 +381,10 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindNotification(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "guardExpression", "toExpression",
-                "subjectExpression", "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression",
-                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
+        copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "toExpression", "subjectExpression",
+                "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageFkProperty", "attachLanguageTargetEntity",
+                "attachReport");
+        bindEventGuard(context, item);
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
@@ -405,8 +408,8 @@ class GlueGenerator {
         boolean generates = item.containsKey("generates") ? truthy(item, "generates") : "generate".equals(str(item, "action"));
         boolean notifies = item.containsKey("notifies") ? truthy(item, "notifies") : !"generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "toExpression", "subjectExpression", "bodyExpression",
-                "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
+                "attachKeyProperty", "attach", "attachEntity", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachReport",
+                "genToEntity", "genToPk",
                 // The scheduled generation's natural key (issue #7070). Absent on a .glue written
                 // before it existed, which `copy` turns into an absent context key - so the guard's
                 // `#if` is false and such a job renders byte-identically to what it always did.
@@ -417,6 +420,11 @@ class GlueGenerator {
         bindCriteria(context, item);
         if (item.containsKey("genUnique")) {
             context.put("genUnique", uniqueTerms(item.get("genUnique")));
+        }
+        if (item.containsKey("genFieldAssignments")) {
+            context.put("genFieldAssignments", assignments(item.get("genFieldAssignments")));
+        } else {
+            context.remove("genFieldAssignments");
         }
         copyJavaLiterals(context, item, "cron");
         context.put("generates", generates);
@@ -472,6 +480,7 @@ class GlueGenerator {
                 resolved.remove("forEachEntityClass");
                 resolved.remove("forEachRepositoryClass");
             }
+            resolved.put("fieldAssignments", assignments(child.get("fieldAssignments")));
             resolved.put("children", scheduleChildren(child.get("children"), parameters));
             children.add(resolved);
         }
@@ -488,7 +497,8 @@ class GlueGenerator {
      */
     private static void bindIntegration(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "clientMethod", "hasBody", "urlExpression",
-                "guardExpression", "hasGuard", "hasPayload", "payloadFields");
+                "hasGuard", "hasPayload", "payloadFields");
+        bindEventGuard(context, item);
         // The declared payload reads the record and, for a one-hop value, a related record - the same
         // loads a notification performs, so the same package resolution applies.
         context.put("javaPerspective", sanitize(item, "perspective"));
@@ -575,7 +585,8 @@ class GlueGenerator {
      */
     private static void bindOutbound(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "destination", "channel", "producerMethod",
-                "guardExpression", "hasGuard", "hasPayload", "payloadFields");
+                "hasGuard", "hasPayload", "payloadFields");
+        bindEventGuard(context, item);
         copyJavaLiterals(context, item, "destination");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
@@ -676,9 +687,8 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindGenerate(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "className", "fromEntity", "toEntity", "toPk", "fieldAssignments", "hasItems", "hasItemLines",
-                "itemLines", "fromItemEntity", "toItemEntity", "srcFkProperty", "toFkProperty", "itemFieldAssignments", "fromPerspective",
-                "sourceStatusProperty", "sourceStatusValue",
+        copy(context, item, "name", "className", "fromEntity", "toEntity", "toPk", "hasItems", "hasItemLines", "fromItemEntity",
+                "toItemEntity", "srcFkProperty", "toFkProperty", "fromPerspective", "sourceStatusProperty", "sourceStatusValue",
                 // The event half (issue #6711): the trigger kind, the status guard and the back-reference
                 // the at-most-once check reads, plus whether a button is contributed at all. The axis and
                 // the cardinality (issue #6800): the topic suffix the listener binds - a lifecycle one or
@@ -697,14 +707,20 @@ class GlueGenerator {
                 // The raw target perspective comes along because the listener binds the TARGET's topic,
                 // and a topic keeps the raw perspective while a package segment is sanitized.
                 "hasReopen", "reopenStatusValue", "reopenRetiredCondition", "toPerspective",
-                // The declared input form (issue #6685): the prompted target properties with their
-                // pre-rendered value conversions - the template renders one block per entry.
-                "hasPrompt", "promptFields",
+                // The declared input form (issue #6685): whether one exists - the prompted properties
+                // themselves are bound below, their conversions rendered from the type each carries.
+                "hasPrompt",
                 // The from-status guard (issue #7068): the pre-rendered boolean over an int
                 // currentStatus local, the status FK it reads and the human half of the 409. Gated on
                 // the boolean - a .glue written before these keys existed carries none and renders the
                 // unguarded run() it always had.
                 "hasStatusGuard", "guardStatusProperty", "guardStatusExpr", "guardStatusText", "guardStatuses");
+        // The mapped values, each rendered from the reading the glue carries (issue #7425) - a copy off
+        // the source, a typed literal, today in the target field's shape, a Calc arithmetic cell.
+        context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
+        context.put("itemFieldAssignments", assignments(item.get("itemFieldAssignments")));
+        context.put("itemLines", rows(item.get("itemLines")));
+        context.put("promptFields", assignments(item.get("promptFields")));
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
         // reference renders as its own literal into a destination nothing ever publishes on. An absent
@@ -757,10 +773,12 @@ class GlueGenerator {
      */
     private static void bindTransition(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "attachKeyProperty", "statusProperty", "setStatus", "allowedExpr",
-                "fromStatuses", "guardExpr", "guardText", "notify", "forEach", "forEachFkProperty", "forEachKeyProperty",
-                "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "notifyRecordScoped", "attach", "attachEntity",
-                "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression",
-                "attachReport");
+                "fromStatuses", "guardText", "notify", "forEach", "forEachFkProperty", "forEachKeyProperty", "notifyToExpression",
+                "notifySubjectExpression", "notifyBodyExpression", "notifyRecordScoped", "attach", "attachEntity",
+                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachReport");
+        // The `when` guard over the loaded source, spelled with the SDK evaluator fully qualified: the
+        // transition controller, unlike the posting and create-from handlers, imports no Calc.
+        bindExpression(context, item, "guardReading", "guardExpr", true);
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
@@ -780,8 +798,8 @@ class GlueGenerator {
     private static void bindSend(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "step", "className", "entity", "perspective", "keyProperty", "keyAccessor", "forEach",
                 "forEachFkProperty", "forEachKeyProperty", "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression",
-                "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
+                "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageFkProperty",
+                "attachLanguageTargetEntity", "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
@@ -801,8 +819,8 @@ class GlueGenerator {
      */
     private static void bindPost(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "sourcePerspective", "sourceKeyField", "isCreate", "event", "statusProperty",
-                "statusValue", "perItem", "itemsEntity", "itemsFk", "itemsPerspective", "into", "targetPerspective", "targetPk", "backRef",
-                "assigns");
+                "statusValue", "perItem", "itemsEntity", "itemsFk", "itemsPerspective", "into", "targetPerspective", "targetPk", "backRef");
+        context.put("assigns", assignments(item.get("assigns")));
         context.put("sourceEntity", item.get("entity"));
         context.put("sourceJavaPerspective", sanitize(item, "sourcePerspective"));
         context.put("itemsJavaPerspective", sanitize(item, "itemsPerspective"));
@@ -820,8 +838,14 @@ class GlueGenerator {
     private static void bindPosting(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "isCreate", "sourcePerspective", "sourceEntity", "sourceKeyField", "guardProperty",
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
-                "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns",
-                "conditionalRuleGuards", "itemRows");
+                "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns");
+        // The derived line rows, each cell and each row guard rendered from the reading the glue
+        // carries (issue #7425); the classifier ternaries the handler null-guards up front are the
+        // very cells that carry one, collected here rather than shipped twice.
+        List<Map<String, Object>> itemRows = rows(item.get("itemRows"));
+        context.put("itemRows", itemRows);
+        context.put("conditionalRuleGuards",
+                item.containsKey("conditionalRuleGuards") ? item.get("conditionalRuleGuards") : conditionalRuleGuards(itemRows));
         // The bound axis (issue #6929): the channel the handler subscribes to, and the sentence its
         // header comment describes it in. Both are absent from a .glue written before the enrichment
         // phase existed, and a bare reference would render as its own literal - so each falls back to
@@ -882,7 +906,7 @@ class GlueGenerator {
         List<Map<String, Object>> assignments = new ArrayList<>();
         for (Map<String, Object> declared : asMaps(raw)) {
             String local = strOr(declared, "local", "");
-            String expr = strOr(declared, "expr", "");
+            String expr = expression(declared, "expr", "");
             Map<String, Object> assignment = new LinkedHashMap<>();
             assignment.put("targetProp", declared.get("targetProp"));
             assignment.put("expr", expr);
@@ -1012,8 +1036,9 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSnapshot(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "master", "masterPk", "languageExpression", "languageFkProperty", "languageTargetEntity", "snapshotEntity",
-                "snapshotMasterFk", "fileNameExpression");
+        copy(context, item, "master", "masterPk", "languageFkProperty", "languageTargetEntity", "snapshotEntity", "snapshotMasterFk");
+        bindExpression(context, item, "language", "languageExpression", false);
+        bindExpression(context, item, "fileName", "fileNameExpression", false);
         context.put("masterJavaPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "masterPerspective", "")));
         // The one-hop loads a fileName pattern reads off the master - the same shape (and the same
         // cross-model package resolution) a notify listener's relation loads have.
@@ -1049,9 +1074,10 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindResolve(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "guardExpression", "setProperty",
-                "registerEntity", "registerPerspective", "registerValueProperty", "matchSummary", "startProperty", "endProperty",
-                "valueProperty", "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        copy(context, item, "name", "className", "entity", "perspective", "keyProperty", "topicSuffix", "setProperty", "registerEntity",
+                "registerPerspective", "registerValueProperty", "matchSummary", "startProperty", "endProperty", "valueProperty",
+                "outcomeProperty", "statusProperty", "foundStatus", "notFoundStatus", "ambiguousStatus", "writesStatus");
+        bindEventGuard(context, item);
         // The `where:` filter keys arrived after resolves shipped, so a `.glue` written before them
         // carries neither - and `copy` REMOVES an absent key, which Velocity then renders as its own
         // literal (`${filterSummary}` in the generated javadoc, an unfiltered lookup that LOOKS
@@ -1249,6 +1275,11 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindAttachLanguage(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        // The render language and the file name, each rendered from the reading the glue carries
+        // (issue #7425): a literal, the platform default, a language read off a loaded record; a
+        // sanitized file-name pattern or the document's number-or-id default.
+        bindExpression(context, item, "attachLanguage", "attachLanguageExpression", false);
+        bindExpression(context, item, "attachFileName", "attachFileNameExpression", false);
         context.put("attachLanguageJavaTargetPerspective",
                 NamingHelper.sanitizeJavaIdentifier(strOr(item, "attachLanguageTargetPerspective", "")));
         context.put("attachLanguageJavaGenFolder", truthy(item, "attachLanguageCrossModel") ? sanitize(item, "attachLanguageTargetModel")
@@ -1459,10 +1490,128 @@ class GlueGenerator {
             } else if ("day".equals(period)) {
                 // A single day needs no range: `between(today, today)` is not what `run: day` says.
                 term.put("expr", JavaLiterals.todayExpression());
+            } else if (declared.containsKey("reading")) {
+                // A property term reads the very value the target is about to be assigned (issue #7070)
+                // - the same reading, rendered here (issue #7425).
+                term.put("expr", expression(declared, "expr", ""));
             }
             terms.add(term);
         }
         return terms;
+    }
+
+    /**
+     * Binds an event binding's guard - the Java boolean the generated handler tests before it acts -
+     * from the NEUTRAL terms the glue carries (issue #7425), {@code true} when it carries none.
+     *
+     * <p>
+     * A descriptor written before the split carries the rendered {@code guardExpression} instead and is
+     * bound as it always was, so an unregenerated project renders byte-identically.
+     *
+     * @param target the template context
+     * @param source the descriptor
+     */
+    static void bindEventGuard(Map<String, Object> target, Map<String, Object> source) {
+        if (!source.containsKey("guardTerms")) {
+            copy(target, source, "guardExpression");
+            return;
+        }
+        String guard = JavaLiterals.conditionExpression(asMaps(source.get("guardTerms")));
+        target.put("guardExpression", guard == null ? "true" : guard);
+    }
+
+    /**
+     * Binds one expression key from the reading the glue carries (issue #7425), falling back to the
+     * rendered key a descriptor written before the split carries - and to the empty string, the
+     * templates' own "nothing here", when it carries neither or the reading is empty.
+     *
+     * @param target the template context
+     * @param source the descriptor
+     * @param readingKey the key the reading is carried under
+     * @param renderedKey the key the template reads the Java under
+     * @param qualified whether the SDK {@code Calc} is spelled fully qualified (a template that does
+     *        not import it)
+     */
+    static void bindExpression(Map<String, Object> target, Map<String, Object> source, String readingKey, String renderedKey,
+            boolean qualified) {
+        if (source.containsKey(readingKey)) {
+            String rendered = qualified ? JavaExpressions.qualifiedExpression(source.get(readingKey))
+                    : JavaExpressions.expression(source.get(readingKey));
+            target.put(renderedKey, rendered == null ? "" : rendered);
+        } else {
+            target.put(renderedKey, strOr(source, renderedKey, ""));
+        }
+    }
+
+    /**
+     * An assignment's Java expression: rendered from its {@code reading} when the glue carries one
+     * (issue #7425), else the {@code expr} a descriptor written before the split carries.
+     *
+     * @param entry the assignment, prompt field or key term as the descriptor carries it
+     * @param renderedKey the key the rendered Java is carried under
+     * @param fallback the value when the entry carries neither
+     * @return the expression
+     */
+    private static String expression(Map<String, Object> entry, String renderedKey, String fallback) {
+        String rendered = entry.containsKey("reading") ? JavaExpressions.expression(entry.get("reading")) : null;
+        return rendered != null ? rendered : strOr(entry, renderedKey, fallback);
+    }
+
+    /**
+     * The assignments of a mapping - a create-from's fields, a posted row's cells, a prompted input's
+     * conversion - each carrying the {@code expr} the template writes, rendered from its reading.
+     *
+     * @param raw the declared assignments, may be absent
+     * @return the assignments the template renders
+     */
+    static List<Map<String, Object>> assignments(Object raw) {
+        List<Map<String, Object>> assignments = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(raw)) {
+            Map<String, Object> assignment = ModelValues.copy(declared);
+            assignment.put("expr", expression(declared, "expr", ""));
+            assignments.add(assignment);
+        }
+        return assignments;
+    }
+
+    /**
+     * The derived line rows of a posting or a create-from - each a {@code when} guard over the source
+     * and the cells it assigns - with the guard and every cell rendered from their readings. A row with
+     * no guard carries the empty string, which the template's own {@code #if} reads.
+     *
+     * @param raw the declared rows, may be absent
+     * @return the rows the template renders
+     */
+    static List<Map<String, Object>> rows(Object raw) {
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (Map<String, Object> declared : asMaps(raw)) {
+            Map<String, Object> row = ModelValues.copy(declared);
+            String guard = declared.containsKey("guardReading") ? JavaExpressions.expression(declared.get("guardReading")) : null;
+            row.put("guard", guard != null ? guard : strOr(declared, "guard", ""));
+            row.put("assigns", assignments(declared.get("assigns")));
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    /**
+     * The classifier ternaries a posting handler null-guards before it posts (dirigible #6534): the
+     * rendered expression of every cell whose reading is a conditional rule column, in row and cell
+     * order - the same list the glue used to carry beside the rows.
+     *
+     * @param rows the rows from {@link #rows(Object)}
+     * @return the guards
+     */
+    static List<String> conditionalRuleGuards(List<Map<String, Object>> rows) {
+        List<String> guards = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            for (Map<String, Object> assignment : asMaps(row.get("assigns"))) {
+                if (assignment.get("reading") instanceof Map<?, ?> reading && "ruleCase".equals(reading.get("kind"))) {
+                    guards.add(str(assignment, "expr"));
+                }
+            }
+        }
+        return guards;
     }
 
     /**

@@ -100,15 +100,16 @@ class GluePostingsReversesTest {
         // SAME side (red storno - never swapped sides).
         List<Map<String, Object>> header = (List<Map<String, Object>>) storno.get("headerAssignments");
         assertTrue(header.stream()
-                         .anyMatch(a -> "EntryDate".equals(a.get("targetProp")) && "source.Date".equals(a.get("expr"))));
+                         .anyMatch(a -> "EntryDate".equals(a.get("targetProp")) && "source.Date".equals(GlueRendering.expr(a))));
         List<Map<String, Object>> rows = (List<Map<String, Object>>) storno.get("itemRows");
         assertEquals(2, rows.size());
         List<Map<String, Object>> firstAssigns = (List<Map<String, Object>>) rows.get(0)
                                                                                  .get("assigns");
         assertTrue(firstAssigns.stream()
-                               .anyMatch(a -> "Account".equals(a.get("targetProp")) && "ruleRow.ReceivableAccount".equals(a.get("expr"))));
+                               .anyMatch(a -> "Account".equals(a.get("targetProp"))
+                                       && "ruleRow.ReceivableAccount".equals(GlueRendering.expr(a))));
         assertTrue(firstAssigns.stream()
                                .anyMatch(a -> "Debit".equals(a.get("targetProp"))
-                                       && "Calc.eval(\"-(Net + Vat)\", source, 2)".equals(a.get("expr"))));
+                                       && "Calc.eval(\"-(Net + Vat)\", source, 2)".equals(GlueRendering.expr(a))));
     }
 }

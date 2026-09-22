@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.data.structures.domain.Table;
@@ -5477,6 +5478,17 @@ class IntentEngineIT extends IntegrationTest {
                         && glue.contains("\"offset\": \"P7D\"") && glue.contains("\"forward\": false"),
                 "glue should carry the schedule's query as typed clauses, the relative moment included");
         assertFalse(glue.contains("Criteria.create()"), "no builder call belongs in the glue: " + glue);
+        // Issue #7425: nor does any EXPRESSION - a mapped value, a row or event guard, a print
+        // language or file name, a timer's due moment - travel as readings ({kind, ...}) the template
+        // layer renders, so none of the keys that used to carry the rendered Java exists any more.
+        for (String rendered : List.of("expr", "guard", "guardExpr", "guardExpression", "attachLanguageExpression",
+                "attachFileNameExpression", "languageExpression", "fileNameExpression", "dueExpression", "conditionalRuleGuards")) {
+            assertFalse(glue.contains("\"" + rendered + "\": "), "the glue must not carry the rendered [" + rendered + "]: " + glue);
+        }
+        assertFalse(glue.contains("Calc.eval"), "no Calc evaluation belongs in the glue: " + glue);
+        assertTrue(glue.contains("\"guardTerms\""), "glue should carry every event guard as neutral terms");
+        assertTrue(glue.contains("\"language\": {") && glue.contains("\"kind\": \"languageFrom\""),
+                "glue should carry the snapshot's languageFrom render language as a reading");
         // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
         assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
