@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -115,8 +116,51 @@ class RollupGuardCrossModelTemplateIT {
         return guard;
     }
 
+    /**
+     * Both parents of the junction are capacities (#7448): the allocation may exceed neither the
+     * invoice's payable nor the payment's amount, and both checks must reach the repository. Before the
+     * guard became a list the second declaration was dropped with nothing in the output saying so.
+     */
+    @Test
+    void everyCapacityBearingRollupRendersItsOwnCheck() throws Exception {
+        Map<String, Object> local = guard("");
+        local.put("parentEntity", "SalesInvoice");
+        local.put("parentPerspective", "salesinvoice");
+        local.put("fkProperty", "SalesInvoice");
+        local.put("capacityField", "Total");
+        String rendered = render(context(List.of(local, guard("customer_payments"))));
+
+        assertTrue(rendered.contains("SalesInvoiceEntity guardParent = new SalesInvoiceRepository().findById(entity.SalesInvoice)"),
+                "the local parent's check must be rendered: " + rendered);
+        assertTrue(rendered.contains(OWNER_TYPE + "Entity guardParent = new " + OWNER_TYPE + "Repository().findById("),
+                "the foreign parent's check must be rendered alongside it: " + rendered);
+        assertTrue(
+                rendered.contains("throw new ValidationException(\"SalesInvoice capacity exceeded")
+                        && rendered.contains("throw new ValidationException(\"CustomerPayment capacity exceeded"),
+                "both refusals must name their own parent: " + rendered);
+        assertTrue(rendered.contains("import gen.sales_invoices.data.salesinvoice.SalesInvoiceEntity;"),
+                "the local parent of the second guard is still imported: " + rendered);
+    }
+
+    /** One import pair per distinct local parent - a duplicated import does not compile. */
+    @Test
+    void twoGuardsOverTheSameLocalParentImportItOnce() throws Exception {
+        Map<String, Object> second = guard("");
+        second.put("fkProperty", "CustomerPaymentAlternate");
+        String rendered = render(context(List.of(guard(""), second)));
+
+        assertEquals(1,
+                rendered.split(java.util.regex.Pattern.quote("import gen.sales_invoices.data.customerpayment.CustomerPaymentEntity;"),
+                        -1).length - 1,
+                "the shared local parent must be imported exactly once: " + rendered);
+    }
+
     /** The allocation link entity: local rows, a pot that may be owned by another module. */
     private static Map<String, Object> context(Map<String, Object> rollupGuard) {
+        return context(List.of(rollupGuard));
+    }
+
+    private static Map<String, Object> context(List<Map<String, Object>> rollupGuards) {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("name", "SalesInvoiceCustomerPayment");
         parameters.put("projectName", "sales-invoices");
@@ -128,7 +172,7 @@ class RollupGuardCrossModelTemplateIT {
         parameters.put("pkPropertyName", "Id");
         parameters.put("properties", List.of(primaryKey(), amount()));
         parameters.put("sensitiveProperties", List.of());
-        parameters.put("rollupGuard", rollupGuard);
+        parameters.put("rollupGuards", rollupGuards);
         return parameters;
     }
 

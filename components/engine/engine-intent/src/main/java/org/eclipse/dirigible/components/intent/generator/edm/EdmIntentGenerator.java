@@ -209,7 +209,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // that would drive the parent's balance negative. Stamp the guard metadata onto the child so its
         // generated DAO enforces it synchronously (the DAO is generated from this .model, which otherwise
         // does not see the roll-ups - those live in the .glue).
-        Map<String, Map<String, Object>> rollupGuards = buildRollupGuards(context, model, byName, compositionParents, usesByAlias);
+        Map<String, List<Map<String, Object>>> rollupGuards = buildRollupGuards(context, model, byName, compositionParents, usesByAlias);
         // The read / write gates the intent's `permissions[].can:` tokens authorize. An entity a token
         // names is gated by the roles the author declared instead of the convention-derived names,
         // which nothing else in the intent mentions.
@@ -261,7 +261,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("perspectiveNavId", entity.getGroup());
             }
             if (rollupGuards.containsKey(name)) {
-                entityMap.put("rollupGuard", rollupGuards.get(name));
+                // A LIST: a junction entity is capacity-bearing on BOTH its parents (an allocation may
+                // not exceed the invoice's payable AND may not exceed the payment's amount), so each
+                // capacity-bearing roll-up contributes its own guard and the DAO renders one check per
+                // guard. A single-valued attribute silently dropped every guard but the first (#7448).
+                entityMap.put("rollupGuards", rollupGuards.get(name));
             }
             // A calendar entity renders its records as events on a Harmonia x-h-calendar. The calendar is
             // an ADDITIONAL page, not a replacement: the entity keeps its own layout (MANAGE /
@@ -879,11 +883,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * Build the capacity-guard metadata per child entity from the model's roll-ups. A guard applies to
      * a child of a capacity-bearing sum roll-up (one carrying {@code capacity} + {@code of}); it
      * rejects a create/update that would push the parent's balance below zero. Keyed by child entity
-     * name; the DAO template ({@code #rollupGuardCheck}) reads {@code rollupGuard} off the entity.
+     * name; the DAO template ({@code #rollupGuardCheck}) reads {@code rollupGuards} off the entity.
+     *
+     * <p>
+     * A child may carry SEVERAL guards. The case the feature exists for is a junction entity whose BOTH
+     * parents are capacities - an allocation that may exceed neither the invoice's payable nor the
+     * payment's amount - so every capacity-bearing roll-up naming the entity contributes a guard and
+     * the value is a list. Capping it at one silently generated the roll-up while dropping its declared
+     * guard, leaving the model reading as guarded and the runtime unguarded (#7448).
      */
-    private static Map<String, Map<String, Object>> buildRollupGuards(IntentGenerationContext context, IntentModel model,
+    private static Map<String, List<Map<String, Object>>> buildRollupGuards(IntentGenerationContext context, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, Map<String, UsesIntent> usesByAlias) {
-        Map<String, Map<String, Object>> guards = new HashMap<>();
+        Map<String, List<Map<String, Object>>> guards = new LinkedHashMap<>();
         for (RollupIntent rollup : model.getRollups()) {
             // A cross-model child cannot carry a guard - the rows are written by the owner's repository,
             // not by anything this model generates - and must not be confused with a local entity of the
@@ -899,7 +910,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             EntityIntent child = byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-            if (via == null || guards.containsKey(rollup.getEntity())) {
+            if (via == null) {
                 continue;
             }
             // A cross-model PARENT carries the guard just the same (#7410): the check is a READ of the
@@ -942,7 +953,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
             guard.put("childIdField", "Id");
-            guards.put(rollup.getEntity(), guard);
+            // Two roll-ups may name the same relation and capacity column (a sum and a count of the same
+            // allocation, say). The guard they describe is one and the same check, so it is emitted once -
+            // twice would refuse nothing extra and only duplicate the parent's import.
+            List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
+            if (!forChild.contains(guard)) {
+                forChild.add(guard);
+            }
         }
         return guards;
     }
@@ -4171,7 +4188,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Every remaining entity attribute rides the cell value, so a live EDM-editor open->save preserves
         // it: serializer.js re-serializes the DECODED cell, not the <entities> block, and would otherwise
         // drop any attribute the cell did not carry (the intent-era attributes "wholesale" of #6826) -
-        // scalars verbatim, the structured values (rollupGuard, checks, ...) as JSON attributes (a flat
+        // scalars verbatim, the structured values (rollupGuards, checks, ...) as JSON attributes (a flat
         // attribute survives mxGraph's codec, a nested element would not). 'name' is already emitted above;
         // 'type' is the mxObjectCodec class marker emitted below (the entity's own type rides as
         // 'entityType'); 'properties' are child cells, not attributes.
@@ -4223,9 +4240,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code transform-edm} rebuilds into {@code uniqueConstraints}. Emitting it here too would write
      * it twice and round-trip it as a duplicate.
      */
-    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys",
-            "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
-            "languages", "widgets", "customActionLabels", "processTaskLabels");
+    // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
+    // authored before that keeps round-tripping as an object rather than a JSON string.
+    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
+            "groupingKeys", "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults",
+            "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

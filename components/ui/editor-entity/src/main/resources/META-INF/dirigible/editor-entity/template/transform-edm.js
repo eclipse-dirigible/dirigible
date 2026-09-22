@@ -22,7 +22,9 @@ import { XML } from "@aerokit/sdk/utils";
 // uniqueConstraints is intentionally NOT here: the composite-unique-key feature emits it as a
 // <constraints>/<uniqueKey> section that transformUniqueKey (below) rebuilds, so parsing it here too would
 // duplicate it (#6826).
-const ENTITY_STRUCTURED = ['rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities', 'scopedCalendars', 'lifecycleStatusNameList', 'duplicateReset', 'duplicateDefaults'];
+// 'rollupGuard' (singular) is the pre-#7448 shape, kept so an .edm authored before the guard became
+// a list still parses back into an object rather than a JSON string.
+const ENTITY_STRUCTURED = ['rollupGuards', 'rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities', 'scopedCalendars', 'lifecycleStatusNameList', 'duplicateReset', 'duplicateDefaults'];
 const PROPERTY_STRUCTURED = ['lookupColumns'];
 // Document level (#6882): the structured values the .model carries ABOVE its entities.
 const MODEL_STRUCTURED = ['languages', 'widgets', 'customActionLabels', 'processTaskLabels'];

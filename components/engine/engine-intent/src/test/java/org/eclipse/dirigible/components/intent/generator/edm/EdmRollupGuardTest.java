@@ -30,15 +30,25 @@ import org.junit.jupiter.api.Test;
 class EdmRollupGuardTest {
 
     @SuppressWarnings("unchecked")
-    private static Map<String, Object> guardOf(String yaml, String childEntity) {
+    private static List<Map<String, Object>> guardsOf(String yaml, String childEntity) {
         Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "test");
         List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) json.get("model")).get("entities");
         for (Map<String, Object> entity : entities) {
             if (childEntity.equals(entity.get("name"))) {
-                return (Map<String, Object>) entity.get("rollupGuard");
+                return (List<Map<String, Object>>) entity.get("rollupGuards");
             }
         }
         return null;
+    }
+
+    /** The single guard of a child that carries exactly one. */
+    private static Map<String, Object> guardOf(String yaml, String childEntity) {
+        List<Map<String, Object>> guards = guardsOf(yaml, childEntity);
+        if (guards == null) {
+            return null;
+        }
+        assertEquals(1, guards.size(), "expected exactly one guard on " + childEntity);
+        return guards.get(0);
     }
 
     private static final String LOCAL = """
@@ -109,5 +119,93 @@ class EdmRollupGuardTest {
         Map<String, Object> guard =
                 guardOf(CROSS_MODEL_PARENT.replace(", capacity: amount, balance: unapplied", ""), "SalesInvoiceCustomerPayment");
         assertNull(guard, "only a capacity-bearing roll-up installs a guard");
+    }
+
+    private static final String JUNCTION = """
+            name: sales-invoices
+            uses:
+              - { model: customer-payments }
+            entities:
+              - name: SalesInvoice
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: total,   type: decimal }
+                  - { name: paid,    type: decimal }
+                  - { name: balance, type: decimal }
+              - name: SalesInvoiceCustomerPayment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: SalesInvoice,    kind: manyToOne, to: SalesInvoice }
+                  - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments }
+            rollups:
+              - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+                  op: sum, of: amount, capacity: total, balance: balance }
+              - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+                  field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+            """;
+
+    /**
+     * The case the feature exists for: an allocation may exceed neither the invoice's payable nor the
+     * payment's amount. Both capacities used to collapse into ONE guard, and the roll-up whose
+     * declaration lost the race generated its sum, balance and handlers with no guard behind them and
+     * no warning at Generate (#7448).
+     */
+    @Test
+    void aJunctionGuardedOnBothParentsCarriesBothGuards() {
+        List<Map<String, Object>> guards = guardsOf(JUNCTION, "SalesInvoiceCustomerPayment");
+        assertNotNull(guards, "a junction with two capacity-bearing roll-ups must carry guards");
+        assertEquals(2, guards.size(), "one guard per capacity-bearing roll-up: " + guards);
+
+        Map<String, Object> invoiceGuard = guards.get(0);
+        assertEquals("SalesInvoice", invoiceGuard.get("parentEntity"));
+        assertEquals("SalesInvoice", invoiceGuard.get("fkProperty"));
+        assertEquals("Total", invoiceGuard.get("capacityField"));
+        assertEquals("", invoiceGuard.get("parentGenFolder"));
+
+        Map<String, Object> paymentGuard = guards.get(1);
+        assertEquals("CustomerPayment", paymentGuard.get("parentEntity"));
+        assertEquals("CustomerPayment", paymentGuard.get("fkProperty"));
+        assertEquals("Amount", paymentGuard.get("capacityField"));
+        assertEquals("customer-payments", paymentGuard.get("parentGenFolder"));
+    }
+
+    /**
+     * Declaration order decides nothing but the order of the emitted checks - both are still emitted.
+     */
+    @Test
+    void theOrderOfTheDeclarationsDoesNotDecideWhichGuardSurvives() {
+        List<Map<String, Object>> guards = guardsOf(JUNCTION, "SalesInvoiceCustomerPayment");
+        List<Map<String, Object>> swapped = guardsOf(SWAPPED_JUNCTION, "SalesInvoiceCustomerPayment");
+        assertEquals(2, swapped.size(), "one guard per capacity-bearing roll-up, whatever the order: " + swapped);
+        assertEquals(guards.get(0), swapped.get(1));
+        assertEquals(guards.get(1), swapped.get(0));
+    }
+
+    private static final String SWAPPED_JUNCTION = JUNCTION.replace("""
+              - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+                  op: sum, of: amount, capacity: total, balance: balance }
+              - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+                  field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+            """, """
+              - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+                  field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+              - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+                  op: sum, of: amount, capacity: total, balance: balance }
+            """);
+
+    /**
+     * The same relation and capacity named twice describes ONE check; emitting it twice would refuse
+     * nothing extra and duplicate the parent's import, which does not compile.
+     */
+    @Test
+    void twoRollupsOverTheSameRelationAndCapacityShareOneGuard() {
+        String yaml = LOCAL + """
+                  - { name: invoicePaidAgain, entity: SalesInvoicePayment, via: SalesInvoice, field: balance,
+                      op: sum, of: amount, capacity: total }
+                """;
+        List<Map<String, Object>> guards = guardsOf(yaml, "SalesInvoicePayment");
+        assertEquals(1, guards.size(), "the identical guard is emitted once: " + guards);
     }
 }

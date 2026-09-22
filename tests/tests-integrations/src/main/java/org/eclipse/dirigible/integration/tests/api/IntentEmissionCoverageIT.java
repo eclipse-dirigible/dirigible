@@ -1116,12 +1116,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: balance, type: decimal, precision: 18, scale: 2 }
                 relations:
                   - { name: Status, kind: manyToOne, to: PledgeStatus }
+              # A junction guarded on BOTH its parents (#7448): a payment is a composition child of its
+              # pledge AND draws on a fund's budget. Two capacity roll-ups name PledgePayment, so its
+              # repository must carry TWO overdraw checks - only the first used to be emitted, and the
+              # second roll-up generated its sum, balance and handlers with nothing behind them.
+              - name: PledgeFund
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: budget,      type: decimal, precision: 18, scale: 2 }
+                  - { name: allocated,   type: decimal, precision: 18, scale: 2 }
+                  - { name: unallocated, type: decimal, precision: 18, scale: 2 }
               - name: PledgePayment
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
                 relations:
                   - { name: Pledge, kind: manyToOne, to: Pledge, composition: true, required: true }
+                  - { name: Fund,   kind: manyToOne, to: PledgeFund }
             """;
 
     // The rest of the same fixture. It is a SECOND constant only because a Java string constant
@@ -1153,6 +1164,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
               - { name: pledgePaid, entity: PledgePayment, via: Pledge, field: paid, op: sum, of: amount,
                   capacity: total, balance: balance, status: Status, statusWhenFull: 3, statusWhenPartial: 2 }
+              - { name: fundAllocated, entity: PledgePayment, via: Fund, field: allocated, op: sum, of: amount,
+                  capacity: budget, balance: unallocated }
 
             expansions:
               - name: retainer-periods
@@ -2580,6 +2593,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                             && pledgeRollup.contains("derived.put(\"DisplacedStatus\", null);"),
                     variant + " must snapshot the displaced status on the way in and restore it when the sum is back at zero");
         }
+        // One overdraw check per capacity-bearing roll-up (#7448): PledgePayment draws on its pledge's
+        // total AND on its fund's budget, and the repository that used to carry a single guard - the
+        // first declaration to win - must now carry both, on the create and on the update path alike.
+        String pledgePaymentRepository = contentOf("gen/emission/data/pledge/PledgePaymentRepository.java");
+        assertTrue(pledgePaymentRepository.contains("PledgeEntity guardParent = new PledgeRepository().findById(entity.Pledge)"),
+                "the pledge capacity must be guarded: " + pledgePaymentRepository);
+        assertTrue(pledgePaymentRepository.contains("PledgeFundEntity guardParent = new PledgeFundRepository().findById(entity.Fund)"),
+                "the fund capacity must be guarded alongside it - not dropped: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"Pledge capacity exceeded"),
+                "the pledge guard runs on create and on update: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"PledgeFund capacity exceeded"),
+                "so does the fund guard: " + pledgePaymentRepository);
+
         assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
                 "the displaced status is bookkeeping - it must not reach the form model");
         assertFalse(contentOf("gen/emission/views/Pledge/Pledge-form.html").contains("DisplacedStatus"), "...nor be rendered on the form");
@@ -5585,6 +5611,80 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("DisplacedStatus", nullValue()),
                 30);
 
+        // ---- Both capacities of a junction are enforced (#7448): a payment may exceed neither its
+        // pledge's total nor its fund's budget. The fund guard is the SECOND declaration, the one that
+        // used to be dropped at Generate with nothing in the output saying so - allocating 2000 out of a
+        // 1500 budget while every check reported success.
+        AtomicReference<Integer> fundId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> fundId.set(given().contentType("application/json")
+                                                            .body("{\"Budget\":1500}")
+                                                            .when()
+                                                            .post(API + "/pledgefund/PledgeFundController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        AtomicReference<Integer> firstPledge = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> firstPledge.set(given().contentType("application/json")
+                                                                 .body("{\"Total\":1000,\"Status\":1}")
+                                                                 .when()
+                                                                 .post(API + "/pledge/PledgeController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .path("Id")));
+        AtomicReference<Integer> secondPledge = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> secondPledge.set(given().contentType("application/json")
+                                                                  .body("{\"Total\":1000,\"Status\":1}")
+                                                                  .when()
+                                                                  .post(API + "/pledge/PledgeController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        // Within both capacities: 1000 of a 1000 pledge, 1000 of a 1500 budget.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + firstPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1000}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(200));
+        // The FIRST guard still refuses: 1500 against a 1000 pledge, whatever the fund has left.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1500}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Pledge capacity exceeded")));
+        // ...and so does the SECOND: 1000 more is inside the other pledge's total but overdraws the fund,
+        // which has 500 left. This is the request that used to return 200.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1000}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("PledgeFund capacity exceeded")));
+        // What fits under both is still accepted, and the fund's own roll-up follows it.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":500}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/pledgefund/PledgeFundController/" + fundId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Allocated", equalTo(1500.0F))
+                                                 .body("Unallocated", equalTo(0.0F)),
+                30);
+
         // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
         // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.
         // The override lives in the server-side session, so the sequence pins one session.
@@ -6797,6 +6897,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         for (ICollection child : collection.getCollections()) {
             collectPages(child, pages);
         }
+    }
+
+    /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
+    private static int countOf(String haystack, String needle) {
+        return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
     }
 
     private String contentOf(String fileName) {

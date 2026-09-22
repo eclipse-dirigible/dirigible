@@ -92,8 +92,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## Recomputed synchronously from the store (not the async-maintained balance field), excluding this row.
 ## A parent owned by ANOTHER model is addressed by its fully-qualified generated type rather than
 ## imported, so nothing this DAO imports can collide with it; a local parent keeps its plain name.
+## ONE CHECK PER GUARD: a junction entity is capacity-bearing on both its parents - an allocation may
+## exceed neither the invoice's payable nor the payment's amount - so every capacity-bearing roll-up
+## naming this entity renders its own block. Each block scopes its own locals, so the names do not
+## collide however many guards there are (#7448).
 #macro(rollupGuardCheck)
-#if($rollupGuard)
+#foreach($rollupGuard in $rollupGuards)
 #if($rollupGuard.parentGenFolder && $rollupGuard.parentGenFolder != "")
 #set($guardParentType = "gen.${rollupGuard.parentGenFolder}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}")
 #else
@@ -260,7 +264,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
+#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -291,22 +295,28 @@ import java.math.BigDecimal;
 import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Entity;
 import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Repository;
 #end
-#if($rollupGuard)
+#if($rollupGuards && $rollupGuards.size() > 0)
 #if(!$documentMaster && $multilingual != "true")
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
-#if(!$rollupGuard.parentGenFolder || $rollupGuard.parentGenFolder == "")
+## One import pair per DISTINCT local parent: two guards may share a parent (two capacity columns on
+## the same invoice), and importing it twice would not compile. A foreign parent is never imported.
+#set($guardImportedParents = [])
+#foreach($rollupGuard in $rollupGuards)
+#if((!$rollupGuard.parentGenFolder || $rollupGuard.parentGenFolder == "") && !$guardImportedParents.contains($rollupGuard.parentEntity))
+#set($guardImportIgnored = $guardImportedParents.add($rollupGuard.parentEntity))
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Entity;
 import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Repository;
 #end
 #end
-#if($haveItemChecks && $multilingual != "true" && !$documentMaster && !$rollupGuard)
+#end
+#if($haveItemChecks && $multilingual != "true" && !$documentMaster && !($rollupGuards && $rollupGuards.size() > 0))
 ## The item-counting document checks need Criteria to load the items; deduped against the other
 ## importers above. A gated requiredWhen reads the row (and at most a related row by id), so a model
 ## whose only document check is one of those must not import it unused.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
-#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !$haveItemChecks)
+#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !($rollupGuards && $rollupGuards.size() > 0) && !$haveItemChecks)
 ## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
