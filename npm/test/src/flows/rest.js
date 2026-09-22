@@ -23,6 +23,7 @@ export function restFlow(manifest, entity, opts = {}) {
     const created = await client.create(entity, payload);
     const id = created?.[idProperty];
     expect(id, 'create response carries the generated id').toBeTruthy();
+    let deleted;
     try {
       const read = await client.get(entity, id);
       expect(read[idProperty]).toBe(id);
@@ -36,7 +37,15 @@ export function restFlow(manifest, entity, opts = {}) {
         expect(reread[handle.name]).toBe(updatedValue);
       }
     } finally {
-      await client.remove(entity, id);
+      deleted = await client.remove(entity, id);
+    }
+    if (!deleted) {
+      // the record's process guard refused the delete (409) - assert the other half of that promise:
+      // the row is still served. A guarded entity can also delete cleanly, when its instance had
+      // already finished, so which outcome is expected is only knowable after the attempt.
+      const kept = await client.get(entity, id);
+      expect(kept[idProperty], `delete refused by ${entity.deleteGuardedByProcess.join(', ')} - the record must survive`).toBe(id);
+      return;
     }
     const gone = await client.getResponse(entity, id);
     expect(gone.status()).toBe(404);

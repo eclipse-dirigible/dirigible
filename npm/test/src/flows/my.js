@@ -108,6 +108,7 @@ export function myFlow(manifest, entity, opts = {}) {
     const id = created?.[idProperty];
     expect(id, 'personal create carries the generated id').toBeTruthy();
     let foreignId;
+    let deleted;
     try {
       const own = await client.get(mine, id);
       expect(own[entity.personal.owner], 'the owner FK is forced server-side on a personal create').toBeTruthy();
@@ -133,11 +134,14 @@ export function myFlow(manifest, entity, opts = {}) {
         expect(rowsAfter.some((row) => row[idProperty] === foreignId), 'a foreign row must not appear in the personal list').toBe(false);
       }
     } finally {
-      await client.remove(mine, id); // deleting the OWN row through the personal controller works
+      deleted = await client.remove(mine, id); // deleting the OWN row through the personal controller works
       if (foreignId) await client.remove(entity, foreignId);
     }
-    const gone = await api.get(manifest.restBase + mine.api + '/' + id);
-    expect(gone.status()).toBe(404);
+    // ... unless a `whenDeleted: refuse` process guards the record while its instance runs
+    if (deleted) {
+      const gone = await api.get(manifest.restBase + mine.api + '/' + id);
+      expect(gone.status()).toBe(404);
+    }
   });
 
   // wave 2: the UI-parity walk over the same personal surface (older manifests without the

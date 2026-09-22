@@ -228,7 +228,9 @@ class IntentEngineIT extends IntegrationTest {
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: name,  type: string,  required: true, length: 200 }
-                  - { name: email, type: string,  unique: true, length: 200 }
+                  # format: email is the preset over `pattern:` - the generated controller refuses a
+                  # value of another shape, which is why the app-test manifest has to carry it.
+                  - { name: email, type: string,  unique: true, length: 200, format: email }
                 relations:
                   - { name: manager, kind: manyToOne, to: SalesRep }
 
@@ -5514,6 +5516,14 @@ class IntentEngineIT extends IntegrationTest {
         // the multilingual setting entity is flagged
         assertTrue(manifest.contains("\"name\": \"Country\"") && manifest.contains("\"multilingual\": true"),
                 "the multilingual Country entity should be flagged");
+        // The two attributes read back off the generated .model rather than re-derived (#7411): the
+        // input-format guard a `format: email` / `pattern:` field carries, so the runner's sample
+        // value has that shape instead of being refused with 400. (The same read-back carries
+        // `isReadOnlyProperty`, which keeps a platform-owned `number:` field out of the runner's
+        // hands.) A numeric property's widgetPattern is a display format and must NOT travel.
+        assertTrue(manifest.contains("\"pattern\": \"^[^@\\\\s]+@[^@\\\\s]+\\\\.[A-Za-z]{2,}$\""),
+                "the SalesRep email field should carry its input-format regex");
+        assertFalse(manifest.contains("### ###"), "a numeric display format is not an input guard and must not be emitted");
     }
 
     /**
