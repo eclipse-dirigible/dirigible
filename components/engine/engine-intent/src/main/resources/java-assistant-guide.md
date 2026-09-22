@@ -133,6 +133,16 @@ completion back. Do not swallow exceptions; do not catch what you cannot handle.
   delivery is **retried** - three further attempts with a backoff - and dead-lettered if they all
   fail. There is no job-log row and nothing to re-trigger by hand: the log and the dead-letter queue
   are the whole record.
+- In a **`JavaDelegate`** (a `delegate:` step) the exception TYPE decides whether the person who
+  pressed the button is told or the server is blamed. A `ValidationException` is a refusal they can
+  act on: the completion rolls back with it and `POST /services/inbox/tasks/<id>` answers **400**
+  with your message, the task still theirs to retry. Anything else is a server fault - **500** on
+  the synchronous stretch in front of the gate, and on a step that kept its own async boundary a
+  failed job that retries and dead-letters with nobody told. So a business rule
+  ("you cannot issue more than you hold", "no contribution scheme for that year") must be a
+  `ValidationException`, never an `IllegalStateException` or a bare `RuntimeException` - the same
+  rule authored as a `checks:` gate already answers 400, and one rule must not change its status
+  code because of where it is written.
 
 So in a listener a throw buys you a retry, not an escalation - and a retry only helps if the handler
 is safe to run twice. Make the work replayable: key it on something durable so a redelivery after a

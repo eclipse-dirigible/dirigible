@@ -66,6 +66,7 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
     private static final String LINES = API + "/goodsreceipt/GoodsReceiptLineController";
     private static final String TASKS = "/services/inbox/tasks";
     private static final String REFUSAL = "Goods receipt needs at least one line before it can be posted";
+    private static final String DELEGATE_REFUSAL = "Negative stock blocked: the store holds less than this receipt returns";
     private static final long TIMEOUT_SECONDS = 90;
     /** The task appears once the create event has started the instance. */
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
@@ -131,12 +132,16 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
 
     /**
      * The posting work: a client delegate bound with {@code delegate:} (so it is emitted on the
-     * {@code flowable:class} path, the one that used to hard-code {@code flowable:async}). It only has
-     * to succeed - what is measured is where the refusal of the step AFTER it lands.
+     * {@code flowable:class} path, the one that used to hard-code {@code flowable:async}). It normally
+     * just succeeds - what is measured is where the refusal of the step AFTER it lands - and on the
+     * {@code refuse} variable it refuses itself, once as the SDK's {@code ValidationException} and once
+     * as a plain {@code IllegalStateException}, which is what the delegate's own status code is decided
+     * by (issue #7450).
      */
     private static final String POST_DELEGATE_JAVA = """
             package custom;
 
+            import org.eclipse.dirigible.sdk.db.ValidationException;
             import org.flowable.engine.delegate.DelegateExecution;
             import org.flowable.engine.delegate.JavaDelegate;
 
@@ -144,10 +149,17 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
 
                 @Override
                 public void execute(DelegateExecution execution) {
+                    Object refuse = execution.getVariable("refuse");
+                    if ("validation".equals(refuse)) {
+                        throw new ValidationException("%s");
+                    }
+                    if ("plain".equals(refuse)) {
+                        throw new IllegalStateException("%s");
+                    }
                     execution.setVariable("posted", Boolean.TRUE);
                 }
             }
-            """;
+            """.formatted(DELEGATE_REFUSAL, DELEGATE_REFUSAL);
 
     @Autowired
     private IRepository repository;
@@ -189,6 +201,65 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400)
                                                  .body(containsString(REFUSAL)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(RECEIPTS + "/" + receipt)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1)));
+        assertEquals(task, taskFor(receipt), "the refused completion rolled back, so the task is still the poster's");
+    }
+
+    /**
+     * The delegate's OWN refusal, on the same synchronous stretch: what reaches the poster is decided
+     * by the exception TYPE, not by where the platform puts the async boundary (issue #7450). A
+     * business rule the person can act on is a {@code ValidationException} and comes back as 400 with
+     * the authored message - the same status the rule would have had as a {@code checks:} gate. The
+     * same sentence thrown as a plain {@code IllegalStateException} is a server fault and stays a 500:
+     * the platform cannot tell a refusal from a breakage except by the type the author chose.
+     */
+    @Test
+    void a_delegates_own_refusal_is_a_client_error_only_when_it_is_authored_as_one() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int receipt = create(RECEIPTS, "{\"Note\":\"delegate refuses\"}");
+        create(LINES, "{\"GoodsReceipt\":" + receipt + ",\"Quantity\":1}");
+
+        String task = taskFor(receipt);
+        completeRefusing(task, "validation", 400, true);
+        assertStillTheirs(receipt, task);
+
+        completeRefusing(task, "plain", 500, false);
+        assertStillTheirs(receipt, task);
+
+        // Neither refusal consumed anything: the poster's next attempt, with nothing to refuse, posts.
+        complete(taskFor(receipt), "post", 200);
+        awaitStatus(receipt, 2);
+    }
+
+    /**
+     * Complete the post task with the delegate armed to refuse, asserting the status the refusal comes
+     * back with - and, for the authored client error, that the delegate's own sentence is the body the
+     * task form shows. The server fault's body is Spring's error payload, deliberately not asserted:
+     * what it must not be is a 400.
+     */
+    private void completeRefusing(String task, String refusal, int expectedStatus, boolean carriesTheMessage) {
+        restAssuredExecutor.execute(() -> {
+            var response = given().contentType("application/json")
+                                  .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"post\",\"refuse\":\"" + refusal + "\"}}")
+                                  .when()
+                                  .post(TASKS + "/" + task)
+                                  .then()
+                                  .statusCode(expectedStatus);
+            if (carriesTheMessage) {
+                response.body(containsString(DELEGATE_REFUSAL));
+            }
+        });
+    }
+
+    /** The refused completion rolled back whole: the document is DRAFT and the task is still theirs. */
+    private void assertStillTheirs(int receipt, String task) {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(RECEIPTS + "/" + receipt)
                                                  .then()
