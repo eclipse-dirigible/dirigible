@@ -30,9 +30,8 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * What this class produces is DATA, not code (issue #7405): a condition becomes typed terms and a
  * {@code compare} literal becomes its reading, and the model carries those. The Java is rendered
  * from them a layer out, by {@code JavaLiterals} - the same split a property default has always
- * had. {@link #javaCondition} is the one exception still here, for the declarative glue lists whose
- * own artefact has not been neutralised yet (issue #7406); it renders the very terms below, so the
- * two outputs cannot disagree.
+ * had. The declarative glue lists carry the very same terms since issue #7425, so there is no Java
+ * rendered anywhere in this class any more.
  *
  * <p>
  * The condition is a closed set of equality comparisons over the record's own properties, ANDed. It
@@ -65,8 +64,8 @@ public final class CheckSupport {
 
     /**
      * The guardable types whose values are whole numbers. They are guardable at any width, so a
-     * comparison against one is rendered numerically rather than as a boxed equality - see
-     * {@link #numericComparison}.
+     * comparison against one is rendered numerically rather than as a boxed equality (the term's
+     * {@code numericKey} flag).
      */
     public static final Set<String> NUMERIC_GUARD_TYPES = Set.of("integer", "int", "long");
 
@@ -165,76 +164,13 @@ public final class CheckSupport {
     }
 
     /**
-     * Renders one comparison as a Java boolean expression.
-     *
-     * @param access the Java expression reading the property
-     * @param equal whether the comparison is {@code ==}
-     * @param javaLiteral the Java literal from {@link #javaLiteral}
-     * @return the expression
-     */
-    public static String comparison(String access, boolean equal, String javaLiteral) {
-        String equals = "java.util.Objects.equals(" + access + ", " + javaLiteral + ")";
-        return equal ? equals : "!" + equals;
-    }
-
-    /**
-     * Renders one comparison of a whole-number property as a NUMERIC comparison rather than a boxed
-     * equality - the form a comparison whose Java width is not known here must take.
-     *
-     * <p>
-     * A to-one's guard is such a property: the foreign-key column is typed from the TARGET's key, and
-     * when the target belongs to another model that key is only readable from the owner's
-     * {@code .model} - where a {@code long} is as legal as an {@code integer}. An
-     * {@code Objects.equals(Long, Integer)} never holds, so the boxed form would switch the rule off
-     * while looking authored, which is the failure this whole check exists to refuse.
-     *
-     * @param access the Java expression reading the property
-     * @param equal whether the comparison is {@code ==}
-     * @param javaLiteral the Java literal from {@link #javaLiteral}, rendered as a {@code long}
-     * @return the expression
-     */
-    public static String numericComparison(String access, boolean equal, String javaLiteral) {
-        String equals = "(" + access + " != null && " + access + ".longValue() == " + javaLiteral + ")";
-        return equal ? equals : "!" + equals;
-    }
-
-    /**
-     * Compiles a whole condition - one comparison or the ANDed list - into the Java boolean a generated
-     * reader tests, every comparison rendered against its property's DECLARED type.
-     *
-     * <p>
-     * This is now the {@code event.when} of the declarative glue lists (issue #7289) alone - the
-     * {@code requiredWhen} check it was written for carries {@link #conditionTerms} into the model
-     * instead, and this is that plus {@link #javaCondition}, so the grammar the parser refuses on, the
-     * type rule and the Java emitted for it still cannot drift into separate answers.
-     *
-     * <p>
-     * A to-one's foreign key is a whole number of a width this class cannot know - the column is typed
-     * from the TARGET's key, and a cross-model target's key lives in the owner's {@code .model}, where
-     * {@code long} is as legal as {@code integer} - so such a comparison is rendered numerically:
-     * {@code Objects.equals(Long, Integer)} never holds, and a boxed equality would switch the guard
-     * off while looking authored (#7237). A field's own width is declared, so it keeps the exact boxed
-     * equality.
-     *
-     * @param entity the entity the condition is read off
-     * @param byName the local entities by name (a to-one's key type comes from its target)
-     * @param when the authored condition - a comparison, a list of them, or {@code null}
-     * @return the Java expression, or {@code null} when there is no condition or a comparison does not
-     *         compile (the parser reports it; a condition silently degraded to {@code true} is the
-     *         failure both call sites exist to refuse)
-     */
-    public static String condition(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
-        return javaCondition(conditionTerms(entity, byName, when));
-    }
-
-    /**
      * Reads a whole condition - one comparison or the ANDed list - into the NEUTRAL terms a model
      * carries (issue #7405), every comparison typed against its property's DECLARED type.
      *
      * <p>
-     * This is the one reader of a typed guard: {@link #condition}, which renders the Java the
-     * declarative glue lists still need, is this plus a rendering pass, so the grammar, the type rule
-     * and the refusals cannot drift into two answers.
+     * This is the one reader of a typed guard - the model's {@code checks} and the declarative glue
+     * lists' event guards (issue #7425) carry what it produces, so the grammar, the type rule and the
+     * refusals cannot drift into two answers.
      *
      * <p>
      * A term names where it reads from ({@code owner}), what it reads ({@code property}), whether the
@@ -303,41 +239,6 @@ public final class CheckSupport {
         term.put("value", unquote(comparison.literal()));
         term.put("numericKey", numericKey);
         return term;
-    }
-
-    /**
-     * Renders neutral terms as the ANDed Java boolean a generated reader tests - the rendering the
-     * declarative glue lists (issue #7289) still take here, until their own artefact stops carrying
-     * code (issue #7406). The model's copy of the same terms is rendered in the template layer.
-     *
-     * @param terms the terms from {@link #conditionTerms}, or {@code null}
-     * @return the Java expression, or {@code null} when there are no terms
-     */
-    public static String javaCondition(List<Map<String, Object>> terms) {
-        if (terms == null || terms.isEmpty()) {
-            return null;
-        }
-        List<String> conditions = new ArrayList<>();
-        for (Map<String, Object> term : terms) {
-            String access = access(String.valueOf(term.get("owner")), String.valueOf(term.get("property")));
-            String literal = javaLiteral(String.valueOf(term.get("type")), String.valueOf(term.get("value")));
-            boolean equal = Boolean.TRUE.equals(term.get("equal"));
-            conditions.add(Boolean.TRUE.equals(term.get("numericKey")) ? numericComparison(access, equal, literal)
-                    : comparison(access, equal, literal));
-        }
-        return String.join(" && ", conditions);
-    }
-
-    /**
-     * The Java reading a term's owner and property: the record's own property directly, and a loaded
-     * hop's through the null guard that hop may not have resolved.
-     *
-     * @param owner the term's owner
-     * @param property the PascalCased property
-     * @return the Java expression
-     */
-    public static String access(String owner, String property) {
-        return RECORD.equals(owner) ? RECORD + "." + property : "(" + owner + " == null ? null : " + owner + "." + property + ")";
     }
 
     /**

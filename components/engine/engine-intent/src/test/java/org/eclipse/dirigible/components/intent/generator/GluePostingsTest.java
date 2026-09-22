@@ -91,10 +91,10 @@ class GluePostingsTest {
         List<Map<String, Object>> header = (List<Map<String, Object>>) p.get("headerAssignments");
         // copy + {placeholder} template, pre-rendered as Java expressions
         assertTrue(header.stream()
-                         .anyMatch(a -> "EntryDate".equals(a.get("targetProp")) && "source.Date".equals(a.get("expr"))));
+                         .anyMatch(a -> "EntryDate".equals(a.get("targetProp")) && "source.Date".equals(GlueRendering.expr(a))));
         assertTrue(header.stream()
-                         .anyMatch(
-                                 a -> "Reason".equals(a.get("targetProp")) && "\"Sales invoice \" + source.Number".equals(a.get("expr"))));
+                         .anyMatch(a -> "Reason".equals(a.get("targetProp"))
+                                 && "\"Sales invoice \" + source.Number".equals(GlueRendering.expr(a))));
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) p.get("itemRows");
@@ -103,17 +103,17 @@ class GluePostingsTest {
         List<Map<String, Object>> firstAssigns = (List<Map<String, Object>>) rows.get(0)
                                                                                  .get("assigns");
         assertTrue(firstAssigns.stream()
-                               .anyMatch(a -> "Account".equals(a.get("targetProp")) && "ruleRow.ReceivableAccount".equals(a.get("expr"))));
+                               .anyMatch(a -> "Account".equals(a.get("targetProp"))
+                                       && "ruleRow.ReceivableAccount".equals(GlueRendering.expr(a))));
         assertTrue(firstAssigns.stream()
                                .anyMatch(a -> "Debit".equals(a.get("targetProp"))
-                                       && "Calc.eval(\"Net + Vat\", source, 2)".equals(a.get("expr"))));
+                                       && "Calc.eval(\"Net + Vat\", source, 2)".equals(GlueRendering.expr(a))));
         // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim - no Calc.
         assertTrue(firstAssigns.stream()
-                               .anyMatch(a -> "Customer".equals(a.get("targetProp")) && "source.Customer".equals(a.get("expr"))),
+                               .anyMatch(a -> "Customer".equals(a.get("targetProp")) && "source.Customer".equals(GlueRendering.expr(a))),
                 "a to-one relation item cell must pre-render as a source-FK copy");
         // the third row carries a null-safe Calc guard
-        assertEquals("Calc.eval(\"Vat\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", rows.get(2)
-                                                                                                          .get("guard"));
+        assertEquals("Calc.eval(\"Vat\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", GlueRendering.guard(rows.get(2)));
         assertEquals(List.of("ReceivableAccount", "RevenueAccount", "VatAccount"), p.get("usedRuleColumns"));
     }
 
@@ -183,10 +183,10 @@ class GluePostingsTest {
         List<Map<String, Object>> assigns = (List<Map<String, Object>>) ((List<Map<String, Object>>) p.get("itemRows")).get(0)
                                                                                                                        .get("assigns");
         assertTrue(assigns.stream()
-                          .anyMatch(a -> "Account".equals(a.get("targetProp")) && ternary.equals(a.get("expr"))),
+                          .anyMatch(a -> "Account".equals(a.get("targetProp")) && ternary.equals(GlueRendering.expr(a))),
                 "the Account cell must be the classifier ternary: " + assigns);
         // the whole expression is a runtime null guard, NOT a static rule column
-        assertEquals(List.of(ternary), p.get("conditionalRuleGuards"));
+        assertEquals(List.of(ternary), GlueRendering.conditionalRuleGuards(p));
         assertEquals(List.of(), p.get("usedRuleColumns"));
     }
 

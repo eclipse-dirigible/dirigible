@@ -246,7 +246,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             boolean generateBusinessKey = hasBusinessKey && "timestamp".equals(TriggerSupport.triggerBusinessKeyStrategy(process));
             trigger.put("generateBusinessKey", String.valueOf(generateBusinessKey));
             trigger.put("topicSuffix", EventBinding.topicSuffix(TriggerSupport.triggerKind(process)));
-            trigger.put("guardExpression", NotificationSupport.guard(TriggerSupport.triggerWhen(process)));
+            trigger.put("guardTerms", NotificationSupport.guardTerms(TriggerSupport.triggerWhen(process)));
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
@@ -495,7 +495,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", StepEventSupport.topicSuffix(notification.getEvent()));
             entry.put("relationLoads", relationLoads(plan, attachment, reportAttachment));
-            entry.put("guardExpression", plan.guardExpression());
+            entry.put("guardTerms", plan.guardTerms());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
@@ -1496,32 +1496,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("prop", IntentNaming.pascalCase(field));
             entry.put("required", p.isRequired());
-            entry.put("expr", promptConversion(targetField == null ? "relation" : targetField.getType()));
+            // The conversion of the posted value to the field's type, as a reading (issue #7425).
+            entry.put("reading", Readings.convert(targetField == null ? "relation" : targetField.getType()));
             out.add(entry);
         }
         return out;
     }
 
-    /** The Java expression converting the posted {@code Object raw} to the target field's type. */
-    private static String promptConversion(String type) {
-        String normalized = type == null ? "string" : type;
-        return switch (normalized) {
-            case "relation", "integer", "int" -> "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())";
-            case "long" -> "Long.valueOf(new java.math.BigDecimal(String.valueOf(raw)).longValue())";
-            case "decimal" -> "new java.math.BigDecimal(String.valueOf(raw))";
-            case "double" -> "Double.valueOf(String.valueOf(raw))";
-            case "boolean" -> "Boolean.valueOf(String.valueOf(raw))";
-            case "date" -> "java.time.LocalDate.parse(String.valueOf(raw))";
-            default -> "String.valueOf(raw)"; // string / text / uuid / month / week
-        };
-    }
-
     /**
      * Transitions: one entry per {@code transitions} declaration - the guarded on-demand status flip.
-     * EVERYTHING is pre-rendered here so the Velocity template contains no expression logic: the
-     * allowed-statuses check is a Java boolean expression over an {@code int currentStatus} local, and
-     * the optional {@code when} guard is a full SDK {@code Calc} comparison over the loaded
-     * {@code source} entity (Calc semantics: a null field reads as 0 - identical to calculated fields).
+     * The Velocity template contains no expression logic: the allowed-statuses check is a Java boolean
+     * expression over an {@code int currentStatus} local, and the optional {@code when} guard travels
+     * as a reading (issue #7425) the template layer renders into an SDK {@code Calc} comparison over
+     * the loaded {@code source} entity (Calc semantics: a null field reads as 0 - identical to
+     * calculated fields).
      */
     private static List<Map<String, Object>> buildTransitions(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
@@ -1561,7 +1549,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             e.put("allowedExpr", String.join(" || ", terms));
             e.put("fromStatuses", String.join(", ", fromIds));
-            String guardExpr = "";
+            Map<String, Object> guardReading = Map.of();
             String guardText = "";
             if (t.getWhen() != null && !t.getWhen()
                                          .isBlank()) {
@@ -1570,14 +1558,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 if (matcher.matches()) {
                     // Calc reads the field with the calculated-field semantics (null -> 0); compareTo
                     // keeps the comparison exact for decimals.
-                    guardExpr = "org.eclipse.dirigible.sdk.utils.Calc.eval(\"" + IntentNaming.pascalCase(matcher.group(1))
-                            + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + matcher.group(3) + "\")) "
-                            + ("==".equals(matcher.group(2)) ? "==" : "!=") + " 0";
+                    guardReading = Readings.calcCompare("source", IntentNaming.pascalCase(matcher.group(1)), "==".equals(matcher.group(2)),
+                            matcher.group(3));
                     guardText = t.getWhen()
                                  .trim();
                 }
             }
-            e.put("guardExpr", guardExpr);
+            e.put("guardReading", guardReading);
             e.put("guardText", guardText);
             // Optional outbound mail after the flip commits ("on Void, mail the counterparty"),
             // resolved against the transitioned record - the same notify block a schedule or a
@@ -1985,40 +1972,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("targetPk", IntentEntities.keyFieldName(target));
             e.put("backRef", p.getIdempotentBy() == null ? "" : IntentNaming.pascalCase(p.getIdempotentBy()));
             e.put("guard", p.getGuard() == null ? "" : p.getGuard());
-            // Rendered per-row assignments: target field -> a Java expression over `source` / `item`.
-            List<Map<String, String>> assigns = new ArrayList<>();
+            // Per-row assignments: target field -> the reading of a value over `source` / `item`.
+            List<Map<String, Object>> assigns = new ArrayList<>();
             for (Map.Entry<String, String> f : p.getSet()
                                                 .entrySet()) {
-                Map<String, String> pair = new LinkedHashMap<>();
+                Map<String, Object> pair = new LinkedHashMap<>();
                 pair.put("field", IntentNaming.pascalCase(f.getKey()));
-                pair.put("expr", postSetExpr(f.getValue(), PostSetSupport.targetType(target, byName, f.getKey())));
+                pair.put("reading", PostSetSupport.reading(f.getValue(), PostSetSupport.targetType(target, byName, f.getKey())));
                 assigns.add(pair);
             }
             e.put("assigns", assigns);
             out.add(e);
         }
         return out;
-    }
-
-    /**
-     * Render a {@code posts:} {@code set:} value to a Java expression over the {@code source} entity
-     * and the per-item {@code item} entity. The vocabulary lives in {@link PostSetSupport}, shared with
-     * the parse-time refusal so the two cannot drift: a plain constant renders as an escaped string
-     * literal, and a value that reads as an expression this renderer cannot compile never reaches here
-     * - the parser refuses it.
-     *
-     * <p>
-     * A constant is rendered for the TYPE of the column it is assigned to, which the target entity
-     * carries: an intent {@code decimal} / {@code double} column is a {@code BigDecimal} in the
-     * generated entity and a {@code long} one a {@code Long}, so the bare number the renderer used to
-     * emit did not compile (dirigible #7287).
-     *
-     * @param raw the authored value
-     * @param type the target column's type
-     * @return the Java expression
-     */
-    private static String postSetExpr(String raw, PostSetSupport.TargetType type) {
-        return PostSetSupport.expression(raw, type);
     }
 
     /** Test hook: build the {@code posts} glue collection without a repository. */
@@ -2183,7 +2149,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("perspective", IntentEntities.resolvePerspective(record.getName(), compositionParents, model));
             e.put("keyProperty", IntentEntities.keyFieldName(record));
             e.put("topicSuffix", EventBinding.topicSuffix(kind));
-            e.put("guardExpression", NotificationSupport.guard(stringArg(resolve.getEvent(), "when")));
+            e.put("guardTerms", NotificationSupport.guardTerms(stringArg(resolve.getEvent(), "when")));
             e.put("setProperty", IntentNaming.pascalCase(filled.getName()));
             e.put("registerEntity", register.getName());
             e.put("registerPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
@@ -2332,22 +2298,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The guard keys of an event binding: the Java condition, plus whether there is one at all - a
-     * template that only needs the record in order to evaluate a guard must not parse it otherwise (a
-     * departure with no payload forwards the message it received verbatim).
+     * The guard keys of an event binding: the neutral terms (issue #7425) the template layer renders
+     * into the Java condition, plus whether there is one at all - a template that only needs the record
+     * in order to evaluate a guard must not parse it otherwise (a departure with no payload forwards
+     * the message it received verbatim).
      *
      * @param event the {@code event:} binding map
-     * @return the {@code guardExpression} / {@code hasGuard} keys
+     * @return the {@code guardTerms} / {@code hasGuard} keys
      */
     private static Map<String, Object> guardFields(Map<String, Object> event, EntityIntent entity, Map<String, EntityIntent> byName) {
         // The guard as authored - a comparison or the list form (an implicit AND, #6957) - rendered
         // against the guarded property's declared type, so a status guard compares the integer FK with
         // an integer (#7289). Passing the stringified map here instead is what left a list guard
         // rendering as `true`: the whole list never matched the scalar pattern.
-        String guard = NotificationSupport.guard(event == null ? null : event.get("when"), entity, byName);
+        List<Map<String, Object>> guard = NotificationSupport.guardTerms(event == null ? null : event.get("when"), entity, byName);
         Map<String, Object> fields = new LinkedHashMap<>();
-        fields.put("guardExpression", guard);
-        fields.put("hasGuard", !"true".equals(guard));
+        fields.put("guardTerms", guard);
+        fields.put("hasGuard", !guard.isEmpty());
         return fields;
     }
 
@@ -2532,7 +2499,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // cannot join the static usedRuleColumns null-skip (that would skip whenever ANY case column
             // is null). Each collected expression is instead null-checked as a whole after the rule row
             // is resolved - an unmatched/undetermined account skips the posting fail-soft.
-            List<String> conditionalRuleGuards = new ArrayList<>();
             if (hasRule) {
                 String ruleEntityName = String.valueOf(effective.getRule()
                                                                 .get("entity"));
@@ -2575,25 +2541,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
             e.put("headerAssignments", headerAssignments);
-            // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source.
+            // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source. Each
+            // cell and each row guard is a READING (issue #7425) the template layer renders.
             List<Map<String, Object>> itemRows = new ArrayList<>();
             for (Map<String, String> row : effective.getItems() == null ? List.<Map<String, String>>of() : effective.getItems()) {
                 Map<String, Object> rendered = new LinkedHashMap<>();
                 List<Map<String, Object>> assigns = new ArrayList<>();
-                String rowGuard = "";
+                Map<String, Object> rowGuard = Map.of();
                 for (Map.Entry<String, String> cell : row.entrySet()) {
                     String value = cell.getValue() == null ? ""
                             : cell.getValue()
                                   .trim();
                     if ("when".equals(cell.getKey())) {
-                        java.util.regex.Matcher guard = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*([!=]=)\\s*(\\d+(?:\\.\\d+)?)\\s*")
-                                                                               .matcher(value);
-                        if (guard.matches()) {
-                            // Calc reads the (possibly null) source field as BigDecimal - null-safe.
-                            rowGuard = "Calc.eval(\"" + IntentNaming.pascalCase(guard.group(1))
-                                    + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + guard.group(3) + "\")) "
-                                    + ("==".equals(guard.group(2)) ? "==" : "!=") + " 0";
-                        }
+                        // Calc reads the (possibly null) source field as BigDecimal - null-safe.
+                        rowGuard = computedGuard(value);
                         continue;
                     }
                     Map<String, Object> assign = new LinkedHashMap<>();
@@ -2607,14 +2568,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     if (ruleSelector.isPresent()) {
                         // Conditional rule column (#6534): a null-safe classifier ternary that reads the
                         // rule row's column chosen by the source's `by` value. Not a static usedRuleColumn
-                        // (the choice is per-row at runtime); its resolved value is null-guarded below.
-                        String ternary = conditionalRuleExpression(ruleSelector.get());
-                        conditionalRuleGuards.add(ternary);
-                        assign.put("expr", ternary);
+                        // (the choice is per-row at runtime); the template layer null-guards every cell
+                        // carrying this reading before the post.
+                        assign.put("reading", conditionalRuleReading(ruleSelector.get()));
                     } else if (ruleRef.matches()) {
                         String column = IntentNaming.pascalCase(ruleRef.group(1));
                         usedRuleColumns.add(column);
-                        assign.put("expr", "ruleRow." + column);
+                        assign.put("reading", Readings.read("ruleRow", column));
                     } else if (toOneRelation(itemsEntity, cell.getKey()) != null) {
                         // Source-FK copy (issue #6533): the item cell's key is a to-one relation of the
                         // items entity, so the value names a source relation whose FK id is copied
@@ -2623,17 +2583,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         // copied (no re-resolution); a null source FK copies null (the line simply carries
                         // no dimension). NOT negated under reversal: a red-storno line must carry the SAME
                         // dimension as the original, or it would not net the counterparty's balance.
-                        assign.put("expr", "source." + IntentNaming.pascalCase(value));
+                        assign.put("reading", Readings.read("source", IntentNaming.pascalCase(value)));
                     } else {
                         FieldIntent target = fieldOf(itemsEntity, cell.getKey());
                         int scale = target != null && target.getScale() != null ? target.getScale() : 2;
                         // Reversal: the SAME expression negated on the SAME side (red storno).
                         String expr = isReverse ? "-(" + value + ")" : value;
-                        assign.put("expr", "Calc.eval(\"" + expr.replace("\"", "\\\"") + "\", source, " + scale + ")");
+                        assign.put("reading", Readings.calc(expr, "source", scale, null));
                     }
                     assigns.add(assign);
                 }
-                rendered.put("guard", rowGuard);
+                rendered.put("guardReading", rowGuard);
                 rendered.put("assigns", assigns);
                 itemRows.add(rendered);
             }
@@ -2686,7 +2646,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("comparesAgainstDefaults", comparesAgainstDefaults);
             e.put("comparesUnlessDerivedIsEmpty", comparesUnlessDerivedIsEmpty);
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
-            e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
@@ -2995,26 +2954,22 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code {prop}} placeholders becomes a Java string concatenation; anything else is a literal.
      */
     /**
-     * The Java expression for a conditional {@code rule(by: ..., cases: ..., default: ...)} account
-     * reference (#6534): a null-safe classifier ternary that reads the resolved {@code ruleRow}'s
-     * column chosen by the source's {@code by} value. The classifier is read through the SDK
-     * {@code Calc} evaluator (null-safe, the same reader the {@code when} guard uses), each case key
-     * compared as a {@code BigDecimal}; an unmatched value falls to the {@code default} column, or to
-     * {@code null} (which the generated handler null-guards → the posting skips to the unposted
-     * worklist).
+     * The reading of a conditional {@code rule(by: ..., cases: ..., default: ...)} account reference
+     * (#6534), which the template layer renders into a null-safe classifier ternary reading the
+     * resolved {@code ruleRow}'s column chosen by the source's {@code by} value. The classifier is read
+     * through the SDK {@code Calc} evaluator (null-safe, the same reader the {@code when} guard uses),
+     * each case key compared as a {@code BigDecimal}; an unmatched value falls to the {@code default}
+     * column, or to {@code null} (which the generated handler null-guards → the posting skips to the
+     * unposted worklist).
      */
-    private static String conditionalRuleExpression(PostingRuleSelector selector) {
-        String classifier = IntentNaming.pascalCase(selector.by());
-        String expr = selector.defaultColumn() != null ? "ruleRow." + IntentNaming.pascalCase(selector.defaultColumn()) : "null";
-        List<Map.Entry<String, String>> entries = new ArrayList<>(selector.cases()
-                                                                          .entrySet());
-        for (int i = entries.size() - 1; i >= 0; i--) {
-            Map.Entry<String, String> caseEntry = entries.get(i);
-            String condition =
-                    "Calc.eval(\"" + classifier + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + caseEntry.getKey() + "\")) == 0";
-            expr = condition + " ? ruleRow." + IntentNaming.pascalCase(caseEntry.getValue()) + " : " + expr;
+    private static Map<String, Object> conditionalRuleReading(PostingRuleSelector selector) {
+        List<Map<String, Object>> cases = new ArrayList<>();
+        for (Map.Entry<String, String> caseEntry : selector.cases()
+                                                           .entrySet()) {
+            cases.add(Readings.ruleCaseOf(caseEntry.getKey(), IntentNaming.pascalCase(caseEntry.getValue())));
         }
-        return "(" + expr + ")";
+        return Readings.ruleCase(IntentNaming.pascalCase(selector.by()), "source", cases,
+                selector.defaultColumn() != null ? IntentNaming.pascalCase(selector.defaultColumn()) : null);
     }
 
     private static Map<String, Object> postingAssignment(String targetProperty, String value) {
@@ -3022,43 +2977,36 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         a.put("targetProp", IntentNaming.pascalCase(targetProperty));
         String v = value == null ? "" : value.trim();
         if (v.matches("\\w+") && !v.matches("\\d+")) {
-            a.put("expr", "source." + IntentNaming.pascalCase(v));
+            a.put("reading", Readings.read("source", IntentNaming.pascalCase(v)));
         } else if (v.contains("{")) {
-            StringBuilder expr = new StringBuilder();
+            List<Map<String, Object>> parts = new ArrayList<>();
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
                                                                .matcher(v);
             int last = 0;
             while (m.find()) {
                 if (m.start() > last) {
-                    if (expr.length() > 0) {
-                        expr.append(" + ");
-                    }
-                    expr.append('"')
-                        .append(v.substring(last, m.start())
-                                 .replace("\"", "\\\""))
-                        .append('"');
+                    parts.add(Readings.string(v.substring(last, m.start())));
                 }
-                if (expr.length() > 0) {
-                    expr.append(" + ");
-                }
-                expr.append("source.")
-                    .append(IntentNaming.pascalCase(m.group(1)));
+                parts.add(Readings.read("source", IntentNaming.pascalCase(m.group(1))));
                 last = m.end();
             }
             if (last < v.length()) {
-                if (expr.length() > 0) {
-                    expr.append(" + ");
-                }
-                expr.append('"')
-                    .append(v.substring(last)
-                             .replace("\"", "\\\""))
-                    .append('"');
+                parts.add(Readings.string(v.substring(last)));
             }
-            a.put("expr", expr.toString());
+            a.put("reading", Readings.concat(parts, false));
         } else {
-            a.put("expr", javaLiteral(v));
+            a.put("reading", literalReading(v));
         }
         return a;
+    }
+
+    /**
+     * A bare constant as a reading (issue #7425): a whole number in its own spelling, else a string -
+     * the same rule {@link #javaLiteral} applies where a literal is still written for a template that
+     * appends it to a {@code Criteria}.
+     */
+    private static Map<String, Object> literalReading(String value) {
+        return value.matches("-?\\d+") ? Readings.number(value) : Readings.string(value);
     }
 
     /**
@@ -3152,10 +3100,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Pre-render the target field assignments for a generate mapping: a {@code map} entry copies a
-     * source property ({@code <sourceVar>.<Prop>}); a {@code defaults} entry sets {@code now} (today's
-     * date, in the target field's own shape - see {@code literalExpression}) or a literal. The
-     * expression is rendered here (in Java, testable) so the Velocity template only emits
+     * The target field assignments for a generate mapping, each as a READING (issue #7425): a
+     * {@code map} entry copies a source property ({@code <sourceVar>.<Prop>}); a {@code defaults} entry
+     * sets {@code now} (today's date, in the target field's own shape - see {@code literalReading}) or
+     * a literal. The template layer renders the Java, so the Velocity template only emits
      * {@code target.<prop> = <expr>;} - no expression logic in the template.
      *
      * <p>
@@ -3191,12 +3139,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 String value = entry.getValue()
                                     .trim();
-                String expression =
-                        hops != null && isHop(value) ? hops.access(value, false) : sourceVar + "." + IntentNaming.pascalCase(value);
-                if (expression == null) {
+                Map<String, Object> reading =
+                        hops != null && isHop(value) ? hops.reading(value) : Readings.read(sourceVar, IntentNaming.pascalCase(value));
+                if (reading == null) {
                     return null;
                 }
-                list.add(assignment(entry.getKey(), expression));
+                list.add(assignment(entry.getKey(), reading));
             }
         }
         if (defaults != null) {
@@ -3206,7 +3154,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 list.add(assignment(entry.getKey(),
-                        literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())))));
+                        literalReading(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())))));
             }
         }
         return list;
@@ -3229,14 +3177,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                  .isBlank()) {
                 continue;
             }
-            String expression = literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())));
+            Map<String, Object> reading = literalReading(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())));
             // A to-one relation default is a foreign-key ID - the generated field is Integer, so the
-            // decimal-column convenience wrap below would not even compile against it.
+            // decimal-column reading below would not even compile against it.
             boolean relation = relationProperties != null && relationProperties.contains(IntentNaming.pascalCase(entry.getKey()));
-            if (!relation && expression.matches("-?\\d+(\\.\\d+)?")) {
-                expression = "new java.math.BigDecimal(\"" + expression + "\")";
+            if (!relation && "number".equals(reading.get("kind")) && !reading.containsKey("type")) {
+                reading = Readings.number(String.valueOf(reading.get("text")), "decimal");
             }
-            list.add(assignment(entry.getKey(), expression));
+            list.add(assignment(entry.getKey(), reading));
         }
         return list;
     }
@@ -3396,9 +3344,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /**
      * Render the computed line-items ({@code itemLines}, issue #6555): one entry per synthetic line,
-     * each {@code {guard, assigns:[{targetProp, expr}]}} - the same pre-rendered shape a posting item
-     * row uses, so the template stays logic-free. Every {@code expr} runs over the loaded
-     * {@code source} master. A {@code when} cell becomes the row guard.
+     * each {@code {guardReading, assigns:[{targetProp, reading}]}} - the same shape a posting item row
+     * uses, so the template stays logic-free. Every reading runs over the loaded {@code source} master.
+     * A {@code when} cell becomes the row guard.
      */
     private static List<Map<String, Object>> computedItemLines(List<Map<String, String>> rows, Map<String, CellMeta> metas,
             java.util.Set<String> sourceProps) {
@@ -3409,7 +3357,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         for (Map<String, String> row : rows) {
             Map<String, Object> rendered = new LinkedHashMap<>();
             List<Map<String, Object>> assigns = new ArrayList<>();
-            String guard = "";
+            Map<String, Object> guard = Map.of();
             for (Map.Entry<String, String> cell : row.entrySet()) {
                 String value = cell.getValue() == null ? ""
                         : cell.getValue()
@@ -3419,9 +3367,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 CellMeta meta = metas.get(IntentNaming.pascalCase(cell.getKey()));
-                assigns.add(assignment(cell.getKey(), computedCellExpression(value, meta, sourceProps)));
+                assigns.add(assignment(cell.getKey(), computedCellReading(value, meta, sourceProps)));
             }
-            rendered.put("guard", guard);
+            rendered.put("guardReading", guard);
             rendered.put("assigns", assigns);
             out.add(rendered);
         }
@@ -3429,29 +3377,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * A single computed-line cell as a Java expression over {@code source}: a to-one relation copies
-     * the source foreign key ({@code source.<Prop>}, issue #6533 parity); a numeric field is a
+     * A single computed-line cell as a reading over {@code source} (issue #7425): a to-one relation
+     * copies the source foreign key ({@code source.<Prop>}, issue #6533 parity); a numeric field is a
      * {@code Calc} arithmetic expression rounded to its scale (integer/long narrowed off the
      * {@code BigDecimal}); a string field is a {@code {field}}-interpolated concatenation, a bare
      * source-property copy, or a quoted literal; a {@code month}/{@code week}/date/boolean field takes
      * {@code now} / a literal.
      */
-    private static String computedCellExpression(String value, CellMeta meta, java.util.Set<String> sourceProps) {
+    private static Map<String, Object> computedCellReading(String value, CellMeta meta, java.util.Set<String> sourceProps) {
         String v = value == null ? "" : value.trim();
         if (meta != null && meta.relation()) {
-            return "source." + IntentNaming.pascalCase(v);
+            return Readings.read("source", IntentNaming.pascalCase(v));
         }
         String kind = meta == null ? "unknown" : meta.kind();
         int scale = meta == null ? 2 : meta.scale();
         switch (kind) {
             case "decimal":
-                return calcExpression(v, scale);
+                return Readings.calc(v, "source", scale, null);
             case "double":
-                return calcExpression(v, scale) + ".doubleValue()";
+                return Readings.calc(v, "source", scale, "double");
             case "integer":
-                return calcExpression(v, 0) + ".intValue()";
+                return Readings.calc(v, "source", 0, "int");
             case "long":
-                return calcExpression(v, 0) + ".longValue()";
+                return Readings.calc(v, "source", 0, "long");
             case "boolean":
             case "date":
             case "timestamp":
@@ -3460,89 +3408,69 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // A bare source property copies it (e.g. a date carried over from the source); otherwise
                 // `now` / a literal in the field's own shape (month -> YYYY-MM, week -> YYYY-Www, else
                 // LocalDate / boolean / quoted string).
-                String copy = bareSourceCopy(v, sourceProps);
-                return copy != null ? copy : literalExpression(v, kind);
+                Map<String, Object> copy = bareSourceCopy(v, sourceProps);
+                return copy != null ? copy : literalReading(v, kind);
             }
             case "string":
-                return stringCellExpression(v, sourceProps);
+                return stringCellReading(v, sourceProps);
             default:
                 // unknown: only when a cross-model item child is unresolved (null-context unit tests);
                 // best effort - an arithmetic-looking value is numeric, otherwise a string.
-                return v.matches("[\\w.]*[-+*/()][\\w.+\\-*/() ]*") ? calcExpression(v, scale) : stringCellExpression(v, sourceProps);
+                return v.matches("[\\w.]*[-+*/()][\\w.+\\-*/() ]*") ? Readings.calc(v, "source", scale, null)
+                        : stringCellReading(v, sourceProps);
         }
     }
 
     /**
-     * {@code Calc.eval("<expr>", source, <scale>)} - the calculated-field / posting-amount convention.
+     * A string cell: {@code {field}} placeholders become a concatenation of literals and source values
+     * rendered as text; a bare identifier that IS a source property copies it ({@code source.<Prop>});
+     * anything else is a literal (so a plain caption like {@code "Consulting services"} is NOT read as
+     * a field).
      */
-    private static String calcExpression(String expr, int scale) {
-        return "Calc.eval(\"" + JavaLiterals.escape(expr) + "\", source, " + scale + ")";
-    }
-
-    /**
-     * A string cell: {@code {field}} placeholders become a Java concatenation over {@code source}; a
-     * bare identifier that IS a source property copies it ({@code source.<Prop>}); anything else is a
-     * quoted literal (so a plain caption like {@code "Consulting services"} is NOT read as a field).
-     */
-    private static String stringCellExpression(String v, java.util.Set<String> sourceProps) {
+    private static Map<String, Object> stringCellReading(String v, java.util.Set<String> sourceProps) {
         if (v.contains("{")) {
-            StringBuilder expr = new StringBuilder();
+            List<Map<String, Object>> parts = new ArrayList<>();
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
                                                                .matcher(v);
             int last = 0;
             while (m.find()) {
                 if (m.start() > last) {
-                    appendConcat(expr, '"' + v.substring(last, m.start())
-                                              .replace("\"", "\\\"")
-                            + '"');
+                    parts.add(Readings.string(v.substring(last, m.start())));
                 }
-                appendConcat(expr, "String.valueOf(source." + IntentNaming.pascalCase(m.group(1)) + ")");
+                parts.add(Readings.text(Readings.read("source", IntentNaming.pascalCase(m.group(1)))));
                 last = m.end();
             }
             if (last < v.length()) {
-                appendConcat(expr, '"' + v.substring(last)
-                                          .replace("\"", "\\\"")
-                        + '"');
+                parts.add(Readings.string(v.substring(last)));
             }
-            return expr.length() == 0 ? "\"\"" : expr.toString();
+            return Readings.concat(parts, false);
         }
-        String copy = bareSourceCopy(v, sourceProps);
-        if (copy != null) {
-            return copy;
-        }
-        return "\"" + JavaLiterals.escape(v) + "\"";
+        Map<String, Object> copy = bareSourceCopy(v, sourceProps);
+        return copy != null ? copy : Readings.string(v);
     }
 
     /**
      * {@code source.<Prop>} when {@code v} is a bare identifier naming a source property, else null.
      */
-    private static String bareSourceCopy(String v, java.util.Set<String> sourceProps) {
+    private static Map<String, Object> bareSourceCopy(String v, java.util.Set<String> sourceProps) {
         if (v.matches("[A-Za-z_]\\w*") && sourceProps.contains(IntentNaming.pascalCase(v))) {
-            return "source." + IntentNaming.pascalCase(v);
+            return Readings.read("source", IntentNaming.pascalCase(v));
         }
         return null;
     }
 
-    private static void appendConcat(StringBuilder expr, String term) {
-        if (expr.length() > 0) {
-            expr.append(" + ");
-        }
-        expr.append(term);
-    }
-
     /**
-     * A computed-line {@code when} guard as a null-safe {@code Calc} comparison over {@code source} -
-     * the postings item-row guard convention ({@code <field> ==|!= <n>}); an unparseable guard yields
-     * no guard (the line is always created).
+     * A {@code when} row guard - a posting item row's or a computed line's - as the reading of a
+     * null-safe {@code Calc} comparison over {@code source} ({@code <field> ==|!= <n>}); an unparseable
+     * guard yields the empty reading, no guard (the line is always created).
      */
-    private static String computedGuard(String value) {
+    private static Map<String, Object> computedGuard(String value) {
         java.util.regex.Matcher guard = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*([!=]=)\\s*(\\d+(?:\\.\\d+)?)\\s*")
                                                                .matcher(value);
         if (guard.matches()) {
-            return "Calc.eval(\"" + IntentNaming.pascalCase(guard.group(1)) + "\", source, 6).compareTo(new java.math.BigDecimal(\""
-                    + guard.group(3) + "\")) " + ("==".equals(guard.group(2)) ? "==" : "!=") + " 0";
+            return Readings.calcCompare("source", IntentNaming.pascalCase(guard.group(1)), "==".equals(guard.group(2)), guard.group(3));
         }
-        return "";
+        return Map.of();
     }
 
     /** The logical kinds a {@code now} default renders in the field's own shape. */
@@ -3598,15 +3526,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return kinds::get;
     }
 
-    private static Map<String, Object> assignment(String targetProperty, String expression) {
+    private static Map<String, Object> assignment(String targetProperty, Map<String, Object> reading) {
         Map<String, Object> a = new LinkedHashMap<>();
         a.put("targetProp", IntentNaming.pascalCase(targetProperty));
-        a.put("expr", expression);
+        a.put("reading", reading);
         return a;
     }
 
     /**
-     * A Java expression for a {@code defaults} value: {@code now} -> today's value in the TARGET
+     * The reading of a {@code defaults} value (issue #7425): {@code now} -> today's value in the TARGET
      * field's own shape - a {@code month} field gets the {@code YYYY-MM} string, a {@code week} field
      * the {@code YYYY-Www} ISO-week string, a {@code timestamp} field the {@code Instant} of the
      * moment, anything else today's {@code LocalDate}. The shape is not cosmetic: month/week are plain
@@ -3614,31 +3542,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * so the untyped {@code LocalDate.now()} would not even compile against any of them. An integer /
      * decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
      */
-    private static String literalExpression(String value, String temporalKind) {
+    private static Map<String, Object> literalReading(String value, String temporalKind) {
         String v = value.trim();
         if ("now".equals(v)) {
-            if ("month".equals(temporalKind)) {
-                return "java.time.YearMonth.now().toString()";
-            }
-            if ("week".equals(temporalKind)) {
-                return "String.format(\"%04d-W%02d\", java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_BASED_YEAR), "
-                        + "java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR))";
-            }
-            if ("timestamp".equals(temporalKind)) {
-                return "java.time.Instant.now()";
-            }
-            return "java.time.LocalDate.now()";
+            return Readings.now(TEMPORAL_KINDS.contains(temporalKind) ? temporalKind : "date");
         }
         if ("true".equals(v) || "false".equals(v)) {
-            return v;
+            return Readings.bool(v);
         }
         if (v.matches("-?\\d+")) {
-            return v;
+            return Readings.number(v);
         }
         if (v.matches("-?\\d+\\.\\d+")) {
-            return "new java.math.BigDecimal(\"" + v + "\")";
+            return Readings.number(v, "decimal");
         }
-        return "\"" + JavaLiterals.escape(v) + "\"";
+        return Readings.string(v);
     }
 
     /** The junction's to-one relation whose target is the given entity, or null. */
@@ -4380,7 +4298,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // map / defaults so the natural key below reads it like any other assigned property -
                     // which is what makes `unique: [Invoice, Level]` send each level exactly once.
                     genFieldAssignments.add(assignment(String.valueOf(escalation.get("escalationIntoProperty")),
-                            NotificationSupport.ESCALATION_LOCAL + "." + escalation.get("escalationKeyProperty")));
+                            Readings.read(NotificationSupport.ESCALATION_LOCAL, String.valueOf(escalation.get("escalationKeyProperty")))));
                 }
                 entry.put("genFieldAssignments", genFieldAssignments);
                 allLoads.addAll(hopLoads);
@@ -5007,7 +4925,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * for a map without the key, and such a job therefore still renders byte-identically.
      *
      * @param g the create-from block
-     * @param assignments the already-rendered map/defaults assignments against the loop row
+     * @param assignments the map/defaults assignments against the loop row, each carrying its reading
      * @return the key terms in declared order, empty when no key is declared, or null when an entry
      *         names a property nothing assigns (the parser reports this too; a generation reached by
      *         another route drops the schedule rather than emitting a guard on a null column)
@@ -5016,9 +4934,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (!g.hasUnique()) {
             return List.of();
         }
-        Map<String, String> byProperty = new LinkedHashMap<>();
+        Map<String, Object> byProperty = new LinkedHashMap<>();
         for (Map<String, Object> assignment : assignments) {
-            byProperty.put(String.valueOf(assignment.get("targetProp")), String.valueOf(assignment.get("expr")));
+            byProperty.put(String.valueOf(assignment.get("targetProp")), assignment.get("reading"));
         }
         List<Map<String, Object>> terms = new ArrayList<>();
         for (UniqueKeyIntent entry : g.getUnique()) {
@@ -5038,11 +4956,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 return null;
             }
             String targetProp = IntentNaming.pascalCase(property);
-            String expression = byProperty.get(targetProp);
-            if (expression == null) {
+            Object reading = byProperty.get(targetProp);
+            if (reading == null) {
                 return null;
             }
-            terms.add(term("property", targetProp, "expr", expression));
+            // The very reading the target is assigned from, so the value looked up and the value
+            // written cannot drift (issue #7070); the template layer renders both from it (#7425).
+            terms.add(term("property", targetProp, "reading", reading));
         }
         return terms;
     }
@@ -5057,16 +4977,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      *
      * @param entry the {@code { run: <period> }} entry, its {@code of:} carrying the date the parser
      *        resolved and pinned (issue #7229) - authored, or the single {@code date} default it chose
-     * @param byProperty the rendered assignment expression per target property
+     * @param byProperty the assignment reading per target property
      * @return the term, or null when {@code of:} is unpinned (an unvalidated model reached by another
      *         route) or names a property this generate does not assign - either way the schedule is
      *         dropped rather than a guard emitted over the wrong column
      */
-    private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, String> byProperty) {
+    private static Map<String, Object> runTerm(UniqueKeyIntent entry, Map<String, Object> byProperty) {
         // The date the run writes is the property the parser PINNED onto `of` (issue #7229): the single
         // `date` field this block assigns from `now`, chosen by a type check. Reusing that one resolution
         // is what keeps the two layers from each defining "the date assigned from now" - this method sees
-        // only rendered expressions, and `now` on a timestamp field renders as the same LocalDate.now() a
+        // only readings, and `now` on a timestamp field reads as the same `now` reading a
         // `date` field does, so the string scan this replaced counted a field the parser's check excludes.
         // An `of` that is blank means an unvalidated model reached here by another route; drop the guard
         // rather than range it over a guessed column.
@@ -5313,7 +5233,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("ownerKeyProperty", load.ownerKeyProperty());
             entry.put("ownerKeyAccessor", load.ownerKeyAccessor());
             entry.put("variable", load.variable());
-            entry.put("dueExpression", load.dueExpression());
+            entry.put("due", load.due());
             loaders.add(entry);
         }
         return loaders;
@@ -5340,7 +5260,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("eventPerspective", wait.eventPerspective());
             entry.put("eventKeyProperty", wait.eventKeyProperty());
             entry.put("topicSuffix", EventBinding.topicSuffix(wait.eventKind()));
-            entry.put("guardExpression", NotificationSupport.guard(wait.when()));
+            entry.put("guardTerms", NotificationSupport.guardTerms(wait.when()));
             // Blank in the direct case (the event entity is the trigger entity itself, carrying its
             // own ProcessId); the template branches on it.
             entry.put("viaFkProperty", wait.viaFkProperty() == null ? "" : wait.viaFkProperty());

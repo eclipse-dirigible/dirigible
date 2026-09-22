@@ -36,9 +36,9 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * to-one relation (rendered against a related entity the listener loads once by FK id - the same
  * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
  * paths are not supported. The {@code when} guard is one {@code <Property> ==|!= <literal>}
- * comparison over the record's own properties - or the list form meaning their AND - rendered
- * against the property's declared type by {@link CheckSupport#condition} where the entity is known;
- * see {@link #guard(Object, EntityIntent, Map)}.
+ * comparison over the record's own properties - or the list form meaning their AND - read into
+ * neutral terms against the property's declared type by {@link CheckSupport#conditionTerms} where
+ * the entity is known; see {@link #guardTerms(Object, EntityIntent, Map)}.
  *
  * <p>
  * Inside a <b>fan-out</b> the entity every bare path resolves against is the ROW; a placeholder
@@ -192,10 +192,12 @@ public final class NotificationSupport {
     /**
      * The translated, ready-to-render shape of a notification. The two {@code uses*} flags report which
      * template-declared deep-link locals the expressions reference, so a generated handler declares
-     * only the links its message actually uses. {@code htmlExpression} is the block's marked-up
-     * alternative with every interpolated value HTML-escaped, or {@code null} when none is declared.
+     * only the links its message actually uses. The guard travels as the NEUTRAL terms the glue carries
+     * (issue #7425) - empty for no guard - and the template layer renders the Java boolean.
+     * {@code htmlExpression} is the block's marked-up alternative with every interpolated value
+     * HTML-escaped, or {@code null} when none is declared.
      */
-    public record Plan(List<RelationLoad> loads, String guardExpression, String toExpression, String subjectExpression,
+    public record Plan(List<RelationLoad> loads, List<Map<String, Object>> guardTerms, String toExpression, String subjectExpression,
             String bodyExpression, String htmlExpression, boolean usesRecordUrl, boolean usesInboxUrl) {
     }
 
@@ -294,8 +296,8 @@ public final class NotificationSupport {
         String subjectExpression = resolver.text(notification.getSubject());
         String bodyExpression = resolver.text(notification.getBody());
         String htmlExpression = resolver.html(notification.getHtml());
-        return new Plan(resolver.loads(), guard(when, eventEntity, byName), recipient, subjectExpression, bodyExpression, htmlExpression,
-                resolver.usesRecordUrl(), resolver.usesInboxUrl());
+        return new Plan(resolver.loads(), guardTerms(when, eventEntity, byName), recipient, subjectExpression, bodyExpression,
+                htmlExpression, resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
@@ -372,93 +374,78 @@ public final class NotificationSupport {
         String subjectExpression = resolver.text(subject);
         String bodyExpression = resolver.text(body);
         String htmlExpression = resolver.html(html);
-        return new Plan(resolver.loads(), guard(when, entity, byName), recipient, subjectExpression, bodyExpression, htmlExpression,
+        return new Plan(resolver.loads(), guardTerms(when, entity, byName), recipient, subjectExpression, bodyExpression, htmlExpression,
                 resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
     /**
-     * Translate a {@code when} guard into a Java boolean expression. Supports a single comparison
-     * {@code field == 'literal'} / {@code field != 'literal'} on a direct field; anything else (or
-     * blank) yields {@code true}.
-     *
-     * @param when the guard expression, may be {@code null}
-     * @return a Java boolean expression
-     */
-    public static String guard(String when) {
-        if (when == null || when.isBlank()) {
-            return "true";
-        }
-        Matcher matcher = SIMPLE_COMPARISON.matcher(when);
-        if (!matcher.matches()) {
-            return "true";
-        }
-        String field = "entity." + IntentNaming.pascalCase(matcher.group(1));
-        String rhs = literalToJava(matcher.group(3)
-                                          .trim());
-        String equals = "java.util.Objects.equals(" + field + ", " + rhs + ")";
-        return "==".equals(matcher.group(2)) ? equals : "!" + equals;
-    }
-
-    /**
-     * A {@code when} guard that may be the scalar comparison or a LIST of them - an implicit AND
-     * (dirigible #6957). Each element renders through {@link #guard(String)}; an element that does not
-     * parse contributes nothing ({@code true}), exactly as the scalar always degraded, so a list is
-     * never stricter than what its author could say with scalars.
+     * Read a {@code when} guard into the NEUTRAL terms the glue carries (issue #7425), UNTYPED: the
+     * scalar comparison {@code field == 'literal'} / {@code field != 'literal'} on a direct field, or a
+     * LIST of them - an implicit AND (dirigible #6957). Each term names the record's property, whether
+     * the comparison is an equality, and the literal with the type its own spelling says - a quoted or
+     * unrecognised text is a string, a number a {@code number}, {@code true} / {@code false} a boolean.
+     * A term that does not parse contributes nothing, exactly as it always did, so a list is never
+     * stricter than what its author could say with scalars; blank or absent yields no term at all,
+     * which the template layer renders as {@code true}.
      *
      * @param when the guard - a comparison string, a list of them, or {@code null}
-     * @return a Java boolean expression
+     * @return the terms, empty for no guard
      */
-    public static String guard(Object when) {
-        if (!(when instanceof List<?> terms)) {
-            return guard(when == null ? null : String.valueOf(when));
-        }
-        List<String> conditions = new java.util.ArrayList<>();
-        for (Object term : terms) {
-            String condition = guard(term == null ? null : String.valueOf(term));
-            if (!"true".equals(condition)) {
-                conditions.add(condition);
+    public static List<Map<String, Object>> guardTerms(Object when) {
+        List<Map<String, Object>> terms = new java.util.ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            Matcher matcher = SIMPLE_COMPARISON.matcher(term);
+            if (!matcher.matches()) {
+                continue;
             }
+            String literal = matcher.group(3)
+                                    .trim();
+            boolean quoted = literal.length() >= 2
+                    && (literal.startsWith("'") && literal.endsWith("'") || literal.startsWith("\"") && literal.endsWith("\""));
+            String value = quoted ? literal.substring(1, literal.length() - 1) : literal;
+            String type = quoted ? "string"
+                    : value.matches("-?\\d+(\\.\\d+)?") ? "number" : "true".equals(value) || "false".equals(value) ? "boolean" : "string";
+            // The same keys, in the same order, a typed term carries (CheckSupport.term) - one shape for
+            // the template layer to render, whichever reader produced it.
+            Map<String, Object> read = new java.util.LinkedHashMap<>();
+            read.put("owner", CheckSupport.RECORD);
+            read.put("property", IntentNaming.pascalCase(matcher.group(1)));
+            read.put("equal", "==".equals(matcher.group(2)));
+            read.put("type", type);
+            read.put("value", value);
+            read.put("numericKey", false);
+            terms.add(read);
         }
-        return conditions.isEmpty() ? "true" : String.join(" && ", conditions);
+        return terms;
     }
 
     /**
-     * A {@code when} guard rendered against the guarded property's DECLARED type - the form every guard
-     * of the declarative glue event axis takes (issue #7289), where the parser holds the guard to the
-     * same closed grammar a {@code requiredWhen} condition is held to.
+     * A {@code when} guard read against the guarded property's DECLARED type - the form every guard of
+     * the declarative glue event axis takes (issue #7289), where the parser holds the guard to the same
+     * closed grammar a {@code requiredWhen} condition is held to.
      *
      * <p>
-     * The typed rendering is the point. An untyped {@code Objects.equals} quotes whatever it cannot
-     * recognise, so {@code Status == ISSUED} - the natural authoring of a status guard, with the name
-     * resolved to its seed id before the typed mapping - used to compare the integer status FK with a
-     * string and never hold: the mail never went out, the departure never left, and parse, generation,
-     * compile and publish were all green. A to-one's key is compared numerically because its width is
-     * not knowable here; see {@link CheckSupport#condition}.
+     * The typed reading is the point. An untyped guard quotes whatever it cannot recognise, so
+     * {@code Status == ISSUED} - the natural authoring of a status guard, with the name resolved to its
+     * seed id before the typed mapping - used to compare the integer status FK with a string and never
+     * hold: the mail never went out, the departure never left, and parse, generation, compile and
+     * publish were all green. A to-one's key is compared numerically because its width is not knowable
+     * here; see {@link CheckSupport#conditionTerms}.
      *
      * <p>
-     * When the condition does not compile - which for a glue guard the parser has already refused, and
-     * for a call site with no entity to read the types off (a cross-model schedule row) it cannot know
-     * - the untyped {@link #guard(Object)} answers instead, so nothing that renders today stops
+     * When the condition does not read - which for a glue guard the parser has already refused, and for
+     * a call site with no entity to read the types off (a cross-model schedule row) it cannot know -
+     * the untyped {@link #guardTerms(Object)} answers instead, so nothing that renders today stops
      * rendering.
      *
      * @param when the guard - a comparison string, a list of them, or {@code null}
      * @param entity the entity the guard is read off, or {@code null} when it is not resolvable
      * @param byName the local entities by name (a to-one's key type comes from its target)
-     * @return a Java boolean expression
+     * @return the terms, empty for no guard
      */
-    public static String guard(Object when, EntityIntent entity, Map<String, EntityIntent> byName) {
-        String typed = CheckSupport.condition(entity, byName, when);
-        return typed == null ? guard(when) : typed;
-    }
-
-    private static String literalToJava(String rhs) {
-        if (rhs.length() >= 2 && (rhs.startsWith("'") && rhs.endsWith("'") || rhs.startsWith("\"") && rhs.endsWith("\""))) {
-            return quote(rhs.substring(1, rhs.length() - 1));
-        }
-        if (rhs.matches("-?\\d+(\\.\\d+)?") || "true".equals(rhs) || "false".equals(rhs)) {
-            return rhs;
-        }
-        return quote(rhs);
+    public static List<Map<String, Object>> guardTerms(Object when, EntityIntent entity, Map<String, EntityIntent> byName) {
+        List<Map<String, Object>> typed = CheckSupport.conditionTerms(entity, byName, when);
+        return typed == null ? guardTerms(when) : typed;
     }
 
     static String quote(String value) {
@@ -675,6 +662,27 @@ public final class NotificationSupport {
                             IntentNaming.pascalCase(name), false, "", ""));
             // The listener loads the related entity into a local named after the relation.
             return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
+        }
+
+        /**
+         * The NEUTRAL reading of a {@code field} or {@code relation.field} path (issue #7425) - a read off
+         * the record, or a null-guarded read off the local the relation is loaded into - registering the
+         * relation load exactly as {@link #access(String, boolean)} does. The deep-link and scope tokens
+         * are placeholders of a message text, not values a mapping copies, so only the two path shapes are
+         * read here.
+         *
+         * @param path the authored path
+         * @return the reading, or {@code null} for an unresolvable relation.field
+         */
+        Map<String, Object> reading(String path) {
+            if (access(path, false) == null) {
+                return null;
+            }
+            int dot = path.indexOf('.');
+            if (dot < 0) {
+                return Readings.read(NotifySupport.ENTITY_LOCAL, IntentNaming.pascalCase(path));
+            }
+            return Readings.hop(path.substring(0, dot), IntentNaming.pascalCase(path.substring(dot + 1)));
         }
 
         RelationIntent toOneRelation(String name) {

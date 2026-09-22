@@ -35,8 +35,6 @@ import org.eclipse.dirigible.components.intent.model.StepIntent;
 public final class ProcessTimerSupport {
 
     /** The far-future due date a {@code null} expiry field arms (the timer never fires in practice). */
-    private static final String FAR_FUTURE = "java.util.Date.from(java.time.Instant.parse(\"9999-12-31T00:00:00Z\"))";
-
     private ProcessTimerSupport() {}
 
     /**
@@ -50,10 +48,12 @@ public final class ProcessTimerSupport {
      * @param ownerKeyProperty the process variable holding the entity's PK (e.g. {@code Id})
      * @param ownerKeyAccessor the {@link Number} accessor matching the PK type
      * @param variable the process variable the boundary timer's {@code timeDate} binds to
-     * @param dueExpression the pre-rendered Java expression producing the {@code java.util.Date}
+     * @param due the NEUTRAL reading of the moment the timer fires (issue #7425) - the date field read
+     *        at task entry and its temporal shape; the template layer renders the
+     *        {@code java.util.Date}
      */
     public record TimerLoad(String process, String beforeStep, String handler, String ownerEntity, String ownerPerspective,
-            String ownerKeyProperty, String ownerKeyAccessor, String variable, String dueExpression) {
+            String ownerKeyProperty, String ownerKeyAccessor, String variable, Map<String, Object> due) {
     }
 
     /** Every expire date loader across every process in the model. */
@@ -80,7 +80,8 @@ public final class ProcessTimerSupport {
                         "Load" + IntentNaming.pascalCase(process.getName()) + IntentNaming.pascalCase(step.getName()) + "Expire",
                         triggerEntity, IntentEntities.resolvePerspective(triggerEntity, compositionParents, model),
                         IntentEntities.keyFieldName(owner), idAccessor(IntentEntities.primaryKeyOf(owner)), expireVariable(step.getName()),
-                        dueExpression(IntentNaming.pascalCase(field.getName()), field.getType())));
+                        Readings.due(IntentNaming.pascalCase(field.getName()),
+                                "timestamp".equals(field.getType()) ? "timestamp" : "date")));
             }
         }
         return loads;
@@ -104,16 +105,6 @@ public final class ProcessTimerSupport {
         }
         Object value = map.get(attribute);
         return value == null ? null : value.toString();
-    }
-
-    /**
-     * The pre-rendered Java expression turning the entity's date field into the timer's
-     * {@code java.util.Date} due value (the expansions convention - the template stays shape-only).
-     */
-    private static String dueExpression(String property, String type) {
-        String value = "timestamp".equals(type) ? "java.util.Date.from(entity." + property + ")"
-                : "java.util.Date.from(entity." + property + ".plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant())";
-        return "entity." + property + " == null ? " + FAR_FUTURE + " : " + value;
     }
 
     private static FieldIntent fieldByName(EntityIntent entity, String name) {
