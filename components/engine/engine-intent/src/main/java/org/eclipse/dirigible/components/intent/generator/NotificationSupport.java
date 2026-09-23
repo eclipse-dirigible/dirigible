@@ -122,6 +122,12 @@ public final class NotificationSupport {
     /** The Java expression a {@link #CONFIG_PREFIX} recipient resolves to, less the quoted key. */
     private static final String CONFIG_EXPRESSION = "org.eclipse.dirigible.sdk.core.Configurations.get(";
 
+    /**
+     * The call an interpolated value of an {@code html:} alternative is wrapped in, less the argument
+     * and the closing parenthesis. Fully qualified for the same reason as {@link #CONFIG_EXPRESSION}.
+     */
+    private static final String HTML_ESCAPE_EXPRESSION = "org.eclipse.dirigible.sdk.mail.Html.escape(";
+
     private NotificationSupport() {}
 
     /**
@@ -186,10 +192,11 @@ public final class NotificationSupport {
     /**
      * The translated, ready-to-render shape of a notification. The two {@code uses*} flags report which
      * template-declared deep-link locals the expressions reference, so a generated handler declares
-     * only the links its message actually uses.
+     * only the links its message actually uses. {@code htmlExpression} is the block's marked-up
+     * alternative with every interpolated value HTML-escaped, or {@code null} when none is declared.
      */
     public record Plan(List<RelationLoad> loads, String guardExpression, String toExpression, String subjectExpression,
-            String bodyExpression, boolean usesRecordUrl, boolean usesInboxUrl) {
+            String bodyExpression, String htmlExpression, boolean usesRecordUrl, boolean usesInboxUrl) {
     }
 
     /**
@@ -286,7 +293,8 @@ public final class NotificationSupport {
         // argument list evaluated left to right would snapshot the loads before the text added any.
         String subjectExpression = resolver.text(notification.getSubject());
         String bodyExpression = resolver.text(notification.getBody());
-        return new Plan(resolver.loads(), guard(when, eventEntity, byName), recipient, subjectExpression, bodyExpression,
+        String htmlExpression = resolver.html(notification.getHtml());
+        return new Plan(resolver.loads(), guard(when, eventEntity, byName), recipient, subjectExpression, bodyExpression, htmlExpression,
                 resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
@@ -334,6 +342,28 @@ public final class NotificationSupport {
      */
     public static Plan plan(String to, String subject, String body, Object when, EntityIntent entity, EntityIntent anchor,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        return plan(to, subject, body, null, when, entity, anchor, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * The fan-out translation plan of a notify block that may carry an {@code html:} alternative
+     * (dirigible #7488), resolved through the same resolver as the body so both parts read the same
+     * values and register the same relation loads.
+     *
+     * @param to the recipient
+     * @param subject the subject
+     * @param body the plain-text body
+     * @param html the marked-up alternative, or {@code null} for a plain-text message
+     * @param when an optional guard - a comparison, a list of them, or {@code null} for none
+     * @param entity the entity the message is about (a fan-out's row)
+     * @param anchor the fan-out's anchor record, or {@code null} outside a fan-out
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the recipient cannot be resolved
+     */
+    public static Plan plan(String to, String subject, String body, String html, Object when, EntityIntent entity, EntityIntent anchor,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, CrossModelLookup crossModel) {
         Resolver resolver = new Resolver(entity, anchor, null, byName, compositionParents, crossModel);
         String recipient = resolver.value(to);
         if (recipient == null) {
@@ -341,7 +371,8 @@ public final class NotificationSupport {
         }
         String subjectExpression = resolver.text(subject);
         String bodyExpression = resolver.text(body);
-        return new Plan(resolver.loads(), guard(when, entity, byName), recipient, subjectExpression, bodyExpression,
+        String htmlExpression = resolver.html(html);
+        return new Plan(resolver.loads(), guard(when, entity, byName), recipient, subjectExpression, bodyExpression, htmlExpression,
                 resolver.usesRecordUrl(), resolver.usesInboxUrl());
     }
 
@@ -519,6 +550,21 @@ public final class NotificationSupport {
          * Text with {@code {field}} / {@code {relation.field}} placeholders into a Java String expression.
          */
         String text(String raw) {
+            return text(raw, false);
+        }
+
+        /**
+         * The marked-up alternative into a Java String expression: the authored segments stay literal and
+         * every resolved value - the deep links included - is HTML-escaped at send time.
+         *
+         * @param raw the authored markup, may be {@code null}
+         * @return the expression, or {@code null} when no markup was authored
+         */
+        String html(String raw) {
+            return raw == null ? null : text(raw, true);
+        }
+
+        private String text(String raw, boolean html) {
             if (raw == null || raw.isEmpty()) {
                 return "\"\"";
             }
@@ -531,7 +577,7 @@ public final class NotificationSupport {
                 }
                 String access = access(matcher.group(1), true);
                 // An unresolvable placeholder degrades to the literal text rather than failing the build.
-                terms.add(access == null ? quote(matcher.group()) : access);
+                terms.add(access == null ? quote(matcher.group()) : html ? HTML_ESCAPE_EXPRESSION + access + ")" : access);
                 last = matcher.end();
             }
             if (last < raw.length()) {

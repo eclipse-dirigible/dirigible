@@ -229,6 +229,13 @@ public class ${className}Job implements JobHandler {
                 part.put("text", body);
                 List<Map> parts = new java.util.ArrayList<>();
                 parts.add(part);
+#if($htmlExpression)
+                Map htmlPart = new HashMap();
+                htmlPart.put("type", "text");
+                htmlPart.put("contentType", "text/html");
+                htmlPart.put("text", ${htmlExpression});
+                parts.add(htmlPart);
+#end
 #if($attach == "print")
                 // attach: print - render THIS row's own print template to PDF server-side (the generated
                 // feeder assembles the { document, items } payload) and attach it, so a periodic notice

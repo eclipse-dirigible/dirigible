@@ -46,6 +46,13 @@ public class NotificationIntent {
     private String subject;
     private String body;
     /**
+     * Optional marked-up alternative of {@link #body} (dirigible #7488): the same message as HTML, sent
+     * beside the plain text as one {@code multipart/alternative} so a mail client shows whichever it
+     * renders. The authored markup is sent as written and every interpolated value is HTML-escaped;
+     * {@link #body} stays required, since it is what a text-only client and every search index read.
+     */
+    private String html;
+    /**
      * Optional document to attach, in one of two authored shapes - hence {@link Object} rather than a
      * String, and hence {@link #getAttach()} reporting only the KIND:
      *
@@ -111,7 +118,7 @@ public class NotificationIntent {
      * not to this set would go straight back to being unauthorable.
      */
     public static final Set<String> BLOCK_KEYS =
-            Set.of("to", "subject", "body", "attach", "language", "languageFrom", "fileName", "forEach", "channel", "outcome");
+            Set.of("to", "subject", "body", "html", "attach", "language", "languageFrom", "fileName", "forEach", "channel", "outcome");
 
     /**
      * The kind {@link #getAttach()} reports for the map shape {@code attach: { report, bind }}. It is
@@ -139,6 +146,7 @@ public class NotificationIntent {
         notify.setTo(string(map.get("to")));
         notify.setSubject(string(map.get("subject")));
         notify.setBody(string(map.get("body")));
+        notify.setHtml(string(map.get("html")));
         notify.setAttach(map.get("attach"));
         notify.setLanguage(string(map.get("language")));
         notify.setLanguageFrom(string(map.get("languageFrom")));
@@ -210,6 +218,14 @@ public class NotificationIntent {
 
     public void setBody(String body) {
         this.body = body;
+    }
+
+    public String getHtml() {
+        return html;
+    }
+
+    public void setHtml(String html) {
+        this.html = html;
     }
 
     /**

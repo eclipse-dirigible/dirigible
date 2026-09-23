@@ -431,14 +431,16 @@ public final class NotifySupport {
      * message actually quotes it, so nothing carries an argument it never reads.
      *
      * @param notify a notify block, may be {@code null}
-     * @return whether a subject or body placeholder is record-scoped
+     * @return whether a subject, body or html placeholder is record-scoped
      */
     public static boolean usesRecordScope(NotificationIntent notify) {
         String marker = "{" + RECORD_SCOPE + ".";
-        return notify != null && (notify.getSubject() != null && notify.getSubject()
-                                                                       .contains(marker)
-                || notify.getBody() != null && notify.getBody()
-                                                     .contains(marker));
+        return notify != null
+                && (contains(notify.getSubject(), marker) || contains(notify.getBody(), marker) || contains(notify.getHtml(), marker));
+    }
+
+    private static boolean contains(String text, String marker) {
+        return text != null && text.contains(marker);
     }
 
     private static boolean attaches(NotificationIntent notify, String kind) {
