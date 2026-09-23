@@ -1166,6 +1166,7 @@ public final class IntentParser {
         List<String> paths = new ArrayList<>();
         collectEscalationScopedPaths(notify.getSubject(), paths);
         collectEscalationScopedPaths(notify.getBody(), paths);
+        collectEscalationScopedPaths(notify.getHtml(), paths);
         if (paths.isEmpty()) {
             return;
         }
@@ -1357,6 +1358,7 @@ public final class IntentParser {
         addSourcePath(paths, "languageFrom", notify.getLanguageFrom());
         collectNotifyPlaceholders(notify.getSubject(), paths);
         collectNotifyPlaceholders(notify.getBody(), paths);
+        collectNotifyPlaceholders(notify.getHtml(), paths);
         collectFileNamePaths(notify.getFileName(), paths);
         NotificationIntent.ReportAttachment report = notify.getReportAttachment();
         if (report != null) {
@@ -3259,6 +3261,7 @@ public final class IntentParser {
             issues.add(subject + " recipient [" + to
                     + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
         }
+        validateNotifyHtml(notify, subject, issues);
         // A fan-out sends one message per row of a related entity instead of one about the record, so
         // from here on every path (the recipient, the placeholders, the attachment) is about the ROW -
         // which is what `aboutEntity` becomes. The record itself stays reachable, but only through the
@@ -3354,6 +3357,32 @@ public final class IntentParser {
             // so only fields of the anchor itself are readable there, exactly as the `record.` scope is
             // limited to one field of it.
             validateFileNamePattern(notify.getFileName(), documentEntity, subject + " fileName", model, issues, !recordPrint, false);
+        }
+    }
+
+    /**
+     * The optional {@code html:} alternative of a notify block (dirigible #7488). It is the SAME
+     * message marked up, sent beside {@code body} as one {@code multipart/alternative} - so it can
+     * never stand alone: a text-only client, a preview pane and a search index all read the plain part,
+     * and a block carrying only markup would send them nothing. A blank one is refused rather than sent
+     * as an empty HTML part, which a client that prefers HTML renders as an empty mail.
+     *
+     * @param notify the block
+     * @param subject the message prefix identifying the call site
+     * @param issues the collected issues
+     */
+    private static void validateNotifyHtml(NotificationIntent notify, String subject, List<String> issues) {
+        String html = notify.getHtml();
+        if (html == null) {
+            return;
+        }
+        if (html.isBlank()) {
+            issues.add(subject + " declares a blank html - write the marked-up message, or drop the key to send plain text only");
+        }
+        String body = notify.getBody();
+        if (body == null || body.isBlank()) {
+            issues.add(subject + " declares html without body - body is required, html is only its marked-up alternative"
+                    + " (a text-only client reads the body)");
         }
     }
 
@@ -3582,6 +3611,7 @@ public final class IntentParser {
         List<String> paths = new ArrayList<>();
         collectRecordScopedPaths(notify.getSubject(), paths);
         collectRecordScopedPaths(notify.getBody(), paths);
+        collectRecordScopedPaths(notify.getHtml(), paths);
         if (paths.isEmpty()) {
             return;
         }

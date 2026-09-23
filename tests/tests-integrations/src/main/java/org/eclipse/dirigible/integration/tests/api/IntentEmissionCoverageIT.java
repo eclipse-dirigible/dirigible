@@ -1204,6 +1204,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: Person.email
                   subject: "Reminder: bill {note}"
                   body: "Dear {Person.name}, your bill is still open: {recordUrl}"
+                  # #7488: the marked-up alternative - compiled here, the escaped values included.
+                  html: '<p>Dear {Person.name}, your bill is <a href="{recordUrl}">still open</a>.</p>'
                   attach: print
                   languageFrom: Person.locale
                   outcome: sendOutcome
@@ -1389,6 +1391,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                        html: "<p>Dear <b>{Person.name}</b>, your bill totals {amount}.</p>"
                         # attach a parameterized REPORT (#6931): the report runs scoped to THIS
                         # record's values and the rendered PDF rides along. `minTotal` declares an
                         # `initial`, so binding it is REQUIRED - left unbound it would stay at that
@@ -1411,6 +1414,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         # while {record.note} above reads the anchor. Two different scopes, both
                         # explicit.
                         body: "Dear {Person.name}, the bill is attached. Your copy: {recordUrl}"
+                        html: "<p>Dear {Person.name}, bill <b>{record.note}</b> is attached.</p>"
                         attach: recordPrint
                       next: end
                   - { name: end, kind: end }
@@ -1429,6 +1433,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 to: ops@example.com
                 subject: "RFQ {title} awaits review"
                 body: "A reviewer must handle it."
+                html: "<p>RFQ <b>{title}</b> awaits a reviewer.</p>"
                 outcome: notifyOutcome
 
             integrations:
@@ -1533,6 +1538,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: ops@example.com
                   subject: "Bill {note}"
                   body: "Please find the bill attached. Open it here: {recordUrl}"
+                  html: '<p>Please find the bill attached. <a href="{recordUrl}">Open it here</a>.</p>'
                   attach: print
                   # #7023: stamp what the delivery did on the record, and publish -notifyFailed when it
                   # did not leave - the trace the notification below binds.
@@ -2968,6 +2974,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(reachedEmitter.contains("-step-RfqFlow-review-reached") && reachedEmitter.contains("Process.executeAfterCommit"),
                 "the emitter must publish the step topic after the chain commits");
         String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
+        assertTrue(
+                stepNotification.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && stepNotification.contains("\"<p>RFQ <b>\" + org.eclipse.dirigible.sdk.mail.Html.escape(entity.Title)"),
+                "a notification's html alternative must be emitted as an escaped text/html part (#7488): " + stepNotification);
         assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
                 "a step-bound notification must bind to the topic its emitter publishes to");
         // #7369: a record with no recipient must stamp `skipped`, not leave the outcome empty (which
@@ -3185,6 +3195,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // publish (the loads became locals of the try block); the ordering is pinned once more, on a
         // real document.
         String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        assertTrue(
+                dunning.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && dunning.contains("org.eclipse.dirigible.sdk.mail.Html.escape((Person == null ? null : Person.Name))"),
+                "a schedule's html alternative must be emitted with its relation value escaped (#7488): " + dunning);
         int dunningTry = dunning.indexOf("try {", dunning.indexOf("for (BillEntity entity : rows) {"));
         int dunningLoad = dunning.indexOf("PersonRepository().findById(entity.Person)");
         int dunningRender = dunning.indexOf("Print.render(\"Bill\",");
@@ -3566,6 +3580,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // wrapped so a mail failure cannot fail the already-committed transition.
         String sendBill = contentOf("gen/events/emission/SendBillTransition.java");
         assertTrue(sendBill.contains("Mail.send("), "a transition's notify must emit the actual send call");
+        // #7488: the html alternative is a second text part, every interpolated value escaped - the
+        // deep link included - while the authored markup stays literal.
+        assertTrue(
+                sendBill.contains("htmlPart.put(\"contentType\", \"text/html\");") && sendBill.contains(
+                        "\"<p>Please find the bill attached. <a href=\\\"\" + org.eclipse.dirigible.sdk.mail.Html.escape(recordUrl)"),
+                "a transition's html alternative must be emitted as an escaped text/html part: " + sendBill);
         assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
                 "attach: print must emit a PDF attachment part");
         assertTrue(sendBill.contains("Print.render(\"Bill\",") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
@@ -3641,6 +3661,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // and no custom/ stub may be scaffolded for it.
         String billSend = contentOf("gen/events/emission/BillFlowMailBillSend.java");
         assertTrue(billSend.contains("implements JavaDelegate"), "a sending step must emit a JavaDelegate");
+        assertTrue(
+                billSend.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && billSend.contains("org.eclipse.dirigible.sdk.mail.Html.escape(entity.Amount)"),
+                "a sending step's html alternative must be emitted as an escaped text/html part (#7488): " + billSend);
         assertTrue(billSend.contains("new BillRepository().findById("),
                 "the sender must re-load the trigger record through its generated repository");
         // The recipient is a one-hop relation.field, so the related record must be loaded by FK
@@ -3691,6 +3715,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // recipient list, so the recipient still resolves against the ROW while the attachment is the
         // ANCHOR record's, rendered ONCE outside the loop and handed to every message.
         String shareBill = contentOf("gen/events/emission/BillFlowShareBillSend.java");
+        assertTrue(shareBill.contains("org.eclipse.dirigible.sdk.mail.Html.escape(source.Note)"),
+                "a fan-out's html alternative must read the anchor through the record scope, escaped (#7488): " + shareBill);
         assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source);"),
                 "a recordPrint fan-out must render the document once, before the loop - and not at all with no recipients");
         assertTrue(

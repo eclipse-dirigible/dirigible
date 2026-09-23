@@ -499,6 +499,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
+            putHtmlExpression(entry, "htmlExpression", plan);
             entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
             entry.putAll(NotifySupport.deepLinkFields(plan, byName.get(entity)));
             entry.putAll(NotifySupport.outcomeFields(notification, byName.get(entity), compositionParents,
@@ -1615,8 +1616,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         EntityIntent anchor = fanOut == null ? null : entity;
         boolean dropped = fanOutRequested && fanOut == null;
         NotificationSupport.Plan plan = notify == null || dropped ? null
-                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, about, anchor, byName,
-                        compositionParents, crossModelLookup(model, context));
+                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), notify.getHtml(), null, about, anchor,
+                        byName, compositionParents, crossModelLookup(model, context));
         if (notify != null && plan == null && !dropped) {
             reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
                     + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
@@ -1638,6 +1639,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
+        if (send) {
+            putHtmlExpression(fields, "notifyHtmlExpression", plan);
+        }
         // Whether a per-row message quotes the anchor record - the fan-out templates then hand the
         // loaded record to their send method, and only then (an argument nothing reads is noise).
         fields.put("notifyRecordScoped", String.valueOf(send && fanOut != null && NotifySupport.usesRecordScope(notify)));
@@ -4467,6 +4471,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
+                putHtmlExpression(entry, "htmlExpression", plan);
                 entry.putAll(NotifySupport.attachmentFields(attachment, reportAttachment));
                 entry.putAll(NotifySupport.deepLinkFields(plan, rowEntity));
                 // A schedule already runs once per matched row, so the row IS the record the message is
@@ -4622,6 +4627,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         }
         collectNotifyPlaceholders(notify.getSubject(), paths);
         collectNotifyPlaceholders(notify.getBody(), paths);
+        collectNotifyPlaceholders(notify.getHtml(), paths);
         NotificationIntent.ReportAttachment report = notify.getReportAttachment();
         if (report != null) {
             for (Map.Entry<String, String> bound : report.bind()
@@ -4646,6 +4652,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return null;
+    }
+
+    /**
+     * Adds the marked-up alternative of a notify block (dirigible #7488) under {@code key} - only when
+     * one is declared, so a block without {@code html:} describes, and renders, exactly what it did
+     * before the key existed.
+     */
+    private static void putHtmlExpression(Map<String, Object> fields, String key, NotificationSupport.Plan plan) {
+        if (plan.htmlExpression() != null) {
+            fields.put(key, plan.htmlExpression());
+        }
     }
 
     /** The {@code {path}} placeholders of one text, keyed by the message they are reported under. */

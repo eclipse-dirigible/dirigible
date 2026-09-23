@@ -380,8 +380,9 @@ class GlueGenerator {
      */
     private static void bindNotification(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "topicSuffix", "guardExpression", "toExpression",
-                "subjectExpression", "bodyExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression",
-                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
+                "subjectExpression", "bodyExpression", "htmlExpression", "attachKeyProperty", "attach", "attachEntity",
+                "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression",
+                "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
         bindDeepLinks(item, context);
@@ -405,7 +406,7 @@ class GlueGenerator {
         boolean generates = item.containsKey("generates") ? truthy(item, "generates") : "generate".equals(str(item, "action"));
         boolean notifies = item.containsKey("notifies") ? truthy(item, "notifies") : !"generate".equals(str(item, "action"));
         copy(context, item, "name", "className", "cron", "entity", "perspective", "toExpression", "subjectExpression", "bodyExpression",
-                "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
+                "htmlExpression", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
                 "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport", "genToEntity", "genToPk", "genFieldAssignments",
                 // The scheduled generation's natural key (issue #7070). Absent on a .glue written
                 // before it existed, which `copy` turns into an absent context key - so the guard's
@@ -758,9 +759,9 @@ class GlueGenerator {
     private static void bindTransition(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "name", "className", "entity", "perspective", "attachKeyProperty", "statusProperty", "setStatus", "allowedExpr",
                 "fromStatuses", "guardExpr", "guardText", "notify", "forEach", "forEachFkProperty", "forEachKeyProperty",
-                "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "notifyRecordScoped", "attach", "attachEntity",
-                "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression",
-                "attachReport");
+                "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression", "notifyHtmlExpression", "notifyRecordScoped",
+                "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty", "attachLanguageTargetEntity",
+                "attachFileNameExpression", "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));
@@ -780,8 +781,8 @@ class GlueGenerator {
     private static void bindSend(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "step", "className", "entity", "perspective", "keyProperty", "keyAccessor", "forEach",
                 "forEachFkProperty", "forEachKeyProperty", "notifyToExpression", "notifySubjectExpression", "notifyBodyExpression",
-                "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression", "attachLanguageFkProperty",
-                "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
+                "notifyHtmlExpression", "notifyRecordScoped", "attachKeyProperty", "attach", "attachEntity", "attachLanguageExpression",
+                "attachLanguageFkProperty", "attachLanguageTargetEntity", "attachFileNameExpression", "attachReport");
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("notifyRelationLoads", relationLoads(item.get("notifyRelationLoads"), parameters));
         context.put("javaForEachPerspective", NamingHelper.sanitizeJavaIdentifier(strOr(item, "forEachPerspective", "")));

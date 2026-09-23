@@ -2738,6 +2738,26 @@ notifications:
 **Rules:** exactly one event of the event axis; `channel` is `email`; `to` follows the recipient rule
 (literal / `@config:KEY` / field / one-hop `relation.field`).
 
+### a styled message - `html:` beside `body` on any notify block
+
+**Use when:** the mail goes to people outside the organisation (a welcome, a confirmation, an
+invitation) and should be formatted rather than plain text.
+
+```yaml
+notify:
+  to: requestedByEmail
+  subject: "Your {name} workspace is ready"
+  body: "Your {name} workspace is ready. Sign in at {appUrl}"
+  html: |
+    <p>Your <strong>{name}</strong> workspace is ready.</p>
+    <p><a href="{appUrl}">Open the workspace</a></p>
+```
+
+**Rules:** `html` is the SAME message marked up, sent with `body` as one `multipart/alternative` -
+`body` stays required and `html` may not be blank. The markup is sent as written; every `{placeholder}`
+value is HTML-escaped. Placeholders follow exactly the `body` rules (the same paths, the `record.`
+scope inside a `forEach`, the deep links). Works on every notify block.
+
 ### send a document by e-mail - `attach: print` on any notify block
 
 **Use when:** the mail must carry the **document itself**, not just a notice about it - the invoice to
