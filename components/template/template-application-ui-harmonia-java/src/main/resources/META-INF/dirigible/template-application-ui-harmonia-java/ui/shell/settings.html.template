@@ -144,17 +144,22 @@
           </div>
         </div>
 
-        <!-- A setting entity's own generated CRUD list, fetched on selection and rendered inline
-             (x-html initializes Alpine on the injected markup, binding its <Entity>ManageListPage).
-             The fragment manages its own height and scrolling, so it fills the pane as it stands. -->
+        <!-- A setting entity's own generated CRUD list. The host carries x-h-include: Harmonia
+             fetches the fragment and initializes Alpine on it (binding its <Entity>ManageListPage
+             and every Harmonia directive in it), destroying and re-initializing only the children so
+             the host's own directives - this ref, the x-show - stay live. Deliberately not an
+             x-html="content" binding: Alpine re-runs such an effect on its own account and the
+             re-run replaced the whole subtree, destroying the list's Filter popover and its record
+             sheet in the tick they opened. x-h-include reports no failure of its own, so the page
+             waits for the fragment:loaded it dispatches (see awaitFragment). -->
         <div class="vbox flex-1 overflow-hidden" x-show="entityUrl" x-cloak>
           <div class="p-4" x-show="loading"><div x-h-spinner></div></div>
           <div x-h-alert data-variant="negative" role="alert" class="m-4" x-show="error">
             <div x-h-alert-description x-text="error"></div>
           </div>
-          <div class="size-full min-w-0" x-show="!loading && !error" x-html="content"></div>
+          <div class="size-full min-w-0" x-show="!loading &amp;&amp; !error"
+               x-ref="entityView" x-h-include="entityUrl" @fragment:loaded="onFragmentLoaded()"></div>
         </div>
-
       </div>
     </div>
   </div>
