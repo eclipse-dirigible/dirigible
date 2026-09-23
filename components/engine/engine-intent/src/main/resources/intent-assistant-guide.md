@@ -3927,15 +3927,20 @@ reach for: one worklist for the human, one fallback process, and an audit row pe
 Declare the trace field `readOnly: true` - a guard on a field the user can edit turns "how did this
 record get here" into "what does the field say today", and Generate warns about it.
 
-**Mint a status per outcome when the outcomes are handled DIFFERENTLY** - different people, a different
-form, a different flow. A process binds at most one trigger and a guard list is ANDed, never ORed, so
-two failure kinds that genuinely need two flows do need two statuses to start them. Two processes
-identical but for their trigger are the sign this was the wrong branch.
+**Outcomes handled DIFFERENTLY - different people, a different form, a different flow - need two
+TRIGGERS, which is not the same as two statuses.** A process binds at most one trigger and a guard
+list is ANDed, never ORed, so one process cannot cover two statuses; but a process trigger takes the
+same list form the `generates` guard does, so two DIFFERENT processes can both trigger on the one
+routing status and be separated by the outcome term -
+`when: ["Status == UNRESOLVED", "resolution == notFound"]` on one, `"resolution == ambiguous"` on the
+other. That is the shape to reach for when the flows differ. Two processes identical but for their
+trigger STATUS, doing the same thing, are the sign the split was not needed at all.
 
-**And mint one per outcome for a `postings:` reaction whatever the flow** - a posting's guard is the
-status term alone, no list and no string term, so it cannot read the trace. This is the one consumer
-the paragraph above does not apply to; every other reaction to a lookup's outcomes (`generates:`,
-`notifications:`, `integrations:`, `outbound:`) can read it.
+**A `postings:` reaction is the one reason to mint a status per outcome** - a posting's guard is the
+status term alone, no list and no string term, so it cannot read the trace. Every other reaction to a
+lookup's outcomes takes the ANDed list and so can read it: `generates:`, a process `trigger:`,
+`notifications:`, `integrations:`, `outbound:`. So if a posting has to tell the two failures apart,
+give them a status each whatever the flow; otherwise one routing status carries them all.
 
 What is never right is one status plus no outcome term: the two failures are then indistinguishable to
 everything downstream.
