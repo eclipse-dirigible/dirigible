@@ -20,12 +20,7 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
         layoutSettings: {
             hideCenterPane: false,
             // The assistant lives in the right pane; a chat with a code diff in it needs the room.
-            rightPaneSize: 25,
-            // No minimum width floor on the side panes: the split collapses a pane only down to its
-            // minSize, so a non-zero floor would keep a "collapsed" panel that wide and reclaim nothing.
-            // The header's toggle buttons collapse them fully (and drag can shrink them freely).
-            leftPaneMinSize: 0,
-            rightPaneMinSize: 0
+            rightPaneSize: 25
         },
     };
 

@@ -146,38 +146,6 @@ class LayoutHub extends MessageHubApi {
     }
 
     /**
-     * Toggles the collapsed state of the left (side) pane, reclaiming or restoring its width.
-     */
-    toggleLeftPane() {
-        this.triggerEvent(`platform.layout${this.layoutId}.pane.toggle-left`);
-    }
-
-    /**
-     * Triggered when the left pane should be toggled.
-     * @param handler - Callback function.
-     * @returns - A reference to the listener. In order to remove/disable the listener, you need to use this reference and pass it to the 'removeMessageListener' function.
-     */
-    onToggleLeftPane(handler) {
-        return this.addMessageListener({ topic: `platform.layout${this.layoutId}.pane.toggle-left`, handler: handler });
-    }
-
-    /**
-     * Toggles the collapsed state of the right (side) pane, reclaiming or restoring its width.
-     */
-    toggleRightPane() {
-        this.triggerEvent(`platform.layout${this.layoutId}.pane.toggle-right`);
-    }
-
-    /**
-     * Triggered when the right pane should be toggled.
-     * @param handler - Callback function.
-     * @returns - A reference to the listener. In order to remove/disable the listener, you need to use this reference and pass it to the 'removeMessageListener' function.
-     */
-    onToggleRightPane(handler) {
-        return this.addMessageListener({ topic: `platform.layout${this.layoutId}.pane.toggle-right`, handler: handler });
-    }
-
-    /**
      * Closes a view inside the layout.
      * @param {string} id - View id.
      * @param {object} [params] - Custom parameters.

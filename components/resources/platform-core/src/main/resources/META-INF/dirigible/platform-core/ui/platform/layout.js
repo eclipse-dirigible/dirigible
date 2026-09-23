@@ -51,11 +51,15 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
             $scope.layoutSettings = {
                 leftPaneSize: 20,
-                leftPaneMinSize: 0,
+                // The collapse chevron shrinks a side pane to this rail width (px) instead of hiding it
+                // completely, so the chevron stays on screen to expand it again.
+                leftPaneMinSize: 41,
                 leftPaneMaxSize: undefined,
                 rightPaneSize: 20,
-                rightPaneMinSize: 0,
+                rightPaneMinSize: 41,
                 rightPaneMaxSize: undefined,
+                // Width (px) a collapsed side pane reopens at when its chevron expands it.
+                sidePaneExpandSize: 350,
                 bottomPaneSize: 30,
                 hideCenterPane: false,
                 hideCenterTabs: false,
@@ -902,9 +906,6 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             const onFocusViewListener = Layout.onFocusView(onFocusView);
             const onFocusEditorListener = Layout.onFocusEditor(onFocusView);
 
-            const onToggleLeftPaneListener = Layout.onToggleLeftPane(() => $scope.$apply($scope.toggleLeftPane));
-            const onToggleRightPaneListener = Layout.onToggleRightPane(() => $scope.$apply($scope.toggleRightPane));
-
             function shortenCenterTabsLabels() {
 
                 const getTabPath = tab => {
@@ -1176,8 +1177,6 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 Workspace.removeMessageListener(onFileDeletedListener);
                 Layout.removeMessageListener(onFocusViewListener);
                 Layout.removeMessageListener(onFocusEditorListener);
-                Layout.removeMessageListener(onToggleLeftPaneListener);
-                Layout.removeMessageListener(onToggleRightPaneListener);
             });
         }],
         templateUrl: '/services/web/platform-core/ui/templates/layout.html',
@@ -1186,7 +1185,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
         restrict: 'E',
         replace: true,
         transclude: true,
-        scope: { views: '=' },
+        scope: { views: '=', region: '@', collapsed: '<', onToggleCollapse: '&' },
         link: {
             pre: (scope) => {
                 if (top.location.search) {
@@ -1208,12 +1207,22 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                     container: 'layout',
                     perspectiveId: perspectiveData.id,
                 });
+                // The first panel's chevron collapses the whole side pane (reclaiming editor width)
+                // and points the way it collapses / expands; the other panels keep their own chevron.
+                scope.paneToggleGlyph = () => {
+                    const pointRight = 'sap-icon--navigation-right-arrow';
+                    const pointLeft = 'sap-icon--navigation-left-arrow';
+                    if (scope.region === 'right') return scope.collapsed ? pointLeft : pointRight;
+                    return scope.collapsed ? pointRight : pointLeft;
+                };
             }
         },
         template: `<div class="bk-vbox bk-full-height pf-accordion">
             <bk-panel class="pf-accordion-panel" ng-attr-shrink="{{!view.expanded}}" compact="true" expanded="view.expanded" ng-repeat="view in views track by view.id">
                 <bk-panel-header>
-                    <bk-panel-expand hint="{{view.expanded ? 'Collapse' : 'Expand' }} '{{::view.label}}' view"></bk-panel-expand>
+                    <bk-button ng-if="$first && region" class="pf-pane-collapse" state="transparent" compact="true" ng-click="onToggleCollapse()" glyph="{{paneToggleGlyph()}}"
+                        title="{{collapsed ? 'Expand panel' : 'Collapse panel'}}" aria-label="{{collapsed ? 'Expand panel' : 'Collapse panel'}}"></bk-button>
+                    <bk-panel-expand ng-if="!($first && region)" hint="{{view.expanded ? 'Collapse' : 'Expand' }} '{{::view.label}}' view"></bk-panel-expand>
                     <h4 bk-panel-title>{{::view.label}}</h4>
                 </bk-panel-header>
                 <bk-panel-content class="bk-full-height" aria-label="{{::view.label}} content">

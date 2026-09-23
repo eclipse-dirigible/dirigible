@@ -225,14 +225,6 @@ if (window !== top) {
             scope.saveNotifications();
           };
 
-          scope.toggleLeftPane = () => {
-            new LayoutHub(scope.perspectiveId).toggleLeftPane();
-          };
-
-          scope.toggleRightPane = () => {
-            new LayoutHub(scope.perspectiveId).toggleRightPane();
-          };
-
           scope.menuClick = (item) => {
             if (item.action === "openView") {
               new LayoutHub(scope.perspectiveId).openView({
