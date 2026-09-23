@@ -92,6 +92,17 @@
         </bk-shellbar-group>
         <div style="flex:2;order:2;" id="spacer"></div>
         <bk-shellbar-group position="right" style="flex:0">
+            <!-- Reclaim editor width by collapsing/restoring the left and right side panels of the
+                 active perspective's layout. Always visible - a collapsed panel has no width to host
+                 its own restore control. -->
+            <bk-shellbar-action>
+                <bk-button id="toggle-left-panel" bk-shellbar-button glyph="sap-icon--navigation-left-arrow" ng-click="toggleLeftPane()"
+                    title="{{'toggleLeftPanel' | t:'Toggle left panel'}}" aria-label="{{'toggleLeftPanel' | t:'Toggle left panel'}}"></bk-button>
+            </bk-shellbar-action>
+            <bk-shellbar-action>
+                <bk-button id="toggle-right-panel" bk-shellbar-button glyph="sap-icon--navigation-right-arrow" ng-click="toggleRightPane()"
+                    title="{{'toggleRightPanel' | t:'Toggle right panel'}}" aria-label="{{'toggleRightPanel' | t:'Toggle right panel'}}"></bk-button>
+            </bk-shellbar-action>
             <bk-shellbar-action>
                 <bk-popover close-innerclick="false">
                     <bk-popover-control>

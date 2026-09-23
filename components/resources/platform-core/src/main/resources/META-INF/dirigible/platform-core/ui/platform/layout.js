@@ -16,7 +16,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
     .constant('Layout', new LayoutHub(perspectiveData.id, true))
     .constant('Workspace', new WorkspaceHub())
     .constant('Dialog', new DialogHub())
-    .directive('layout', (Views, Editors, SplitPaneState, layoutConstants, uuid, Layout, Workspace, Dialog, ButtonStates) => ({
+    .directive('layout', (Views, Editors, SplitPaneState, layoutConstants, uuid, Layout, Workspace, Dialog, ButtonStates, $timeout) => ({
         restrict: 'E',
         replace: true,
         scope: {
@@ -172,6 +172,10 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
                     shortenCenterTabsLabels();
 
+                    if (savedState.sidePanes) {
+                        restoreSidePanesState(savedState.sidePanes);
+                    }
+
                 } else {
                     let openViews = $scope.initialOpenViews.reduce(viewById, []);
 
@@ -264,6 +268,58 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 return $scope.splitPanesState.main.length < 2 || $scope.splitPanesState.main[1] == SplitPaneState.COLLAPSED;
             };
 
+            // The outer horizontal split renders its panes in this order: [left?, center, right?].
+            // The left pane, when present, is always first; the right pane, when present, is always last.
+            function leftPaneStateIndex() {
+                return $scope.leftTabs.length > 0 ? 0 : -1;
+            }
+
+            function rightPaneStateIndex() {
+                if ($scope.rightTabs.length === 0) return -1;
+                return ($scope.leftTabs.length > 0 ? 1 : 0) + 1;
+            }
+
+            $scope.isLeftPaneCollapsed = () => {
+                const index = leftPaneStateIndex();
+                return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
+            };
+
+            $scope.isRightPaneCollapsed = () => {
+                const index = rightPaneStateIndex();
+                return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
+            };
+
+            $scope.toggleLeftPane = () => {
+                const index = leftPaneStateIndex();
+                if (index < 0 || !$scope.splitPanesState.side) return;
+                $scope.splitPanesState.side[index] = $scope.isLeftPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
+                saveLayoutState();
+            };
+
+            $scope.toggleRightPane = () => {
+                const index = rightPaneStateIndex();
+                if (index < 0 || !$scope.splitPanesState.side) return;
+                $scope.splitPanesState.side[index] = $scope.isRightPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
+                saveLayoutState();
+            };
+
+            function restoreSidePanesState(sidePanes) {
+                // The split builds its state array while its panes link, so the collapse can only be
+                // applied once that has happened - defer it a tick so the change is picked up as a
+                // transition (EXPANDED -> COLLAPSED) that actually collapses the pane.
+                $timeout(() => {
+                    if (!$scope.splitPanesState.side) return;
+                    if (sidePanes.left && !$scope.isLeftPaneCollapsed()) {
+                        const index = leftPaneStateIndex();
+                        if (index >= 0) $scope.splitPanesState.side[index] = SplitPaneState.COLLAPSED;
+                    }
+                    if (sidePanes.right && !$scope.isRightPaneCollapsed()) {
+                        const index = rightPaneStateIndex();
+                        if (index >= 0) $scope.splitPanesState.side[index] = SplitPaneState.COLLAPSED;
+                    }
+                });
+            }
+
             $scope.isMoreTabsButtonVisible = (tabs) => tabs.some(x => x.isHidden);
 
             $scope.sideViewStateChanged = () => saveLayoutState();
@@ -334,7 +390,11 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                         tabs: $scope.bottomTabs.map(({ id, type }) => ({ id, type })),
                         selected: $scope.selection.selectedBottomTab
                     },
-                    center: saveCenterSplittedTabViews($scope.centerSplittedTabViews)
+                    center: saveCenterSplittedTabViews($scope.centerSplittedTabViews),
+                    sidePanes: {
+                        left: $scope.isLeftPaneCollapsed(),
+                        right: $scope.isRightPaneCollapsed()
+                    }
                 };
 
                 localStorage.setItem(layoutStateKey, JSON.stringify(state));
@@ -842,6 +902,9 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             const onFocusViewListener = Layout.onFocusView(onFocusView);
             const onFocusEditorListener = Layout.onFocusEditor(onFocusView);
 
+            const onToggleLeftPaneListener = Layout.onToggleLeftPane(() => $scope.$apply($scope.toggleLeftPane));
+            const onToggleRightPaneListener = Layout.onToggleRightPane(() => $scope.$apply($scope.toggleRightPane));
+
             function shortenCenterTabsLabels() {
 
                 const getTabPath = tab => {
@@ -1113,6 +1176,8 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 Workspace.removeMessageListener(onFileDeletedListener);
                 Layout.removeMessageListener(onFocusViewListener);
                 Layout.removeMessageListener(onFocusEditorListener);
+                Layout.removeMessageListener(onToggleLeftPaneListener);
+                Layout.removeMessageListener(onToggleRightPaneListener);
             });
         }],
         templateUrl: '/services/web/platform-core/ui/templates/layout.html',
