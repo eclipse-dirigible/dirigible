@@ -14,8 +14,8 @@ export function sampleValue(field) {
   switch (field.type) {
     case 'string': {
       const len = field.length ?? 64;
-      if (len >= 16) return 'APPTEST-' + rand(ALPHA + DIGITS, 6);
-      return rand(ALPHA, Math.max(1, len - 1)) + rand(DIGITS, 1);
+      const value = len >= 16 ? 'APPTEST-' + rand(ALPHA + DIGITS, 6) : rand(ALPHA, Math.max(1, len - 1)) + rand(DIGITS, 1);
+      return field.pattern ? shaped(field, value) : value;
     }
     case 'integer':
     case 'bigint':
@@ -35,6 +35,31 @@ export function sampleValue(field) {
     default:
       return 'APPTEST-' + rand(ALPHA + DIGITS, 6);
   }
+}
+
+// A `pattern:` field (an authored regex, or the address regex behind `format: email`) is rejected
+// by the generated controller with 400 unless the value has the declared shape, so the marker value
+// above has to be traded for one that matches: the candidates are tried in order and the first that
+// both matches and fits the declared length wins. A pattern nothing here matches keeps the plain
+// marker - the controller's own 400 then names the field and the pattern, which is the message the
+// module author needs, and a silent near-miss would not.
+function shaped(field, value) {
+  let regex;
+  try {
+    // anchored like the generated controller's own String.matches, so an unanchored pattern cannot
+    // pass here on a substring and then be refused by the server
+    regex = new RegExp('^(?:' + field.pattern + ')$');
+  } catch {
+    return value; // not a JavaScript-parsable regex - nothing to shape the value to
+  }
+  const token = value.replace(/[^A-Za-z0-9]/g, '');
+  const candidates = [
+    value,
+    `apptest.${token}@apptest.example.com`, // format: email and other address-shaped patterns
+    token, // letters and digits, no separator
+    rand(DIGITS, 10), // a numeric code
+  ];
+  return candidates.find((candidate) => candidate.length <= (field.length ?? 255) && regex.test(candidate)) ?? value;
 }
 
 export function editableFields(entity) {
@@ -108,11 +133,15 @@ function shifted(value, type, step) {
 }
 
 // The searchable "handle" field: the first long string field shown in the list. Its
-// value identifies the record in the table across the create/edit/delete flow.
+// value identifies the record in the table across the create/edit/delete flow, and the flows
+// flip it by appending a suffix - so a field carrying a `pattern:` cannot be it, the suffix
+// breaking the very shape the controller enforces. Read-only fields are out through
+// editableFields: a `number:` field is the platform's to stamp and preserve, so a write to it
+// reads back unchanged (dirigible #7411).
 // Null when the entity has no such field (all-numeric/date entities) - flows degrade:
 // the UI walk is skipped and the REST flow drops its update-value assertion.
 export function handleField(entity) {
-  return editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false) ?? null;
+  return editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false && !f.pattern) ?? null;
 }
 
 export function labelOf(field) {

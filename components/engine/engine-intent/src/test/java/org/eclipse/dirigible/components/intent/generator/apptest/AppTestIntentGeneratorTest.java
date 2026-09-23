@@ -32,6 +32,9 @@ import org.junit.jupiter.api.Test;
  */
 class AppTestIntentGeneratorTest {
 
+    /** The canonical address regex {@code format: email} resolves to - what the EDM emits. */
+    private static final String EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$";
+
     private static final String INTENT = """
             name: countries
             languages: [en, bg]
@@ -258,6 +261,57 @@ class AppTestIntentGeneratorTest {
         assertNull(entity(manifest, "Person").get("personal"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void mirrorsThePlatformOwnedFieldsAndTheDeleteGuardOfTheModel() {
+        String intent = """
+                name: invoices
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                      - { name: email, type: string, length: 320, format: email }
+                      - { name: total, type: decimal }
+                      - { name: reference, type: string, length: 200 }
+                """;
+        Map<String, Object> edm = edmEntity("SalesInvoice", "Sales Invoice", "Sales Invoices", "MANAGE_LIST", "Invoices", "sales",
+                "KF_MOD_INVOICES_SALESINVOICE", false);
+        edm.put("properties", List.of(property("Id", Map.of("dataPrimaryKey", "true")),
+                // what the EDM generator emits for a `number:` field: the platform stamps it and the
+                // form renders it read-only
+                property("Number", Map.of("isReadOnlyProperty", "true")), property("Email", Map.of("widgetPattern", EMAIL_PATTERN)),
+                // on a numeric property the same attribute is the DISPLAY format, never a guard
+                property("Total", Map.of("widgetPattern", "### ##0.00")), property("Reference", Map.of())));
+        edm.put("processDeleteGuards", "SalesInvoicePosting:Sales Invoice Posting");
+        Map<String, Map<String, Object>> edmEntities = new LinkedHashMap<>();
+        edmEntities.put("SalesInvoice", edm);
+
+        Map<String, Object> invoice = entity(
+                AppTestIntentGenerator.buildManifest("invoices", "invoices", IntentParser.parse(intent), edmEntities), "SalesInvoice");
+        Map<String, Map<String, Object>> fields = new LinkedHashMap<>();
+        for (Map<String, Object> field : (List<Map<String, Object>>) invoice.get("fields")) {
+            fields.put(String.valueOf(field.get("name")), field);
+        }
+
+        // the number field is the platform's: the DAO stamps and preserves it, so the runner must
+        // neither write it nor pick it as the value it flips to prove an update landed
+        assertEquals(Boolean.TRUE, fields.get("Number")
+                                         .get("readOnly"));
+        // the shape guard travels, so the sample value can be made to match instead of being refused
+        assertEquals(EMAIL_PATTERN, fields.get("Email")
+                                          .get("pattern"));
+        assertNull(fields.get("Total")
+                         .get("pattern"),
+                "a numeric widgetPattern is a display format, not an input guard");
+        assertNull(fields.get("Reference")
+                         .get("readOnly"));
+        assertNull(fields.get("Reference")
+                         .get("pattern"));
+        // the process guard: the delete of a record whose instance still runs is refused with 409
+        assertEquals(List.of("Sales Invoice Posting"), invoice.get("deleteGuardedByProcess"));
+    }
+
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
 
     private static Map<String, Map<String, Object>> edm() {
@@ -268,6 +322,14 @@ class AppTestIntentGeneratorTest {
         byName.put("Account",
                 edmEntity("Account", "Account", "Accounts", "MANAGE_LIST", "Accounts", "master-data", "KF_MOD_COUNTRIES_ACCOUNT", false));
         return byName;
+    }
+
+    /** One {@code .model} property: its PascalCase name plus the attributes the manifest reads. */
+    private static Map<String, Object> property(String name, Map<String, String> attributes) {
+        Map<String, Object> property = new LinkedHashMap<>();
+        property.put("name", name);
+        property.putAll(attributes);
+        return property;
     }
 
     private static Map<String, Object> edmEntity(String name, String label, String plural, String layoutType, String perspective,
