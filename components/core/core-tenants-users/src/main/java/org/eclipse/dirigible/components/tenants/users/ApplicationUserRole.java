@@ -16,6 +16,8 @@ import org.hibernate.annotations.OnDeleteAction;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -26,10 +28,15 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
 /**
- * One role granted to an {@link ApplicationUser} - an identity-provider group membership
- * {@code <tenantId>.<appId>.<role>} as this application knows it - with who granted it, when, and
- * by which request. The first grant keeps its who and when: a later callback for the same role
- * changes nothing here.
+ * One role of an {@link ApplicationUser} - an identity-provider group membership
+ * {@code <tenantId>.<appId>.<role>} as this application knows it - through its whole life: who
+ * asked for it and when, by which request, whether it was granted (by whom, when) or why it failed.
+ *
+ * <p>
+ * One row per user and role. A request creates it {@link ApplicationUserRoleState#REQUESTED}; the
+ * provisioning system's callback makes it {@link ApplicationUserRoleState#GRANTED} or
+ * {@link ApplicationUserRoleState#FAILED}. The first grant keeps its who and when: a later callback
+ * for a granted role changes nothing here.
  */
 @Entity
 @Table(name = "DIRIGIBLE_APPLICATION_USER_ROLES",
@@ -43,7 +50,7 @@ public class ApplicationUserRole {
     @Column(name = "APPUSERROLE_ID", columnDefinition = "BIGINT", nullable = false)
     private Long id;
 
-    /** The user the role is granted to. */
+    /** The user the role belongs to. */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "APPUSERROLE_USER_ID", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
@@ -53,17 +60,34 @@ public class ApplicationUserRole {
     @Column(name = "APPUSERROLE_ROLE", columnDefinition = "VARCHAR", nullable = false, length = 100)
     private String role;
 
+    /** Where the role stands. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "APPUSERROLE_STATE", columnDefinition = "VARCHAR", nullable = false, length = 50)
+    private ApplicationUserRoleState state;
+
+    /** The message id of the latest request for the role - the granting one once it is granted. */
+    @Column(name = "APPUSERROLE_REQUEST_ID", columnDefinition = "VARCHAR", length = 64)
+    private String requestId;
+
+    /** Who asked for the role, when this application asked. */
+    @Column(name = "APPUSERROLE_REQUESTED_BY", columnDefinition = "VARCHAR", length = 320)
+    private String requestedBy;
+
+    /** When the latest request was published - refreshed when it is sent again. */
+    @Column(name = "APPUSERROLE_REQUESTED_AT", columnDefinition = "TIMESTAMP")
+    private Instant requestedAt;
+
     /** Who granted it. */
     @Column(name = "APPUSERROLE_GRANTED_BY", columnDefinition = "VARCHAR", length = 320)
     private String grantedBy;
 
     /** When it was granted. */
-    @Column(name = "APPUSERROLE_GRANTED_AT", columnDefinition = "TIMESTAMP", nullable = false)
+    @Column(name = "APPUSERROLE_GRANTED_AT", columnDefinition = "TIMESTAMP")
     private Instant grantedAt;
 
-    /** The request that granted it. */
-    @Column(name = "APPUSERROLE_REQUEST_ID", columnDefinition = "VARCHAR", length = 64)
-    private String requestId;
+    /** The failure text of the latest failed request. */
+    @Column(name = "APPUSERROLE_ERROR_MESSAGE", columnDefinition = "VARCHAR", length = 2000)
+    private String errorMessage;
 
     /**
      * Instantiates a new role row. Required by JPA.
@@ -75,16 +99,22 @@ public class ApplicationUserRole {
      *
      * @param user the user
      * @param role the role
-     * @param grantedBy who granted it
-     * @param grantedAt when
-     * @param requestId the granting request, may be null
+     * @param state the initial state
      */
-    ApplicationUserRole(ApplicationUser user, String role, String grantedBy, Instant grantedAt, String requestId) {
+    ApplicationUserRole(ApplicationUser user, String role, ApplicationUserRoleState state) {
         this.user = user;
         this.role = role;
-        this.grantedBy = grantedBy;
-        this.grantedAt = grantedAt;
-        this.requestId = requestId;
+        this.state = state;
+    }
+
+    /**
+     * Whether the role is in the given state.
+     *
+     * @param expected the state
+     * @return whether it is
+     */
+    boolean is(ApplicationUserRoleState expected) {
+        return state == expected;
     }
 
     public Long getId() {
@@ -95,15 +125,59 @@ public class ApplicationUserRole {
         return role;
     }
 
+    public ApplicationUserRoleState getState() {
+        return state;
+    }
+
+    void setState(ApplicationUserRoleState state) {
+        this.state = state;
+    }
+
+    public String getRequestId() {
+        return requestId;
+    }
+
+    void setRequestId(String requestId) {
+        this.requestId = requestId;
+    }
+
+    public String getRequestedBy() {
+        return requestedBy;
+    }
+
+    void setRequestedBy(String requestedBy) {
+        this.requestedBy = requestedBy;
+    }
+
+    public Instant getRequestedAt() {
+        return requestedAt;
+    }
+
+    void setRequestedAt(Instant requestedAt) {
+        this.requestedAt = requestedAt;
+    }
+
     public String getGrantedBy() {
         return grantedBy;
+    }
+
+    void setGrantedBy(String grantedBy) {
+        this.grantedBy = grantedBy;
     }
 
     public Instant getGrantedAt() {
         return grantedAt;
     }
 
-    public String getRequestId() {
-        return requestId;
+    void setGrantedAt(Instant grantedAt) {
+        this.grantedAt = grantedAt;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 }

@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.tenants.users;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * An application user as the APIs answer it. Every timestamp is an ISO-8601 string, never a number.
@@ -18,13 +19,8 @@ import java.util.List;
  * @param id the id
  * @param tenantId the tenant id
  * @param email the email
- * @param roles the granted roles
+ * @param roles the roles, in every state
  * @param status the account status
- * @param errorMessage the failure text of the latest failed request
- * @param requestId the latest request's message id
- * @param requestedRole the role the latest request asked for
- * @param requestState the latest request's state
- * @param requestedAt when the latest request was published
  * @param invitedBy who made the first request
  * @param invitedAt when
  * @param updatedBy who last changed the row
@@ -32,19 +28,36 @@ import java.util.List;
  * @param lastSignInAt when the person last entered the tenant
  * @param createdAt when the row was created
  */
-public record ApplicationUserState(Long id, String tenantId, String email, List<GrantedRole> roles, String status, String errorMessage,
-        String requestId, String requestedRole, String requestState, String requestedAt, String invitedBy, String invitedAt,
-        String updatedBy, String updatedAt, String lastSignInAt, String createdAt) {
+public record ApplicationUserState(Long id, String tenantId, String email, List<RoleState> roles, String status, String invitedBy,
+        String invitedAt, String updatedBy, String updatedAt, String lastSignInAt, String createdAt) {
 
     /**
-     * One granted role.
+     * One role of the user.
      *
      * @param role the role
+     * @param state {@code REQUESTED}, {@code GRANTED} or {@code FAILED}
+     * @param requestId the latest request for the role - the granting one once granted
+     * @param requestedBy who asked for it
+     * @param requestedAt when the latest request was published
      * @param grantedBy who granted it
      * @param grantedAt when
-     * @param requestId the granting request
+     * @param errorMessage the failure text of the latest failed request
      */
-    public record GrantedRole(String role, String grantedBy, String grantedAt, String requestId) {
+    public record RoleState(String role, String state, String requestId, String requestedBy, String requestedAt, String grantedBy,
+            String grantedAt, String errorMessage) {
+    }
+
+    /**
+     * The given role, if the user has a row for it.
+     *
+     * @param role the role
+     * @return the role
+     */
+    public Optional<RoleState> role(String role) {
+        return roles.stream()
+                    .filter(row -> row.role()
+                                      .equals(role))
+                    .findFirst();
     }
 
     /**
@@ -54,19 +67,17 @@ public record ApplicationUserState(Long id, String tenantId, String email, List<
      * @return the state
      */
     static ApplicationUserState of(ApplicationUser user) {
-        List<GrantedRole> roles = user.getRoles()
-                                      .stream()
-                                      .map(role -> new GrantedRole(role.getRole(), role.getGrantedBy(), iso(role.getGrantedAt()),
-                                              role.getRequestId()))
-                                      .toList();
+        List<RoleState> roles = user.getRoles()
+                                    .stream()
+                                    .map(row -> new RoleState(row.getRole(), row.getState()
+                                                                                .name(),
+                                            row.getRequestId(), row.getRequestedBy(), iso(row.getRequestedAt()), row.getGrantedBy(),
+                                            iso(row.getGrantedAt()), row.getErrorMessage()))
+                                    .toList();
         return new ApplicationUserState(user.getId(), user.getTenantId(), user.getEmail(), roles, user.getStatus()
                                                                                                       .name(),
-                user.getErrorMessage(), user.getRequestId(), user.getRequestedRole(),
-                user.getRequestState() == null ? null
-                        : user.getRequestState()
-                              .name(),
-                iso(user.getRequestedAt()), user.getInvitedBy(), iso(user.getInvitedAt()), user.getUpdatedBy(), iso(user.getUpdatedAt()),
-                iso(user.getLastSignInAt()), iso(user.getCreatedAt()));
+                user.getInvitedBy(), iso(user.getInvitedAt()), user.getUpdatedBy(), iso(user.getUpdatedAt()), iso(user.getLastSignInAt()),
+                iso(user.getCreatedAt()));
     }
 
     /**

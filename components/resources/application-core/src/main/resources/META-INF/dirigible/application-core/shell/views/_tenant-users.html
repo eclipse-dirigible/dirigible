@@ -71,7 +71,6 @@
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.statusColumn', 'Status')"></th>
-          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.requestColumn', 'Latest request')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.invitedColumn', 'Invited')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.updatedColumn', 'Updated')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.signInColumn', 'Last sign-in')"></th>
@@ -82,29 +81,27 @@
           <tr x-h-table-row :data-user="user.email">
             <td x-h-table-cell class="whitespace-nowrap" x-text="user.email"></td>
             <td x-h-table-cell>
-              <div class="hbox gap-1 flex-wrap">
-                <template x-for="role in user.roles" :key="role.role">
-                  <span x-h-badge data-variant="outline" :title="$store.tenantUsers.grantedTitle(role)" x-text="role.role"></span>
-                </template>
-              </div>
-            </td>
-            <td x-h-table-cell>
               <div class="vbox gap-1">
-                <span x-h-badge :data-variant="$store.tenantUsers.statusVariant(user.status)" x-text="$store.tenantUsers.statusLabel(user.status)"></span>
-                <template x-if="$store.tenantUsers.isStale(user)">
-                  <div class="hbox items-center gap-2">
-                    <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.t('shell.tenantUsers.stale', 'No answer yet')"></span>
-                    <button x-h-button data-variant="outline" data-size="sm" type="button" :disabled="$store.tenantUsers.busy"
-                            @click="$store.tenantUsers.resend(user)" x-text="$store.tenantUsers.t('shell.tenantUsers.resend', 'Send again')"></button>
+                <template x-for="role in user.roles" :key="role.role">
+                  <div class="vbox gap-1" :data-role="role.role" :data-state="role.state">
+                    <div class="hbox items-center gap-2 flex-wrap">
+                      <span x-h-badge :data-variant="$store.tenantUsers.roleVariant(role)" :title="$store.tenantUsers.roleTitle(role)"
+                            x-text="$store.tenantUsers.roleLabel(role)"></span>
+                      <template x-if="$store.tenantUsers.isStale(role)">
+                        <div class="hbox items-center gap-2">
+                          <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.t('shell.tenantUsers.stale', 'No answer yet')"></span>
+                          <button x-h-button data-variant="outline" data-size="sm" type="button" :disabled="$store.tenantUsers.busy"
+                                  @click="$store.tenantUsers.resend(user, role)" x-text="$store.tenantUsers.t('shell.tenantUsers.resend', 'Send again')"></button>
+                        </div>
+                      </template>
+                    </div>
+                    <span x-show="role.state === 'FAILED' && role.errorMessage" x-h-text.muted class="text-xs" x-text="role.errorMessage"></span>
                   </div>
                 </template>
               </div>
             </td>
             <td x-h-table-cell>
-              <div class="vbox gap-1">
-                <span class="text-sm" x-text="$store.tenantUsers.requestLabel(user)"></span>
-                <span x-show="user.errorMessage" x-h-text.muted class="text-xs" x-text="user.errorMessage"></span>
-              </div>
+              <span x-h-badge :data-variant="$store.tenantUsers.statusVariant(user.status)" x-text="$store.tenantUsers.statusLabel(user.status)"></span>
             </td>
             <td x-h-table-cell>
               <div class="vbox gap-1">

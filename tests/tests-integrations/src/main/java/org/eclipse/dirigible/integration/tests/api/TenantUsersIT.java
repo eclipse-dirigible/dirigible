@@ -136,11 +136,14 @@ class TenantUsersIT extends IntegrationTest {
                                                            "{\"email\":\"Invited.Person@Example.com\",\"role\":\"User\",\"tenantId\":\"elsewhere\"}"))
                                .andExpect(status().isAccepted())
                                .andExpect(jsonPath("$.status").value("PENDING"))
-                               .andExpect(jsonPath("$.requestState").value("SENT"))
+                               .andExpect(jsonPath("$.roles[0].role").value("User"))
+                               .andExpect(jsonPath("$.roles[0].state").value("REQUESTED"))
                                .andExpect(jsonPath("$.tenantId").value(tenant.getId()))
                                .andReturn();
         String requestId = json.readTree(invited.getResponse()
                                                 .getContentAsString())
+                               .get("roles")
+                               .get(0)
                                .get("requestId")
                                .asText();
 
@@ -163,9 +166,19 @@ class TenantUsersIT extends IntegrationTest {
         mvc.perform(post(USERS).session(owner)
                                .with(authentication(person(OWNER, "Owner")))
                                .contentType(MediaType.APPLICATION_JSON)
-                               .content("{\"email\":\"invited.person@example.com\",\"role\":\"Owner\"}"))
+                               .content("{\"email\":\"invited.person@example.com\",\"role\":\"User\"}"))
            .andExpect(status().isConflict())
            .andExpect(jsonPath("$.reason").value("REQUEST_PENDING"));
+
+        // another role is requested side by side
+        mvc.perform(post(USERS).session(owner)
+                               .with(authentication(person(OWNER, "Owner")))
+                               .contentType(MediaType.APPLICATION_JSON)
+                               .content("{\"email\":\"invited.person@example.com\",\"role\":\"Owner\"}"))
+           .andExpect(status().isAccepted())
+           .andExpect(jsonPath("$.roles[?(@.role == 'Owner')].state").value("REQUESTED"))
+           .andExpect(jsonPath("$.roles[?(@.role == 'User')].state").value("REQUESTED"));
+        drainTheQueue();
     }
 
     @Test
@@ -176,16 +189,14 @@ class TenantUsersIT extends IntegrationTest {
 
         mvc.perform(post(USERS + "/" + user.get("id")
                                            .asLong()
-                + "/resend").session(owner)
-                            .with(authentication(person(OWNER, "Owner")))
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{}"))
+                + "/roles/User/resend").session(owner)
+                                       .with(authentication(person(OWNER, "Owner")))
+                                       .contentType(MediaType.APPLICATION_JSON)
+                                       .content("{}"))
            .andExpect(status().isAccepted());
-        assertEquals(user.get("requestId")
-                         .asText(),
-                json.readTree(MessagingFacade.receiveFromQueue(QUEUE, 10_000))
-                    .get("messageId")
-                    .asText());
+        assertEquals(requestIdOf(user, "User"), json.readTree(MessagingFacade.receiveFromQueue(QUEUE, 10_000))
+                                                    .get("messageId")
+                                                    .asText());
 
         mvc.perform(post(USERS).session(owner)
                                .with(authentication(person(OWNER, "Owner")))
@@ -205,20 +216,19 @@ class TenantUsersIT extends IntegrationTest {
                                                                                              .content(json.writeValueAsString(Map.of(
                                                                                                      "email", "invited.person@example.com",
                                                                                                      "role", "User", "status", "INVITED",
-                                                                                                     "requestId", user.get("requestId")
-                                                                                                                      .asText(),
+                                                                                                     "requestId", requestIdOf(user, "User"),
                                                                                                      "updatedBy", OWNER))))
            .andExpect(status().isOk());
 
         JsonNode after = userNamed(owner, "invited.person@example.com");
         assertEquals("INVITED", after.get("status")
                                      .asText());
-        assertEquals("COMPLETED", after.get("requestState")
-                                       .asText());
-        assertEquals("User", after.get("roles")
-                                  .get(0)
-                                  .get("role")
-                                  .asText());
+        assertEquals("GRANTED", roleOf(after, "User").get("state")
+                                                     .asText());
+        assertEquals(OWNER, roleOf(after, "User").get("requestedBy")
+                                                 .asText());
+        assertEquals("REQUESTED", roleOf(after, "Owner").get("state")
+                                                        .asText());
 
         mvc.perform(post(USERS).session(owner)
                                .with(authentication(person(OWNER, "Owner")))
@@ -291,5 +301,20 @@ class TenantUsersIT extends IntegrationTest {
         } catch (TimeoutException expected) {
             // drained
         }
+    }
+
+    private static JsonNode roleOf(JsonNode user, String role) {
+        for (JsonNode row : user.get("roles")) {
+            if (role.equals(row.get("role")
+                               .asText())) {
+                return row;
+            }
+        }
+        throw new AssertionError("[" + user.get("email") + "] has no role row [" + role + "]");
+    }
+
+    private static String requestIdOf(JsonNode user, String role) {
+        return roleOf(user, role).get("requestId")
+                                 .asText();
     }
 }

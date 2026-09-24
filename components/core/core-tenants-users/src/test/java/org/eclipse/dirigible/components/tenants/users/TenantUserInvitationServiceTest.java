@@ -65,15 +65,17 @@ class TenantUserInvitationServiceTest {
     }
 
     private static ApplicationUserState state(String email, String role, String requestId) {
-        return new ApplicationUserState(1L, "acme", email, List.of(), "PENDING", null, requestId, role, "SENT", NOW.toString(),
-                "owner@example.com", NOW.toString(), "owner@example.com", NOW.toString(), null, NOW.toString());
+        return new ApplicationUserState(
+                1L, "acme", email, List.of(new ApplicationUserState.RoleState(role, "REQUESTED", requestId, "owner@example.com",
+                        NOW.toString(), null, null, null)),
+                "PENDING", "owner@example.com", NOW.toString(), "owner@example.com", NOW.toString(), null, NOW.toString());
     }
 
     @Test
     void anInvitationIsRecordedThenPublishedWithTheContractEnvelope() throws Exception {
         when(users.prepareInvitation(eq("acme"), eq("new.user@example.com"), eq("User"), eq("owner@example.com"), anyString(),
                 eq(NOW))).thenAnswer(
-                        call -> new ApplicationUserService.PreparedInvitation(1L, true, null,
+                        call -> new ApplicationUserService.PreparedInvitation(1L, "User", true, null,
                                 state("new.user@example.com", "User", call.getArgument(4))));
 
         ApplicationUserState result = service.invite("acme", new InvitationRequest(" New.User@Example.com", "User"), "owner@example.com");
@@ -81,8 +83,11 @@ class TenantUserInvitationServiceTest {
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(producer).sendMessageToQueue(eq(QUEUE), body.capture());
         JsonNode message = json.readTree(body.getValue());
-        assertEquals(result.requestId(), message.get("messageId")
-                                                .asText());
+        assertEquals(result.role("User")
+                           .orElseThrow()
+                           .requestId(),
+                message.get("messageId")
+                       .asText());
         assertEquals("user.assignment.requested", message.get("type")
                                                          .asText());
         assertEquals(1, message.get("version")
@@ -104,7 +109,7 @@ class TenantUserInvitationServiceTest {
     @Test
     void aFailedPublishIsUndoneAndAnsweredUnavailable() throws Exception {
         ApplicationUserService.PreparedInvitation prepared =
-                new ApplicationUserService.PreparedInvitation(1L, true, null, state("x@example.com", "User", "m1"));
+                new ApplicationUserService.PreparedInvitation(1L, "User", true, null, state("x@example.com", "User", "m1"));
         when(users.prepareInvitation(any(), any(), any(), any(), any(), any())).thenReturn(prepared);
         doThrow(new JMSException("broker down")).when(producer)
                                                 .sendMessageToQueue(anyString(), anyString());
@@ -137,10 +142,10 @@ class TenantUserInvitationServiceTest {
 
     @Test
     void aResendPublishesTheSameId() throws Exception {
-        when(users.prepareResend("acme", 1L, "owner@example.com", NOW)).thenReturn(
-                new ApplicationUserService.PreparedInvitation(1L, false, null, state("x@example.com", "User", "m-kept")));
+        when(users.prepareResend("acme", 1L, "User", "owner@example.com", NOW)).thenReturn(
+                new ApplicationUserService.PreparedInvitation(1L, "User", false, null, state("x@example.com", "User", "m-kept")));
 
-        service.resend("acme", 1L, "owner@example.com");
+        service.resend("acme", 1L, "User", "owner@example.com");
 
         ArgumentCaptor<String> body = ArgumentCaptor.forClass(String.class);
         verify(producer).sendMessageToQueue(eq(QUEUE), body.capture());

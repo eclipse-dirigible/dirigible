@@ -10,16 +10,16 @@
 package org.eclipse.dirigible.components.tenants.users;
 
 /**
- * The state of the latest request made for an application user.
+ * Where one role of an application user stands: asked for, granted, or refused.
  */
-public enum ApplicationUserRequestState {
+public enum ApplicationUserRoleState {
 
-    /** Published, not answered yet. */
-    SENT,
+    /** The request for the role was published and not answered yet. */
+    REQUESTED,
 
-    /** Answered with a granted role. */
-    COMPLETED,
+    /** The role is granted - the person holds the identity-provider group. */
+    GRANTED,
 
-    /** Answered with a failure. */
+    /** The latest request for the role failed. */
     FAILED
 }

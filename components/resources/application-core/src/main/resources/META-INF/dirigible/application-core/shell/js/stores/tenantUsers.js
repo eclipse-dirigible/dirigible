@@ -126,9 +126,10 @@ document.addEventListener('alpine:init', () => {
       });
     },
 
-    /** Sends an unanswered request again, with the same id. */
-    async resend(user) {
-      await this.send(USERS_URL + '/' + encodeURIComponent(user.id) + '/resend', {}, () => {
+    /** Sends a role's unanswered request again, with the same id. */
+    async resend(user, role) {
+      const url = USERS_URL + '/' + encodeURIComponent(user.id) + '/roles/' + encodeURIComponent(role.role) + '/resend';
+      await this.send(url, {}, () => {
         this.announce(this.t('shell.tenantUsers.resent', 'Invitation sent again to {{email}}', { email: user.email }));
       });
     },
@@ -158,9 +159,9 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    /** A request published and not answered for a while - the provisioning system may never have received it. */
-    isStale(user) {
-      return user.requestState === 'SENT' && !!user.requestedAt && Date.now() - Date.parse(user.requestedAt) > STALE_AFTER_MS;
+    /** A role requested and not answered for a while - the provisioning system may never have received the request. */
+    isStale(role) {
+      return role.state === 'REQUESTED' && !!role.requestedAt && Date.now() - Date.parse(role.requestedAt) > STALE_AFTER_MS;
     },
 
     statusVariant(status) {
@@ -178,14 +179,32 @@ document.addEventListener('alpine:init', () => {
       return this.t('shell.tenantUsers.status.' + status, fallback);
     },
 
-    requestLabel(user) {
-      if (!user.requestState) return '';
-      const fallback = { SENT: 'Sent', COMPLETED: 'Completed', FAILED: 'Failed' }[user.requestState] || user.requestState;
-      return (user.requestedRole ? user.requestedRole + ' - ' : '') + this.t('shell.tenantUsers.request.' + user.requestState, fallback);
+    /** A granted role is a plain badge; a requested or failed one says so. */
+    roleVariant(role) {
+      switch (role.state) {
+        case 'REQUESTED': return 'warning';
+        case 'FAILED': return 'negative';
+        default: return 'outline';
+      }
     },
 
-    grantedTitle(role) {
-      return this.t('shell.tenantUsers.grantedBy', 'Granted by {{by}} on {{at}}', { by: role.grantedBy || '-', at: this.time(role.grantedAt) });
+    roleLabel(role) {
+      if (role.state === 'GRANTED') return role.role;
+      const fallback = { REQUESTED: 'requested', FAILED: 'failed' }[role.state] || role.state;
+      return role.role + ' - ' + this.t('shell.tenantUsers.roleState.' + role.state, fallback);
+    },
+
+    /** Who asked for the role and who granted it, with when. */
+    roleTitle(role) {
+      const lines = [];
+      if (role.requestedAt) {
+        lines.push(this.t('shell.tenantUsers.requested', 'Requested by {{by}} on {{at}}', { by: role.requestedBy || '-', at: this.time(role.requestedAt) }));
+      }
+      if (role.grantedAt) {
+        lines.push(this.t('shell.tenantUsers.grantedBy', 'Granted by {{by}} on {{at}}', { by: role.grantedBy || '-', at: this.time(role.grantedAt) }));
+      }
+      if (role.errorMessage) lines.push(role.errorMessage);
+      return lines.join('\n');
     },
 
     /** A timestamp in the user's locale; empty when there is none. */
@@ -207,7 +226,7 @@ document.addEventListener('alpine:init', () => {
     messageFor(status, refusal) {
       const reason = refusal && refusal.reason;
       switch (reason) {
-        case 'REQUEST_PENDING': return this.t('shell.tenantUsers.error.pending', 'A request for this person is still waiting for an answer. Send it again from the list instead.');
+        case 'REQUEST_PENDING': return this.t('shell.tenantUsers.error.pending', 'A request for this role is still waiting for an answer. Send it again from the list instead.');
         case 'ROLE_ALREADY_GRANTED': return this.t('shell.tenantUsers.error.granted', 'This person already has that role.');
         case 'INVALID_EMAIL': return this.t('shell.tenantUsers.error.email', 'Enter a valid email address.');
         case 'INVALID_ROLE': return this.t('shell.tenantUsers.error.role', 'Choose one of the offered roles.');

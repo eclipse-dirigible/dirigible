@@ -10618,36 +10618,6 @@
                 },
                 {
                   "column": {
-                    "name": "APPUSER_ERROR_MESSAGE",
-                    "type": "VARCHAR(2000)"
-                  }
-                },
-                {
-                  "column": {
-                    "name": "APPUSER_REQUEST_ID",
-                    "type": "VARCHAR(64)"
-                  }
-                },
-                {
-                  "column": {
-                    "name": "APPUSER_REQUESTED_ROLE",
-                    "type": "VARCHAR(100)"
-                  }
-                },
-                {
-                  "column": {
-                    "name": "APPUSER_REQUEST_STATE",
-                    "type": "VARCHAR(50)"
-                  }
-                },
-                {
-                  "column": {
-                    "name": "APPUSER_REQUESTED_AT",
-                    "type": "TIMESTAMP"
-                  }
-                },
-                {
-                  "column": {
                     "name": "APPUSER_INVITED_BY",
                     "type": "VARCHAR(320)"
                   }
@@ -10749,14 +10719,8 @@
                 },
                 {
                   "column": {
-                    "name": "APPUSERROLE_GRANTED_BY",
-                    "type": "VARCHAR(320)"
-                  }
-                },
-                {
-                  "column": {
-                    "name": "APPUSERROLE_GRANTED_AT",
-                    "type": "TIMESTAMP",
+                    "name": "APPUSERROLE_STATE",
+                    "type": "VARCHAR(50)",
                     "constraints": {
                       "nullable": false
                     }
@@ -10766,6 +10730,36 @@
                   "column": {
                     "name": "APPUSERROLE_REQUEST_ID",
                     "type": "VARCHAR(64)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_REQUESTED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_REQUESTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_GRANTED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_GRANTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_ERROR_MESSAGE",
+                    "type": "VARCHAR(2000)"
                   }
                 }
               ],

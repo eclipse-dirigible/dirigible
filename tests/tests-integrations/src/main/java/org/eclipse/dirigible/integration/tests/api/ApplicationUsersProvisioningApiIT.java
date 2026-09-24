@@ -88,8 +88,9 @@ class ApplicationUsersProvisioningApiIT extends IntegrationTest {
                                                                          .statusCode(201)
                                                                          .body("email", equalTo("first.user@example.com"))
                                                                          .body("status", equalTo("INVITED"))
-                                                                         .body("requestState", equalTo("COMPLETED"))
                                                                          .body("roles", hasSize(1))
+                                                                         .body("roles[0].state", equalTo("GRANTED"))
+                                                                         .body("roles[0].requestId", equalTo("m-1"))
                                                                          .body("roles[0].role", equalTo("User"))
                                                                          .body("roles[0].grantedBy", equalTo("owner@example.com"))
                                                                          .body("invitedAt", containsString("T"));
@@ -102,28 +103,36 @@ class ApplicationUsersProvisioningApiIT extends IntegrationTest {
     }
 
     @Test
-    void aFailureNeverRemovesAGrantAndAFailureOfAnotherRequestIsIgnored() {
+    void aFailureNeverRemovesAGrantAndIsRecordedOnItsRole() {
         asProvisioner(() -> {
             put("second.user@example.com", "User", "ASSIGNED", "m-2", null).then()
                                                                            .statusCode(201);
-            put("second.user@example.com", "Owner", "FAILED", "m-0", "an older request").then()
-                                                                                        .statusCode(200)
-                                                                                        .body("status", equalTo("ASSIGNED"))
-                                                                                        .body("requestState", equalTo("COMPLETED"));
-            put("second.user@example.com", "Owner", "FAILED", "m-2", "boom").then()
+            put("second.user@example.com", "User", "FAILED", "m-2", "late").then()
+                                                                           .statusCode(200)
+                                                                           .body("roles[0].state", equalTo("GRANTED"));
+            put("second.user@example.com", "Owner", "FAILED", "m-3", "boom").then()
                                                                             .statusCode(200)
                                                                             .body("status", equalTo("ASSIGNED"))
-                                                                            .body("requestState", equalTo("FAILED"))
-                                                                            .body("errorMessage", equalTo("boom"));
+                                                                            .body("roles.find { it.role == 'Owner' }.state",
+                                                                                    equalTo("FAILED"))
+                                                                            .body("roles.find { it.role == 'Owner' }.errorMessage",
+                                                                                    equalTo("boom"))
+                                                                            .body("roles.find { it.role == 'User' }.state",
+                                                                                    equalTo("GRANTED"));
+            put("second.user@example.com", "Owner", "FAILED", "m-0", "an older request").then()
+                                                                                        .statusCode(200)
+                                                                                        .body("roles.find { it.role == 'Owner' }.errorMessage",
+                                                                                                equalTo("boom"));
         });
     }
 
     @Test
-    void aFailureForAnUnknownUserIsAFailedUserWithoutRoles() {
+    void aFailureForAnUnknownUserIsAFailedUserWithAFailedRole() {
         asProvisioner(() -> put("third.user@example.com", "User", "FAILED", "m-3", null).then()
                                                                                         .statusCode(201)
                                                                                         .body("status", equalTo("FAILED"))
-                                                                                        .body("roles", hasSize(0)));
+                                                                                        .body("roles", hasSize(1))
+                                                                                        .body("roles[0].state", equalTo("FAILED")));
     }
 
     @Test

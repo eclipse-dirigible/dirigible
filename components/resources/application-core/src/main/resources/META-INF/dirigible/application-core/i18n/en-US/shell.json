@@ -225,13 +225,13 @@
       "emptyHint": "Invite the first person above.",
       "roles": "Roles",
       "statusColumn": "Status",
-      "requestColumn": "Latest request",
       "invitedColumn": "Invited",
       "updatedColumn": "Updated",
       "signInColumn": "Last sign-in",
       "stale": "No answer yet",
       "resend": "Send again",
       "grantedBy": "Granted by {{by}} on {{at}}",
+      "requested": "Requested by {{by}} on {{at}}",
       "status": {
         "PENDING": "Pending",
         "INVITED": "Invited",
@@ -239,13 +239,13 @@
         "ACTIVE": "Active",
         "FAILED": "Failed"
       },
-      "request": {
-        "SENT": "Sent",
-        "COMPLETED": "Completed",
-        "FAILED": "Failed"
+      "roleState": {
+        "REQUESTED": "requested",
+        "GRANTED": "granted",
+        "FAILED": "failed"
       },
       "error": {
-        "pending": "A request for this person is still waiting for an answer. Send it again from the list instead.",
+        "pending": "A request for this role is still waiting for an answer. Send it again from the list instead.",
         "granted": "This person already has that role.",
         "email": "Enter a valid email address.",
         "role": "Choose one of the offered roles.",

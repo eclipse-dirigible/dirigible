@@ -71,6 +71,9 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible, Duration.ofSeconds(30))
                 .shouldHave(Condition.text("Pending"))
                 .shouldHave(Condition.text(OWNER));
+        Selenide.$(By.cssSelector("#tenant-users-table tr[data-user='invited.from.ui@example.com'] [data-role='User']"))
+                .shouldHave(Condition.attribute("data-state", "REQUESTED"))
+                .shouldHave(Condition.text("User - requested"));
     }
 
     @Test

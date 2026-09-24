@@ -27,9 +27,9 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 /**
- * One person in one tenant of this application: the account status, the latest request made for
- * them, who invited them and who last changed the row, and when they last entered the tenant. The
- * roles granted to them are {@link ApplicationUserRole} rows.
+ * One person in one tenant of this application: the account status, who invited them and who last
+ * changed the row, and when they last entered the tenant. Their roles - requested, granted or
+ * failed, each with its own request and audit - are {@link ApplicationUserRole} rows.
  *
  * <p>
  * The email is the only identity key, stored lower-cased, and unique together with the tenant. The
@@ -65,26 +65,6 @@ public class ApplicationUser {
     @Column(name = "APPUSER_STATUS", columnDefinition = "VARCHAR", nullable = false, length = 50)
     private ApplicationUserStatus status;
 
-    /** The failure text of the latest failed request. */
-    @Column(name = "APPUSER_ERROR_MESSAGE", columnDefinition = "VARCHAR", length = 2000)
-    private String errorMessage;
-
-    /** The message id of the latest request. */
-    @Column(name = "APPUSER_REQUEST_ID", columnDefinition = "VARCHAR", length = 64)
-    private String requestId;
-
-    /** The role the latest request asked for. */
-    @Column(name = "APPUSER_REQUESTED_ROLE", columnDefinition = "VARCHAR", length = 100)
-    private String requestedRole;
-
-    /** The state of the latest request. */
-    @Enumerated(EnumType.STRING)
-    @Column(name = "APPUSER_REQUEST_STATE", columnDefinition = "VARCHAR", length = 50)
-    private ApplicationUserRequestState requestState;
-
-    /** When the latest request was published. */
-    @Column(name = "APPUSER_REQUESTED_AT", columnDefinition = "TIMESTAMP")
-    private Instant requestedAt;
 
     /** Who made the first request. Never overwritten. */
     @Column(name = "APPUSER_INVITED_BY", columnDefinition = "VARCHAR", length = 320)
@@ -110,7 +90,7 @@ public class ApplicationUser {
     @Column(name = "APPUSER_UPDATED_AT", columnDefinition = "TIMESTAMP", nullable = false)
     private Instant updatedAt;
 
-    /** The granted roles. */
+    /** The roles, in every state. */
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("role ASC")
     private List<ApplicationUserRole> roles = new ArrayList<>();
@@ -137,28 +117,50 @@ public class ApplicationUser {
     }
 
     /**
-     * The role row granting the given role, if any.
+     * The row of the given role, in any state.
      *
      * @param role the role
      * @return the role row
      */
     Optional<ApplicationUserRole> roleNamed(String role) {
         return roles.stream()
-                    .filter(granted -> granted.getRole()
-                                              .equals(role))
+                    .filter(row -> row.getRole()
+                                      .equals(role))
                     .findFirst();
     }
 
     /**
-     * Grants a role.
+     * Adds a role row.
      *
      * @param role the role
-     * @param grantedBy who granted it
-     * @param grantedAt when
-     * @param grantingRequestId the request that granted it, may be null
+     * @param state its initial state
+     * @return the row
      */
-    void grant(String role, String grantedBy, Instant grantedAt, String grantingRequestId) {
-        roles.add(new ApplicationUserRole(this, role, grantedBy, grantedAt, grantingRequestId));
+    ApplicationUserRole addRole(String role, ApplicationUserRoleState state) {
+        ApplicationUserRole row = new ApplicationUserRole(this, role, state);
+        roles.add(row);
+        return row;
+    }
+
+    /**
+     * Removes a role row.
+     *
+     * @param role the role
+     */
+    void removeRole(String role) {
+        roles.removeIf(row -> row.getRole()
+                                 .equals(role));
+    }
+
+    /**
+     * Whether any role is in the given state.
+     *
+     * @param state the state
+     * @return whether one is
+     */
+    boolean hasRoleIn(ApplicationUserRoleState state) {
+        return roles.stream()
+                    .anyMatch(row -> row.is(state));
     }
 
     public Long getId() {
@@ -179,46 +181,6 @@ public class ApplicationUser {
 
     void setStatus(ApplicationUserStatus status) {
         this.status = status;
-    }
-
-    public String getErrorMessage() {
-        return errorMessage;
-    }
-
-    void setErrorMessage(String errorMessage) {
-        this.errorMessage = errorMessage;
-    }
-
-    public String getRequestId() {
-        return requestId;
-    }
-
-    void setRequestId(String requestId) {
-        this.requestId = requestId;
-    }
-
-    public String getRequestedRole() {
-        return requestedRole;
-    }
-
-    void setRequestedRole(String requestedRole) {
-        this.requestedRole = requestedRole;
-    }
-
-    public ApplicationUserRequestState getRequestState() {
-        return requestState;
-    }
-
-    void setRequestState(ApplicationUserRequestState requestState) {
-        this.requestState = requestState;
-    }
-
-    public Instant getRequestedAt() {
-        return requestedAt;
-    }
-
-    void setRequestedAt(Instant requestedAt) {
-        this.requestedAt = requestedAt;
     }
 
     public String getInvitedBy() {

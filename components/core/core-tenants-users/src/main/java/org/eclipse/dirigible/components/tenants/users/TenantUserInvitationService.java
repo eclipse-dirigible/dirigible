@@ -28,13 +28,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
- * Invites a person: records the request on their user row, then publishes it.
+ * Invites a person: records the request on the row of the role asked for, then publishes it.
  *
  * <p>
  * The row is written first and the message second, and the two are not one transaction. A publish
- * that fails is compensated - a new row is removed, an existing one gets its previous request back
- * - and answered 503. A crash between the two leaves a request marked sent that nobody answers; the
- * page marks it stale and offers to resend it with the same id.
+ * that fails is compensated - a new user or role row is removed, an existing role row gets its
+ * previous request back - and answered 503. A crash between the two leaves a request marked sent
+ * that nobody answers; the page marks it stale and offers to resend it with the same id.
  */
 @Service
 @Conditional(TenantUsersEnabledCondition.class)
@@ -118,20 +118,24 @@ class TenantUserInvitationService {
     }
 
     /**
-     * Publishes an unanswered request again, with the same id.
+     * Publishes an unanswered request for a role again, with the same id.
      *
      * @param tenantId the tenant
      * @param userId the user
+     * @param role the role
      * @param requestedBy the owner
      * @return the user's state
      */
-    ApplicationUserState resend(String tenantId, long userId, String requestedBy) {
+    ApplicationUserState resend(String tenantId, long userId, String role, String requestedBy) {
         Instant now = clock.instant();
-        ApplicationUserService.PreparedInvitation prepared = users.prepareResend(tenantId, userId, requestedBy, now);
+        ApplicationUserService.PreparedInvitation prepared = users.prepareResend(tenantId, userId, role, requestedBy, now);
         ApplicationUserState state = prepared.state();
+        String requestId = state.role(role)
+                                .map(ApplicationUserState.RoleState::requestId)
+                                .orElseThrow();
         try {
-            publish(new UserAssignmentRequest(state.requestId(), UserAssignmentRequest.TYPE, 1, tenantId,
-                    DirigibleConfig.APP_ID.getStringValue(), state.email(), state.requestedRole(), requestedBy, now.toString()));
+            publish(new UserAssignmentRequest(requestId, UserAssignmentRequest.TYPE, 1, tenantId, DirigibleConfig.APP_ID.getStringValue(),
+                    state.email(), role, requestedBy, now.toString()));
         } catch (RuntimeException e) {
             users.undoInvitation(prepared);
             throw e;

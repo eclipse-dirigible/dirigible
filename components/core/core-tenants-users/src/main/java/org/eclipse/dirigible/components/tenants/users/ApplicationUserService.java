@@ -30,15 +30,17 @@ import org.springframework.web.server.ResponseStatusException;
  * Owns every rule about application users. The endpoints stay thin; the merge rules live here once.
  *
  * <p>
- * The merge rules of a callback, which make it idempotent - a re-driven request replays the same
- * callback to the same state:
+ * Every request and outcome is recorded on the row of the role it is about. The merge rules of a
+ * callback, which make it idempotent - a re-driven request replays the same callback to the same
+ * state:
  * <ul>
- * <li>a success ({@code INVITED}/{@code ASSIGNED}) adds the role row if absent - an existing one
- * keeps its who and when - clears the failure text, and raises the status by precedence, never
- * lowering it; a row whose person has already entered the tenant becomes {@code ACTIVE};</li>
- * <li>a {@code FAILED} whose request id is not the row's is ignored - a later request that failed
- * must not touch an earlier grant; otherwise it marks the request failed, and the account
- * {@code FAILED} only while no role is granted.</li>
+ * <li>a success ({@code INVITED}/{@code ASSIGNED}) makes the role {@code GRANTED} - a role already
+ * granted keeps its who and when - clears its failure text, and raises the account status by
+ * precedence, never lowering it; a person who has already entered the tenant becomes
+ * {@code ACTIVE};</li>
+ * <li>a {@code FAILED} for a granted role, or whose request id is not the role's latest, is ignored
+ * - a failure must never touch a grant or a newer request; otherwise it marks the role failed, and
+ * the account {@code FAILED} only while no role is granted or still requested.</li>
  * </ul>
  */
 @Service
@@ -104,39 +106,51 @@ class ApplicationUserService {
             user = new ApplicationUser(tenantId, email, ApplicationUserStatus.PENDING, now);
             user.setInvitedBy(upsert.updatedBy());
             user.setInvitedAt(now);
-            user.setRequestId(upsert.requestId());
-            user.setRequestedRole(upsert.role());
         }
+        ApplicationUserRole row = user.roleNamed(upsert.role())
+                                      .orElse(null);
 
         if (sent == ApplicationUserStatus.FAILED) {
-            if (!created && upsert.requestId() != null && user.getRequestId() != null && !upsert.requestId()
-                                                                                                .equals(user.getRequestId())) {
-                LOGGER.warn("Ignored a FAILED outcome of request [{}] for [{}] in tenant [{}]: the user's latest request is [{}]",
-                        upsert.requestId(), email, tenantId, user.getRequestId());
+            if (row != null && row.is(ApplicationUserRoleState.GRANTED)) {
+                LOGGER.warn("Ignored a FAILED outcome of request [{}] for [{}] in tenant [{}]: the role [{}] is already granted",
+                        upsert.requestId(), email, tenantId, upsert.role());
                 return new CallbackResult(false, ApplicationUserState.of(user));
             }
-            adoptRequestId(user, upsert);
-            user.setRequestState(ApplicationUserRequestState.FAILED);
-            user.setErrorMessage(upsert.errorMessage());
-            if (user.getRoles()
-                    .isEmpty()) {
+            if (row != null && upsert.requestId() != null && row.getRequestId() != null && !upsert.requestId()
+                                                                                                  .equals(row.getRequestId())) {
+                LOGGER.warn(
+                        "Ignored a FAILED outcome of request [{}] for [{}] in tenant [{}]: the latest request for the role [{}] is [{}]",
+                        upsert.requestId(), email, tenantId, upsert.role(), row.getRequestId());
+                return new CallbackResult(false, ApplicationUserState.of(user));
+            }
+            if (row == null) {
+                row = user.addRole(upsert.role(), ApplicationUserRoleState.FAILED);
+            }
+            row.setState(ApplicationUserRoleState.FAILED);
+            row.setErrorMessage(upsert.errorMessage());
+            if (row.getRequestId() == null) {
+                row.setRequestId(upsert.requestId());
+            }
+            if (!user.hasRoleIn(ApplicationUserRoleState.GRANTED) && !user.hasRoleIn(ApplicationUserRoleState.REQUESTED)) {
                 user.setStatus(ApplicationUserStatus.FAILED);
             }
         } else {
-            if (user.roleNamed(upsert.role())
-                    .isEmpty()) {
-                user.grant(upsert.role(), upsert.updatedBy(), now, upsert.requestId());
+            if (row == null) {
+                row = user.addRole(upsert.role(), ApplicationUserRoleState.GRANTED);
             }
-            user.setErrorMessage(null);
+            if (row.getGrantedAt() == null) {
+                row.setGrantedBy(upsert.updatedBy());
+                row.setGrantedAt(now);
+                if (upsert.requestId() != null) {
+                    row.setRequestId(upsert.requestId());
+                }
+            }
+            row.setState(ApplicationUserRoleState.GRANTED);
+            row.setErrorMessage(null);
             ApplicationUserStatus target = user.getLastSignInAt() != null ? ApplicationUserStatus.ACTIVE : sent;
             if (target.rank() > user.getStatus()
                                     .rank()) {
                 user.setStatus(target);
-            }
-            if (upsert.requestId() == null || user.getRequestId() == null || upsert.requestId()
-                                                                                   .equals(user.getRequestId())) {
-                adoptRequestId(user, upsert);
-                user.setRequestState(ApplicationUserRequestState.COMPLETED);
             }
         }
         user.setUpdatedBy(upsert.updatedBy());
@@ -148,10 +162,10 @@ class ApplicationUserService {
     }
 
     /**
-     * Records an owner's request for a person on their user row, before it is published: a new row is
-     * {@code PENDING}; an existing one keeps its status - a failed one returns to {@code PENDING} - and
-     * gets the new request. One request is in flight per user, and a granted role is not asked for
-     * twice.
+     * Records an owner's request for a role before it is published: a new user is {@code PENDING}; an
+     * existing one keeps its status - a failed one returns to {@code PENDING}. The role row becomes
+     * {@code REQUESTED} with the new request. A role is asked for once at a time, and a granted role is
+     * not asked for again; different roles may be requested side by side.
      *
      * @param tenantId the tenant
      * @param email the email, normalized
@@ -168,67 +182,74 @@ class ApplicationUserService {
                                     .orElse(null);
         boolean created = user == null;
         Snapshot previous = null;
+        ApplicationUserRole row;
         if (created) {
             user = new ApplicationUser(tenantId, email, ApplicationUserStatus.PENDING, now);
             user.setInvitedBy(requestedBy);
             user.setInvitedAt(now);
+            row = user.addRole(role, ApplicationUserRoleState.REQUESTED);
         } else {
-            if (user.getRequestState() == ApplicationUserRequestState.SENT) {
-                throw new TenantUsersException(HttpStatus.CONFLICT, "REQUEST_PENDING",
-                        "A request for [" + email + "] is still waiting for an answer - resend it instead");
-            }
-            if (user.roleNamed(role)
-                    .isPresent()) {
+            row = user.roleNamed(role)
+                      .orElse(null);
+            if (row != null && row.is(ApplicationUserRoleState.GRANTED)) {
                 throw new TenantUsersException(HttpStatus.CONFLICT, "ROLE_ALREADY_GRANTED",
                         "[" + email + "] already holds the role [" + role + "]");
             }
-            previous = Snapshot.of(user);
+            if (row != null && row.is(ApplicationUserRoleState.REQUESTED)) {
+                throw new TenantUsersException(HttpStatus.CONFLICT, "REQUEST_PENDING",
+                        "A request for [" + email + "] as [" + role + "] is still waiting for an answer - resend it instead");
+            }
+            previous = Snapshot.of(user, row);
+            if (row == null) {
+                row = user.addRole(role, ApplicationUserRoleState.REQUESTED);
+            }
             if (user.getStatus() == ApplicationUserStatus.FAILED) {
                 user.setStatus(ApplicationUserStatus.PENDING);
             }
-            user.setErrorMessage(null);
         }
-        user.setRequestId(messageId);
-        user.setRequestedRole(role);
-        user.setRequestState(ApplicationUserRequestState.SENT);
-        user.setRequestedAt(now);
+        row.setState(ApplicationUserRoleState.REQUESTED);
+        row.setRequestId(messageId);
+        row.setRequestedBy(requestedBy);
+        row.setRequestedAt(now);
+        row.setErrorMessage(null);
         user.setUpdatedBy(requestedBy);
         user.setUpdatedAt(now);
         ApplicationUser saved = users.save(user);
-        return new PreparedInvitation(saved.getId(), created, previous, ApplicationUserState.of(saved));
+        return new PreparedInvitation(saved.getId(), role, created, previous, ApplicationUserState.of(saved));
     }
 
     /**
-     * Records that an unanswered request is published again, with the same id.
+     * Records that an unanswered request for a role is published again, with the same id.
      *
      * @param tenantId the tenant
      * @param userId the user
+     * @param role the role
      * @param requestedBy the owner
      * @param now the time
      * @return what was changed, so a failed publish can be undone
      */
     @Transactional
-    PreparedInvitation prepareResend(String tenantId, long userId, String requestedBy, Instant now) {
+    PreparedInvitation prepareResend(String tenantId, long userId, String role, String requestedBy, Instant now) {
         ApplicationUser user = users.findById(userId)
                                     .filter(found -> found.getTenantId()
                                                           .equals(tenantId))
                                     .orElseThrow(() -> new TenantUsersException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
                                             "There is no user [" + userId + "] in this tenant"));
-        if (user.getRequestState() != ApplicationUserRequestState.SENT) {
-            throw new TenantUsersException(HttpStatus.CONFLICT, "NOT_PENDING",
-                    "Only a request still waiting for an answer can be resent - invite again instead");
-        }
-        Snapshot previous = Snapshot.of(user);
-        user.setRequestedAt(now);
+        ApplicationUserRole row = user.roleNamed(role)
+                                      .filter(found -> found.is(ApplicationUserRoleState.REQUESTED))
+                                      .orElseThrow(() -> new TenantUsersException(HttpStatus.CONFLICT, "NOT_PENDING",
+                                              "Only a request still waiting for an answer can be resent - invite again instead"));
+        Snapshot previous = Snapshot.of(user, row);
+        row.setRequestedAt(now);
         user.setUpdatedBy(requestedBy);
         user.setUpdatedAt(now);
         ApplicationUser saved = users.save(user);
-        return new PreparedInvitation(saved.getId(), false, previous, ApplicationUserState.of(saved));
+        return new PreparedInvitation(saved.getId(), role, false, previous, ApplicationUserState.of(saved));
     }
 
     /**
-     * Undoes a prepared invitation whose publish failed: a created row is removed, an existing one gets
-     * its previous request back.
+     * Undoes a prepared invitation whose publish failed: a created user is removed, a created role row
+     * is removed, and an existing one gets its previous request back.
      *
      * @param prepared what was changed
      */
@@ -241,7 +262,7 @@ class ApplicationUserService {
         users.findById(prepared.userId())
              .ifPresent(user -> {
                  prepared.previous()
-                         .restore(user);
+                         .restore(user, prepared.role());
                  users.save(user);
              });
     }
@@ -307,19 +328,6 @@ class ApplicationUserService {
     }
 
     /**
-     * Takes the callback's request id when the row has none yet.
-     *
-     * @param user the user
-     * @param upsert the outcome
-     */
-    private static void adoptRequestId(ApplicationUser user, ApplicationUserUpsert upsert) {
-        if (user.getRequestId() == null && upsert.requestId() != null) {
-            user.setRequestId(upsert.requestId());
-            user.setRequestedRole(upsert.role());
-        }
-    }
-
-    /**
      * Refuses an invalid or unknown tenant.
      *
      * @param tenantId the tenant id
@@ -349,42 +357,62 @@ class ApplicationUserService {
      * A prepared invitation.
      *
      * @param userId the user
-     * @param created whether the row was created for it
-     * @param previous the previous request of an existing row, or null
+     * @param role the role asked for
+     * @param created whether the user was created for it
+     * @param previous what the invitation changed on an existing user, or null
      * @param state the resulting state
      */
-    record PreparedInvitation(long userId, boolean created, Snapshot previous, ApplicationUserState state) {
+    record PreparedInvitation(long userId, String role, boolean created, Snapshot previous, ApplicationUserState state) {
     }
 
     /**
-     * The request fields of a row before an invitation changed them.
+     * An existing user and the requested role's row before an invitation changed them.
      *
-     * @param status the status
-     * @param errorMessage the failure text
-     * @param requestId the request id
-     * @param requestedRole the requested role
-     * @param requestState the request state
-     * @param requestedAt when it was published
+     * @param status the account status
      * @param updatedBy who changed the row
      * @param updatedAt when
+     * @param role the role row before, or null when the invitation created it
      */
-    record Snapshot(ApplicationUserStatus status, String errorMessage, String requestId, String requestedRole,
-            ApplicationUserRequestState requestState, Instant requestedAt, String updatedBy, Instant updatedAt) {
+    record Snapshot(ApplicationUserStatus status, String updatedBy, Instant updatedAt, RoleSnapshot role) {
 
-        static Snapshot of(ApplicationUser user) {
-            return new Snapshot(user.getStatus(), user.getErrorMessage(), user.getRequestId(), user.getRequestedRole(),
-                    user.getRequestState(), user.getRequestedAt(), user.getUpdatedBy(), user.getUpdatedAt());
+        static Snapshot of(ApplicationUser user, ApplicationUserRole row) {
+            return new Snapshot(user.getStatus(), user.getUpdatedBy(), user.getUpdatedAt(), row == null ? null : RoleSnapshot.of(row));
         }
 
-        void restore(ApplicationUser user) {
+        void restore(ApplicationUser user, String roleName) {
             user.setStatus(status);
-            user.setErrorMessage(errorMessage);
-            user.setRequestId(requestId);
-            user.setRequestedRole(requestedRole);
-            user.setRequestState(requestState);
-            user.setRequestedAt(requestedAt);
             user.setUpdatedBy(updatedBy);
             user.setUpdatedAt(updatedAt);
+            if (role == null) {
+                user.removeRole(roleName);
+                return;
+            }
+            user.roleNamed(roleName)
+                .ifPresent(role::restore);
+        }
+    }
+
+    /**
+     * The request fields of a role row before an invitation changed them.
+     *
+     * @param state the state
+     * @param requestId the request id
+     * @param requestedBy who asked
+     * @param requestedAt when it was published
+     * @param errorMessage the failure text
+     */
+    record RoleSnapshot(ApplicationUserRoleState state, String requestId, String requestedBy, Instant requestedAt, String errorMessage) {
+
+        static RoleSnapshot of(ApplicationUserRole row) {
+            return new RoleSnapshot(row.getState(), row.getRequestId(), row.getRequestedBy(), row.getRequestedAt(), row.getErrorMessage());
+        }
+
+        void restore(ApplicationUserRole row) {
+            row.setState(state);
+            row.setRequestId(requestId);
+            row.setRequestedBy(requestedBy);
+            row.setRequestedAt(requestedAt);
+            row.setErrorMessage(errorMessage);
         }
     }
 }
