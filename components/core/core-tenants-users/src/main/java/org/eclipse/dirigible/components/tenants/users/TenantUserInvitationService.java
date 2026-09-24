@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.listeners.service.MessageProducer;
 import org.slf4j.Logger;
@@ -91,7 +92,10 @@ class TenantUserInvitationService {
      * @return the user's state
      */
     ApplicationUserState invite(String tenantId, InvitationRequest request, String requestedBy) {
-        String email = request == null || request.email() == null ? "" : ApplicationUserService.normalize(request.email());
+        if (request == null) {
+            throw new TenantUsersException(HttpStatus.BAD_REQUEST, "INVALID_EMAIL", "The request names no email address");
+        }
+        String email = request.email() == null ? "" : ApplicationUserService.normalize(request.email());
         if (email.isEmpty() || email.length() > 320 || !EMAIL.matcher(email)
                                                              .matches()) {
             throw new TenantUsersException(HttpStatus.BAD_REQUEST, "INVALID_EMAIL", "[" + email + "] is not an email address");
@@ -152,12 +156,14 @@ class TenantUserInvitationService {
         String queue = TenantUsersSettings.requestQueue();
         try {
             producer.sendMessageToQueue(queue, JSON.writeValueAsString(request));
-            LOGGER.info("Published request [{}] inviting [{}] as [{}] into tenant [{}] to [{}]", request.messageId(), request.email(),
-                    request.role(), request.tenantId(), queue);
+            LOGGER.info("Published request [{}] inviting [{}] as [{}] into tenant [{}] to [{}]", LogSanitizer.sanitize(request.messageId()),
+                    LogSanitizer.sanitize(request.email()), LogSanitizer.sanitize(request.role()), request.tenantId(),
+                    LogSanitizer.sanitize(queue));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Could not serialize the request [" + request.messageId() + "]", e);
         } catch (Exception e) {
-            LOGGER.error("Could not publish request [{}] to [{}]", request.messageId(), queue, e);
+            LOGGER.error("Could not publish request [{}] to [{}]", LogSanitizer.sanitize(request.messageId()), LogSanitizer.sanitize(queue),
+                    e);
             throw new TenantUsersException(HttpStatus.SERVICE_UNAVAILABLE, "PUBLISH_FAILED",
                     "The invitation could not be sent - try again in a moment");
         }

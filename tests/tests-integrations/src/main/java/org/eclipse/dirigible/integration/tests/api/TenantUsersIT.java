@@ -203,6 +203,12 @@ class TenantUsersIT extends IntegrationTest {
                                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                                .content("email=x%40example.com&role=User"))
            .andExpect(status().isUnsupportedMediaType());
+        mvc.perform(post(USERS + "/" + user.get("id")
+                                           .asLong()
+                + "/roles/User/resend").session(owner)
+                                       .with(authentication(person(OWNER, "Owner")))
+                                       .contentType(MediaType.APPLICATION_FORM_URLENCODED))
+           .andExpect(status().isUnsupportedMediaType());
     }
 
     @Test

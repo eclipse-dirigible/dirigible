@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.tenants.users;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
@@ -55,14 +56,15 @@ class TenantUsersConfigValidator {
             LOGGER.warn(
                     "Tenant users management publishes invitations to [{}] on the EMBEDDED broker - no external provisioning "
                             + "system can receive them. Set [{}] to use an external broker.",
-                    queue, DirigibleConfig.MESSAGING_BROKER_URL.getKey());
+                    LogSanitizer.sanitize(queue), DirigibleConfig.MESSAGING_BROKER_URL.getKey());
         }
         if (DirigibleConfig.TRIAL_ENABLED.getBooleanValue()) {
             LOGGER.warn("Trial mode grants no tenant role, so no user can manage tenant users while [{}] is on.",
                     DirigibleConfig.TRIAL_ENABLED.getKey());
         }
-        LOGGER.info("Tenant users management is enabled: owner role [{}], grantable roles {}, request queue [{}].", ownerRole,
-                TenantUsersSettings.grantableRoles(), queue);
+        LOGGER.info("Tenant users management is enabled: owner role [{}], grantable roles {}, request queue [{}].",
+                LogSanitizer.sanitize(ownerRole), LogSanitizer.sanitize(TenantUsersSettings.grantableRoles()),
+                LogSanitizer.sanitize(queue));
     }
 
     /**
@@ -75,7 +77,7 @@ class TenantUsersConfigValidator {
     private static InvalidConfigException invalid(DirigibleConfig config, String reason) {
         String message = "Invalid configuration [" + config.getKey() + "] while [" + DirigibleConfig.TENANT_USERS_ENABLED.getKey()
                 + "] is on: " + reason;
-        LOGGER.error(message);
+        LOGGER.error(LogSanitizer.sanitize(message));
         return new InvalidConfigException(message, config.getKey());
     }
 }

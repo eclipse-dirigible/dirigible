@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.tenants.users;
 
 import java.util.List;
-import java.util.Map;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.springframework.context.annotation.Conditional;
@@ -103,13 +102,11 @@ class TenantUsersEndpoint extends BaseEndpoint {
      *
      * @param id the user id
      * @param role the role
-     * @param body an empty JSON object
      * @return 202 with the user
      */
     @PostMapping(path = "/{id}/roles/{role}/resend", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
-    ResponseEntity<ApplicationUserState> resend(@PathVariable("id") long id, @PathVariable("role") String role,
-            @RequestBody(required = false) Map<String, Object> body) {
+    ResponseEntity<ApplicationUserState> resend(@PathVariable("id") long id, @PathVariable("role") String role) {
         String tenantId = access.requireManager();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                              .body(invitations.resend(tenantId, id, role, access.callerName()));

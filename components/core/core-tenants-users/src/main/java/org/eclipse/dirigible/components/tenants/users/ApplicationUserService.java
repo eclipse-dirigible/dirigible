@@ -16,6 +16,7 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,14 +114,16 @@ class ApplicationUserService {
         if (sent == ApplicationUserStatus.FAILED) {
             if (row != null && row.is(ApplicationUserRoleState.GRANTED)) {
                 LOGGER.warn("Ignored a FAILED outcome of request [{}] for [{}] in tenant [{}]: the role [{}] is already granted",
-                        upsert.requestId(), email, tenantId, upsert.role());
+                        LogSanitizer.sanitize(upsert.requestId()), LogSanitizer.sanitize(email), LogSanitizer.sanitize(tenantId),
+                        LogSanitizer.sanitize(upsert.role()));
                 return new CallbackResult(false, ApplicationUserState.of(user));
             }
             if (row != null && upsert.requestId() != null && row.getRequestId() != null && !upsert.requestId()
                                                                                                   .equals(row.getRequestId())) {
                 LOGGER.warn(
                         "Ignored a FAILED outcome of request [{}] for [{}] in tenant [{}]: the latest request for the role [{}] is [{}]",
-                        upsert.requestId(), email, tenantId, upsert.role(), row.getRequestId());
+                        LogSanitizer.sanitize(upsert.requestId()), LogSanitizer.sanitize(email), LogSanitizer.sanitize(tenantId),
+                        LogSanitizer.sanitize(upsert.role()), LogSanitizer.sanitize(row.getRequestId()));
                 return new CallbackResult(false, ApplicationUserState.of(user));
             }
             if (row == null) {
@@ -156,8 +159,8 @@ class ApplicationUserService {
         user.setUpdatedBy(upsert.updatedBy());
         user.setUpdatedAt(now);
         ApplicationUser saved = users.save(user);
-        LOGGER.info("Recorded [{}] for [{}] as [{}] in tenant [{}] - the user is [{}]", sent, email, upsert.role(), tenantId,
-                saved.getStatus());
+        LOGGER.info("Recorded [{}] for [{}] as [{}] in tenant [{}] - the user is [{}]", sent, LogSanitizer.sanitize(email),
+                LogSanitizer.sanitize(upsert.role()), LogSanitizer.sanitize(tenantId), saved.getStatus());
         return new CallbackResult(created, ApplicationUserState.of(saved));
     }
 
