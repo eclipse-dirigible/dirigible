@@ -19,6 +19,9 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
         viewSettings: {},
         layoutSettings: {
             hideCenterPane: false,
+            // The Projects (left) and Assistant (right) panes collapse to a slim rail via their first
+            // panel's chevron; this is Workbench-only, the other perspectives keep the plain chevron.
+            collapsibleSidePanes: true,
             // The assistant lives in the right pane; a chat with a code diff in it needs the room.
             rightPaneSize: 25
         },

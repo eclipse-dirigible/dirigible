@@ -14,7 +14,7 @@
 <div class="bk-border-box bk-fill-parent">
     <split direction="horizontal" state="splitPanesState.side">
         <split-pane ng-if="leftTabs.length > 0" size="{{ layoutSettings.leftPaneSize }}" min-size="::layoutSettings.leftPaneMinSize" max-size="::layoutSettings.leftPaneMaxSize" expand-size="::layoutSettings.sidePaneExpandSize" snap-offset="0" class="pane-left" ng-class="{ 'pane-collapsed': isLeftPaneCollapsed() }">
-            <accordion views="leftTabs" region="left" collapsed="isLeftPaneCollapsed()" on-toggle-collapse="toggleLeftPane()"></accordion>
+            <accordion views="leftTabs" ng-attr-region="{{ layoutSettings.collapsibleSidePanes ? 'left' : undefined }}" collapsed="isLeftPaneCollapsed()" on-toggle-collapse="toggleLeftPane()"></accordion>
         </split-pane>
         <split-pane size="auto" min-size="100" snap-offset="0">
             <split direction="vertical" state="splitPanesState.main">
@@ -47,7 +47,7 @@
             </split>
         </split-pane>
         <split-pane ng-if="rightTabs.length > 0" size="{{ ::layoutSettings.rightPaneSize }}" min-size="::layoutSettings.rightPaneMinSize" max-size="::layoutSettings.rightPaneMaxSize" expand-size="::layoutSettings.sidePaneExpandSize" snap-offset="0" class="pane-right" ng-class="{ 'pane-collapsed': isRightPaneCollapsed() }">
-            <accordion views="rightTabs" region="right" collapsed="isRightPaneCollapsed()" on-toggle-collapse="toggleRightPane()"></accordion>
+            <accordion views="rightTabs" ng-attr-region="{{ layoutSettings.collapsibleSidePanes ? 'right' : undefined }}" collapsed="isRightPaneCollapsed()" on-toggle-collapse="toggleRightPane()"></accordion>
         </split-pane>
     </split>
 </div>

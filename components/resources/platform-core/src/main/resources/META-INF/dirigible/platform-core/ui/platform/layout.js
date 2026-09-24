@@ -51,13 +51,15 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
             $scope.layoutSettings = {
                 leftPaneSize: 20,
-                // The collapse chevron shrinks a side pane to this rail width (px) instead of hiding it
-                // completely, so the chevron stays on screen to expand it again.
-                leftPaneMinSize: 41,
+                leftPaneMinSize: 0,
                 leftPaneMaxSize: undefined,
                 rightPaneSize: 20,
-                rightPaneMinSize: 41,
+                rightPaneMinSize: 0,
                 rightPaneMaxSize: undefined,
+                // Opt-in per perspective (only the Workbench enables it): renders the collapse chevron on
+                // the first panel of each side pane and lets the pane shrink to a slim rail. Off by default
+                // so the other perspectives keep the plain expand chevron and a 0 min-size floor.
+                collapsibleSidePanes: false,
                 // Width (px) a collapsed side pane reopens at when its chevron expands it.
                 sidePaneExpandSize: 350,
                 bottomPaneSize: 30,
@@ -66,6 +68,13 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 hideBottomTabs: false,
                 ...($scope.config.layoutSettings || {})
             };
+            // A collapsible side pane needs a rail-width floor so the collapsed pane keeps enough width to
+            // host the chevron that expands it again; a non-collapsible pane keeps the default 0 floor.
+            if ($scope.layoutSettings.collapsibleSidePanes) {
+                const sidePaneRailSize = 41;
+                if ($scope.layoutSettings.leftPaneMinSize < sidePaneRailSize) $scope.layoutSettings.leftPaneMinSize = sidePaneRailSize;
+                if ($scope.layoutSettings.rightPaneMinSize < sidePaneRailSize) $scope.layoutSettings.rightPaneMinSize = sidePaneRailSize;
+            }
             $scope.selection = {
                 selectedBottomTab: null
             };
