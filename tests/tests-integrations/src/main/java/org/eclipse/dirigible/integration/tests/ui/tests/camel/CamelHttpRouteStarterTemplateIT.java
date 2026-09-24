@@ -53,6 +53,5 @@ public class CamelHttpRouteStarterTemplateIT extends UserInterfaceIntegrationTes
                              .body(containsString("Set by Handler.java")),
                 15);
     }
-
 }
 
