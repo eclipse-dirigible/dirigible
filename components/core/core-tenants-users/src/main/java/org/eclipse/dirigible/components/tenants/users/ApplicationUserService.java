@@ -147,6 +147,105 @@ class ApplicationUserService {
     }
 
     /**
+     * Records an owner's request for a person on their user row, before it is published: a new row is
+     * {@code PENDING}; an existing one keeps its status - a failed one returns to {@code PENDING} - and
+     * gets the new request. One request is in flight per user, and a granted role is not asked for
+     * twice.
+     *
+     * @param tenantId the tenant
+     * @param email the email, normalized
+     * @param role the role
+     * @param requestedBy the owner
+     * @param messageId the request's id
+     * @param now the time
+     * @return what was changed, so a failed publish can be undone
+     */
+    @Transactional
+    PreparedInvitation prepareInvitation(String tenantId, String email, String role, String requestedBy, String messageId, Instant now) {
+        requireTenant(tenantId);
+        ApplicationUser user = users.findByTenantIdAndEmail(tenantId, email)
+                                    .orElse(null);
+        boolean created = user == null;
+        Snapshot previous = null;
+        if (created) {
+            user = new ApplicationUser(tenantId, email, ApplicationUserStatus.PENDING, now);
+            user.setInvitedBy(requestedBy);
+            user.setInvitedAt(now);
+        } else {
+            if (user.getRequestState() == ApplicationUserRequestState.SENT) {
+                throw new TenantUsersException(HttpStatus.CONFLICT, "REQUEST_PENDING",
+                        "A request for [" + email + "] is still waiting for an answer - resend it instead");
+            }
+            if (user.roleNamed(role)
+                    .isPresent()) {
+                throw new TenantUsersException(HttpStatus.CONFLICT, "ROLE_ALREADY_GRANTED",
+                        "[" + email + "] already holds the role [" + role + "]");
+            }
+            previous = Snapshot.of(user);
+            if (user.getStatus() == ApplicationUserStatus.FAILED) {
+                user.setStatus(ApplicationUserStatus.PENDING);
+            }
+            user.setErrorMessage(null);
+        }
+        user.setRequestId(messageId);
+        user.setRequestedRole(role);
+        user.setRequestState(ApplicationUserRequestState.SENT);
+        user.setRequestedAt(now);
+        user.setUpdatedBy(requestedBy);
+        user.setUpdatedAt(now);
+        ApplicationUser saved = users.save(user);
+        return new PreparedInvitation(saved.getId(), created, previous, ApplicationUserState.of(saved));
+    }
+
+    /**
+     * Records that an unanswered request is published again, with the same id.
+     *
+     * @param tenantId the tenant
+     * @param userId the user
+     * @param requestedBy the owner
+     * @param now the time
+     * @return what was changed, so a failed publish can be undone
+     */
+    @Transactional
+    PreparedInvitation prepareResend(String tenantId, long userId, String requestedBy, Instant now) {
+        ApplicationUser user = users.findById(userId)
+                                    .filter(found -> found.getTenantId()
+                                                          .equals(tenantId))
+                                    .orElseThrow(() -> new TenantUsersException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND",
+                                            "There is no user [" + userId + "] in this tenant"));
+        if (user.getRequestState() != ApplicationUserRequestState.SENT) {
+            throw new TenantUsersException(HttpStatus.CONFLICT, "NOT_PENDING",
+                    "Only a request still waiting for an answer can be resent - invite again instead");
+        }
+        Snapshot previous = Snapshot.of(user);
+        user.setRequestedAt(now);
+        user.setUpdatedBy(requestedBy);
+        user.setUpdatedAt(now);
+        ApplicationUser saved = users.save(user);
+        return new PreparedInvitation(saved.getId(), false, previous, ApplicationUserState.of(saved));
+    }
+
+    /**
+     * Undoes a prepared invitation whose publish failed: a created row is removed, an existing one gets
+     * its previous request back.
+     *
+     * @param prepared what was changed
+     */
+    @Transactional
+    void undoInvitation(PreparedInvitation prepared) {
+        if (prepared.created()) {
+            users.deleteById(prepared.userId());
+            return;
+        }
+        users.findById(prepared.userId())
+             .ifPresent(user -> {
+                 prepared.previous()
+                         .restore(user);
+                 users.save(user);
+             });
+    }
+
+    /**
      * The users of a tenant.
      *
      * @param tenantId the tenant id
@@ -210,5 +309,48 @@ class ApplicationUserService {
      * @param state the resulting state
      */
     record CallbackResult(boolean created, ApplicationUserState state) {
+    }
+
+    /**
+     * A prepared invitation.
+     *
+     * @param userId the user
+     * @param created whether the row was created for it
+     * @param previous the previous request of an existing row, or null
+     * @param state the resulting state
+     */
+    record PreparedInvitation(long userId, boolean created, Snapshot previous, ApplicationUserState state) {
+    }
+
+    /**
+     * The request fields of a row before an invitation changed them.
+     *
+     * @param status the status
+     * @param errorMessage the failure text
+     * @param requestId the request id
+     * @param requestedRole the requested role
+     * @param requestState the request state
+     * @param requestedAt when it was published
+     * @param updatedBy who changed the row
+     * @param updatedAt when
+     */
+    record Snapshot(ApplicationUserStatus status, String errorMessage, String requestId, String requestedRole,
+            ApplicationUserRequestState requestState, Instant requestedAt, String updatedBy, Instant updatedAt) {
+
+        static Snapshot of(ApplicationUser user) {
+            return new Snapshot(user.getStatus(), user.getErrorMessage(), user.getRequestId(), user.getRequestedRole(),
+                    user.getRequestState(), user.getRequestedAt(), user.getUpdatedBy(), user.getUpdatedAt());
+        }
+
+        void restore(ApplicationUser user) {
+            user.setStatus(status);
+            user.setErrorMessage(errorMessage);
+            user.setRequestId(requestId);
+            user.setRequestedRole(requestedRole);
+            user.setRequestState(requestState);
+            user.setRequestedAt(requestedAt);
+            user.setUpdatedBy(updatedBy);
+            user.setUpdatedAt(updatedAt);
+        }
     }
 }

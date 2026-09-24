@@ -1,0 +1,114 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.tenants.users;
+
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.springframework.context.annotation.Conditional;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ * The users of the current tenant, for its owners: who they are, where each stands, and an
+ * invitation for another person.
+ *
+ * <p>
+ * No {@code @RolesAllowed}: the owner role is configuration, and {@link TenantUsersAccess} checks
+ * it on every method. The tenant is always the caller's selected tenant - never a request field.
+ * Both POSTs accept JSON only, which is what keeps a cross-site form from triggering them (the
+ * chains disable CSRF tokens; the tenant selection endpoint relies on the same).
+ */
+@RestController
+@RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURITY + "tenant-users")
+@Conditional(TenantUsersEnabledCondition.class)
+class TenantUsersEndpoint extends BaseEndpoint {
+
+    /** The access rules. */
+    private final TenantUsersAccess access;
+
+    /** The users. */
+    private final ApplicationUserService users;
+
+    /** The invitations. */
+    private final TenantUserInvitationService invitations;
+
+    /**
+     * Instantiates the endpoint.
+     *
+     * @param access the access rules
+     * @param users the users
+     * @param invitations the invitations
+     */
+    TenantUsersEndpoint(TenantUsersAccess access, ApplicationUserService users, TenantUserInvitationService invitations) {
+        this.access = access;
+        this.users = users;
+        this.invitations = invitations;
+    }
+
+    /**
+     * Whether the caller may see and manage users here - answers every authenticated user.
+     *
+     * @return the context
+     */
+    @GetMapping(path = "/context", produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<TenantUsersContext> context() {
+        boolean canManage = access.canManage();
+        boolean canRead = access.canRead();
+        String tenantId = canRead ? access.requireTenant() : null;
+        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, TenantUsersSettings.ownerRole(),
+                TenantUsersSettings.grantableRoles()));
+    }
+
+    /**
+     * The users of the current tenant.
+     *
+     * @return the users
+     */
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<List<ApplicationUserState>> list() {
+        return ResponseEntity.ok(users.listOf(access.requireReader()));
+    }
+
+    /**
+     * Invites a person into the current tenant.
+     *
+     * @param request the person and role
+     * @return 202 with the user
+     */
+    @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<ApplicationUserState> invite(@RequestBody InvitationRequest request) {
+        String tenantId = access.requireManager();
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                             .body(invitations.invite(tenantId, request, access.callerName()));
+    }
+
+    /**
+     * Publishes a user's unanswered request again, with the same id.
+     *
+     * @param id the user id
+     * @param body an empty JSON object
+     * @return 202 with the user
+     */
+    @PostMapping(path = "/{id}/resend", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<ApplicationUserState> resend(@PathVariable("id") long id, @RequestBody(required = false) Map<String, Object> body) {
+        String tenantId = access.requireManager();
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                             .body(invitations.resend(tenantId, id, access.callerName()));
+    }
+}
