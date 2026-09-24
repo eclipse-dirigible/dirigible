@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -243,6 +244,39 @@ class ApplicationUserService {
                          .restore(user);
                  users.save(user);
              });
+    }
+
+    /**
+     * Records that a person entered a tenant: stamps their last sign-in and makes an invited or
+     * assigned user {@code ACTIVE}. The row is found by email - the email claim, or the principal name
+     * when it is an address. Its own transaction, so a failure here can never reach the selection that
+     * raised it.
+     *
+     * @param tenantId the tenant entered
+     * @param principal the principal name
+     * @param emailClaim the email claim, or null
+     * @param at when
+     * @return whether a user was found
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    boolean recordSignIn(String tenantId, String principal, String emailClaim, Instant at) {
+        String key =
+                emailClaim != null && !emailClaim.isBlank() ? emailClaim : principal != null && principal.contains("@") ? principal : null;
+        if (key == null) {
+            LOGGER.debug("Tenant [{}] entered by [{}], who carries no email to match a user by", tenantId, principal);
+            return false;
+        }
+        return users.findByTenantIdAndEmail(tenantId, normalize(key))
+                    .map(user -> {
+                        user.setLastSignInAt(at);
+                        if (user.getStatus() == ApplicationUserStatus.INVITED || user.getStatus() == ApplicationUserStatus.ASSIGNED) {
+                            user.setStatus(ApplicationUserStatus.ACTIVE);
+                        }
+                        user.setUpdatedAt(at);
+                        users.save(user);
+                        return true;
+                    })
+                    .orElse(false);
     }
 
     /**

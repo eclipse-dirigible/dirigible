@@ -229,6 +229,18 @@ class TenantUsersIT extends IntegrationTest {
         drainTheQueue();
     }
 
+    @Test
+    @Order(5)
+    void theInvitedPersonEnteringTheTenantBecomesActive() throws Exception {
+        enter("invited.person@example.com", "User");
+
+        JsonNode user = userNamed(enter(OWNER, "Owner"), "invited.person@example.com");
+        assertEquals("ACTIVE", user.get("status")
+                                   .asText());
+        assertEquals(false, user.get("lastSignInAt")
+                                .isNull());
+    }
+
     private MockHttpSession enter(String user, String role) throws Exception {
         MockHttpSession session = new MockHttpSession();
         mvc.perform(post(SELECTION).session(session)
