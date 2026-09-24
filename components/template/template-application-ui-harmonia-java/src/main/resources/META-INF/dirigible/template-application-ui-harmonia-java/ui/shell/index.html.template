@@ -165,12 +165,17 @@
           </nav>
 #set($hasSettings = false)
 #foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
-#if($hasSettings)
-          <!-- Settings pinned to the sidebar footer (bottom-left), like codbex-athena-app. -->
+          <!-- Settings pinned to the sidebar footer (bottom-left), like codbex-athena-app. Always emitted:
+               a model without SETTING entities still offers Settings to a tenant owner, for the platform's
+               Users section (#7498) - the entry then shows only while that section is offered. -->
           <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
+#if($hasSettings)
                 <li x-h-sidebar-menu-item>
+#else
+                <li x-h-sidebar-menu-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
+#end
                   <button x-h-sidebar-menu-nav :data-active="isActive('/settings')" @click="navigate('/settings')">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
                   </button>
@@ -178,7 +183,6 @@
               </ul>
             </nav>
           </div>
-#end
         </div>
       </div>
 
@@ -451,10 +455,9 @@
     <!-- Built-in shell sections (always present): Process Inbox + Documents. -->
     <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
-#if($hasSettings)
-    <!-- Settings landing: lists the setting entities (each still has its own CRUD route below). -->
+    <!-- Settings landing: the platform preferences, the Users section for a tenant owner, and the
+         setting entities (each still has its own CRUD route below). Always routed. -->
     <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
-#end
     <!-- Reports landing: always routed; the page lists reports discovered at runtime (reports store). -->
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
     <!-- The BROWSE route of a layout is /<Entity> - unless the entity also declares a calendar view
@@ -634,6 +637,7 @@
     <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>

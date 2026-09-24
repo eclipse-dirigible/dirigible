@@ -184,6 +184,7 @@
       "tenantConfigFailed": "Something went wrong. Please try again.",
       "numbering": "Document Numbering",
       "tenantUsers": "Users",
+      "tenant": "Tenant",
       "numberingHint": "Each document series' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.",
       "numberingForbidden": "You do not have permission to view or change document numbering.",
       "numberingFailed": "Something went wrong. Please try again.",
