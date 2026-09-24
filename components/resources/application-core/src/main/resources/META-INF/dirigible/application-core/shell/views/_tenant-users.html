@@ -1,0 +1,127 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!--
+  Settings > Users - the ONE copy of the section, mounted through x-html on the shared tenantUsers
+  store (shell/js/stores/tenantUsers.js) by the application shell's Settings and by every generated
+  application shell. Every binding goes through $store.tenantUsers. Stable ids for the browser tests:
+  tenant-users-page, tenant-users-invite, tenant-users-email, tenant-users-table.
+-->
+<div id="tenant-users-page" class="vbox gap-4 p-4">
+  <div class="hbox items-center gap-2">
+    <div class="vbox gap-1 flex-1 min-w-0">
+      <span class="text-lg font-medium" x-text="$store.tenantUsers.t('shell.tenantUsers.title', 'Users')"></span>
+      <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.description', 'The people of this tenant and where each one stands. Invite another person with a role - they receive an invitation to sign in.')"></span>
+    </div>
+    <button x-h-button data-variant="outline" data-size="icon-sm" type="button" @click="$store.tenantUsers.load()"
+            :aria-label="$store.tenantUsers.t('shell.tenantUsers.refresh', 'Refresh')">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
+    </button>
+  </div>
+
+  <form id="tenant-users-invite" class="hbox items-end gap-2 flex-wrap" @submit.prevent="$store.tenantUsers.invite()">
+    <div class="vbox gap-1 flex-1 min-w-0">
+      <label x-h-label for="tenant-users-email" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></label>
+      <input x-h-input id="tenant-users-email" type="email" required autocomplete="off" x-model="$store.tenantUsers.form.email"
+             :placeholder="$store.tenantUsers.t('shell.tenantUsers.emailPlaceholder', 'name@example.com')" />
+    </div>
+    <div class="vbox gap-1">
+      <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.role', 'Role')"></span>
+      <div x-h-select>
+        <input x-h-select-input x-model="$store.tenantUsers.form.role" :placeholder="$store.tenantUsers.t('shell.tenantUsers.role', 'Role')" />
+        <div x-h-select-content>
+          <div x-h-select-list>
+            <template x-for="role in $store.tenantUsers.roles" :key="role">
+              <div x-h-select-option="role" :data-value="role"></div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button x-h-button data-variant="primary" type="submit" id="tenant-users-invite-button" :disabled="$store.tenantUsers.busy"
+            x-text="$store.tenantUsers.t('shell.tenantUsers.invite', 'Invite')"></button>
+  </form>
+
+  <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
+    <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
+  </div>
+
+  <div x-show="$store.tenantUsers.loaded && $store.tenantUsers.items.length === 0" x-cloak x-h-info-page>
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="users"></svg></div>
+      <div x-h-info-page-title x-text="$store.tenantUsers.t('shell.tenantUsers.empty', 'Nobody has been invited yet')"></div>
+      <div x-h-info-page-description x-text="$store.tenantUsers.t('shell.tenantUsers.emptyHint', 'Invite the first person above.')"></div>
+    </div>
+  </div>
+
+  <div x-show="$store.tenantUsers.items.length > 0" x-h-table-container.scroll>
+    <table id="tenant-users-table" x-h-table data-borders="rows">
+      <thead x-h-table-header>
+        <tr x-h-table-row>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.statusColumn', 'Status')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.requestColumn', 'Latest request')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.invitedColumn', 'Invited')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.updatedColumn', 'Updated')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.signInColumn', 'Last sign-in')"></th>
+        </tr>
+      </thead>
+      <tbody x-h-table-body>
+        <template x-for="user in $store.tenantUsers.items" :key="user.id">
+          <tr x-h-table-row :data-user="user.email">
+            <td x-h-table-cell class="whitespace-nowrap" x-text="user.email"></td>
+            <td x-h-table-cell>
+              <div class="hbox gap-1 flex-wrap">
+                <template x-for="role in user.roles" :key="role.role">
+                  <span x-h-badge data-variant="outline" :title="$store.tenantUsers.grantedTitle(role)" x-text="role.role"></span>
+                </template>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <span x-h-badge :data-variant="$store.tenantUsers.statusVariant(user.status)" x-text="$store.tenantUsers.statusLabel(user.status)"></span>
+                <template x-if="$store.tenantUsers.isStale(user)">
+                  <div class="hbox items-center gap-2">
+                    <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.t('shell.tenantUsers.stale', 'No answer yet')"></span>
+                    <button x-h-button data-variant="outline" data-size="sm" type="button" :disabled="$store.tenantUsers.busy"
+                            @click="$store.tenantUsers.resend(user)" x-text="$store.tenantUsers.t('shell.tenantUsers.resend', 'Send again')"></button>
+                  </div>
+                </template>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <span class="text-sm" x-text="$store.tenantUsers.requestLabel(user)"></span>
+                <span x-show="user.errorMessage" x-h-text.muted class="text-xs" x-text="user.errorMessage"></span>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <span class="text-sm" x-text="user.invitedBy || ''"></span>
+                <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.time(user.invitedAt)"></span>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="vbox gap-1">
+                <span class="text-sm" x-text="user.updatedBy || ''"></span>
+                <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.time(user.updatedAt)"></span>
+              </div>
+            </td>
+            <td x-h-table-cell class="text-sm" x-text="$store.tenantUsers.time(user.lastSignInAt)"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
