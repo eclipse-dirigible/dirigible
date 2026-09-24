@@ -19,10 +19,8 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
         viewSettings: {},
         layoutSettings: {
             hideCenterPane: false,
-            leftPaneMinSize: 355,
             // The assistant lives in the right pane; a chat with a code diff in it needs the room.
-            rightPaneSize: 25,
-            rightPaneMinSize: 340
+            rightPaneSize: 25
         },
     };
 

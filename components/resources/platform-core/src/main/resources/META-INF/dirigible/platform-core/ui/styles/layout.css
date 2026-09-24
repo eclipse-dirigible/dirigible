@@ -60,6 +60,24 @@
   flex-direction: column;
 }
 
+/* A side pane collapsed to its rail width shows only the first panel's chevron, which expands it again. */
+.bk-split-pane.pane-collapsed .pf-accordion-panel:not(:first-child) {
+  display: none;
+}
+
+.bk-split-pane.pane-collapsed .pf-accordion-panel .fd-panel__content {
+  display: none;
+}
+
+.bk-split-pane.pane-collapsed .pf-accordion-panel h4 {
+  display: none;
+}
+
+.bk-split-pane.pane-collapsed .pf-accordion-panel .fd-panel__header {
+  justify-content: center;
+  padding-inline: 0;
+}
+
 .bk-split-pane.pane-center {
   background-color: transparent;
 }

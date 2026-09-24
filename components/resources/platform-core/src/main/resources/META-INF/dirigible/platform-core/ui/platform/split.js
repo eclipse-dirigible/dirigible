@@ -149,13 +149,25 @@ angular.module('platformSplit', []).constant('SplitPaneState', { EXPANDED: 0, CO
                     for (let i = 0; i < newState.length; i++) {
                         if (newState[i] !== oldState[i]) {
                             if (newState[i] === SplitPaneState.EXPANDED) {
-                                let sizes = $scope.split.getSizes();
-                                let size = Math.floor(sizes[i]);
-                                if (size === 0) {
-                                    let pane = $scope.panes[i];
-                                    sizes[i] = pane.lastSize || (pane.size == 'auto' ? calcAutoSize() : Number(pane.size));
-                                    normalizeSizes(sizes, i);
+                                let pane = $scope.panes[i];
+                                // lastSize is set only when collapsing, so its presence means the pane
+                                // is collapsed - to 0 or, when it has a min-size, to that rail width.
+                                if (pane.lastSize) {
+                                    let sizes = $scope.split.getSizes();
+                                    // expandSize (px) opens the pane at a fixed width; otherwise restore
+                                    // the width it had before it was collapsed.
+                                    let target = pane.lastSize;
+                                    if (pane.expandSize) {
+                                        let total = $element[0].getBoundingClientRect().width;
+                                        if (total > 0) target = (Number(pane.expandSize) / total) * 100;
+                                    }
+                                    // Take the space only from the adjacent (center) pane, so the pane on
+                                    // the opposite side stays exactly where it is instead of being nudged.
+                                    let neighbor = i === 0 ? 1 : i - 1;
+                                    sizes[neighbor] = sizes[neighbor] - (target - sizes[i]);
+                                    sizes[i] = target;
                                     $scope.split.setSizes(sizes);
+                                    pane.lastSize = undefined;
                                 }
                             }
                         }
@@ -181,6 +193,7 @@ angular.module('platformSplit', []).constant('SplitPaneState', { EXPANDED: 0, CO
         minSize: '<?',
         maxSize: '<?',
         snapOffset: '<?',
+        expandSize: '<?',
     },
     link: (scope, element, _attrs, bgSplitCtrl) => {
         const paneData = scope.paneData = {
@@ -188,7 +201,8 @@ angular.module('platformSplit', []).constant('SplitPaneState', { EXPANDED: 0, CO
             size: scope.size,
             minSize: scope.minSize,
             maxSize: scope.maxSize,
-            snapOffset: Number(scope.snapOffset || 0)
+            snapOffset: Number(scope.snapOffset || 0),
+            expandSize: scope.expandSize
         };
 
         bgSplitCtrl.addPane(paneData);
