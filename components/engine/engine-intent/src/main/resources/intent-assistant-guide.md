@@ -3930,8 +3930,8 @@ resolves:
     copy: { rate: rate }                    # optional: register field -> record field, on found only
     outcome: resolution                     # optional string field stamped found/notFound/ambiguous
     found:     { setStatus: IDENTIFIED }
-    notFound:  { setStatus: NO_MATCH }
-    ambiguous: { setStatus: MULTIPLE_MATCHES }
+    notFound:  { setStatus: UNRESOLVED }     # both failures share the routing status;
+    ambiguous: { setStatus: UNRESOLVED }     # `outcome:` is what tells them apart
 ```
 
 **The three outcomes are the whole point.** Exactly one covering register row fills the relation. NO
@@ -3940,42 +3940,63 @@ candidates, because a silently-wrong driver (or price, or approver) is worse tha
 record. Route each outcome with `setStatus` and/or record it with `outcome:` so the unresolved ones
 are a filterable worklist a human can finish, and so a process `decision` can branch on them.
 
-**Two outcomes you must tell apart downstream need two statuses OR a guard that reads `outcome:`.**
-A `generates` guard takes, next to its status term, terms over the source's own STRING fields (see *the
-event axis*), so `outcome:` is readable there - the example above could equally route both failures to
-one `UNRESOLVED` and separate the audit rows on the outcome, as long as the rows are minted by a
-`generates` (`mode: append`); a `postings:` guard is the status term alone, so a posting per outcome
-still needs a status per outcome:
+**Tell the two failures apart with `outcome:`, not with two statuses.** A `generates` guard takes,
+next to its one status term, terms over the source's own **string/text** fields (see *the event axis*),
+so the `outcome:` trace is readable there. One routing status plus an outcome term is the shape to
+reach for: one worklist for the human, one fallback process, and an audit row per failure kind anyway.
+Declare the trace field `readOnly: true` - a guard on a field the user can edit turns "how did this
+record get here" into "what does the field say today", and Generate warns about it.
 
-```yaml
-    notFound:  { setStatus: UNRESOLVED }
-    ambiguous: { setStatus: UNRESOLVED }
-# ...
-    event: { onTransition: Fine, mode: append, when: ["Status == UNRESOLVED", "resolution == notFound"] }
-```
+**Outcomes handled DIFFERENTLY - different people, a different form, a different flow - need two
+TRIGGERS, which is not the same as two statuses.** A process binds at most one trigger and a guard
+list is ANDed, never ORed, so one process cannot cover two statuses; but a process trigger takes the
+same list form the `generates` guard does, so two DIFFERENT processes can both trigger on the one
+routing status and be separated by the outcome term -
+`when: ["Status == UNRESOLVED", "resolution == notFound"]` on one, `"resolution == ambiguous"` on the
+other. That is the shape to reach for when the flows differ. Two processes identical but for their
+trigger STATUS, doing the same thing, are the sign the split was not needed at all.
 
-Prefer that when the two failures are handled the SAME way and differ only in what the trail records:
-one status, one fallback process, one worklist. Prefer separate statuses when they are handled
-DIFFERENTLY - a process binds at most one trigger and a guard list is ANDed, never ORed, so two failure
-kinds that need two different flows need two statuses to start them. What is never right is one status
-plus no outcome term: the two are then indistinguishable to everything downstream.
+**A `postings:` reaction is the one reason to mint a status per outcome** - a posting's guard is the
+status term alone, no list and no string term, so it cannot read the trace. Every other reaction to a
+lookup's outcomes takes the ANDed list and so can read it: `generates:`, a process `trigger:`,
+`notifications:`, `integrations:`, `outbound:`. So if a posting has to tell the two failures apart,
+give them a status each whatever the flow; otherwise one routing status carries them all.
+
+What is never right is one status plus no outcome term: the two failures are then indistinguishable to
+everything downstream.
 
 Because each outcome's `setStatus:` publishes `-transitioned` (see *which writes are observable*), the
 whole automatic path is bindable without writing any Java:
 
 ```yaml
 generates:
-  - name: log-no-match                          # one audit row per failed lookup
+  # one audit row per failure kind - the STATUS is shared, the OUTCOME term separates them
+  - name: log-no-match
     from: Fine
     to: FineLog
-    event: { onTransition: Fine, when: "Status == NO_MATCH", mode: append }
+    event:
+      onTransition: Fine
+      mode: append
+      when: ["Status == UNRESOLVED", "resolution == notFound"]
     map: { fine: id, plateNumberChecked: vehicle.plateNumber, violationAtChecked: violationAt }
     defaults: { event: "DRIVER_IDENTIFICATION_FAILED", reason: "NO_MATCH" }
 
+  - name: log-ambiguous
+    from: Fine
+    to: FineLog
+    event:
+      onTransition: Fine
+      mode: append
+      when: ["Status == UNRESOLVED", "resolution == ambiguous"]
+    map: { fine: id, plateNumberChecked: vehicle.plateNumber, violationAtChecked: violationAt }
+    defaults: { event: "DRIVER_IDENTIFICATION_FAILED", reason: "MULTIPLE_MATCHES" }
+
 processes:
-  - name: ResolveNoMatch                        # a fallback process per failure kind:
-    trigger: { onTransition: Fine, when: "Status == NO_MATCH", businessKey: id }
-    steps:                                      # a process takes at most ONE trigger
+  # ONE fallback for both failure kinds - the officer does the same thing either way, and the
+  # form shows `resolution` so they can see which one they are looking at
+  - name: ManualIdentification
+    trigger: { onTransition: Fine, when: "Status == UNRESOLVED", businessKey: id }
+    steps:
       - name: identify
         kind: userTask
         args: { assignee: officer, form: IdentifyDriver, setRelationField: Status, value: IDENTIFIED, next: done }
