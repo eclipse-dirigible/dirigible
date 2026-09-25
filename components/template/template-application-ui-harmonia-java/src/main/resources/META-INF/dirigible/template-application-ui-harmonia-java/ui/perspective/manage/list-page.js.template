@@ -25,7 +25,7 @@ document.addEventListener('alpine:init', () => {
     sortColumn: null,
     sortDirection: null,
     currentPage: 1,
-    pageSize: 20,
+    pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
     // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ.
@@ -38,10 +38,22 @@ document.addEventListener('alpine:init', () => {
     filterColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end'#if($property.isNumberType), number: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
 #end
 #end
     ],
+
+    // The Filter menu is presentation over the filter model above: filterOpen is the popover's open
+    // state, filterEditing the column whose editor it shows (null = the "add a filter" list), and
+    // filterDraft the value being edited - written into columnFilters only when the user applies it,
+    // so one query runs per filter rather than one per keystroke.
+    filterOpen: false,
+    filterEditing: null,
+    filterDraft: '',
+
+    // The record preview is a right-hand sheet; the overlay binds this two-way, so dismissing it by
+    // clicking the scrim has to clear the selection the same way closeDetails() does.
+    detailsOpen: false,
 
     // Delete confirmation.
     deleteOpen: false,
@@ -59,6 +71,11 @@ document.addEventListener('alpine:init', () => {
     caView: '${name}',
 
     async init() {
+      // The sheet's overlay owns detailsOpen two-way, so a dismissal that never goes through
+      // closeDetails() - a click on the scrim - still has to drop the selection and the record id.
+      this.$watch('detailsOpen', (open) => { if (!open && this.selected) this.closeDetails(); });
+      // The menu always opens on its "add a filter" step, whatever editor it was last left on.
+      this.$watch('filterOpen', (open) => { if (open) { this.filterEditing = null; this.filterDraft = ''; } });
 #if($hasRestrictedFields)
       // Role-scoped fields: ask the controller which columns it withholds from this caller, so the
       // table, its filter row and the export leave them out instead of carrying permanently empty
@@ -78,13 +95,17 @@ document.addEventListener('alpine:init', () => {
       this.onActionDone(async () => { await this.load(); this.loadLookups(); });
     },
 
-    // Deep link / reload support: /${name}/:id pre-selects that row once the list is loaded.
+    // Deep link / reload support: /${name}/:id pre-selects that row once the list is loaded, and
+    // opens the sheet it is selected IN - the URL names a record because the record is being looked
+    // at, so a reload or a step through history that lands here has to show it, not just highlight
+    // the row behind a closed sheet. Every route step re-renders this fragment, so this covers the
+    // whole history axis: an id opens the sheet, the bare list route renders with none.
     selectFromRoute() {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       const id = params.id;
       if (id === undefined || id === null || id === '') return;
       const match = this.items.find(it => String(it.${primaryKeysString}) === String(id));
-      if (match) { this.selected = match; this.refreshIcons(); }
+      if (match) { this.selected = match; this.detailsOpen = true; this.refreshIcons(); }
     },
 
     // True while this list is rendered inline on somebody else's route - the Settings master-detail
@@ -159,10 +180,10 @@ document.addEventListener('alpine:init', () => {
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
-    selectRow(row)   { this.selected = row; this.refreshIcons(); this.syncSelectionUrl(row); },
+    selectRow(row)   { this.selected = row; this.detailsOpen = true; this.refreshIcons(); this.syncSelectionUrl(row); },
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears, and take the record id back out of the URL (issue #7463).
-    closeDetails()   { this.selected = null; this.refreshIcons(); this.syncSelectionUrl(null); },
+    closeDetails()   { this.selected = null; this.detailsOpen = false; this.refreshIcons(); this.syncSelectionUrl(null); },
     // Render a property value for the details pane. Jackson serializes java.time as arrays
     // (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
     // Render a date/datetime value through the instance Date/Timestamp patterns (shell format.js).
@@ -290,6 +311,55 @@ document.addEventListener('alpine:init', () => {
 
     clearColumnFilters() { this.columnFilters = {}; this.applyServerFilter(); },
 
+    // ----- The Filter menu and its chips (presentation over the model above) ----------------------
+    // A column's own label, the one its table header shows.
+    filterLabel(col) { return window.T ? T(col.tkey, col.label) : col.label; },
+
+    // The columns a filter can be added on. A MULTISELECT column ('none') is excluded rather than
+    // offered and then ignored: its value is a key list, which neither EQ nor LIKE can match.
+    get availableFilters() { return this.filterColumns.filter(c => c.type !== 'none'); },
+
+    // The filters in force, as chips - each value printed the way the table prints that column.
+    get activeFilterChips() {
+      return this.filterColumns.filter(c => {
+        const v = this.columnFilters[c.name];
+        return v !== undefined && v !== null && String(v).trim() !== '';
+      }).map(c => ({ name: c.name, label: this.filterLabel(c), text: this.filterValueText(c) }));
+    },
+
+    filterValueText(col) {
+      const v = this.columnFilters[col.name];
+      if (col.type === 'fk')   return this.lookupText(col.name, v);
+      if (col.type === 'date') return this.displayValue(v, true);
+      return String(v);
+    },
+
+    // Open the editor for one column, starting from the value that column already filters by.
+    openFilterEditor(name) {
+      this.filterEditing = name;
+      const v = this.columnFilters[name];
+      this.filterDraft = (v === undefined || v === null) ? '' : v;
+    },
+    backToFilterMenu() { this.filterEditing = null; this.filterDraft = ''; },
+    get editedFilterColumn() { return this.filterColumns.find(c => c.name === this.filterEditing) || null; },
+
+    // Apply writes the draft into the filter model and runs the ONE query it implies.
+    applyFilterDraft() {
+      if (!this.filterEditing) return;
+      this.columnFilters = { ...this.columnFilters, [this.filterEditing]: this.filterDraft };
+      this.closeFilterMenu();
+      this.applyServerFilter();
+    },
+    closeFilterMenu() { this.filterOpen = false; this.filterEditing = null; this.filterDraft = ''; },
+
+    // Drop one filter (a chip's x). The rest stay in force.
+    removeFilter(name) {
+      const next = { ...this.columnFilters };
+      delete next[name];
+      this.columnFilters = next;
+      this.applyServerFilter();
+    },
+
     // FK filter dropdown options ({value,text}) from the already-loaded lookup map.
     optionsForFilter(name) {
       const m = this.lookups[name] || {};
@@ -332,9 +402,29 @@ document.addEventListener('alpine:init', () => {
       this.currentPage = 1;
       this.refreshIcons();
     },
+    // What a screen reader announces for a sortable column header.
+    ariaSort(col) {
+      if (this.sortColumn !== col) return 'none';
+      return this.sortDirection === 'asc' ? 'ascending' : 'descending';
+    },
     isSortedAsc(col)  { return this.sortColumn === col && this.sortDirection === 'asc'; },
     isSortedDesc(col) { return this.sortColumn === col && this.sortDirection === 'desc'; },
     isUnsorted(col)   { return this.sortColumn !== col; },
+
+    // "1-10 of 11 Expenses": WHICH rows are in view, of everything the search and the filters leave.
+    // A count alone ("10 of 11") says how many but not which, and reads as a contradiction on the
+    // last page, where it would be "1 of 11".
+    showingRange() {
+      const total = this.sortedItems.length;
+      if (!total) return '';
+      const from = (this.currentPage - 1) * this.pageSize + 1;
+      const to = from + this.paginatedItems.length - 1;
+      const name = window.T ? T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}';
+      return window.T
+        ? T('$projectName:${tprefix}.defaults.showing', '{{from}}-{{to}} of {{total}} {{name}}',
+            { from: from, to: to, total: total, name: name })
+        : from + '-' + to + ' of ' + total + ' ' + name;
+    },
 
     goPage(n) { this.currentPage = Math.max(1, Math.min(n, this.totalPages)); this.refreshIcons(); },
     // The page numbers the pager shows: first, last and the current page's neighbours, '...' over

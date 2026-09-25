@@ -13,11 +13,18 @@
  * settingsPage — the built-in Settings section as a master-detail: every settings item is a row in
  * the list on the left, its content opens in the pane on the right. A platform preference (Region &
  * Language and the display formats) share one pane and render from the page's own markup; a SETTING
- * entity's generated manage-list view fragment is fetched only when its row is picked and rendered
- * inline via x-html — which initializes Alpine on the injected markup and binds its
- * <Entity>ManageListPage component — so a module declaring many nomenclatures loads one of them, not
- * all of them. That embedded list opens create/edit/preview in the shared related-record dialog
- * instead of navigating, so this pane keeps its place (the list page's inlineHosted()).
+ * entity's generated manage-list view fragment is fetched only when its row is picked, so a module
+ * declaring many nomenclatures loads one of them, not all of them. That embedded list opens
+ * create/edit/preview in the shared related-record dialog instead of navigating, so this pane keeps
+ * its place (the list page's inlineHosted()).
+ *
+ * The fragment is rendered IMPERATIVELY (renderEntityView), not through a reactive x-html binding.
+ * Alpine re-runs an x-html effect on its own account, and a re-run replaces the whole injected
+ * subtree: measured in a browser, opening the embedded list's Filter popover or its record sheet
+ * rebuilt the fragment in the same tick, destroying the overlay that had just opened and costing a
+ * second load of the entity - while the delete dialog beside them was unaffected. Rendering once and
+ * initializing the tree ourselves gives the injected page the lifetime it needs; destroyTree on the
+ * way out keeps its effects, listeners and watchers from leaking.
  */
 document.addEventListener('alpine:init', () => {
   Alpine.data('settingsPage', () => ({
@@ -25,7 +32,9 @@ document.addEventListener('alpine:init', () => {
     selected: null,     // 'regionLanguage' | the selected setting entity's name
     selectedTitle: '',  // its label - the compact toolbar names what is open, the list being hidden
     entityUrl: null,    // the selected entity's view fragment; null for a platform preference
-    content: '',        // the fetched fragment HTML (rendered via x-html)
+    // Kept for pages generated before the imperative render: their _settings.html binds
+    // x-html="content", and this runtime is swapped under pages generated months earlier (#7427).
+    content: '',
     loading: false,
     error: null,
     // Below the breakpoint the list and the detail pane take turns (the split hides one of them), so
@@ -64,20 +73,46 @@ document.addEventListener('alpine:init', () => {
       this.selectedTitle = title || '';
       this.entityUrl = url || null;
       this.error = null;
-      this.content = '';
+      this.clearEntityView();
       if (!url) return;
       this.loading = true;
       try {
         const r = await fetch(url, { credentials: 'same-origin' });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        this.content = await r.text();
+        const html = await r.text();
+        await this.$nextTick();          // the host sits behind x-show; let it render before filling it
+        this.renderEntityView(html);
       } catch (e) {
         console.error('settings: failed to load the view for ' + name, e);
         this.error = window.T ? T('application-core:shell.settings.loadFailed', 'Could not load this setting.')
                 : 'Could not load this setting.';
+        this.clearEntityView();
       } finally {
         this.loading = false;
       }
+    },
+
+    // Render one setting entity's generated page into the detail pane and initialize Alpine on it -
+    // this is what binds its <Entity>ManageListPage component and every Harmonia directive in it.
+    renderEntityView(html) {
+      const host = this.$refs.entityView;
+      if (!host) { this.content = html; return; }   // a page generated before this: its x-html binding
+      Alpine.mutateDom(() => {
+        Alpine.destroyTree(host);
+        host.innerHTML = html;
+        Alpine.initTree(host);
+      });
+    },
+
+    // Tear the rendered page down with its effects, listeners and watchers.
+    clearEntityView() {
+      const host = this.$refs.entityView;
+      if (!host) { this.content = ''; return; }
+      if (!host.firstChild) return;
+      Alpine.mutateDom(() => {
+        Alpine.destroyTree(host);
+        host.innerHTML = '';
+      });
     },
 
     // Back to the list on a narrow screen, where the split shows one panel at a time.
@@ -85,8 +120,8 @@ document.addEventListener('alpine:init', () => {
       this.selected = null;
       this.selectedTitle = '';
       this.entityUrl = null;
-      this.content = '';
       this.error = null;
+      this.clearEntityView();
     },
   }));
 }, { once: true });

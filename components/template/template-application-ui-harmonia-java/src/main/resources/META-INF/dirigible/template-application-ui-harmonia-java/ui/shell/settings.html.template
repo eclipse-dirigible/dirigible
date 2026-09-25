@@ -144,15 +144,18 @@
           </div>
         </div>
 
-        <!-- A setting entity's own generated CRUD list, fetched on selection and rendered inline
-             (x-html initializes Alpine on the injected markup, binding its <Entity>ManageListPage).
-             The fragment manages its own height and scrolling, so it fills the pane as it stands. -->
+        <!-- A setting entity's own generated CRUD list, fetched on selection and rendered into the
+             host below by settingsPage.renderEntityView, which initializes Alpine on it (binding its
+             <Entity>ManageListPage and every Harmonia directive in it). Deliberately NOT an x-html
+             binding: Alpine re-runs that effect on its own account and the re-run replaces the whole
+             injected subtree, which destroyed the list's Filter popover and its record sheet in the
+             tick they opened. The fragment manages its own height, so it fills the pane as it is. -->
         <div class="vbox flex-1 overflow-hidden" x-show="entityUrl" x-cloak>
           <div class="p-4" x-show="loading"><div x-h-spinner></div></div>
           <div x-h-alert data-variant="negative" role="alert" class="m-4" x-show="error">
             <div x-h-alert-description x-text="error"></div>
           </div>
-          <div class="size-full min-w-0" x-show="!loading && !error" x-html="content"></div>
+          <div class="size-full min-w-0" x-show="!loading &amp;&amp; !error" x-ref="entityView"></div>
         </div>
 
       </div>

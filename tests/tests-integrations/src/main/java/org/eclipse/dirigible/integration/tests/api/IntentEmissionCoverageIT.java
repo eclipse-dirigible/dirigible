@@ -2735,12 +2735,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
-        // The per-column filter must debounce (~300ms) and must never blank the table or show the
-        // empty state while a POST /search is in flight - it keeps the settled rows and only settles
-        // the empty state on a query that returned zero rows (issue #7461).
-        assertTrue(unitManageView.contains("@input.debounce.300ms=\"applyServerFilter()\""),
-                "the per-column text filter must debounce applyServerFilter (~300ms), not query per keystroke");
-        assertFalse(unitManageView.contains("@input.debounce.400ms"), "the pre-#7461 400ms debounce must be gone");
+        // The per-column filters live in the Filter menu (#7491), not in a row inside the table: the
+        // value is edited as a draft and applied once, so the list queries per applied filter rather
+        // than per keystroke - and no filter control sits in the table's header any more.
+        assertTrue(unitManageView.contains("@click=\"applyFilterDraft()\""),
+                "the Filter menu must apply the edited filter through applyFilterDraft");
+        assertFalse(unitManageView.contains("@input.debounce"),
+                "no filter control may debounce a query per keystroke from inside the table any more");
+        // ...and it must never blank the table or show the empty state while a POST /search is in
+        // flight - it keeps the settled rows and only settles the empty state on a query that
+        // returned zero rows (issue #7461).
+        assertTrue(unitManageView.contains("x-show=\"filtering\""),
+                "an in-flight filter query must be signalled rather than blanking the table (#7461)");
         assertTrue(unitManageList.contains("if (this.filtering) return this.items.length ? 'default' : 'loading'"),
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
