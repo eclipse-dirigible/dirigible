@@ -172,11 +172,98 @@ document.addEventListener('alpine:init', () => {
       return this.items.filter(it => it.${hierarchyProperty} === pid);
     },
     hasChildren(node) { return this.items.some(it => it.${hierarchyProperty} === node.${primaryKeysString}); },
+    // What a node is called: its first couple of major, own values, PRINTED the way the table
+    // prints them - a raw date is a Jackson array ([2026,9,25]) and would read as "2026,9,25" - and
+    // tested for emptiness BEFORE formatting, or the empty-value placeholder becomes the label.
+    // Text columns come first: a name identifies a record, a date or an amount rarely does.
     nodeLabel(node) {
-#set($labelCandidates = 0)
-      return [#foreach($property in $properties)#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $labelCandidates < 4)node.${property.name}, #set($labelCandidates = $labelCandidates + 1)#end#end].filter(v => v !== null && v !== undefined && v !== '').slice(0, 2).join(' ');
+      if (!node) return '';
+      const parts = [];
+      const has = (v) => v !== null && v !== undefined && v !== '';
+#set($textCandidates = 0)
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "MULTISELECT" && !$property.isNumberType && !$property.isDateType && !$property.isFloatType && $textCandidates < 4)
+      if (has(node.${property.name})) parts.push(this.displayValue(node.${property.name}));
+#set($textCandidates = $textCandidates + 1)
+#end
+#end
+#set($otherCandidates = 0)
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "MULTISELECT" && ($property.isNumberType || $property.isDateType || $property.isFloatType) && $otherCandidates < 4)
+#if($property.isDateType)
+      if (has(node.${property.name})) parts.push(this.displayValue(node.${property.name}, true));
+#elseif($property.isFloatType)
+      if (has(node.${property.name})) parts.push(this.formatNumber(node.${property.name}, '${property.formatPattern}'));
+#else
+      if (has(node.${property.name})) parts.push(this.displayValue(node.${property.name}));
+#end
+#set($otherCandidates = $otherCandidates + 1)
+#end
+#end
+      return parts.slice(0, 2).join(' ');
     },
 #end
+    // The heading the sheet carries over the record's properties: what KIND of thing it is. The
+    // record's own key is in the header beside it, and its values are in the block below.
+    sheetTitle() {
+      return window.T ? T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') : '${entityLabel}';
+    },
+
+    // ----- What the sheet offers for the selected record -------------------------------------------
+    // In the order they are offered: the record's own actionable process tasks (your step outranks
+    // everything), then whatever the customActions extension point contributes. The FIRST of them is
+    // the sheet's one visible button; the rest go into its overflow menu, each group its own.
+    get recordTasks() {
+#if($hasProcess)
+      const tasks = Alpine.store('processTasks');
+      return (this.selected && tasks) ? tasks.getTasks(this.selected) : [];
+#else
+      return [];
+#end
+    },
+    get recordActions() {
+      const actions = Alpine.store('customActions');
+      return (this.selected && actions) ? actions.getActions(this.caView, 'entity', this.selected) : [];
+    },
+    // 'task' | 'edit' | 'preview' - what the sheet's one filled button does. The record's own
+    // process task comes first (the step it is waiting on), then Edit, and Preview when the
+    // record's status makes it read-only and there is nothing to edit. A contributed action is
+    // never it: Duplicate and Print are conveniences, not the reason the record is open, and the
+    // filled button is what the sheet is FOR.
+    get primaryAction() {
+      if (this.recordTasks.length) return 'task';
+#if($immutableStatusProperty || $immutableAlways)
+      if (this.isRowImmutable(this.selected)) return 'preview';
+#end
+      return 'edit';
+    },
+    // Whatever the primary button did not take. Contributed actions are all of them, always.
+    get menuTasks() { return this.primaryAction === 'task' ? this.recordTasks.slice(1) : this.recordTasks; },
+    get menuActions() { return this.recordActions; },
+    // The task the primary button runs. Named here rather than indexed in the markup: a $store
+    // method call carrying an index expression is the Velocity-vs-Alpine trap - Velocity parses the
+    // $store reference and chokes on the '['.
+    get primaryTask() { return this.recordTasks[0] || null; },
+
+    get menuHasEdit() {
+#if($immutableStatusProperty || $immutableAlways)
+      if (this.isRowImmutable(this.selected)) return false;
+#end
+      return this.primaryAction !== 'edit';
+    },
+    get menuHasPreview() { return this.primaryAction !== 'preview'; },
+    // Delete is withheld from a record its status makes read-only (the controller would 409).
+    get menuHasDelete() {
+#if($immutableStatusProperty || $immutableAlways)
+      return !this.isRowImmutable(this.selected);
+#else
+      return true;
+#end
+    },
+    // A separator earns its place only between two groups that both have something in them.
+    get menuHasRecordActions() { return this.menuHasPreview || this.menuHasEdit; },
+    get menuHasAnythingAbove() { return this.menuTasks.length > 0 || this.menuActions.length > 0 || this.menuHasRecordActions; },
+
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
@@ -481,16 +568,16 @@ document.addEventListener('alpine:init', () => {
     },
     editEntity(row) {
       const route = '/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit';
-      if (this.inlineHosted()) return this.openInDialog(route, this.recordTitle());
+      if (this.inlineHosted()) return this.openInDialog(route, this.entityTitle());
       window.PineconeRouter.navigate(route);
     },
     previewEntity(row) {
       const route = '/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview';
-      if (this.inlineHosted()) return this.openInDialog(route, this.recordTitle());
+      if (this.inlineHosted()) return this.openInDialog(route, this.entityTitle());
       window.PineconeRouter.navigate(route);
     },
     // The singular entity label, for the dialog that holds one record's form.
-    recordTitle() {
+    entityTitle() {
       return window.T ? T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') : '${entityLabel}';
     },
 #if($immutableStatusProperty || $immutableAlways)

@@ -2741,11 +2741,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterPage.contains("closeDetails()"), "the master page must define closeDetails()");
         assertTrue(unitManageList.contains("closeDetails()"), "the manage list page must define closeDetails()");
         for (String detailView : new String[] {unitManageView, campaignMasterView}) {
-            assertTrue(detailView.contains("@click=\"closeDetails()\""),
-                    "the detail panel toolbar must carry a close control wired to closeDetails()");
+            assertTrue(detailView.contains("@click=\"closeDetails()\""), "the detail panel must carry a control wired to closeDetails()");
             assertTrue(detailView.contains("@keydown.escape.window"), "Esc must dismiss the detail panel");
-            assertTrue(detailView.contains("defaults.close"), "the close control must use the translated Close label");
         }
+        // The manage list's record opens in a sheet OVER the list, so its dismissal is named after
+        // where it returns you (#7491); the master-detail pane closes a panel beside the list.
+        assertTrue(unitManageView.contains("defaults.backToList"),
+                "the record sheet's dismissal must use the translated Back to list label");
+        assertTrue(campaignMasterView.contains("defaults.close"),
+                "the master-detail panel's close control must use the translated Close label");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
