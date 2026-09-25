@@ -43,13 +43,13 @@ class TenantUsersExceptionHandler {
 
     /**
      * Renders a caller refused by the endpoints' {@code @RolesAllowed} - in the same shape, so a page
-     * reads one reason for it.
+     * reads one reason for it. The exception carries nothing the body needs, so the handler takes no
+     * parameter.
      *
-     * @param ex the refusal
      * @return the body
      */
     @ExceptionHandler(AccessDeniedException.class)
-    ResponseEntity<TenantUsersRefusal> handleAccessDenied(AccessDeniedException ex) {
+    ResponseEntity<TenantUsersRefusal> handleAccessDenied() {
         HttpStatus status = HttpStatus.FORBIDDEN;
         return ResponseEntity.status(status)
                              .body(new TenantUsersRefusal(status.value(), status.getReasonPhrase(),
