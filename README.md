@@ -1,6 +1,7 @@
 # Eclipse Dirigible™
 
 [![Build Status](https://github.com/eclipse/dirigible/actions/workflows/build.yml/badge.svg)](https://github.com/eclipse/dirigible/actions/workflows/build.yml)
+[![GetMerged Scorecard](https://getmerged.abhishekco.de/api/badge/eclipse-dirigible/dirigible)](https://getmerged.abhishekco.de/eclipse-dirigible/dirigible)
 [![Eclipse License](https://img.shields.io/badge/License-EPL%202.0-brightgreen.svg)](https://github.com/eclipse/dirigible/blob/master/LICENSE)
 [![Download Dirigible](https://img.shields.io/badge/download-releases-green.svg)](http://download.dirigible.io/)
 [![Artifact HUB](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/eclipse-dirigible)](https://artifacthub.io/packages/search?org=dirigiblelabs)
