@@ -49,11 +49,16 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  *
  * <p>
  * The handshake accepts the configured cross-origin origins that name a host - a wildcard never
- * reaches it, since a handshake carries the session cookie (see
- * {@link CorsConfigurationSourceProvider#stompOriginPatterns()}); unconfigured it stays
- * same-origin, as it always was. The endpoint answers its own CORS: the platform's CORS filter
- * leaves {@code /stomp/**} alone (see {@link CorsConfigurationSourceProvider}), so the SockJS
- * transports answer with the credentials SockJS clients require.
+ * reaches it (see {@link CorsConfigurationSourceProvider#stompOriginPatterns()}); unconfigured it
+ * stays same-origin, as it always was. A session opened cross-origin is marked as such
+ * ({@link CrossOriginHandshakeInterceptor}, on the raw handshake and on every SockJS transport),
+ * and the identity its handshake carried - the session cookie, HTTP authentication - becomes the
+ * session's user only when credentials are allowed for the configured origins
+ * ({@link CorsConfigurationSourceProvider#stompCredentialsAllowed()}), the decision every other
+ * cross-origin request is held to; otherwise the CONNECT needs the bearer token. The endpoint
+ * answers its own CORS: the platform's CORS filter leaves {@code /stomp/**} alone (see
+ * {@link CorsConfigurationSourceProvider}), so the SockJS transports answer with the credentials
+ * SockJS clients require - which says nothing about whether the cookie they carry is accepted.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -115,12 +120,19 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setErrorHandler(new BearerTokenStompErrorHandler());
         StompWebSocketEndpointRegistration endpoint = registry.addEndpoint("/stomp");
         StompWebSocketEndpointRegistration sockJsEndpoint = registry.addEndpoint("/stomp");
+        // the SockJS registration copies the interceptors and the patterns when it is created, so
+        // both go on before it is
+        CrossOriginHandshakeInterceptor crossOriginMarker = new CrossOriginHandshakeInterceptor();
+        endpoint.addInterceptors(crossOriginMarker);
+        sockJsEndpoint.addInterceptors(crossOriginMarker);
         List<String> origins = CorsConfigurationSourceProvider.stompOriginPatterns();
         if (!origins.isEmpty()) {
-            LOGGER.info("The STOMP handshake accepts the origins {}.", origins);
+            LOGGER.info(
+                    "The STOMP handshake accepts the origins {}; a session opened from one of them {} authenticated by its handshake"
+                            + " cookie or HTTP authentication.",
+                    origins, CorsConfigurationSourceProvider.stompCredentialsAllowed() ? "is" : "is not");
             String[] originPatterns = origins.toArray(String[]::new);
             endpoint.setAllowedOriginPatterns(originPatterns);
-            // the SockJS registration copies the patterns when it is created, so they go on first
             sockJsEndpoint.setAllowedOriginPatterns(originPatterns);
         }
         sockJsEndpoint.withSockJS();
@@ -134,7 +146,9 @@ public class WebsocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new BearerTokenStompInterceptor(bearerTokenAuthenticator, sessionTerminator),
+        registration.interceptors(
+                new BearerTokenStompInterceptor(bearerTokenAuthenticator, sessionTerminator,
+                        CorsConfigurationSourceProvider.stompCredentialsAllowed()),
                 new SecurityContextChannelInterceptor(), new AuthorizationChannelInterceptor(inboundAuthorization()));
     }
 
