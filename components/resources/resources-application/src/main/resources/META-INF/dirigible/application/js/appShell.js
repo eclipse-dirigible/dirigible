@@ -518,6 +518,7 @@ document.addEventListener('alpine:init', () => {
               this.settingsUrl = item.path || '';
               if (item.id === 'tenant-configuration') this.loadTenantConfig();
               if (item.id === 'document-numbering') this.loadNumbering();
+              if (item.id === 'tenant-users') this.loadTenantUsers();
             }
           }
         } else {
@@ -643,6 +644,12 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    /** Reads the Users section's rows - the store may be absent on a page that predates it. */
+    loadTenantUsers() {
+      const store = window.Alpine && Alpine.store('tenantUsers');
+      if (store) store.load();
+    },
+
     /** Open the Settings master-detail (the aggregated SETTING entities from every app). */
     openSettings() {
       this.settingsMode = true;
@@ -667,6 +674,7 @@ document.addEventListener('alpine:init', () => {
         }
         if (item.id === 'tenant-configuration') this.loadTenantConfig();
         if (item.id === 'document-numbering') this.loadNumbering();
+        if (item.id === 'tenant-users') this.loadTenantUsers();
       }
     },
 
@@ -678,6 +686,7 @@ document.addEventListener('alpine:init', () => {
       if (id === 'region-language') return { id: 'region-language' };
       if (id === 'tenant-configuration') return { id: 'tenant-configuration' };
       if (id === 'document-numbering') return { id: 'document-numbering' };
+      if (id === 'tenant-users') return { id: 'tenant-users' };
       return (this.settingsItems || []).find(i => i.id === id) || null;
     },
 

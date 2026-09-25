@@ -65,6 +65,11 @@ document.addEventListener('alpine:init', () => {
       this.entityUrl = url || null;
       this.error = null;
       this.content = '';
+      if (name === 'tenantUsers') {
+        // The platform's Users section renders from its own store - absent on a page generated before it.
+        const store = window.Alpine && Alpine.store('tenantUsers');
+        if (store) store.load();
+      }
       if (!url) return;
       this.loading = true;
       try {

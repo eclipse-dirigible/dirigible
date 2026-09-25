@@ -183,6 +183,8 @@
       "tenantConfigForbidden": "You do not have permission to view or change the tenant configuration.",
       "tenantConfigFailed": "Something went wrong. Please try again.",
       "numbering": "Document Numbering",
+      "tenantUsers": "Users",
+      "tenant": "Tenant",
       "numberingHint": "Each document series' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.",
       "numberingForbidden": "You do not have permission to view or change document numbering.",
       "numberingFailed": "Something went wrong. Please try again.",
@@ -208,6 +210,52 @@
       },
       "backToList": "Back to the settings list",
       "loadFailed": "Could not load this setting."
+    },
+    "tenantUsers": {
+      "title": "Users",
+      "description": "The people of this tenant and where each one stands. Invite another person with a role - they receive an invitation to sign in.",
+      "refresh": "Refresh",
+      "email": "Email",
+      "emailPlaceholder": "name@example.com",
+      "role": "Role",
+      "invite": "Invite",
+      "invited": "Invitation sent to {{email}}",
+      "resent": "Invitation sent again to {{email}}",
+      "empty": "Nobody has been invited yet",
+      "emptyHint": "Invite the first person above.",
+      "roles": "Roles",
+      "statusColumn": "Status",
+      "invitedColumn": "Invited",
+      "updatedColumn": "Updated",
+      "signInColumn": "Last sign-in",
+      "stale": "No answer yet",
+      "resend": "Send again",
+      "grantedBy": "Granted by {{by}} on {{at}}",
+      "requested": "Requested by {{by}} on {{at}}",
+      "status": {
+        "PENDING": "Pending",
+        "INVITED": "Invited",
+        "ASSIGNED": "Assigned",
+        "ACTIVE": "Active",
+        "FAILED": "Failed"
+      },
+      "roleState": {
+        "REQUESTED": "requested",
+        "GRANTED": "granted",
+        "FAILED": "failed"
+      },
+      "error": {
+        "pending": "A request for this role is still waiting for an answer. Send it again from the list instead.",
+        "granted": "This person already has that role.",
+        "email": "Enter a valid email address.",
+        "role": "Choose one of the offered roles.",
+        "publish": "The invitation could not be sent. Try again in a moment.",
+        "owner": "Only an owner of this tenant can manage its users.",
+        "tenant": "Select a tenant to manage its users.",
+        "notPending": "This request has already been answered. Invite the person again instead.",
+        "session": "Your session has expired. Reload the page to sign in again.",
+        "failed": "Something went wrong. Please try again."
+      }
     },
     "apps": {
       "loading": "Loading applications...",

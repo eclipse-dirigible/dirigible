@@ -176,6 +176,20 @@ public enum DirigibleConfig {
      */
     TENANT_PROVISIONING_API_ENABLED("DIRIGIBLE_TENANT_PROVISIONING_API_ENABLED", Boolean.FALSE.toString()),
 
+    /**
+     * Whether tenant owners may manage the users of their tenant from the application shell's Settings:
+     * list them, see where each one stands, and invite another person. An invitation is a request
+     * published to {@link #TENANT_USERS_REQUEST_QUEUE} for an external provisioning system. Off by
+     * default; it requires {@link #TENANT_RESOLUTION_STRATEGY} {@code TOKEN_GROUPS}.
+     */
+    TENANT_USERS_ENABLED("DIRIGIBLE_TENANT_USERS_ENABLED", Boolean.FALSE.toString()),
+
+    /**
+     * The queue an invitation is published to, e.g. {@code global:acme.user-assignment-requests}.
+     * Required when {@link #TENANT_USERS_ENABLED} is on.
+     */
+    TENANT_USERS_REQUEST_QUEUE("DIRIGIBLE_TENANT_USERS_REQUEST_QUEUE", null),
+
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */

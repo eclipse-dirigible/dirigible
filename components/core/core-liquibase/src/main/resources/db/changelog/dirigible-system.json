@@ -10554,6 +10554,353 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_APPLICATION_USERS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_APPLICATION_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "APPUSER_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_APPLICATION_USERS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_EMAIL",
+                    "type": "VARCHAR(320)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_STATUS",
+                    "type": "VARCHAR(50)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_INVITED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_INVITED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_UPDATED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_LAST_SIGN_IN_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_CREATED_AT",
+                    "type": "TIMESTAMP",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSER_UPDATED_AT",
+                    "type": "TIMESTAMP",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_APPLICATION_USERS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_APPLICATION_USER_ROLES",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "APPUSERROLE_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_APPLICATION_USER_ROLES"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_USER_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_ROLE",
+                    "type": "VARCHAR(100)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_STATE",
+                    "type": "VARCHAR(50)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_REQUEST_ID",
+                    "type": "VARCHAR(64)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_REQUESTED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_REQUESTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_GRANTED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_GRANTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "APPUSERROLE_ERROR_MESSAGE",
+                    "type": "VARCHAR(2000)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_APPLICATION_USERS_TENANT_EMAIL",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_APPLICATION_USERS_TENANT_EMAIL",
+                  "tableName": "DIRIGIBLE_APPLICATION_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "APPUSER_TENANT_ID, APPUSER_EMAIL",
+              "constraintName": "UK_DIRIGIBLE_APPLICATION_USERS_TENANT_EMAIL",
+              "tableName": "DIRIGIBLE_APPLICATION_USERS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_APPLICATION_USER_ROLES_USER_ROLE",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_APPLICATION_USER_ROLES_USER_ROLE",
+                  "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "APPUSERROLE_USER_ID, APPUSERROLE_ROLE",
+              "constraintName": "UK_DIRIGIBLE_APPLICATION_USER_ROLES_USER_ROLE",
+              "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "FK_DIRIGIBLE_APPLICATION_USER_ROLES__APPUSERROLE_USER_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_APPLICATION_USER_ROLES__APPUSERROLE_USER_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addForeignKeyConstraint": {
+              "baseColumnNames": "APPUSERROLE_USER_ID",
+              "baseTableName": "DIRIGIBLE_APPLICATION_USER_ROLES",
+              "constraintName": "FK_DIRIGIBLE_APPLICATION_USER_ROLES__APPUSERROLE_USER_ID",
+              "deferrable": false,
+              "initiallyDeferred": false,
+              "onDelete": "CASCADE",
+              "onUpdate": "RESTRICT",
+              "referencedColumnNames": "APPUSER_ID",
+              "referencedTableName": "DIRIGIBLE_APPLICATION_USERS",
+              "validate": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "IX_DIRIGIBLE_APPLICATION_USERS_APPUSER_TENANT_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_APPLICATION_USERS_APPUSER_TENANT_ID",
+                  "tableName": "DIRIGIBLE_APPLICATION_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createIndex": {
+              "columns": [
+                {
+                  "column": {
+                    "name": "APPUSER_TENANT_ID"
+                  }
+                }
+              ],
+              "indexName": "IX_DIRIGIBLE_APPLICATION_USERS_APPUSER_TENANT_ID",
+              "tableName": "DIRIGIBLE_APPLICATION_USERS"
+            }
+          }
+        ]
+      }
     }
   ]
 }

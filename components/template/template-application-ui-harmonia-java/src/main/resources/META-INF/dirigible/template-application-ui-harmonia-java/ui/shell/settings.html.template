@@ -31,6 +31,18 @@
             </button>
           </li>
 
+          <!-- Users: the platform's section for the owners of the current tenant (#7498), the same fragment
+               the application shell's Settings renders. Offered only while the tenantUsers store says so. -->
+          <li x-h-list-header x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak
+              x-text="T('application-core:shell.settings.tenant', 'Tenant')"></li>
+          <li x-h-list-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
+            <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="selected === 'tenantUsers'"
+                    @click="select('tenantUsers', null, T('application-core:shell.settings.tenantUsers', 'Users'))">
+              <svg role="presentation" x-h-lucide data-lucide="users"></svg>
+              <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantUsers', 'Users')"></span>
+            </button>
+          </li>
+
 #set($hasSettings = false)
 #foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
 #if($hasSettings)
@@ -143,6 +155,10 @@
             </div>
           </div>
         </div>
+
+        <!-- Users: the shared fragment of the tenantUsers store. -->
+        <div class="size-full overflow-auto" x-show="selected === 'tenantUsers'" x-cloak
+             x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
 
         <!-- A setting entity's own generated CRUD list, fetched on selection and rendered inline
              (x-html initializes Alpine on the injected markup, binding its <Entity>ManageListPage).
