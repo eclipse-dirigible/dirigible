@@ -139,7 +139,7 @@ class NotifyAttachReportTest {
     void theFileNameDefaultsToTheReportAndTheRowsIdentity() {
         Map<String, Object> entry = schedule(MODEL + STATEMENT_SCHEDULE);
         // A mailbox of statements is only self-describing when each one names its recipient.
-        assertEquals("\"CustomerStatement \" + \"Customer \" + entity.Id + \".pdf\"", entry.get("attachFileNameExpression"));
+        assertEquals("\"CustomerStatement \" + \"Customer \" + entity.Id + \".pdf\"", GlueRendering.attachFileName(entry));
     }
 
     @Test
@@ -162,12 +162,12 @@ class NotifyAttachReportTest {
         Map<String, Object> entry = schedule(yaml);
         // The same sanitizing the document attachment applies - a name is going into a mail header.
         assertEquals("\"Statement_\" + org.eclipse.dirigible.sdk.print.FileNames.part(entity.Name) + \".pdf\"",
-                entry.get("attachFileNameExpression"));
+                GlueRendering.attachFileName(entry));
         assertEquals("Country", entry.get("attachLanguageFkProperty"));
         assertEquals("Country", entry.get("attachLanguageTargetEntity"));
-        assertTrue(String.valueOf(entry.get("attachLanguageExpression"))
+        assertTrue(String.valueOf(GlueRendering.attachLanguage(entry))
                          .contains("attachLanguageSource.Language"),
-                "language: " + entry.get("attachLanguageExpression"));
+                "language: " + GlueRendering.attachLanguage(entry));
     }
 
     @Test

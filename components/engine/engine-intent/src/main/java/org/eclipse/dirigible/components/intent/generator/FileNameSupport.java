@@ -71,9 +71,6 @@ public final class FileNameSupport {
     /** The Java local the snapshot delegate holds the copy's version in. */
     static final String VERSION_LOCAL = "version";
 
-    /** The SDK helper the generated code sanitizes and formats every interpolated value with. */
-    private static final String HELPER = "org.eclipse.dirigible.sdk.print.FileNames";
-
     /** One {@code {...}} interpolation. The body is parsed by {@link #operandExpression}. */
     private static final Pattern TOKEN = Pattern.compile("\\{([^{}]*)\\}");
 
@@ -85,12 +82,13 @@ public final class FileNameSupport {
     /**
      * The translated pattern.
      *
-     * @param expression the Java String expression, without the {@code .pdf} suffix
-     * @param loads the one-hop relation loads the expression reads, in first-use order
+     * @param reading the NEUTRAL reading of the name (issue #7425), without the {@code .pdf} suffix - a
+     *        concatenation of literals and sanitized values the template layer renders
+     * @param loads the one-hop relation loads the reading reads, in first-use order
      * @param usesVersion whether the pattern named {@link #VERSION_TOKEN} itself (a snapshot then
      *        appends no version suffix of its own - the author already placed it)
      */
-    record Resolved(String expression, List<NotificationSupport.RelationLoad> loads, boolean usesVersion) {
+    record Resolved(Map<String, Object> reading, List<NotificationSupport.RelationLoad> loads, boolean usesVersion) {
     }
 
     /**
@@ -108,7 +106,7 @@ public final class FileNameSupport {
     }
 
     /**
-     * Resolve a {@code fileName:} pattern into the expression the generated code assigns.
+     * Resolve a {@code fileName:} pattern into the reading the generated code names the file from.
      *
      * @param pattern the authored pattern
      * @param site where it is being resolved
@@ -126,21 +124,21 @@ public final class FileNameSupport {
         }
         String authored = pattern.trim();
         Map<String, NotificationSupport.RelationLoad> loads = new LinkedHashMap<>();
-        List<String> terms = new ArrayList<>();
+        List<Map<String, Object>> parts = new ArrayList<>();
         boolean usesVersion = false;
         Matcher matcher = TOKEN.matcher(authored);
         int last = 0;
         while (matcher.find()) {
             if (matcher.start() > last) {
-                terms.add(NotificationSupport.quote(authored.substring(last, matcher.start())));
+                parts.add(Readings.string(authored.substring(last, matcher.start())));
             }
             String body = matcher.group(1);
             if (VERSION_TOKEN.equals(body.trim())) {
                 requireVersion(site, authored);
                 usesVersion = true;
-                terms.add(VERSION_LOCAL);
+                parts.add(Readings.local(VERSION_LOCAL));
             } else {
-                terms.add(tokenExpression(body, authored, site, byName, compositionParents, crossModel, loads));
+                parts.add(tokenReading(body, authored, site, byName, compositionParents, crossModel, loads));
             }
             last = matcher.end();
         }
@@ -148,9 +146,10 @@ public final class FileNameSupport {
             throw new IllegalArgumentException("fileName [" + authored + "] interpolates nothing - it would name every copy alike");
         }
         if (last < authored.length()) {
-            terms.add(NotificationSupport.quote(authored.substring(last)));
+            parts.add(Readings.string(authored.substring(last)));
         }
-        return new Resolved(join(terms), new ArrayList<>(loads.values()), usesVersion);
+        // Forced to a String: a pattern that is one lone value would otherwise take that value's type.
+        return new Resolved(Readings.concat(parts, true), new ArrayList<>(loads.values()), usesVersion);
     }
 
     /**
@@ -161,36 +160,34 @@ public final class FileNameSupport {
      *
      * @param entity the rendered entity
      * @param local the Java local holding the record
-     * @return a Java String expression
+     * @return the reading
      */
-    static String numberOrId(EntityIntent entity, String local) {
+    static Map<String, Object> numberOrId(EntityIntent entity, String local) {
         String keyProperty = IntentEntities.keyFieldName(entity);
         for (FieldIntent field : entity.getFields()) {
             if (field.getNumber() != null && field.getName() != null) {
-                String number = local + "." + IntentNaming.pascalCase(field.getName());
-                return "(" + number + " == null || " + number + ".isBlank() ? \"" + entity.getName() + " \" + " + local + "." + keyProperty
-                        + " : " + number + ")";
+                return Readings.numberOrId(local, entity.getName(), keyProperty, IntentNaming.pascalCase(field.getName()));
             }
         }
-        return "\"" + entity.getName() + " \" + " + local + "." + keyProperty;
+        return Readings.numberOrId(local, entity.getName(), keyProperty, null);
     }
 
     /** One {@code {...}} body: a single operand, or {@code |}-separated alternatives. */
-    private static String tokenExpression(String body, String authored, Site site, Map<String, EntityIntent> byName,
+    private static Map<String, Object> tokenReading(String body, String authored, Site site, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
             Map<String, NotificationSupport.RelationLoad> loads) {
-        List<String> operands = new ArrayList<>();
+        List<Map<String, Object>> operands = new ArrayList<>();
         for (String operand : body.split("\\|")) {
-            operands.add(operandExpression(operand, authored, site, byName, compositionParents, crossModel, loads));
+            operands.add(operandReading(operand, authored, site, byName, compositionParents, crossModel, loads));
         }
         if (operands.isEmpty()) {
             throw new IllegalArgumentException("fileName [" + authored + "] has an empty {} token");
         }
-        return operands.size() == 1 ? operands.get(0) : HELPER + ".first(" + String.join(", ", operands) + ")";
+        return operands.size() == 1 ? operands.get(0) : Readings.first(operands);
     }
 
-    /** One operand: {@code Path} or {@code Path:pattern}, rendered as a sanitizing helper call. */
-    private static String operandExpression(String operand, String authored, Site site, Map<String, EntityIntent> byName,
+    /** One operand: {@code Path} or {@code Path:pattern}, read as a sanitized, formatted value. */
+    private static Map<String, Object> operandReading(String operand, String authored, Site site, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
             Map<String, NotificationSupport.RelationLoad> loads) {
         String trimmed = operand.trim();
@@ -208,13 +205,11 @@ public final class FileNameSupport {
                                                                                      .getName()
                     + "]");
         }
-        String access = access(path, authored, site, byName, compositionParents, crossModel, loads);
-        return format == null || format.isEmpty() ? HELPER + ".part(" + access + ")"
-                : HELPER + ".part(" + access + ", " + NotificationSupport.quote(format) + ")";
+        return Readings.part(access(path, authored, site, byName, compositionParents, crossModel, loads), format);
     }
 
-    /** A Java read of a direct field or a one-hop relation field, registering the load it needs. */
-    private static String access(String path, String authored, Site site, Map<String, EntityIntent> byName,
+    /** The reading of a direct field or a one-hop relation field, registering the load it needs. */
+    private static Map<String, Object> access(String path, String authored, Site site, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
             Map<String, NotificationSupport.RelationLoad> loads) {
         EntityIntent entity = site.entity();
@@ -224,7 +219,7 @@ public final class FileNameSupport {
                 throw new IllegalArgumentException(
                         "fileName [" + authored + "]: [" + path + "] is not a field of [" + entity.getName() + "]");
             }
-            return site.local() + "." + IntentNaming.pascalCase(path);
+            return Readings.read(site.local(), IntentNaming.pascalCase(path));
         }
         if (!site.relationsAllowed()) {
             throw new IllegalArgumentException("fileName [" + authored + "]: [" + path
@@ -265,7 +260,7 @@ public final class FileNameSupport {
         }
         // The generated code loads the related record into a local named after the relation - the same
         // local a notify placeholder reads, so one load serves both.
-        return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
+        return Readings.hop(relationName, pascalField);
     }
 
     private static void requireVersion(Site site, String authored) {
@@ -273,15 +268,6 @@ public final class FileNameSupport {
             throw new IllegalArgumentException("fileName [" + authored + "] uses {" + VERSION_TOKEN
                     + "}, which only a snapshot copy has - a sent document carries no version");
         }
-    }
-
-    /** Concatenates the terms into a String expression, forcing String on a lone non-literal term. */
-    private static String join(List<String> terms) {
-        if (terms.size() == 1 && !terms.get(0)
-                                       .startsWith("\"")) {
-            return "\"\" + " + terms.get(0);
-        }
-        return String.join(" + ", terms);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {

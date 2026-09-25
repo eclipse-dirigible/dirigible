@@ -260,13 +260,18 @@ class GlueGeneratesTest {
 
         List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
         // map first (source copy), then defaults (now / literal).
-        assertTrue(fields.contains(Map.of("targetProp", "Customer", "expr", "source.Customer")));
-        assertTrue(fields.contains(Map.of("targetProp", "Note", "expr", "source.Note")));
-        assertTrue(fields.contains(Map.of("targetProp", "Date", "expr", "java.time.LocalDate.now()")));
-        assertTrue(fields.contains(Map.of("targetProp", "Note", "expr", "\"from quote\"")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Customer", "expr", "source.Customer")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Note", "expr", "source.Note")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Date", "expr", "java.time.LocalDate.now()")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Note", "expr", "\"from quote\"")));
 
         List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
-        assertTrue(itemFields.contains(Map.of("targetProp", "Amount", "expr", "srcItem.Amount")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "Amount", "expr", "srcItem.Amount")));
 
         // No completion hook declared - the template's #if renders nothing.
         assertEquals("", g.get("sourceStatusProperty"));
@@ -442,7 +447,8 @@ class GlueGeneratesTest {
         assertEquals(false, ((Boolean) g.get("hasItems")).booleanValue());
 
         List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
-        assertTrue(fields.contains(Map.of("targetProp", "Note", "expr", "source.Note")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Note", "expr", "source.Note")));
     }
 
     /**
@@ -490,7 +496,8 @@ class GlueGeneratesTest {
         assertEquals("", g.get("toModel"));
 
         List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
-        assertTrue(fields.contains(Map.of("targetProp", "GoodsIssue", "expr", "source.Id")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "GoodsIssue", "expr", "source.Id")));
     }
 
     /** A purely local generate keeps the cross-model-source markers empty (backward compatibility). */
@@ -552,13 +559,16 @@ class GlueGeneratesTest {
                                                    .get(0);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
-        assertTrue(fields.contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
                 "a timestamp field's now must be the Instant of the moment: " + fields);
-        assertTrue(fields.contains(Map.of("targetProp", "ApprovedOn", "expr", "java.time.LocalDate.now()")),
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "ApprovedOn", "expr", "java.time.LocalDate.now()")),
                 "a date field keeps today's LocalDate: " + fields);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
-        assertTrue(itemFields.contains(Map.of("targetProp", "SeenAt", "expr", "java.time.Instant.now()")),
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "SeenAt", "expr", "java.time.Instant.now()")),
                 "an items child's timestamp cell follows the same rule: " + itemFields);
     }
 
@@ -590,9 +600,12 @@ class GlueGeneratesTest {
         List<Map<String, Object>> fields = (List<Map<String, Object>>) GlueIntentGenerator.buildGeneratesForTest(model)
                                                                                           .get(0)
                                                                                           .get("fieldAssignments");
-        assertTrue(fields.contains(Map.of("targetProp", "Qty", "expr", "3")));
-        assertTrue(fields.contains(Map.of("targetProp", "Rate", "expr", "new java.math.BigDecimal(\"1.5\")")));
-        assertTrue(fields.contains(Map.of("targetProp", "Active", "expr", "true")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Qty", "expr", "3")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Rate", "expr", "new java.math.BigDecimal(\"1.5\")")));
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Active", "expr", "true")));
         assertFalse(fields.isEmpty());
     }
 
@@ -653,10 +666,13 @@ class GlueGeneratesTest {
         assertEquals("Sheet", g.get("srcFkProperty"));
 
         List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
-        assertTrue(itemFields.contains(Map.of("targetProp", "Name", "expr", "srcItem.Number")));
-        assertTrue(itemFields.contains(Map.of("targetProp", "Price", "expr", "srcItem.Amount")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "Name", "expr", "srcItem.Number")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "Price", "expr", "srcItem.Amount")));
         // The decimal `quantity` default renders as BigDecimal (a bare `1` would not compile).
-        assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
     }
 
     /**
@@ -723,9 +739,11 @@ class GlueGeneratesTest {
 
         List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
         // The decimal default keeps the BigDecimal wrap...
-        assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
         // ...but the relation default is the FK id, assigned as the bare integer.
-        assertTrue(itemFields.contains(Map.of("targetProp", "TaxRate", "expr", "1")));
+        assertTrue(GlueRendering.rendered(itemFields)
+                                .contains(Map.of("targetProp", "TaxRate", "expr", "1")));
     }
 
     /**
@@ -806,16 +824,20 @@ class GlueGeneratesTest {
         assertEquals(1, lines.size());
         Map<String, Object> row = lines.get(0);
         // The `when` cell becomes a null-safe Calc row guard (the postings guard convention).
-        assertEquals("Calc.eval(\"BillableAmount\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", row.get("guard"));
+        assertEquals("Calc.eval(\"BillableAmount\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", GlueRendering.guard(row));
 
         List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
         // String cell: {period} interpolates the source master (a month field is a plain String).
-        assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Services for \" + String.valueOf(source.Period)")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Name", "expr", "\"Services for \" + String.valueOf(source.Period)")));
         // Numeric cells run through Calc rounded to the TARGET field's scale (quantity 3, price 2).
-        assertTrue(assigns.contains(Map.of("targetProp", "Quantity", "expr", "Calc.eval(\"1\", source, 3)")));
-        assertTrue(assigns.contains(Map.of("targetProp", "Price", "expr", "Calc.eval(\"BillableAmount\", source, 2)")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Quantity", "expr", "Calc.eval(\"1\", source, 3)")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Price", "expr", "Calc.eval(\"BillableAmount\", source, 2)")));
         // A to-one relation cell copies the raw source foreign key (issue #6533 parity), not a Calc value.
-        assertTrue(assigns.contains(Map.of("targetProp", "Product", "expr", "source.Product")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Product", "expr", "source.Product")));
     }
 
     /**
@@ -952,8 +974,10 @@ class GlueGeneratesTest {
                                                    .get(0);
         List<Map<String, Object>> assigns = (List<Map<String, Object>>) ((List<Map<String, Object>>) g.get("itemLines")).get(0)
                                                                                                                         .get("assigns");
-        assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Consulting services\"")));
-        assertTrue(assigns.contains(Map.of("targetProp", "Factor", "expr", "Calc.eval(\"Hours * 2\", source, 2).doubleValue()")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Name", "expr", "\"Consulting services\"")));
+        assertTrue(GlueRendering.rendered(assigns)
+                                .contains(Map.of("targetProp", "Factor", "expr", "Calc.eval(\"Hours * 2\", source, 2).doubleValue()")));
     }
 
     /**
@@ -1005,10 +1029,14 @@ class GlueGeneratesTest {
         assertEquals(true, g.get("hasPrompt"));
         List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
         assertEquals(3, prompt.size());
-        assertTrue(prompt.contains(Map.of("prop", "CustomerPayment", "required", true, "expr",
-                "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
-        assertTrue(prompt.contains(Map.of("prop", "Amount", "required", true, "expr", "new java.math.BigDecimal(String.valueOf(raw))")));
-        assertTrue(prompt.contains(Map.of("prop", "Note", "required", false, "expr", "String.valueOf(raw)")));
+        assertTrue(GlueRendering.rendered(prompt)
+                                .contains(Map.of("prop", "CustomerPayment", "required", true, "expr",
+                                        "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
+        assertTrue(GlueRendering.rendered(prompt)
+                                .contains(Map.of("prop", "Amount", "required", true, "expr",
+                                        "new java.math.BigDecimal(String.valueOf(raw))")));
+        assertTrue(GlueRendering.rendered(prompt)
+                                .contains(Map.of("prop", "Note", "required", false, "expr", "String.valueOf(raw)")));
     }
 
     /** An action without a prompt keeps the flag off so the template renders nothing new. */

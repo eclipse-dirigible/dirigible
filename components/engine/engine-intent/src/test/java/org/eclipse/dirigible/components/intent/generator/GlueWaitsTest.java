@@ -75,7 +75,7 @@ class GlueWaitsTest {
         assertEquals("CaseMessage", wait.get("eventEntity"));
         assertEquals("Id", wait.get("eventKeyProperty"));
         assertEquals("", wait.get("topicSuffix"));
-        assertEquals("java.util.Objects.equals(entity.Internal, 0)", wait.get("guardExpression"));
+        assertEquals("java.util.Objects.equals(entity.Internal, 0)", GlueRendering.eventGuard(wait));
         assertEquals("Case", wait.get("viaFkProperty"));
         assertEquals("Case", wait.get("parentEntity"));
     }
@@ -90,7 +90,7 @@ class GlueWaitsTest {
         assertEquals("-updated", wait.get("topicSuffix"));
         // Blank via -> the template's direct branch: the event record itself carries the ProcessId.
         assertEquals("", wait.get("viaFkProperty"));
-        assertEquals("true", wait.get("guardExpression"));
+        assertEquals("true", GlueRendering.eventGuard(wait));
     }
 
     /**
@@ -124,7 +124,7 @@ class GlueWaitsTest {
         assertEquals("intValue", loader.get("ownerKeyAccessor"));
         assertEquals("__workExpireDate", loader.get("variable"));
         // A `date` field names the LAST valid day - the timer arms at the start of the day after it.
-        String due = String.valueOf(loader.get("dueExpression"));
+        String due = String.valueOf(GlueRendering.due(loader));
         assertTrue(due.contains("entity.ValidUntil == null"), due);
         assertTrue(due.contains("plusDays(1).atStartOfDay"), due);
         assertTrue(due.contains("9999-12-31"), due);
@@ -135,7 +135,7 @@ class GlueWaitsTest {
         String yaml = YAML.replace("until: validUntil", "until: dueAt");
         Map<String, Object> loader = GlueIntentGenerator.buildTimerLoadersForTest(IntentParser.parse(yaml))
                                                         .get(0);
-        String due = String.valueOf(loader.get("dueExpression"));
+        String due = String.valueOf(GlueRendering.due(loader));
         assertTrue(due.contains("java.util.Date.from(entity.DueAt)"), due);
         assertTrue(!due.contains("plusDays"), due);
     }

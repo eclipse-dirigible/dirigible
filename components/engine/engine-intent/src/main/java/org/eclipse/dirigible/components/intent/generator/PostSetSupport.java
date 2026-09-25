@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -37,9 +36,9 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * Every intent numeric-with-scale type is a {@code java.math.BigDecimal} in the generated entity
  * and {@code long} is a {@code Long}, so a bare {@code -3.5} / {@code 2} emitted the un-compilable
  * {@code row.Quantity = -3.5;} / {@code row.Sequence = 2;} for exactly the same reason the text
- * case did. {@link #targetType} reads the column's type off the target entity and
- * {@link #expression} renders to it; a constant that column cannot hold at all ({@code issued} into
- * a decimal, a fraction into a long) is named by {@link #typeMismatch} and refused at parse.
+ * case did. {@link #targetType} reads the column's type off the target entity and {@link #reading}
+ * reads it for that type; a constant that column cannot hold at all ({@code issued} into a decimal,
+ * a fraction into a long) is named by {@link #typeMismatch} and refused at parse.
  */
 public final class PostSetSupport {
 
@@ -243,93 +242,76 @@ public final class PostSetSupport {
     }
 
     /**
-     * The Java expression a {@code set:} value renders to, over the {@code source} record and - in a
-     * {@code forEach} rule - the {@code item} row, for a target column whose type is not resolvable.
-     *
-     * @param raw the authored value
-     * @return the Java expression
-     */
-    public static String expression(String raw) {
-        return expression(raw, TargetType.UNKNOWN);
-    }
-
-    /**
-     * The Java expression a {@code set:} value renders to, over the {@code source} record and - in a
-     * {@code forEach} rule - the {@code item} row, TYPED to the target column.
+     * The NEUTRAL reading a {@code set:} value carries into the glue (issue #7425), over the
+     * {@code source} record and - in a {@code forEach} rule - the {@code item} row, TYPED to the target
+     * column; the template layer renders the Java from it.
      *
      * <p>
      * The recognised forms are {@code item.<Field>}, {@code -item.<Field>} (null-safe),
      * {@code source.<Field>}, a number, {@code true} / {@code false} / {@code null}, and a value the
-     * author quoted explicitly. A constant renders as a literal of the column's own Java type -
-     * {@code new java.math.BigDecimal("-3.5")}, {@code 2L}, {@code 2}, {@code "2"} - never as a bare
-     * literal of the wrong type, and never as a bare identifier; neither compiles.
+     * author quoted explicitly. A constant is read for the column's own Java type - a decimal column's
+     * number renders as a {@code BigDecimal}, a long's with its suffix, a text's as a string literal -
+     * never as a bare literal of the wrong type, and never as a bare identifier; neither compiles.
      *
      * @param raw the authored value
      * @param type the target column's type
-     * @return the Java expression
+     * @return the reading
      */
-    public static String expression(String raw, TargetType type) {
+    public static Map<String, Object> reading(String raw, TargetType type) {
         if (raw == null) {
-            return "null";
+            return Readings.nil();
         }
         TargetType target = type == null ? TargetType.UNKNOWN : type;
         String value = raw.trim();
         Matcher negated = NEGATED_ITEM.matcher(value);
         if (negated.matches()) {
-            String access = "item." + IntentNaming.pascalCase(negated.group(1));
-            return access + " == null ? null : " + access + ".negate()";
+            return Readings.negate("item", IntentNaming.pascalCase(negated.group(1)));
         }
         Matcher item = ITEM.matcher(value);
         if (item.matches()) {
-            return "item." + IntentNaming.pascalCase(item.group(1));
+            return Readings.read("item", IntentNaming.pascalCase(item.group(1)));
         }
         Matcher source = SOURCE.matcher(value);
         if (source.matches()) {
-            return "source." + IntentNaming.pascalCase(source.group(1));
+            return Readings.read("source", IntentNaming.pascalCase(source.group(1)));
         }
         if ("null".equals(value)) {
-            return "null";
+            return Readings.nil();
         }
         if (NUMBER.matcher(value)
                   .matches()) {
             return number(value, target);
         }
         if ("true".equals(value) || "false".equals(value)) {
-            return target == TargetType.STRING ? literal(value) : value;
+            return target == TargetType.STRING ? Readings.string(value) : Readings.bool(value);
         }
         if (QUOTED.matcher(value)
                   .matches()) {
-            return literal(value.substring(1, value.length() - 1));
+            return Readings.string(value.substring(1, value.length() - 1));
         }
-        return literal(value);
+        return Readings.string(value);
     }
 
     /**
-     * A numeric constant as a literal of the target column's Java type.
+     * A numeric constant read for the target column's Java type.
      *
      * <p>
      * A fraction into a whole-number column, and a number into a boolean or a date column, are refused
      * at parse ({@link #typeMismatch}) - so those branches are unreachable through a parsed model. They
-     * still render something that COMPILES rather than something that does not, because the generator
+     * still read as something that COMPILES rather than something that does not, because the generator
      * is also reachable from a model built in code, and one mis-valued column beats a generated module
      * that will not build.
      */
-    private static String number(String value, TargetType type) {
-        boolean whole = value.indexOf('.') < 0;
+    private static Map<String, Object> number(String value, TargetType type) {
         return switch (type) {
-            case DECIMAL -> "new java.math.BigDecimal(\"" + value + "\")";
-            case LONG -> whole ? value + "L" : "new java.math.BigDecimal(\"" + value + "\").longValue()";
-            case INTEGER -> whole ? value : "new java.math.BigDecimal(\"" + value + "\").intValue()";
-            case STRING -> literal(value);
+            case DECIMAL -> Readings.number(value, "decimal");
+            case LONG -> Readings.number(value, "long");
+            case INTEGER -> Readings.number(value, "integer");
+            case STRING -> Readings.string(value);
             // A bare number is what an unresolvable column (an FK the target declares by another name)
             // always got, and a boolean / temporal column is refused at parse before it reaches here.
-            default -> value;
+            default -> Readings.number(value);
         };
-    }
-
-    /** A constant as an escaped Java string literal. */
-    private static String literal(String value) {
-        return '"' + JavaLiterals.escape(value) + '"';
     }
 
     /** Whether the value is a copy off the source record or the per-item row, not a constant. */

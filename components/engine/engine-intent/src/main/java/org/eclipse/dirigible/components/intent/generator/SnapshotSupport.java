@@ -48,7 +48,6 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 final class SnapshotSupport {
 
     /** The run-time fallback: the first entry of the tenant-resolved application language set. */
-    private static final String DEFAULT_LANGUAGE_EXPRESSION = NotifySupport.DEFAULT_LANGUAGE_EXPRESSION;
 
     /**
      * The Java local the generated delegate holds the DOCUMENT MASTER in - the record a snapshot's
@@ -104,9 +103,10 @@ final class SnapshotSupport {
     /**
      * The render-language keys, always present (empty strings when not applicable - an undefined
      * Velocity variable renders as its own literal name, so the template must never depend on a key
-     * being absent): {@code languageExpression} is the Java expression the delegate assigns, and the
-     * {@code languageFkProperty} / {@code languageTarget*} keys carry the {@code languageFrom} load
-     * coordinates.
+     * being absent): {@code language} is the NEUTRAL reading of the render language (issue #7425) - a
+     * literal, the platform default, or a language read off the {@code languageFrom} record - which the
+     * template layer renders, and the {@code languageFkProperty} / {@code languageTarget*} keys carry
+     * the {@code languageFrom} load coordinates.
      */
     private static void putLanguage(Map<String, Object> snapshot, EntityIntent entity, EntityIntent master,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
@@ -116,12 +116,12 @@ final class SnapshotSupport {
         snapshot.put("languageTargetModel", "");
         String literal = entity.getLanguage();
         if (literal != null && !literal.isBlank()) {
-            snapshot.put("languageExpression", "\"" + literal.trim() + "\"");
+            snapshot.put("language", Readings.string(literal.trim()));
             return;
         }
         String path = entity.getLanguageFrom();
         if (path == null || path.isBlank()) {
-            snapshot.put("languageExpression", DEFAULT_LANGUAGE_EXPRESSION);
+            snapshot.put("language", Readings.defaultLanguage());
             return;
         }
         int dot = path.indexOf('.');
@@ -164,14 +164,14 @@ final class SnapshotSupport {
         }
         snapshot.put("languageFkProperty", IntentNaming.pascalCase(relationName));
         snapshot.put("languageTargetEntity", relation.getTo());
-        snapshot.put("languageExpression", "languageSource == null || languageSource." + pascalField + " == null || languageSource."
-                + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : languageSource." + pascalField + ".trim()");
+        snapshot.put("language", Readings.languageFrom("languageSource", pascalField));
     }
 
     /**
-     * The file-name keys: {@code fileNameExpression} is the Java expression the delegate names the
-     * stored PDF with, and {@code fileNameLoads} carries the one-hop relation loads a pattern reads off
-     * the master (the delegate declares one local per load, exactly as a notify listener does).
+     * The file-name keys: {@code fileName} is the NEUTRAL reading of the name the delegate stores the
+     * PDF under (issue #7425), which the template layer renders, and {@code fileNameLoads} carries the
+     * one-hop relation loads a pattern reads off the master (the delegate declares one local per load,
+     * exactly as a notify listener does).
      *
      * <p>
      * Absent a pattern the name is the master's own document number - or its name plus the record id
@@ -191,16 +191,17 @@ final class SnapshotSupport {
             // underneath the knob - fail the pass loudly rather than minting indistinguishable copies.
             throw new IllegalStateException("snapshot [" + entity.getName() + "]: " + ex.getMessage(), ex);
         }
-        String version = " + \"_v\" + " + FileNameSupport.VERSION_LOCAL;
-        if (resolved == null) {
-            snapshot.put("fileNameExpression", FileNameSupport.numberOrId(master, MASTER_LOCAL) + version + " + \".pdf\"");
-            snapshot.put("fileNameLoads", List.of());
-            return;
-        }
+        List<Map<String, Object>> parts = new ArrayList<>();
+        parts.add(resolved == null ? FileNameSupport.numberOrId(master, MASTER_LOCAL) : resolved.reading());
         // A pattern that placed {Version} itself owns where the version goes; only a pattern without one
         // gets the suffix appended, because two versions of a copy must never share a name.
-        snapshot.put("fileNameExpression", resolved.expression() + (resolved.usesVersion() ? "" : version) + " + \".pdf\"");
-        snapshot.put("fileNameLoads", NotificationSupport.loadFields(resolved.loads()));
+        if (resolved == null || !resolved.usesVersion()) {
+            parts.add(Readings.string("_v"));
+            parts.add(Readings.local(FileNameSupport.VERSION_LOCAL));
+        }
+        parts.add(Readings.string(".pdf"));
+        snapshot.put("fileName", Readings.concat(parts, false));
+        snapshot.put("fileNameLoads", resolved == null ? List.of() : NotificationSupport.loadFields(resolved.loads()));
     }
 
     private static RelationIntent toOneRelation(EntityIntent entity, String name) {

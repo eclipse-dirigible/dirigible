@@ -107,34 +107,41 @@ class GluePostsTest {
         assertEquals("Id", p.get("targetPk"));
         assertEquals("GoodsIssue", p.get("backRef"));
 
-        List<Map<String, String>> assigns = (List<Map<String, String>>) p.get("assigns");
+        List<Map<String, Object>> assigns = (List<Map<String, Object>>) p.get("assigns");
         assertEquals(6, assigns.size());
         // item copy, null-safe negation, integer constant, source copy - rendered to Java expressions.
-        assertEquals(Map.of("field", "Product", "expr", "item.Product"), assigns.get(0));
-        assertEquals(Map.of("field", "Quantity", "expr", "item.Quantity == null ? null : item.Quantity.negate()"), assigns.get(1));
-        assertEquals(Map.of("field", "Direction", "expr", "2"), assigns.get(2));
+        assertEquals(Map.of("field", "Product", "expr", "item.Product"), GlueRendering.rendered(assigns)
+                                                                                      .get(0));
+        assertEquals(Map.of("field", "Quantity", "expr", "item.Quantity == null ? null : item.Quantity.negate()"),
+                GlueRendering.rendered(assigns)
+                             .get(1));
+        assertEquals(Map.of("field", "Direction", "expr", "2"), GlueRendering.rendered(assigns)
+                                                                             .get(2));
         // a long column takes a long literal - a bare `10` would not assign to a Long.
-        assertEquals(Map.of("field", "Sequence", "expr", "10L"), assigns.get(3));
-        assertEquals(Map.of("field", "Store", "expr", "source.Store"), assigns.get(4));
+        assertEquals(Map.of("field", "Sequence", "expr", "10L"), GlueRendering.rendered(assigns)
+                                                                              .get(3));
+        assertEquals(Map.of("field", "Store", "expr", "source.Store"), GlueRendering.rendered(assigns)
+                                                                                    .get(4));
         // a plain constant: a Java string literal, never the bare identifier that would not compile.
-        assertEquals(Map.of("field", "Note", "expr", "\"issued\""), assigns.get(5));
+        assertEquals(Map.of("field", "Note", "expr", "\"issued\""), GlueRendering.rendered(assigns)
+                                                                                 .get(5));
     }
 
     /** A constant carrying a quote or a backslash cannot end the literal it is written into. */
     @Test
     void escapesAConstantThatWouldCloseTheLiteral() {
-        assertEquals("\"6\\\" pipe\"", PostSetSupport.expression("6\" pipe"));
-        assertEquals("\"back\\\\slash\"", PostSetSupport.expression("back\\slash"));
+        assertEquals("\"6\\\" pipe\"", GlueRendering.postSet("6\" pipe"));
+        assertEquals("\"back\\\\slash\"", GlueRendering.postSet("back\\slash"));
     }
 
     /** The forms that are values rather than text: numbers, booleans, an explicitly quoted constant. */
     @Test
     void rendersTheNonTextForms() {
-        assertEquals("2", PostSetSupport.expression("2"));
-        assertEquals("-3.5", PostSetSupport.expression("-3.5"));
-        assertEquals("true", PostSetSupport.expression("true"));
-        assertEquals("null", PostSetSupport.expression("null"));
-        assertEquals("\"source.Store\"", PostSetSupport.expression("\"source.Store\""));
+        assertEquals("2", GlueRendering.postSet("2"));
+        assertEquals("-3.5", GlueRendering.postSet("-3.5"));
+        assertEquals("true", GlueRendering.postSet("true"));
+        assertEquals("null", GlueRendering.postSet("null"));
+        assertEquals("\"source.Store\"", GlueRendering.postSet("\"source.Store\""));
     }
 
     /**
@@ -144,18 +151,18 @@ class GluePostsTest {
      */
     @Test
     void rendersANumberForTheTargetsJavaType() {
-        assertEquals("new java.math.BigDecimal(\"-3.5\")", PostSetSupport.expression("-3.5", TargetType.DECIMAL));
-        assertEquals("new java.math.BigDecimal(\"2\")", PostSetSupport.expression("2", TargetType.DECIMAL));
-        assertEquals("2L", PostSetSupport.expression("2", TargetType.LONG));
-        assertEquals("2", PostSetSupport.expression("2", TargetType.INTEGER));
+        assertEquals("new java.math.BigDecimal(\"-3.5\")", GlueRendering.postSet("-3.5", TargetType.DECIMAL));
+        assertEquals("new java.math.BigDecimal(\"2\")", GlueRendering.postSet("2", TargetType.DECIMAL));
+        assertEquals("2L", GlueRendering.postSet("2", TargetType.LONG));
+        assertEquals("2", GlueRendering.postSet("2", TargetType.INTEGER));
         // a number into a text column is that text, not a bare number assigned to a String
-        assertEquals("\"2\"", PostSetSupport.expression("2", TargetType.STRING));
-        assertEquals("\"true\"", PostSetSupport.expression("true", TargetType.STRING));
+        assertEquals("\"2\"", GlueRendering.postSet("2", TargetType.STRING));
+        assertEquals("\"true\"", GlueRendering.postSet("true", TargetType.STRING));
         // an FK the target declares under another name is not resolvable: the bare integer, as before
-        assertEquals("2", PostSetSupport.expression("2", TargetType.UNKNOWN));
+        assertEquals("2", GlueRendering.postSet("2", TargetType.UNKNOWN));
         // a copy is never retyped - the two columns' types are the author's business
-        assertEquals("item.Quantity", PostSetSupport.expression("item.Quantity", TargetType.DECIMAL));
-        assertEquals("null", PostSetSupport.expression("null", TargetType.DECIMAL));
+        assertEquals("item.Quantity", GlueRendering.postSet("item.Quantity", TargetType.DECIMAL));
+        assertEquals("null", GlueRendering.postSet("null", TargetType.DECIMAL));
     }
 
     /**
@@ -210,10 +217,11 @@ class GluePostsTest {
 
         // the remedy, verbatim, through the parser
         IntentModel model = IntentParser.parse(YAML.replace("Note: issued", "Note: '\"Receipt.Store\"'"));
-        List<Map<String, String>> assigns = (List<Map<String, String>>) GlueIntentGenerator.buildPostsForTest(model)
+        List<Map<String, Object>> assigns = (List<Map<String, Object>>) GlueIntentGenerator.buildPostsForTest(model)
                                                                                            .get(0)
                                                                                            .get("assigns");
-        assertEquals(Map.of("field", "Note", "expr", "\"Receipt.Store\""), assigns.get(assigns.size() - 1));
+        assertEquals(Map.of("field", "Note", "expr", "\"Receipt.Store\""), GlueRendering.rendered(assigns)
+                                                                                        .get(assigns.size() - 1));
     }
 
     private static void assertRefused(String yaml, String field, String reason) {

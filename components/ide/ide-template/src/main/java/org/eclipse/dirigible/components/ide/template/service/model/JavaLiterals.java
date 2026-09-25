@@ -427,6 +427,12 @@ public final class JavaLiterals {
      * A guard term's value as a Java literal of its type - the exact equality the term was typed
      * against, and null for a type that has none.
      *
+     * <p>
+     * {@code number} is the type of a term the generator could NOT type against a declared property -
+     * the untyped guards of a process trigger, a wait and a register lookup (issue #7425), whose
+     * value's own spelling is all there is to go on. It renders as the bare spelling, whole or
+     * fractional, exactly as those guards always compared.
+     *
      * @param type the type the generator resolved the term against
      * @param value the authored value, unquoted
      * @return the Java literal, or null
@@ -439,6 +445,7 @@ public final class JavaLiterals {
             case "string", "text" -> "\"" + escape(value) + "\"";
             case "integer", "int" -> value.matches("-?\\d+") ? value : null;
             case "long" -> value.matches("-?\\d+") ? value + "L" : null;
+            case "number" -> value.matches("-?\\d+(\\.\\d+)?") ? value : null;
             case "boolean" -> "true".equals(value) || "false".equals(value) ? value : null;
             default -> null;
         };

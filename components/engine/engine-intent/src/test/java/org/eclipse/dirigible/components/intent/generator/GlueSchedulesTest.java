@@ -123,8 +123,12 @@ class GlueSchedulesTest {
         List<Map<String, Object>> fields = (List<Map<String, Object>>) s.get("genFieldAssignments");
         // The loop variable in the job template is "entity"; map copies the row, defaults render
         // now/literal.
-        assertTrue(fields.contains(Map.of("targetProp", "Employee", "expr", "entity.Id")), "fields: " + fields);
-        assertTrue(fields.contains(Map.of("targetProp", "Period", "expr", "java.time.LocalDate.now()")), "fields: " + fields);
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Employee", "expr", "entity.Id")),
+                "fields: " + fields);
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Period", "expr", "java.time.LocalDate.now()")),
+                "fields: " + fields);
     }
 
     @SuppressWarnings("unchecked")
@@ -167,14 +171,17 @@ class GlueSchedulesTest {
         Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
                                                    .get(0);
         List<Map<String, Object>> fields = (List<Map<String, Object>>) s.get("genFieldAssignments");
-        assertTrue(fields.contains(Map.of("targetProp", "Period", "expr", "java.time.YearMonth.now().toString()")),
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "Period", "expr", "java.time.YearMonth.now().toString()")),
                 "a month field's now must be the YYYY-MM string: " + fields);
         assertTrue(fields.stream()
-                         .anyMatch(f -> "Slot".equals(f.get("targetProp")) && ((String) f.get("expr")).contains("WEEK_BASED_YEAR")),
+                         .anyMatch(f -> "Slot".equals(f.get("targetProp")) && ((String) GlueRendering.expr(f)).contains("WEEK_BASED_YEAR")),
                 "a week field's now must be the YYYY-Www ISO-week string: " + fields);
-        assertTrue(fields.contains(Map.of("targetProp", "BookedOn", "expr", "java.time.LocalDate.now()")),
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "BookedOn", "expr", "java.time.LocalDate.now()")),
                 "a date field keeps today's LocalDate: " + fields);
-        assertTrue(fields.contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
+        assertTrue(GlueRendering.rendered(fields)
+                                .contains(Map.of("targetProp", "ApprovedAt", "expr", "java.time.Instant.now()")),
                 "a timestamp field's now must be the Instant of the moment: " + fields);
     }
 
@@ -344,7 +351,7 @@ class GlueSchedulesTest {
         assertEquals(true, s.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
         assertEquals(List.of(Map.of("property", "Project", "expr", "entity.Id"),
-                Map.of("property", "Period", "expr", "java.time.YearMonth.now().toString()")), unique);
+                Map.of("property", "Period", "expr", "java.time.YearMonth.now().toString()")), GlueRendering.rendered(unique));
     }
 
     @SuppressWarnings("unchecked")
@@ -389,7 +396,8 @@ class GlueSchedulesTest {
 
         assertEquals(true, s.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
-        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
+        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), GlueRendering.rendered(unique)
+                                                                                             .get(0));
         // The glue carries the PERIOD the author declared (issue #7406); the template layer turns it
         // into the two bounds, which stay derived from one another - so the period the guard queries is
         // by construction the period the row is dated into.
@@ -442,7 +450,8 @@ class GlueSchedulesTest {
 
         assertEquals(true, s.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
-        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), unique.get(0));
+        assertEquals(Map.of("property", "Supplier", "expr", "entity.Supplier"), GlueRendering.rendered(unique)
+                                                                                             .get(0));
         assertEquals(Map.of("kind", "range", "property", "Date", "period", "month"), unique.get(1));
         assertEquals("java.time.LocalDate.now().withDayOfMonth(1)", JavaLiterals.periodLowerExpression("month"));
         assertEquals("java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1).minusDays(1)", JavaLiterals.periodUpperExpression("month"));
@@ -654,8 +663,8 @@ class GlueSchedulesTest {
                                                    .get(0);
 
         List<Map<String, Object>> unique = (List<Map<String, Object>>) s.get("genUnique");
-        assertEquals(List.of("property", "expr"), List.copyOf(unique.get(0)
-                                                                    .keySet()));
+        assertEquals(List.of("property", "reading"), List.copyOf(unique.get(0)
+                                                                       .keySet()));
         assertEquals(List.of("kind", "property", "period"), List.copyOf(unique.get(1)
                                                                               .keySet()));
     }
