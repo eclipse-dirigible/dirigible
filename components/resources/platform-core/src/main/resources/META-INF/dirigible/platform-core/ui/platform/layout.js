@@ -16,7 +16,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
     .constant('Layout', new LayoutHub(perspectiveData.id, true))
     .constant('Workspace', new WorkspaceHub())
     .constant('Dialog', new DialogHub())
-    .directive('layout', (Views, Editors, SplitPaneState, layoutConstants, uuid, Layout, Workspace, Dialog, ButtonStates, $timeout) => ({
+    .directive('layout', (Views, Editors, SplitPaneState, layoutConstants, uuid, Layout, Workspace, Dialog, ButtonStates) => ({
         restrict: 'E',
         replace: true,
         scope: {
@@ -56,27 +56,27 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 rightPaneSize: 20,
                 rightPaneMinSize: 0,
                 rightPaneMaxSize: undefined,
-                // Opt-in per perspective (only the Workbench enables it): renders the collapse chevron on
-                // the first panel of each side pane and lets the pane shrink to a slim rail. Off by default
-                // so the other perspectives keep the plain expand chevron and a 0 min-size floor.
-                collapsibleSidePanes: false,
-                // Width (px) a collapsed side pane reopens at when its chevron expands it.
-                sidePaneExpandSize: 350,
+                // Opt-in (only the Workbench sets it): re-clicking the perspective's own activity-bar
+                // button opens / closes the left (Projects) pane. Off elsewhere, so the button keeps
+                // its plain re-select behaviour and no other perspective's left pane reacts.
+                leftPaneToggle: false,
+                // Width (px) the left pane reopens at when toggled back open; undefined restores its
+                // pre-collapse width instead.
+                leftPaneExpandSize: undefined,
+                // Opt-in (only the Workbench sets it): render the right (Assistant) pane like the bottom
+                // pane - a tab bar whose header X collapses the whole pane to 0 (no rail left behind),
+                // reopened from Window > Views like the Console/Terminal. Off elsewhere keeps the plain
+                // accordion right pane (e.g. the Git perspective's staging view).
+                rightPaneCollapsible: false,
                 bottomPaneSize: 30,
                 hideCenterPane: false,
                 hideCenterTabs: false,
                 hideBottomTabs: false,
                 ...($scope.config.layoutSettings || {})
             };
-            // A collapsible side pane needs a rail-width floor so the collapsed pane keeps enough width to
-            // host the chevron that expands it again; a non-collapsible pane keeps the default 0 floor.
-            if ($scope.layoutSettings.collapsibleSidePanes) {
-                const sidePaneRailSize = 41;
-                if ($scope.layoutSettings.leftPaneMinSize < sidePaneRailSize) $scope.layoutSettings.leftPaneMinSize = sidePaneRailSize;
-                if ($scope.layoutSettings.rightPaneMinSize < sidePaneRailSize) $scope.layoutSettings.rightPaneMinSize = sidePaneRailSize;
-            }
             $scope.selection = {
-                selectedBottomTab: null
+                selectedBottomTab: null,
+                selectedRightTab: null
             };
             $scope.splitPanesState = {
                 main: [
@@ -185,10 +185,6 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
                     shortenCenterTabsLabels();
 
-                    if (savedState.sidePanes) {
-                        restoreSidePanesState(savedState.sidePanes);
-                    }
-
                 } else {
                     let openViews = $scope.initialOpenViews.reduce(viewById, []);
 
@@ -281,15 +277,10 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 return $scope.splitPanesState.main.length < 2 || $scope.splitPanesState.main[1] == SplitPaneState.COLLAPSED;
             };
 
-            // The outer horizontal split renders its panes in this order: [left?, center, right?].
-            // The left pane, when present, is always first; the right pane, when present, is always last.
+            // The outer horizontal split renders its panes as [left?, center, right?], so the left pane,
+            // when present, is always the first entry of splitPanesState.side.
             function leftPaneStateIndex() {
                 return $scope.leftTabs.length > 0 ? 0 : -1;
-            }
-
-            function rightPaneStateIndex() {
-                if ($scope.rightTabs.length === 0) return -1;
-                return ($scope.leftTabs.length > 0 ? 1 : 0) + 1;
             }
 
             $scope.isLeftPaneCollapsed = () => {
@@ -297,41 +288,41 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
             };
 
+            // Opens / closes the left (Projects) pane. With leftPaneMinSize 0 the split collapses it to
+            // zero width (fully hidden) and restores its previous width on expand.
+            $scope.toggleLeftPane = () => {
+                const index = leftPaneStateIndex();
+                if (index < 0 || !$scope.splitPanesState.side) return;
+                $scope.splitPanesState.side[index] = $scope.isLeftPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
+            };
+
+            // The right pane, when present, is always the last entry of splitPanesState.side.
+            function rightPaneStateIndex() {
+                if ($scope.rightTabs.length === 0) return -1;
+                return ($scope.leftTabs.length > 0 ? 1 : 0) + 1;
+            }
+
             $scope.isRightPaneCollapsed = () => {
                 const index = rightPaneStateIndex();
                 return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
             };
 
-            $scope.toggleLeftPane = () => {
-                const index = leftPaneStateIndex();
-                if (index < 0 || !$scope.splitPanesState.side) return;
-                $scope.splitPanesState.side[index] = $scope.isLeftPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
-                saveLayoutState();
-            };
-
+            // Opens / closes the right (Assistant) pane. With rightPaneMinSize 0 the split collapses it
+            // to zero width (fully hidden, like the bottom pane); reopened from Window > Views, it
+            // restores its previous width.
             $scope.toggleRightPane = () => {
                 const index = rightPaneStateIndex();
                 if (index < 0 || !$scope.splitPanesState.side) return;
                 $scope.splitPanesState.side[index] = $scope.isRightPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
-                saveLayoutState();
             };
 
-            function restoreSidePanesState(sidePanes) {
-                // The split builds its state array while its panes link, so the collapse can only be
-                // applied once that has happened - defer it a tick so the change is picked up as a
-                // transition (EXPANDED -> COLLAPSED) that actually collapses the pane.
-                $timeout(() => {
-                    if (!$scope.splitPanesState.side) return;
-                    if (sidePanes.left && !$scope.isLeftPaneCollapsed()) {
-                        const index = leftPaneStateIndex();
-                        if (index >= 0) $scope.splitPanesState.side[index] = SplitPaneState.COLLAPSED;
-                    }
-                    if (sidePanes.right && !$scope.isRightPaneCollapsed()) {
-                        const index = rightPaneStateIndex();
-                        if (index >= 0) $scope.splitPanesState.side[index] = SplitPaneState.COLLAPSED;
-                    }
-                });
-            }
+            // The right pane renders as a tab bar (opt-in), so keep a valid selected tab as its views
+            // change - a bk-icon-tab-bar with no selection renders an empty body.
+            $scope.$watchCollection('rightTabs', (tabs) => {
+                if (tabs && tabs.length && !tabs.some(t => t.id === $scope.selection.selectedRightTab)) {
+                    $scope.selection.selectedRightTab = tabs[0].id;
+                }
+            });
 
             $scope.isMoreTabsButtonVisible = (tabs) => tabs.some(x => x.isHidden);
 
@@ -403,11 +394,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                         tabs: $scope.bottomTabs.map(({ id, type }) => ({ id, type })),
                         selected: $scope.selection.selectedBottomTab
                     },
-                    center: saveCenterSplittedTabViews($scope.centerSplittedTabViews),
-                    sidePanes: {
-                        left: $scope.isLeftPaneCollapsed(),
-                        right: $scope.isRightPaneCollapsed()
-                    }
+                    center: saveCenterSplittedTabViews($scope.centerSplittedTabViews)
                 };
 
                 localStorage.setItem(layoutStateKey, JSON.stringify(state));
@@ -802,6 +789,14 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 $scope.$apply($scope.openView(data.id, data.params));
             });
 
+            // The perspective's activity-bar button lives in the shell (parent) frame; when the already
+            // active button is re-clicked the shell drives the left pane over the hub. Gated so only the
+            // opted-in perspective (the Workbench) reacts.
+            const toggleLeftPaneListener = Layout.onToggleLeftPane(() => {
+                if (!$scope.layoutSettings.leftPaneToggle) return;
+                $scope.$apply(() => $scope.toggleLeftPane());
+            });
+
             const onOpenEditorListener = Layout.onOpenEditor((data) => {
                 $scope.$apply(() => {
                     $scope.openEditor(
@@ -1143,6 +1138,12 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                             rightViewTab.expanded = true;
                             $scope.rightTabs.push(rightViewTab);
                         }
+                        // When the pane renders as a tab bar, focus the opened view and reopen the pane
+                        // if it was collapsed to its rail (mirrors the bottom pane).
+                        if ($scope.layoutSettings.rightPaneCollapsible) {
+                            $scope.selection.selectedRightTab = rightViewTab.id;
+                            if ($scope.isRightPaneCollapsed()) $scope.toggleRightPane();
+                        }
 
                     } else if (view.region === 'center') {
                         let result = findCenterSplittedTabViewById(view.id);
@@ -1172,6 +1173,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
             $scope.$on('$destroy', () => {
                 Layout.removeMessageListener(viewOpenListener);
+                Layout.removeMessageListener(toggleLeftPaneListener);
                 Layout.removeMessageListener(viewSetDirtyListener);
                 Layout.removeMessageListener(editorCloseListener);
                 Layout.removeMessageListener(editorCloseAllListener);
@@ -1194,7 +1196,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
         restrict: 'E',
         replace: true,
         transclude: true,
-        scope: { views: '=', region: '@', collapsed: '<', onToggleCollapse: '&' },
+        scope: { views: '=' },
         link: {
             pre: (scope) => {
                 if (top.location.search) {
@@ -1216,22 +1218,12 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                     container: 'layout',
                     perspectiveId: perspectiveData.id,
                 });
-                // The first panel's chevron collapses the whole side pane (reclaiming editor width)
-                // and points the way it collapses / expands; the other panels keep their own chevron.
-                scope.paneToggleGlyph = () => {
-                    const pointRight = 'sap-icon--navigation-right-arrow';
-                    const pointLeft = 'sap-icon--navigation-left-arrow';
-                    if (scope.region === 'right') return scope.collapsed ? pointLeft : pointRight;
-                    return scope.collapsed ? pointRight : pointLeft;
-                };
             }
         },
         template: `<div class="bk-vbox bk-full-height pf-accordion">
             <bk-panel class="pf-accordion-panel" ng-attr-shrink="{{!view.expanded}}" compact="true" expanded="view.expanded" ng-repeat="view in views track by view.id">
                 <bk-panel-header>
-                    <bk-button ng-if="$first && region" class="pf-pane-collapse" state="transparent" compact="true" ng-click="onToggleCollapse()" glyph="{{paneToggleGlyph()}}"
-                        title="{{collapsed ? 'Expand panel' : 'Collapse panel'}}" aria-label="{{collapsed ? 'Expand panel' : 'Collapse panel'}}"></bk-button>
-                    <bk-panel-expand ng-if="!($first && region)" hint="{{view.expanded ? 'Collapse' : 'Expand' }} '{{::view.label}}' view"></bk-panel-expand>
+                    <bk-panel-expand hint="{{view.expanded ? 'Collapse' : 'Expand' }} '{{::view.label}}' view"></bk-panel-expand>
                     <h4 bk-panel-title>{{::view.label}}</h4>
                 </bk-panel-header>
                 <bk-panel-content class="bk-full-height" aria-label="{{::view.label}} content">
