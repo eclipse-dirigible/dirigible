@@ -11,12 +11,16 @@ package org.eclipse.dirigible.components.websockets.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -30,8 +34,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageBuilder;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.messaging.access.intercept.AuthorizationChannelInterceptor;
 import org.springframework.security.messaging.context.SecurityContextChannelInterceptor;
 import org.springframework.web.socket.config.annotation.SockJsServiceRegistration;
@@ -39,9 +49,9 @@ import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.StompWebSocketEndpointRegistration;
 
 /**
- * The configured origins that name a host reach both STOMP registrations before the SockJS one is
- * created - a wildcard never does, since the handshake carries the session cookie - and the inbound
- * channel authenticates before it authorizes.
+ * The cross-origin marker and the configured origins that name a host reach both STOMP
+ * registrations before the SockJS one is created - a wildcard never does - and the inbound channel
+ * authenticates before it authorizes, holding a cross-origin CONNECT to the credentials setting.
  */
 @SuppressWarnings("unchecked")
 class WebsocketConfigTest {
@@ -62,6 +72,7 @@ class WebsocketConfigTest {
     @AfterEach
     void clearConfiguration() {
         Configuration.remove(DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+        Configuration.remove(DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey());
     }
 
     @Test
@@ -72,6 +83,19 @@ class WebsocketConfigTest {
         verify(sockJsEndpoint, never()).setAllowedOriginPatterns(any(String[].class));
         verify(sockJsEndpoint).withSockJS();
         verify(registry).setErrorHandler(any(BearerTokenStompErrorHandler.class));
+    }
+
+    @Test
+    void theCrossOriginMarkerReachesBothRegistrationsBeforeSockJsIsCreated() {
+        // the SockJS registration copies the interceptors when it is created, like the patterns
+        config.registerStompEndpoints(registry);
+
+        verify(endpoint).addInterceptors(any(CrossOriginHandshakeInterceptor.class));
+        InOrder inOrder = inOrder(sockJsEndpoint);
+        inOrder.verify(sockJsEndpoint)
+               .addInterceptors(any(CrossOriginHandshakeInterceptor.class));
+        inOrder.verify(sockJsEndpoint)
+               .withSockJS();
     }
 
     @Test
@@ -130,6 +154,34 @@ class WebsocketConfigTest {
         assertInstanceOf(BearerTokenStompInterceptor.class, chain[0]);
         assertInstanceOf(SecurityContextChannelInterceptor.class, chain[1]);
         assertInstanceOf(AuthorizationChannelInterceptor.class, chain[2]);
+    }
+
+    @Test
+    void theConnectGateReadsTheCredentialsSettingWhenTheChannelIsConfigured() {
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com");
+        Message<byte[]> connect = crossOriginConnect();
+
+        assertThrows(InsufficientAuthenticationException.class, () -> connectGate().preSend(connect, mock(MessageChannel.class)),
+                "credentials off: a listed origin gets CORS, not the handshake identity");
+
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
+        assertSame(connect, connectGate().preSend(connect, mock(MessageChannel.class)), "credentials on: the handshake identity applies");
+    }
+
+    private ChannelInterceptor connectGate() {
+        ChannelRegistration registration = mock(ChannelRegistration.class);
+        ArgumentCaptor<ChannelInterceptor[]> interceptors = ArgumentCaptor.forClass(ChannelInterceptor[].class);
+        config.configureClientInboundChannel(registration);
+        verify(registration).interceptors(interceptors.capture());
+        return interceptors.getValue()[0];
+    }
+
+    private static Message<byte[]> crossOriginConnect() {
+        StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.CONNECT);
+        accessor.setSessionId("session-1");
+        accessor.setSessionAttributes(Map.of(CrossOriginHandshakeInterceptor.CROSS_ORIGIN_ATTRIBUTE, "https://app.example.com"));
+        accessor.setLeaveMutable(true);
+        return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 
     @Test

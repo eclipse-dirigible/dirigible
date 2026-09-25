@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -22,6 +23,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.AuthenticatedBearerToken;
 import org.eclipse.dirigible.components.base.http.access.BearerTokenAuthenticator;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,17 +38,20 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.security.authentication.AuthenticationServiceException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.CredentialsExpiredException;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 
 /**
  * A bearer CONNECT authenticates the session in place and gives it the token's deadline, an expired
  * token refuses what the client sends, a DISCONNECT is never refused, and everything else is left
- * to the handshake.
+ * to the handshake - unless the session was opened cross-origin and credentials are not allowed, in
+ * which case the handshake identity is refused.
  */
 class BearerTokenStompInterceptorTest {
 
     private static final String TOKEN = "eyJhbGciOiJSUzI1NiJ9.token";
+    private static final String ORIGIN = "https://app.example.com";
 
     private final ObjectProvider<BearerTokenAuthenticator> authenticatorProvider = mock(ObjectProvider.class);
     private final BearerTokenAuthenticator authenticator = mock(BearerTokenAuthenticator.class);
@@ -61,16 +66,64 @@ class BearerTokenStompInterceptorTest {
     @BeforeEach
     void setUp() {
         when(terminatorProvider.getObject()).thenReturn(terminator);
-        interceptor = new BearerTokenStompInterceptor(authenticatorProvider, terminatorProvider);
+        interceptor = new BearerTokenStompInterceptor(authenticatorProvider, terminatorProvider, false);
     }
 
     @Test
     void aConnectWithoutAuthorizationIsLeftAlone() {
+        // a same-origin session - every page the platform serves - is authenticated by its handshake
         Message<byte[]> connect = frame(StompCommand.CONNECT, null, true);
 
         assertSame(connect, interceptor.preSend(connect, channel));
         assertNull(SimpMessageHeaderAccessor.getUser(connect.getHeaders()));
         verifyNoInteractions(authenticatorProvider);
+    }
+
+    @Test
+    void aCrossOriginConnectWithoutAuthorizationIsRefusedUnlessCredentialsAreAllowed() {
+        // the handshake carried the cookie, and a listed origin gets CORS, not the user's session
+        sessionAttributes.put(CrossOriginHandshakeInterceptor.CROSS_ORIGIN_ATTRIBUTE, ORIGIN);
+        Message<byte[]> connect = frame(StompCommand.CONNECT, null, true);
+
+        InsufficientAuthenticationException refusal =
+                assertThrows(InsufficientAuthenticationException.class, () -> interceptor.preSend(connect, channel));
+
+        assertTrue(refusal.getMessage()
+                          .contains(ORIGIN),
+                "the log names the origin");
+        assertTrue(refusal.getMessage()
+                          .contains(DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey()),
+                "and the key that decides");
+        verifyNoInteractions(authenticatorProvider);
+    }
+
+    @Test
+    void aCrossOriginStompFrameIsHeldToTheSameRule() {
+        sessionAttributes.put(CrossOriginHandshakeInterceptor.CROSS_ORIGIN_ATTRIBUTE, ORIGIN);
+
+        assertThrows(InsufficientAuthenticationException.class, () -> interceptor.preSend(frame(StompCommand.STOMP, null, true), channel));
+    }
+
+    @Test
+    void aCrossOriginConnectIsLeftAloneWhenCredentialsAreAllowed() {
+        BearerTokenStompInterceptor credentialed = new BearerTokenStompInterceptor(authenticatorProvider, terminatorProvider, true);
+        sessionAttributes.put(CrossOriginHandshakeInterceptor.CROSS_ORIGIN_ATTRIBUTE, ORIGIN);
+        Message<byte[]> connect = frame(StompCommand.CONNECT, null, true);
+
+        assertSame(connect, credentialed.preSend(connect, channel));
+        verifyNoInteractions(authenticatorProvider);
+    }
+
+    @Test
+    void aCrossOriginBearerConnectAuthenticatesTheToken() {
+        // the token is the identity such a session is meant to carry, whatever the handshake had
+        when(authenticatorProvider.getIfAvailable()).thenReturn(authenticator);
+        when(authenticator.authenticate(TOKEN)).thenReturn(new AuthenticatedBearerToken(jane, null));
+        sessionAttributes.put(CrossOriginHandshakeInterceptor.CROSS_ORIGIN_ATTRIBUTE, ORIGIN);
+        Message<byte[]> connect = frame(StompCommand.CONNECT, "Bearer " + TOKEN, true);
+
+        assertSame(jane, SimpMessageHeaderAccessor.getUser(interceptor.preSend(connect, channel)
+                                                                      .getHeaders()));
     }
 
     @Test

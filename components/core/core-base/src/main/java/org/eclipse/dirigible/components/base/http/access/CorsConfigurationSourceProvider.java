@@ -47,7 +47,10 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * <p>
  * The STOMP endpoint under {@code /stomp} is left out either way: it checks origins itself, against
  * the configured origins that name a host ({@link #stompOriginPatterns()}), and its SockJS
- * transports answer their own CORS.
+ * transports answer their own CORS. Whether a session opened cross-origin may be authenticated by
+ * its handshake - the cookie or HTTP authentication the handshake carries - follows
+ * {@link DirigibleConfig#CORS_ALLOW_CREDENTIALS} ({@link #stompCredentialsAllowed()}), as it does
+ * for every other request.
  */
 public class CorsConfigurationSourceProvider {
 
@@ -95,10 +98,11 @@ public class CorsConfigurationSourceProvider {
      * HTTP may grant every origin without credentials - no cookie travels on such a request, so a
      * wildcard there serves bearer clients and nothing else. A WebSocket handshake carries the session
      * cookie whatever the CORS configuration says about credentials, and the handshake principal
-     * becomes the STOMP user. A pattern reaching every origin ({@code *}, {@code https://*},
-     * {@code https://*.*}) or one that cannot be told to name a host ({@code h*}, which Spring matches
-     * against the whole origin string) would therefore let any page open a STOMP session as a logged in
-     * user. Such patterns are left out, with one warning, and the handshake stays same-origin when
+     * becomes the STOMP user wherever the CONNECT gate accepts it (see
+     * {@link #stompCredentialsAllowed()}). A pattern reaching every origin ({@code *},
+     * {@code https://*}, {@code https://*.*}) or one that cannot be told to name a host ({@code h*},
+     * which Spring matches against the whole origin string) would therefore open the endpoint to any
+     * page. Such patterns are left out, with one warning, and the handshake stays same-origin when
      * nothing is left. A concrete origin or a narrow pattern ({@code https://*.example.com}) is the
      * operator's explicit trust decision and passes.
      *
@@ -117,6 +121,23 @@ public class CorsConfigurationSourceProvider {
                     DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
         }
         return byNamingAHost.get(true);
+    }
+
+    /**
+     * Whether a STOMP session opened cross-origin, from a configured origin, may be authenticated by
+     * its handshake - the session cookie or the HTTP authentication the handshake request carried.
+     *
+     * <p>
+     * A cross-origin HTTP request carries the user's session only when
+     * {@link DirigibleConfig#CORS_ALLOW_CREDENTIALS} says so, and a STOMP session is held to the same
+     * decision: a WebSocket handshake or a SockJS transport request cannot be kept from carrying the
+     * cookie, so the CONNECT gate refuses the handshake identity instead, and such a session then needs
+     * a bearer token on its CONNECT frame. A same-origin session is never concerned.
+     *
+     * @return true when origins are configured and credentials are allowed for them
+     */
+    public static boolean stompCredentialsAllowed() {
+        return isConfigured() && DirigibleConfig.CORS_ALLOW_CREDENTIALS.getBooleanValue();
     }
 
     /**
