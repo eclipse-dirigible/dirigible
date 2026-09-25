@@ -23,20 +23,24 @@ import com.codeborne.selenide.Selenide;
 import org.openqa.selenium.By;
 
 /**
- * Browser test for collapsing the Workbench's Projects (left) and Assistant (right) side panes from
- * the first panel's header chevron (issue #7492). The chevron collapses the pane to a slim rail
- * that reclaims the editor width and stays clickable to expand it again; the collapsed state
- * persists in the layout's localStorage key. This can only be exercised in a browser: the panes
- * live inside the perspective iframe and the collapse is a rendered width change.
+ * Browser test for opening / closing the Workbench's Projects (left) pane from the Workbench
+ * activity-bar button (issue #7492). Re-clicking the already active Workbench button collapses the
+ * Projects pane to zero width (reclaiming the editor width) and re-clicking it again restores the
+ * pane; the Assistant (right) pane is unaffected. The behaviour is opt-in per perspective, so a
+ * perspective that did not opt in (the Database perspective) does not react to a re-click. This can
+ * only be exercised in a browser: the panes live inside the perspective iframe and the toggle is a
+ * rendered width change driven from the shell frame over the message hub.
  */
 public class WorkbenchSidePaneToggleIT extends UserInterfaceIntegrationTest {
 
-    private static final int COLLAPSED_MAX_WIDTH = 60;
+    private static final String WORKBENCH_BUTTON_ID = "perspective-workbench";
+    private static final String DATABASE_BUTTON_ID = "perspective-database";
+    private static final int COLLAPSED_MAX_WIDTH = 5;
     private static final int EXPANDED_MIN_WIDTH = 100;
     private static final Duration TIMEOUT = Duration.ofSeconds(15);
 
     @Test
-    void chevronCollapsesAndRestoresTheSidePanes() {
+    void workbenchButtonOpensAndClosesTheProjectsPane() {
         ide.openHomePage();
         ide.openWorkbench();
 
@@ -44,58 +48,45 @@ public class WorkbenchSidePaneToggleIT extends UserInterfaceIntegrationTest {
         Selenide.switchTo()
                 .defaultContent();
 
-        Assertions.assertTrue(paneWidth("left") > EXPANDED_MIN_WIDTH, "the left pane should start expanded");
-        Assertions.assertTrue(paneWidth("right") > EXPANDED_MIN_WIDTH, "the right pane should start expanded");
-
-        // Collapsing / expanding one side must not move the other side.
+        Assertions.assertTrue(paneWidth("left") > EXPANDED_MIN_WIDTH, "the Projects pane should start open");
         int rightWidth = paneWidth("right");
-        clickPaneChevron("left");
+
+        clickPerspectiveButton(WORKBENCH_BUTTON_ID);
         awaitPaneWidth("left", true);
-        assertUnchanged("right", rightWidth, "collapsing the left pane moved the right pane");
-        clickPaneChevron("left");
+        assertUnchanged("right", rightWidth, "toggling the Projects pane moved the Assistant pane");
+
+        clickPerspectiveButton(WORKBENCH_BUTTON_ID);
         awaitPaneWidth("left", false);
-        assertUnchanged("right", rightWidth, "expanding the left pane moved the right pane");
+        assertUnchanged("right", rightWidth, "toggling the Projects pane moved the Assistant pane");
+    }
+
+    @Test
+    void nonOptedInPerspectiveDoesNotToggleItsLeftPane() {
+        ide.openHomePage();
+        ide.openDatabasePerspective();
+
+        browser.findElementInAllFrames(By.cssSelector(".pane-left"), Condition.visible);
+        Selenide.switchTo()
+                .defaultContent();
 
         int leftWidth = paneWidth("left");
-        clickPaneChevron("right");
-        awaitPaneWidth("right", true);
-        assertUnchanged("left", leftWidth, "collapsing the right pane moved the left pane");
-        clickPaneChevron("right");
-        awaitPaneWidth("right", false);
-        assertUnchanged("left", leftWidth, "expanding the right pane moved the left pane");
+        Assertions.assertTrue(leftWidth > EXPANDED_MIN_WIDTH, "the Database left pane should start open");
+
+        // Re-clicking the active Database button must not collapse its left pane - only the Workbench
+        // opted in. Give the (no-op) hub round-trip a moment before asserting the width is unchanged.
+        clickPerspectiveButton(DATABASE_BUTTON_ID);
+        Selenide.sleep(1000);
+        assertUnchanged("left", leftWidth, "re-clicking a non-opted-in perspective toggled its left pane");
+    }
+
+    private void clickPerspectiveButton(String buttonId) {
+        Selenide.switchTo()
+                .defaultContent();
+        browser.clickOnElementById(buttonId);
     }
 
     private void assertUnchanged(String side, int expected, String message) {
         Assertions.assertTrue(Math.abs(paneWidth(side) - expected) <= 3, message);
-    }
-
-    @Test
-    void collapsedStatePersistsAcrossReload() {
-        ide.openHomePage();
-        ide.openWorkbench();
-
-        browser.findElementInAllFrames(By.cssSelector(".pane-left .pf-accordion"), Condition.visible);
-        Selenide.switchTo()
-                .defaultContent();
-        Assertions.assertTrue(paneWidth("left") > EXPANDED_MIN_WIDTH, "the left pane should start expanded");
-
-        clickPaneChevron("left");
-        awaitPaneWidth("left", true);
-
-        ide.reload();
-
-        // The perspective reopens from the persisted selection; the left pane must still be collapsed.
-        browser.findElementInAllFrames(By.cssSelector(".pane-left .pf-accordion"));
-        Selenide.switchTo()
-                .defaultContent();
-        awaitPaneWidth("left", true);
-    }
-
-    private void clickPaneChevron(String side) {
-        browser.findElementInAllFrames(By.cssSelector(".pane-" + side + " .pf-pane-collapse"), Condition.visible)
-               .click();
-        Selenide.switchTo()
-                .defaultContent();
     }
 
     private void awaitPaneWidth(String side, boolean collapsed) {

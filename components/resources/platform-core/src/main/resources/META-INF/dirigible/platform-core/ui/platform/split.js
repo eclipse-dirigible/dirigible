@@ -150,11 +150,12 @@ angular.module('platformSplit', []).constant('SplitPaneState', { EXPANDED: 0, CO
                         if (newState[i] !== oldState[i]) {
                             if (newState[i] === SplitPaneState.EXPANDED) {
                                 let pane = $scope.panes[i];
-                                // lastSize is set only when collapsing, so its presence means the pane
-                                // is collapsed - to 0 or, when it has a min-size, to that rail width.
+                                // lastSize is set only when collapsing (to 0 or to a rail min-size), so
+                                // its presence means the pane is collapsed and needs restoring - a plain
+                                // 0-width check misses a pane collapsed to a non-zero rail.
                                 if (pane.lastSize) {
                                     let sizes = $scope.split.getSizes();
-                                    // expandSize (px) opens the pane at a fixed width; otherwise restore
+                                    // expandSize (px) reopens the pane at a fixed width; otherwise restore
                                     // the width it had before it was collapsed.
                                     let target = pane.lastSize;
                                     if (pane.expandSize) {
@@ -162,7 +163,7 @@ angular.module('platformSplit', []).constant('SplitPaneState', { EXPANDED: 0, CO
                                         if (total > 0) target = (Number(pane.expandSize) / total) * 100;
                                     }
                                     // Take the space only from the adjacent (center) pane, so the pane on
-                                    // the opposite side stays exactly where it is instead of being nudged.
+                                    // the opposite side stays exactly where it was before this pane closed.
                                     let neighbor = i === 0 ? 1 : i - 1;
                                     sizes[neighbor] = sizes[neighbor] - (target - sizes[i]);
                                     sizes[i] = target;

@@ -122,6 +122,23 @@ class LayoutHub extends MessageHubApi {
     }
 
     /**
+     * Opens or closes the layout's left (Projects) pane. Published from the shell (parent) frame so the
+     * perspective's own activity-bar button can toggle the pane that lives inside the perspective iframe.
+     */
+    toggleLeftPane() {
+        this.triggerEvent(`platform.layout${this.layoutId}.pane.left.toggle`);
+    }
+
+    /**
+     * Triggered when the left pane should be opened or closed.
+     * @param handler - Callback function.
+     * @returns - A reference to the listener. In order to remove/disable the listener, you need to use this reference and pass it to the 'removeMessageListener' function.
+     */
+    onToggleLeftPane(handler) {
+        return this.addMessageListener({ topic: `platform.layout${this.layoutId}.pane.left.toggle`, handler: handler });
+    }
+
+    /**
      * Tells a view that it should gain focus from the inside.
      * @param {string} id - View id.
      * @param {string} [region] - The region where the view is displayed. The options are 'left', 'right', 'center' and 'bottom'. Default is 'center'.

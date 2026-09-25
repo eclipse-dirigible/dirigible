@@ -19,8 +19,18 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
         viewSettings: {},
         layoutSettings: {
             hideCenterPane: false,
+            // The Projects (left) pane opens / closes from the Workbench activity-bar button; a 0
+            // minimum lets it collapse fully to reclaim the editor width, and it reopens at a fixed
+            // 350px rather than whatever width it had before.
+            leftPaneMinSize: 0,
+            leftPaneToggle: true,
+            leftPaneExpandSize: 350,
             // The assistant lives in the right pane; a chat with a code diff in it needs the room.
-            rightPaneSize: 25
+            rightPaneSize: 25,
+            // The Assistant pane is a tab bar like the Console/Terminal bottom pane: the header X closes
+            // it completely (collapses to 0, no rail), and it reopens from Window > Views > Assistant.
+            rightPaneCollapsible: true,
+            rightPaneMinSize: 0
         },
     };
 
