@@ -1092,7 +1092,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>vue__shared</artifactId>
-                <version>3.5.42</version>
+                <version>3.5.43</version>
             </dependency>
             <!-- via codbex__harmonia (${harmonia.version}): [1.8.0,2.0.0-0) -->
             <dependency>
