@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
 import org.eclipse.dirigible.components.listeners.service.MessageProducer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,7 +101,7 @@ class TenantUserInvitationService {
                                                              .matches()) {
             throw new TenantUsersException(HttpStatus.BAD_REQUEST, "INVALID_EMAIL", "[" + email + "] is not an email address");
         }
-        List<String> roles = TenantUsersSettings.grantableRoles();
+        List<String> roles = ApplicationRoles.ALL;
         String role = request.role() == null ? ""
                 : request.role()
                          .trim();

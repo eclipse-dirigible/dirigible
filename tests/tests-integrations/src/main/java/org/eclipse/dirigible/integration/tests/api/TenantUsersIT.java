@@ -122,6 +122,12 @@ class TenantUsersIT extends IntegrationTest {
                               .with(authentication(person(MEMBER, "User"))))
            .andExpect(status().isForbidden())
            .andExpect(jsonPath("$.reason").value("NOT_A_TENANT_OWNER"));
+        mvc.perform(post(USERS).session(member)
+                               .with(authentication(person(MEMBER, "User")))
+                               .contentType(MediaType.APPLICATION_JSON)
+                               .content("{\"email\":\"x@example.com\",\"role\":\"User\"}"))
+           .andExpect(status().isForbidden())
+           .andExpect(jsonPath("$.reason").value("NOT_A_TENANT_OWNER"));
     }
 
     @Test

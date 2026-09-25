@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.tenants.users;
 import java.util.List;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
+import org.eclipse.dirigible.components.base.http.roles.Roles.RoleNames;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,15 +25,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The users of the current tenant, for its owners: who they are, where each stands, and an
  * invitation for another person.
  *
  * <p>
- * No {@code @RolesAllowed}: the owner role is configuration, and {@link TenantUsersAccess} checks
- * it on every method. The tenant is always the caller's selected tenant - never a request field.
- * Both POSTs accept JSON only, which is what keeps a cross-site form from triggering them (the
- * chains disable CSRF tokens; the tenant selection endpoint relies on the same).
+ * Protected like every other service, with {@code @RolesAllowed}: managing is for the
+ * {@link ApplicationRoles#OWNER} of the selected tenant, a developer or an administrator; reading
+ * also for an operator; the context answers every authenticated user so a page can decide whether
+ * to offer the section. The tenant is always the caller's selected tenant - never a request field -
+ * and never the default one. Both POSTs accept JSON only, which is what keeps a cross-site form
+ * from triggering them (the chains disable CSRF tokens; the tenant selection endpoint relies on the
+ * same).
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURITY + "tenant-users")
@@ -70,8 +77,7 @@ class TenantUsersEndpoint extends BaseEndpoint {
         boolean canManage = access.canManage();
         boolean canRead = access.canRead();
         String tenantId = canRead ? access.requireTenant() : null;
-        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, TenantUsersSettings.ownerRole(),
-                TenantUsersSettings.grantableRoles()));
+        return ResponseEntity.ok(new TenantUsersContext(true, tenantId, canManage, canRead, ApplicationRoles.OWNER, ApplicationRoles.ALL));
     }
 
     /**
@@ -80,8 +86,9 @@ class TenantUsersEndpoint extends BaseEndpoint {
      * @return the users
      */
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+    @RolesAllowed({ApplicationRoles.OWNER, RoleNames.DEVELOPER, RoleNames.ADMINISTRATOR, RoleNames.OPERATOR})
     ResponseEntity<List<ApplicationUserState>> list() {
-        return ResponseEntity.ok(users.listOf(access.requireReader()));
+        return ResponseEntity.ok(users.listOf(access.requireTenant()));
     }
 
     /**
@@ -91,8 +98,9 @@ class TenantUsersEndpoint extends BaseEndpoint {
      * @return 202 with the user
      */
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    @RolesAllowed({ApplicationRoles.OWNER, RoleNames.DEVELOPER, RoleNames.ADMINISTRATOR})
     ResponseEntity<ApplicationUserState> invite(@RequestBody InvitationRequest request) {
-        String tenantId = access.requireManager();
+        String tenantId = access.requireTenant();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                              .body(invitations.invite(tenantId, request, access.callerName()));
     }
@@ -106,8 +114,9 @@ class TenantUsersEndpoint extends BaseEndpoint {
      */
     @PostMapping(path = "/{id}/roles/{role}/resend", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.APPLICATION_JSON_VALUE)
+    @RolesAllowed({ApplicationRoles.OWNER, RoleNames.DEVELOPER, RoleNames.ADMINISTRATOR})
     ResponseEntity<ApplicationUserState> resend(@PathVariable("id") long id, @PathVariable("role") String role) {
-        String tenantId = access.requireManager();
+        String tenantId = access.requireTenant();
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                              .body(invitations.resend(tenantId, id, role, access.callerName()));
     }

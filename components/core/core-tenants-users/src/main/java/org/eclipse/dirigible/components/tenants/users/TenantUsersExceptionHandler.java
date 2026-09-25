@@ -9,9 +9,11 @@
  */
 package org.eclipse.dirigible.components.tenants.users;
 
+import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,6 +39,22 @@ class TenantUsersExceptionHandler {
                                      ex.status()
                                        .getReasonPhrase(),
                                      ex.getMessage(), ex.reason()));
+    }
+
+    /**
+     * Renders a caller refused by the endpoints' {@code @RolesAllowed} - in the same shape, so a page
+     * reads one reason for it.
+     *
+     * @param ex the refusal
+     * @return the body
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    ResponseEntity<TenantUsersRefusal> handleAccessDenied(AccessDeniedException ex) {
+        HttpStatus status = HttpStatus.FORBIDDEN;
+        return ResponseEntity.status(status)
+                             .body(new TenantUsersRefusal(status.value(), status.getReasonPhrase(),
+                                     "Only a holder of the [" + ApplicationRoles.OWNER + "] role of this tenant may manage its users",
+                                     "NOT_A_TENANT_OWNER"));
     }
 
     /**

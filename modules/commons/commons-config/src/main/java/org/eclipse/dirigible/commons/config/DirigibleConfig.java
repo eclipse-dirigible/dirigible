@@ -190,15 +190,6 @@ public enum DirigibleConfig {
      */
     TENANT_USERS_REQUEST_QUEUE("DIRIGIBLE_TENANT_USERS_REQUEST_QUEUE", null),
 
-    /** The tenant role that may manage the users of a tenant. */
-    TENANT_USERS_OWNER_ROLE("DIRIGIBLE_TENANT_USERS_OWNER_ROLE", "Owner"),
-
-    /**
-     * The roles a tenant owner may grant, comma-separated. Their casing reaches the published request
-     * unchanged, so it has to match what the consumer expects.
-     */
-    TENANT_USERS_ROLES("DIRIGIBLE_TENANT_USERS_ROLES", "Owner,User"),
-
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 
     /** The basic admin username. */

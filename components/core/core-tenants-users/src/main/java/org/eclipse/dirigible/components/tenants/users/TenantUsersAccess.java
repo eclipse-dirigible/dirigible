@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.tenants.users;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.springframework.http.HttpStatus;
@@ -21,19 +23,27 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 /**
- * Who may do what with the users of the current tenant, decided in one place.
+ * What the users endpoints need beyond their {@code @RolesAllowed}: the tenant they act on - never
+ * the default one, which has no users of its own - and, for the page, whether the caller would pass
+ * those role checks.
  *
  * <p>
- * The owner role is configuration, so it cannot be a {@code @RolesAllowed} constant: the
- * authorities are read here. It deliberately does not use {@code UserFacade.isInRole}, which
- * answers true for every developer and administrator. Administrators and operators may read, as
- * break-glass, but not invite: an invitation needs a requester who belongs to the tenant.
+ * The role sets here are the ones {@link TenantUsersEndpoint} declares: managing is for the
+ * {@link ApplicationRoles#OWNER} of the selected tenant, a developer or an administrator; reading
+ * also for an operator.
  */
 @Component
 class TenantUsersAccess {
 
-    /** The authority prefix. */
+    /** The authority prefix of a role. */
     private static final String ROLE_PREFIX = "ROLE_";
+
+    /** The roles that manage users - as {@code TenantUsersEndpoint} declares them. */
+    static final Set<String> MANAGERS = Set.of(ApplicationRoles.OWNER, Roles.RoleNames.DEVELOPER, Roles.RoleNames.ADMINISTRATOR);
+
+    /** The roles that read users - as {@code TenantUsersEndpoint} declares them. */
+    static final Set<String> READERS =
+            Set.of(ApplicationRoles.OWNER, Roles.RoleNames.DEVELOPER, Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR);
 
     /** The tenant context. */
     private final TenantContext tenantContext;
@@ -50,21 +60,19 @@ class TenantUsersAccess {
     /**
      * Whether the caller may manage the users of the current tenant.
      *
-     * @return true for a holder of the owner role in a tenant other than the default one
+     * @return true for an owner, a developer or an administrator in a tenant other than the default one
      */
     boolean canManage() {
-        return currentTenantOrNull() != null && authorities().contains(ROLE_PREFIX + TenantUsersSettings.ownerRole());
+        return currentTenantOrNull() != null && holdsAny(MANAGERS);
     }
 
     /**
      * Whether the caller may read the users of the current tenant.
      *
-     * @return true for a manager, an administrator or an operator
+     * @return true for a manager or an operator in a tenant other than the default one
      */
     boolean canRead() {
-        Set<String> authorities = authorities();
-        return currentTenantOrNull() != null
-                && (canManage() || authorities.contains(ROLE_PREFIX + "ADMINISTRATOR") || authorities.contains(ROLE_PREFIX + "OPERATOR"));
+        return currentTenantOrNull() != null && holdsAny(READERS);
     }
 
     /**
@@ -79,34 +87,6 @@ class TenantUsersAccess {
                     "Users are managed per tenant - select a tenant first; the default tenant has none to manage");
         }
         return tenant.getId();
-    }
-
-    /**
-     * Refuses a caller who may not manage users.
-     *
-     * @return the tenant id
-     */
-    String requireManager() {
-        String tenantId = requireTenant();
-        if (!canManage()) {
-            throw new TenantUsersException(HttpStatus.FORBIDDEN, "NOT_A_TENANT_OWNER",
-                    "Only a holder of the [" + TenantUsersSettings.ownerRole() + "] role of this tenant may manage its users");
-        }
-        return tenantId;
-    }
-
-    /**
-     * Refuses a caller who may not read users.
-     *
-     * @return the tenant id
-     */
-    String requireReader() {
-        String tenantId = requireTenant();
-        if (!canRead()) {
-            throw new TenantUsersException(HttpStatus.FORBIDDEN, "NOT_A_TENANT_OWNER",
-                    "Only a holder of the [" + TenantUsersSettings.ownerRole() + "] role of this tenant may see its users");
-        }
-        return tenantId;
     }
 
     /**
@@ -134,19 +114,22 @@ class TenantUsersAccess {
     }
 
     /**
-     * The caller's authorities.
+     * Whether the caller holds any of the roles.
      *
-     * @return the authority names
+     * @param roles the roles
+     * @return whether they do
      */
-    private static Set<String> authorities() {
+    private static boolean holdsAny(Set<String> roles) {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();
         if (authentication == null) {
-            return Set.of();
+            return false;
         }
-        return authentication.getAuthorities()
-                             .stream()
-                             .map(GrantedAuthority::getAuthority)
-                             .collect(Collectors.toSet());
+        Set<String> held = authentication.getAuthorities()
+                                         .stream()
+                                         .map(GrantedAuthority::getAuthority)
+                                         .collect(Collectors.toSet());
+        return roles.stream()
+                    .anyMatch(role -> held.contains(ROLE_PREFIX + role));
     }
 }

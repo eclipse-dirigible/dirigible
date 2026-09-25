@@ -43,14 +43,6 @@ class TenantUsersConfigValidator {
                                                      .equals("global:")) {
             throw invalid(DirigibleConfig.TENANT_USERS_REQUEST_QUEUE, "it names the queue invitations are published to");
         }
-        String ownerRole = TenantUsersSettings.ownerRole();
-        if (ownerRole.isEmpty()) {
-            throw invalid(DirigibleConfig.TENANT_USERS_OWNER_ROLE, "it names the tenant role that may manage users");
-        }
-        if (!TenantUsersSettings.grantableRoles()
-                                .contains(ownerRole)) {
-            throw invalid(DirigibleConfig.TENANT_USERS_ROLES, "it must contain the owner role [" + ownerRole + "]");
-        }
         String broker = DirigibleConfig.MESSAGING_BROKER_URL.getStringValue();
         if (broker == null || broker.isBlank()) {
             LOGGER.warn(
@@ -62,9 +54,7 @@ class TenantUsersConfigValidator {
             LOGGER.warn("Trial mode grants no tenant role, so no user can manage tenant users while [{}] is on.",
                     DirigibleConfig.TRIAL_ENABLED.getKey());
         }
-        LOGGER.info("Tenant users management is enabled: owner role [{}], grantable roles {}, request queue [{}].",
-                LogSanitizer.sanitize(ownerRole), LogSanitizer.sanitize(TenantUsersSettings.grantableRoles()),
-                LogSanitizer.sanitize(queue));
+        LOGGER.info("Tenant users management is enabled: request queue [{}].", LogSanitizer.sanitize(queue));
     }
 
     /**

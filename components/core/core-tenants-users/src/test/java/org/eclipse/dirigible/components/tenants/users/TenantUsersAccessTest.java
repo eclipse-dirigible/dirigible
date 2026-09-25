@@ -23,7 +23,6 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -62,29 +61,35 @@ class TenantUsersAccessTest {
         signIn("Owner");
         assertTrue(access.canManage());
         assertTrue(access.canRead());
-        assertEquals("acme", access.requireManager());
+        assertEquals("acme", access.requireTenant());
     }
 
     @Test
     void aUserDoesNeither() {
         signIn("User");
+        assertFalse(access.canManage());
         assertFalse(access.canRead());
-        TenantUsersException refusal = assertThrows(TenantUsersException.class, access::requireReader);
-        assertEquals(HttpStatus.FORBIDDEN, refusal.status());
     }
 
     @Test
-    void anAdministratorReadsButDoesNotInvite() {
-        signIn("ADMINISTRATOR", "DEVELOPER");
+    void aDeveloperOrAnAdministratorManagesLikeAnOwner() {
+        signIn("DEVELOPER");
+        assertTrue(access.canManage());
+        signIn("ADMINISTRATOR");
+        assertTrue(access.canManage());
+    }
+
+    @Test
+    void anOperatorReadsButDoesNotManage() {
+        signIn("OPERATOR");
         assertTrue(access.canRead());
         assertFalse(access.canManage());
-        assertThrows(TenantUsersException.class, access::requireManager);
     }
 
     @Test
     void theDefaultTenantHasNoUsersToManage() {
         when(tenant.isDefault()).thenReturn(true);
-        signIn("Owner");
+        signIn("ADMINISTRATOR");
         assertFalse(access.canManage());
         TenantUsersException refusal = assertThrows(TenantUsersException.class, access::requireTenant);
         assertEquals("DEFAULT_TENANT", refusal.reason());

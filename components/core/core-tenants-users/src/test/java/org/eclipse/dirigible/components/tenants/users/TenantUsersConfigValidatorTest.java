@@ -31,7 +31,7 @@ class TenantUsersConfigValidatorTest {
     @AfterEach
     void tearDown() {
         for (DirigibleConfig key : new DirigibleConfig[] {DirigibleConfig.TENANT_RESOLUTION_STRATEGY,
-                DirigibleConfig.TENANT_USERS_REQUEST_QUEUE, DirigibleConfig.TENANT_USERS_OWNER_ROLE, DirigibleConfig.TENANT_USERS_ROLES}) {
+                DirigibleConfig.TENANT_USERS_REQUEST_QUEUE}) {
             Configuration.remove(key.getKey());
         }
     }
@@ -52,12 +52,6 @@ class TenantUsersConfigValidatorTest {
     @Test
     void aMissingQueueIsRefused() {
         DirigibleConfig.TENANT_USERS_REQUEST_QUEUE.setStringValue("global:");
-        assertThrows(InvalidConfigException.class, TenantUsersConfigValidator::new);
-    }
-
-    @Test
-    void anOwnerRoleThatIsNotGrantableIsRefused() {
-        DirigibleConfig.TENANT_USERS_ROLES.setStringValue("User,Reader");
         assertThrows(InvalidConfigException.class, TenantUsersConfigValidator::new);
     }
 }

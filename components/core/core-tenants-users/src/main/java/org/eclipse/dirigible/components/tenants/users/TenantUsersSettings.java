@@ -9,9 +9,6 @@
  */
 package org.eclipse.dirigible.components.tenants.users;
 
-import java.util.Arrays;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 
 /**
@@ -30,28 +27,4 @@ final class TenantUsersSettings {
         return DirigibleConfig.TENANT_USERS_REQUEST_QUEUE.getStringValue();
     }
 
-    /**
-     * The tenant role that may manage users.
-     *
-     * @return the role
-     */
-    static String ownerRole() {
-        return DirigibleConfig.TENANT_USERS_OWNER_ROLE.getStringValue()
-                                                      .trim();
-    }
-
-    /**
-     * The roles an owner may grant, in configured order.
-     *
-     * @return the roles
-     */
-    static List<String> grantableRoles() {
-        String configured = DirigibleConfig.TENANT_USERS_ROLES.getStringValue();
-        return configured == null ? List.of()
-                : Arrays.stream(configured.split(","))
-                        .map(String::trim)
-                        .filter(role -> !role.isEmpty())
-                        .distinct()
-                        .toList();
-    }
 }
