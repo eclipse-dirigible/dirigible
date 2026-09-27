@@ -71,6 +71,14 @@ import org.eclipse.dirigible.parsers.document.parser.TagRegistry;
  * ({@code &#123;&#123;document.Date:dd.MM.yyyy&#125;&#125;}). It exists because the default number
  * rendering cannot know a bare integral JSON value ({@code 5390}) is money that lost its scale on
  * the way through the browser — only the template author knows, and says so per placeholder.
+ *
+ * <p>
+ * The format {@code words(<currency>)} spells a money amount out in the template's language -
+ * {@code &#123;&#123;document.Total:words(document.Currency.Code)&#125;&#125;} prints
+ * {@code ПЕТ ХИЛЯДИ ДВЕСТА ШЕСТДЕСЕТ И ЧЕТИРИ ЕВРО И 44 ЕВРОЦЕНТА} in a {@code bg} template. The
+ * argument is a path to the ISO 4217 currency code, or the code itself ({@code words(EUR)}) for a
+ * template of one currency. It renders empty in a language with no spelling, for a currency the
+ * language cannot name, and for a value that is not a number.
  */
 public final class DataBinder {
 
@@ -86,7 +94,11 @@ public final class DataBinder {
         return symbols;
     }
 
+    private static final String WORDS_FORMAT = "words";
+
     private final TagRegistry registry;
+
+    private final AmountInWords amountInWords;
 
     /**
      * Creates a binder over the built-in tag registry.
@@ -96,13 +108,35 @@ public final class DataBinder {
     }
 
     /**
+     * Creates a binder over the built-in tag registry for a template of the given language - the one
+     * the {@code words} format spells amounts in.
+     *
+     * @param language the language code of the template ({@code bg}, {@code en}, ...)
+     */
+    public DataBinder(String language) {
+        this(TagRegistry.builtIn(), language);
+    }
+
+    /**
      * Creates a binder that rebuilds nodes through a custom tag registry — required when the template
      * was parsed with registered extension tags.
      *
      * @param registry the registry the template was parsed with
      */
     public DataBinder(TagRegistry registry) {
+        this(registry, null);
+    }
+
+    /**
+     * Creates a binder that rebuilds nodes through a custom tag registry, for a template of the given
+     * language.
+     *
+     * @param registry the registry the template was parsed with
+     * @param language the language code of the template, {@code null} when unknown
+     */
+    public DataBinder(TagRegistry registry, String language) {
         this.registry = Objects.requireNonNull(registry, "registry");
+        this.amountInWords = AmountInWords.forLanguage(language);
     }
 
     /**
@@ -244,7 +278,7 @@ public final class DataBinder {
     }
 
     /** Replaces every {@code {{path}}} in the value; unresolved paths become empty strings. */
-    private static String substitute(String value, Scope scope) {
+    private String substitute(String value, Scope scope) {
         if (value == null || !value.contains("{{")) {
             return value;
         }
@@ -287,7 +321,7 @@ public final class DataBinder {
      * cannot satisfy - or a value of any other type - falls back to the default rendering: a printout
      * never shows an exception, matching the parser's leniency contract.
      */
-    private static String resolvePlaceholder(String body, Scope scope) {
+    private String resolvePlaceholder(String body, Scope scope) {
         String[] operands = body.split("\\|");
         for (int i = 0; i < operands.length; i++) {
             String operand = operands[i];
@@ -299,12 +333,52 @@ public final class DataBinder {
                 operand = operand.substring(0, colon);
             }
             Object resolved = scope.resolve(operand.trim());
-            String rendered = resolved == null ? "" : stringify(resolved, pattern);
+            String rendered;
+            if (pattern != null && pattern.startsWith(WORDS_FORMAT)) {
+                rendered = inWords(resolved, pattern.substring(WORDS_FORMAT.length()), scope);
+            } else {
+                rendered = resolved == null ? "" : stringify(resolved, pattern);
+            }
             if (i == operands.length - 1 || !rendered.isBlank()) {
                 return rendered;
             }
         }
         return "";
+    }
+
+    /**
+     * The {@code words(<currency>)} format: the amount spelled out by the template language's strategy.
+     * The argument is resolved as a path first and taken as the code itself when nothing is there.
+     * Anything it cannot spell renders empty.
+     */
+    private String inWords(Object resolved, String argument, Scope scope) {
+        String trimmed = argument.trim();
+        if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) {
+            return "";
+        }
+        BigDecimal amount = asAmount(resolved);
+        if (amount == null) {
+            return "";
+        }
+        String currencyArgument = trimmed.substring(1, trimmed.length() - 1)
+                                         .trim();
+        Object currency = scope.resolve(currencyArgument);
+        String text = amountInWords.render(amount, currency == null ? currencyArgument : String.valueOf(currency));
+        return text == null ? "" : text;
+    }
+
+    /** A number, or its string form, as a {@code BigDecimal}; else {@code null}. */
+    private static BigDecimal asAmount(Object value) {
+        try {
+            return switch (value) {
+                case BigDecimal decimal -> decimal;
+                case Number number -> new BigDecimal(number.toString());
+                case String string -> new BigDecimal(string.trim());
+                case null, default -> null;
+            };
+        } catch (NumberFormatException notANumber) {
+            return null;
+        }
     }
 
     /**

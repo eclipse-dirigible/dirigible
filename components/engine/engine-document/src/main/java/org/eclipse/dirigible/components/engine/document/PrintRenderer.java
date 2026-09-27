@@ -36,12 +36,14 @@ final class PrintRenderer {
      * Parses the template, binds the data and renders the XSL-FO stylesheet.
      *
      * @param templateSource the {@code .print} template source
+     * @param language the language folder the template was read from - the language amounts are spelled
+     *        out in
      * @param data the document data context
      * @param imageResolver resolves each {@code <image>} source into embeddable content
      * @return the XSL-FO stylesheet with the data merged in
      */
-    static String renderFo(String templateSource, Map<String, Object> data, ImageResolver imageResolver) {
-        Node bound = new DataBinder().bind(new DocumentParser().parse(templateSource), data);
+    static String renderFo(String templateSource, String language, Map<String, Object> data, ImageResolver imageResolver) {
+        Node bound = new DataBinder(language).bind(new DocumentParser().parse(templateSource), data);
         return new XslFoRenderer(imageResolver).renderBound(bound);
     }
 
@@ -49,11 +51,12 @@ final class PrintRenderer {
      * Runs the full pipeline down to PDF bytes.
      *
      * @param templateSource the {@code .print} template source
+     * @param language the language folder the template was read from
      * @param data the document data context
      * @param imageResolver resolves each {@code <image>} source into embeddable content
      * @return the PDF bytes
      */
-    static byte[] renderPdf(String templateSource, Map<String, Object> data, ImageResolver imageResolver) {
-        return PDFFacade.generate(renderFo(templateSource, data, imageResolver), EMPTY_DATA_SOURCE);
+    static byte[] renderPdf(String templateSource, String language, Map<String, Object> data, ImageResolver imageResolver) {
+        return PDFFacade.generate(renderFo(templateSource, language, data, imageResolver), EMPTY_DATA_SOURCE);
     }
 }
