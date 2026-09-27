@@ -209,7 +209,7 @@ class GlueTransitionAxisTest {
         // the one guard in the DSL whose status NAME was never resolved, so it reached the generated
         // listener as a string compared against the integer FK: never true, and an onTransition trigger
         // - which is exactly the one that needs a status guard - could not start at all.
-        assertEquals("java.util.Objects.equals(entity.Status, 2)", dunning.get("guardExpression"),
+        assertEquals("java.util.Objects.equals(entity.Status, 2)", GlueRendering.eventGuard(dunning),
                 "the trigger's status guard must compare against the seed id, not against the name as a string");
     }
 
@@ -228,7 +228,7 @@ class GlueTransitionAxisTest {
 
         assertEquals("Fine", wait.get("eventEntity"));
         assertEquals("-transitioned", wait.get("topicSuffix"));
-        assertEquals("java.util.Objects.equals(entity.Status, 2)", wait.get("guardExpression"),
+        assertEquals("java.util.Objects.equals(entity.Status, 2)", GlueRendering.eventGuard(wait),
                 "the wait's status guard must compare against the seed id, not against the name as a string");
     }
 
@@ -247,7 +247,7 @@ class GlueTransitionAxisTest {
 
         assertEquals("Payment", wait.get("eventEntity"));
         assertEquals("Fine", wait.get("parentEntity"));
-        assertEquals("java.util.Objects.equals(entity.Status, 3)", wait.get("guardExpression"),
+        assertEquals("java.util.Objects.equals(entity.Status, 3)", GlueRendering.eventGuard(wait),
                 "the guard is over the payment's own status nomenclature, which numbers SETTLED apart from any fine status");
     }
 }

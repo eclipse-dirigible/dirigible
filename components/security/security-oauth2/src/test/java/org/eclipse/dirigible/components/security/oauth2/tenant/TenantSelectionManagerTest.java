@@ -33,10 +33,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.eclipse.dirigible.components.tenants.tenant.TenantEnteredEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
@@ -73,6 +76,9 @@ class TenantSelectionManagerTest {
     @Mock
     private SecurityContextRepository securityContextRepository;
 
+    @Mock
+    private ApplicationEventPublisher events;
+
     private TenantSelectionManager manager;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
@@ -81,7 +87,7 @@ class TenantSelectionManagerTest {
     void setUp() {
         DirigibleConfig.TENANT_GROUPS_CLAIM.setStringValue(GROUPS_CLAIM);
         DirigibleConfig.APP_ID.setStringValue(APP_ID);
-        manager = new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository);
+        manager = new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository, events);
         request = new MockHttpServletRequest();
         request.setSession(new MockHttpSession());
         response = new MockHttpServletResponse();
@@ -130,6 +136,30 @@ class TenantSelectionManagerTest {
                           .getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE)).isEqualTo(ACME);
         assertThat(currentRoleNames()).containsExactlyInAnyOrder("DEVELOPER", "Owner", "User");
         verify(securityContextRepository).saveContext(any(SecurityContext.class), any(), any());
+    }
+
+    @Test
+    void selectingATenantAnnouncesTheUserEnteredIt() {
+        authenticate("acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
+
+        manager.selectTenant(request, response, ACME);
+
+        ArgumentCaptor<TenantEnteredEvent> event = ArgumentCaptor.forClass(TenantEnteredEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue()
+                        .tenantId()).isEqualTo(ACME);
+        assertThat(event.getValue()
+                        .principal()).isEqualTo(USER);
+    }
+
+    @Test
+    void aRefusedSelectionAnnouncesNothing() {
+        authenticate("globex.library.User");
+
+        assertThatThrownBy(() -> manager.selectTenant(request, response, ACME)).isInstanceOf(TenantSelectionException.class);
+
+        verify(events, never()).publishEvent(any());
     }
 
     @Test

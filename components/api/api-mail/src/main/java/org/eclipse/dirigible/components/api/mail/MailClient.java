@@ -169,6 +169,9 @@ public class MailClient {
         mimeMessage.setSubject(subjectText, "UTF-8"); //$NON-NLS-1$
 
         MimeMultipart multiPart = new MimeMultipart("mixed");
+        List<MimeBodyPart> plainTextParts = new ArrayList<>();
+        List<MimeBodyPart> htmlTextParts = new ArrayList<>();
+        int textPosition = -1;
 
         for (Map mailPart : parts) {
             String type = (String) mailPart.get("type");
@@ -187,13 +190,19 @@ public class MailClient {
                         case "plain":
                             MimeBodyPart plainTextPart = new MimeBodyPart();
                             plainTextPart.setText(mailText, "utf-8", contentType.getSubType());
-                            multiPart.addBodyPart(plainTextPart);
+                            plainTextParts.add(plainTextPart);
                             break;
                         case "html":
                             MimeBodyPart htmlTextPart = new MimeBodyPart();
-                            htmlTextPart.setContent(mailText, String.valueOf(contentType));
-                            multiPart.addBodyPart(htmlTextPart);
+                            // UTF-8 unless the caller named a charset: interpolated business data is
+                            // routinely non-ASCII, and a text/html part without one is read as ASCII.
+                            String charset = contentType.getParameter("charset");
+                            htmlTextPart.setText(mailText, charset == null ? "utf-8" : charset, contentType.getSubType());
+                            htmlTextParts.add(htmlTextPart);
                             break;
+                    }
+                    if (textPosition < 0) {
+                        textPosition = multiPart.getCount();
                     }
                     break;
                 case "inline":
@@ -226,9 +235,47 @@ public class MailClient {
             }
         }
 
+        if (textPosition >= 0) {
+            addTextParts(multiPart, textPosition, plainTextParts, htmlTextParts);
+        }
         mimeMessage.setContent(multiPart);
 
         return mimeMessage;
+    }
+
+    /**
+     * Places the message's text bodies where the first of them was given. A plain and an HTML body are
+     * the same message in two renderings, so when both are present they go into one
+     * {@code multipart/alternative} - plain first, HTML last, the order RFC 2046 reads as increasing
+     * preference - which then sits in the {@code mixed} container beside the attachments. As two
+     * siblings of the {@code mixed} container several clients show them as two bodies, one after the
+     * other. A single rendering is added as it always was.
+     *
+     * @param multiPart the {@code mixed} container
+     * @param position the index the text bodies take in it
+     * @param plainTextParts the {@code text/plain} bodies, in the given order
+     * @param htmlTextParts the {@code text/html} bodies, in the given order
+     * @throws MessagingException if a part cannot be added
+     */
+    private static void addTextParts(MimeMultipart multiPart, int position, List<MimeBodyPart> plainTextParts,
+            List<MimeBodyPart> htmlTextParts) throws MessagingException {
+        if (plainTextParts.isEmpty() || htmlTextParts.isEmpty()) {
+            int index = position;
+            for (MimeBodyPart textPart : plainTextParts.isEmpty() ? htmlTextParts : plainTextParts) {
+                multiPart.addBodyPart(textPart, index++);
+            }
+            return;
+        }
+        MimeMultipart alternative = new MimeMultipart("alternative");
+        for (MimeBodyPart textPart : plainTextParts) {
+            alternative.addBodyPart(textPart);
+        }
+        for (MimeBodyPart textPart : htmlTextParts) {
+            alternative.addBodyPart(textPart);
+        }
+        MimeBodyPart alternativePart = new MimeBodyPart();
+        alternativePart.setContent(alternative);
+        multiPart.addBodyPart(alternativePart, position);
     }
 
     /**

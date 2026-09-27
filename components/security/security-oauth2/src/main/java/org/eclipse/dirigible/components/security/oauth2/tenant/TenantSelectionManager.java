@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.security.oauth2.tenant;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -23,16 +24,19 @@ import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
+import org.eclipse.dirigible.components.tenants.tenant.TenantEnteredEvent;
 import org.eclipse.dirigible.components.tenants.tenant.TenantImpl;
 import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionConstants;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -68,16 +72,19 @@ public class TenantSelectionManager {
 
     private final SecurityContextRepository securityContextRepository;
 
+    private final ApplicationEventPublisher events;
+
     /**
      * Instantiates a new tenant selection manager. Annotated because the class carries a second
      * constructor for the tests, so the injectable one has to be named.
      *
      * @param groupsClaim the claim the user groups are read from
      * @param tenantService the tenant registry of this instance
+     * @param events where a tenant entered is announced
      */
     @Autowired
-    public TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService) {
-        this(groupsClaim, tenantService, new HttpSessionSecurityContextRepository());
+    public TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService, ApplicationEventPublisher events) {
+        this(groupsClaim, tenantService, new HttpSessionSecurityContextRepository(), events);
     }
 
     /**
@@ -86,12 +93,14 @@ public class TenantSelectionManager {
      * @param groupsClaim the claim the user groups are read from
      * @param tenantService the tenant registry of this instance
      * @param securityContextRepository where the rebuilt authentication is persisted
+     * @param events where a tenant entered is announced
      */
-    TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService,
-            SecurityContextRepository securityContextRepository) {
+    TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService, SecurityContextRepository securityContextRepository,
+            ApplicationEventPublisher events) {
         this.groupsClaim = groupsClaim;
         this.tenantService = tenantService;
         this.securityContextRepository = securityContextRepository;
+        this.events = events;
     }
 
     /**
@@ -172,6 +181,11 @@ public class TenantSelectionManager {
         reauthenticate(oauth2Authentication, roles, request, response);
 
         LOGGER.info("User [{}] selected tenant [{}] and has roles [{}].", authentication.getName(), tenantId, roles);
+        // The one place both the picker and the auto-selection of a user's only tenant go through, so it
+        // is where a sign-in into a tenant is announced. A listener's failure must not undo the selection,
+        // which is why listeners catch their own.
+        String email = oauth2Authentication.getPrincipal() instanceof OidcUser oidcUser ? oidcUser.getEmail() : null;
+        events.publishEvent(new TenantEnteredEvent(tenantId, authentication.getName(), email, Instant.now()));
         return roles;
     }
 

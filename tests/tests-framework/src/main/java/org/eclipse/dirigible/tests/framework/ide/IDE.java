@@ -15,11 +15,15 @@ import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.util.SleepUtil;
+import org.openqa.selenium.By;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
+
+import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.Selenide;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.CoreMatchers.containsString;
@@ -171,9 +175,29 @@ public class IDE {
     public Workbench openWorkbench() {
         openIde();
 
-        browser.clickOnElementById("perspective-workbench");
+        // A fresh IDE already lands on the Workbench (its lowest-ordered perspective), and the
+        // Workbench activity-bar button now opens / closes the Projects pane when the Workbench is
+        // already the active perspective. So click the button only to switch in from another
+        // perspective - clicking it while the Workbench is active would collapse Projects and break
+        // the flows that follow.
+        if (!isWorkbenchActive()) {
+            browser.clickOnElementById("perspective-workbench");
+        }
 
         return workbenchFactory.create(browser);
+    }
+
+    private boolean isWorkbenchActive() {
+        // The shell nav lives in the top frame; wait for it before reading the persisted selection.
+        Selenide.$(By.id("perspective-workbench"))
+                .shouldBe(Condition.visible);
+        Object selected = Selenide.executeJavaScript("for (var i = 0; i < localStorage.length; i++) {" //
+                + "  var key = localStorage.key(i);" //
+                + "  if (key && key.endsWith('.shell.selected-perspective')) return localStorage.getItem(key);" //
+                + "}" //
+                + "return null;");
+        // No stored selection means the shell falls back to its default perspective, the Workbench.
+        return selected == null || "workbench".equals(selected);
     }
 
     public void assertPublishedProjectMessage(String projectName) {

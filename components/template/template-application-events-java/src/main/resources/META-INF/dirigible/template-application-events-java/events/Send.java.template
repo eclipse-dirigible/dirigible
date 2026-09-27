@@ -205,6 +205,13 @@ public class ${className} implements JavaDelegate {
         part.put("text", ${notifyBodyExpression});
         List<Map> parts = new ArrayList<>();
         parts.add(part);
+#if($notifyHtmlExpression)
+        Map htmlPart = new HashMap();
+        htmlPart.put("type", "text");
+        htmlPart.put("contentType", "text/html");
+        htmlPart.put("text", ${notifyHtmlExpression});
+        parts.add(htmlPart);
+#end
 #if($attach == "print")
 #if($attachLanguageFkProperty != "")
         ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null

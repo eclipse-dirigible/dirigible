@@ -623,23 +623,34 @@ class ModelGenerator {
     }
 
     /**
-     * Sanitizes the parent perspective of a capacity guard into the package segment the repository
+     * Sanitizes the parent perspective of every capacity guard into the package segment the repository
      * imports the parent from - and, for a guard whose parent is owned by ANOTHER model, that model's
-     * alias into the gen folder its generated code lives under.
+     * alias into the gen folder its generated code lives under. An entity carries one guard per
+     * capacity-bearing roll-up, so a junction guarded on both its parents carries two (#7448).
      *
      * @param entities the entities
      */
     private static void annotateGuardedRollups(List<Map<String, Object>> entities) {
         for (Map<String, Object> entity : entities) {
-            Map<String, Object> rollupGuard = asMap(entity.get("rollupGuard"));
-            if (rollupGuard == null) {
-                continue;
+            List<Map<String, Object>> rollupGuards = asMaps(entity.get("rollupGuards"));
+            if (rollupGuards.isEmpty()) {
+                // A .model generated before #7448 carries a single guard object under the singular key.
+                // Normalize it into the list the DAO template now reads, so an application regenerated
+                // from such a .model keeps the guard it already had.
+                Map<String, Object> legacy = asMap(entity.get("rollupGuard"));
+                if (legacy == null) {
+                    continue;
+                }
+                rollupGuards = new ArrayList<>(List.of(legacy));
+                entity.put("rollupGuards", rollupGuards);
             }
-            if (truthy(rollupGuard, "parentPerspective")) {
-                rollupGuard.put("parentPerspective", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentPerspective")));
-            }
-            if (truthy(rollupGuard, "parentGenFolder")) {
-                rollupGuard.put("parentGenFolder", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentGenFolder")));
+            for (Map<String, Object> rollupGuard : rollupGuards) {
+                if (truthy(rollupGuard, "parentPerspective")) {
+                    rollupGuard.put("parentPerspective", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentPerspective")));
+                }
+                if (truthy(rollupGuard, "parentGenFolder")) {
+                    rollupGuard.put("parentGenFolder", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentGenFolder")));
+                }
             }
         }
     }

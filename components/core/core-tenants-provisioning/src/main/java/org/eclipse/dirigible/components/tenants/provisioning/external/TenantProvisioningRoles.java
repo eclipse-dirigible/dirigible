@@ -24,16 +24,16 @@ package org.eclipse.dirigible.components.tenants.provisioning.external;
  * {@code ADMINISTRATOR} and {@code OPERATOR} are admitted as well, so an operator can drive the
  * same sequence by hand when a provisioning run has to be repaired.
  */
-final class TenantProvisioningRoles {
+public final class TenantProvisioningRoles {
 
     /** The role a machine-to-machine provisioning client presents. */
-    static final String TENANT_PROVISIONER = "TENANT_PROVISIONER";
+    public static final String TENANT_PROVISIONER = "TENANT_PROVISIONER";
 
     /** The role of a platform administrator - break-glass access to the same API. */
-    static final String ADMINISTRATOR = "ADMINISTRATOR";
+    public static final String ADMINISTRATOR = "ADMINISTRATOR";
 
     /** The role of a platform operator - break-glass access to the same API. */
-    static final String OPERATOR = "OPERATOR";
+    public static final String OPERATOR = "OPERATOR";
 
     private TenantProvisioningRoles() {}
 }

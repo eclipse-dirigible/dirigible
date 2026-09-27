@@ -1116,12 +1116,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: balance, type: decimal, precision: 18, scale: 2 }
                 relations:
                   - { name: Status, kind: manyToOne, to: PledgeStatus }
+              # A junction guarded on BOTH its parents (#7448): a payment is a composition child of its
+              # pledge AND draws on a fund's budget. Two capacity roll-ups name PledgePayment, so its
+              # repository must carry TWO overdraw checks - only the first used to be emitted, and the
+              # second roll-up generated its sum, balance and handlers with nothing behind them.
+              - name: PledgeFund
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: budget,      type: decimal, precision: 18, scale: 2 }
+                  - { name: allocated,   type: decimal, precision: 18, scale: 2 }
+                  - { name: unallocated, type: decimal, precision: 18, scale: 2 }
               - name: PledgePayment
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
                 relations:
                   - { name: Pledge, kind: manyToOne, to: Pledge, composition: true, required: true }
+                  - { name: Fund,   kind: manyToOne, to: PledgeFund }
             """;
 
     // The rest of the same fixture. It is a SECOND constant only because a Java string constant
@@ -1153,6 +1164,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
               - { name: pledgePaid, entity: PledgePayment, via: Pledge, field: paid, op: sum, of: amount,
                   capacity: total, balance: balance, status: Status, statusWhenFull: 3, statusWhenPartial: 2 }
+              - { name: fundAllocated, entity: PledgePayment, via: Fund, field: allocated, op: sum, of: amount,
+                  capacity: budget, balance: unallocated }
 
             expansions:
               - name: retainer-periods
@@ -1204,6 +1217,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: Person.email
                   subject: "Reminder: bill {note}"
                   body: "Dear {Person.name}, your bill is still open: {recordUrl}"
+                  # #7488: the marked-up alternative - compiled here, the escaped values included.
+                  html: '<p>Dear {Person.name}, your bill is <a href="{recordUrl}">still open</a>.</p>'
                   attach: print
                   languageFrom: Person.locale
                   outcome: sendOutcome
@@ -1389,6 +1404,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         to: Person.email
                         subject: "Bill {note}"
                         body: "Dear {Person.name}, your bill totals {amount}."
+                        html: "<p>Dear <b>{Person.name}</b>, your bill totals {amount}.</p>"
                         # attach a parameterized REPORT (#6931): the report runs scoped to THIS
                         # record's values and the rendered PDF rides along. `minTotal` declares an
                         # `initial`, so binding it is REQUIRED - left unbound it would stay at that
@@ -1411,6 +1427,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         # while {record.note} above reads the anchor. Two different scopes, both
                         # explicit.
                         body: "Dear {Person.name}, the bill is attached. Your copy: {recordUrl}"
+                        html: "<p>Dear {Person.name}, bill <b>{record.note}</b> is attached.</p>"
                         attach: recordPrint
                       next: end
                   - { name: end, kind: end }
@@ -1429,6 +1446,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 to: ops@example.com
                 subject: "RFQ {title} awaits review"
                 body: "A reviewer must handle it."
+                html: "<p>RFQ <b>{title}</b> awaits a reviewer.</p>"
                 outcome: notifyOutcome
 
             integrations:
@@ -1533,6 +1551,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   to: ops@example.com
                   subject: "Bill {note}"
                   body: "Please find the bill attached. Open it here: {recordUrl}"
+                  html: '<p>Please find the bill attached. <a href="{recordUrl}">Open it here</a>.</p>'
                   attach: print
                   # #7023: stamp what the delivery did on the record, and publish -notifyFailed when it
                   # did not leave - the trace the notification below binds.
@@ -2580,6 +2599,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                             && pledgeRollup.contains("derived.put(\"DisplacedStatus\", null);"),
                     variant + " must snapshot the displaced status on the way in and restore it when the sum is back at zero");
         }
+        // One overdraw check per capacity-bearing roll-up (#7448): PledgePayment draws on its pledge's
+        // total AND on its fund's budget, and the repository that used to carry a single guard - the
+        // first declaration to win - must now carry both, on the create and on the update path alike.
+        String pledgePaymentRepository = contentOf("gen/emission/data/pledge/PledgePaymentRepository.java");
+        assertTrue(pledgePaymentRepository.contains("PledgeEntity guardParent = new PledgeRepository().findById(entity.Pledge)"),
+                "the pledge capacity must be guarded: " + pledgePaymentRepository);
+        assertTrue(pledgePaymentRepository.contains("PledgeFundEntity guardParent = new PledgeFundRepository().findById(entity.Fund)"),
+                "the fund capacity must be guarded alongside it - not dropped: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"Pledge capacity exceeded"),
+                "the pledge guard runs on create and on update: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"PledgeFund capacity exceeded"),
+                "so does the fund guard: " + pledgePaymentRepository);
+
         assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
                 "the displaced status is bookkeeping - it must not reach the form model");
         assertFalse(contentOf("gen/emission/views/Pledge/Pledge-form.html").contains("DisplacedStatus"), "...nor be rendered on the form");
@@ -2978,6 +3010,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(reachedEmitter.contains("-step-RfqFlow-review-reached") && reachedEmitter.contains("Process.executeAfterCommit"),
                 "the emitter must publish the step topic after the chain commits");
         String stepNotification = contentOf("gen/events/emission/RfqReviewPendingNotification.java");
+        assertTrue(
+                stepNotification.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && stepNotification.contains("\"<p>RFQ <b>\" + org.eclipse.dirigible.sdk.mail.Html.escape(entity.Title)"),
+                "a notification's html alternative must be emitted as an escaped text/html part (#7488): " + stepNotification);
         assertTrue(stepNotification.contains("-step-RfqFlow-review-reached"),
                 "a step-bound notification must bind to the topic its emitter publishes to");
         // #7369: a record with no recipient must stamp `skipped`, not leave the outcome empty (which
@@ -3195,6 +3231,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // publish (the loads became locals of the try block); the ordering is pinned once more, on a
         // real document.
         String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        assertTrue(
+                dunning.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && dunning.contains("org.eclipse.dirigible.sdk.mail.Html.escape((Person == null ? null : Person.Name))"),
+                "a schedule's html alternative must be emitted with its relation value escaped (#7488): " + dunning);
         int dunningTry = dunning.indexOf("try {", dunning.indexOf("for (BillEntity entity : rows) {"));
         int dunningLoad = dunning.indexOf("PersonRepository().findById(entity.Person)");
         int dunningRender = dunning.indexOf("Print.render(\"Bill\",");
@@ -3576,6 +3616,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // wrapped so a mail failure cannot fail the already-committed transition.
         String sendBill = contentOf("gen/events/emission/SendBillTransition.java");
         assertTrue(sendBill.contains("Mail.send("), "a transition's notify must emit the actual send call");
+        // #7488: the html alternative is a second text part, every interpolated value escaped - the
+        // deep link included - while the authored markup stays literal.
+        assertTrue(
+                sendBill.contains("htmlPart.put(\"contentType\", \"text/html\");") && sendBill.contains(
+                        "\"<p>Please find the bill attached. <a href=\\\"\" + org.eclipse.dirigible.sdk.mail.Html.escape(recordUrl)"),
+                "a transition's html alternative must be emitted as an escaped text/html part: " + sendBill);
         assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
                 "attach: print must emit a PDF attachment part");
         assertTrue(sendBill.contains("Print.render(\"Bill\",") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
@@ -3651,6 +3697,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // and no custom/ stub may be scaffolded for it.
         String billSend = contentOf("gen/events/emission/BillFlowMailBillSend.java");
         assertTrue(billSend.contains("implements JavaDelegate"), "a sending step must emit a JavaDelegate");
+        assertTrue(
+                billSend.contains("htmlPart.put(\"contentType\", \"text/html\");")
+                        && billSend.contains("org.eclipse.dirigible.sdk.mail.Html.escape(entity.Amount)"),
+                "a sending step's html alternative must be emitted as an escaped text/html part (#7488): " + billSend);
         assertTrue(billSend.contains("new BillRepository().findById("),
                 "the sender must re-load the trigger record through its generated repository");
         // The recipient is a one-hop relation.field, so the related record must be loaded by FK
@@ -3701,6 +3751,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // recipient list, so the recipient still resolves against the ROW while the attachment is the
         // ANCHOR record's, rendered ONCE outside the loop and handed to every message.
         String shareBill = contentOf("gen/events/emission/BillFlowShareBillSend.java");
+        assertTrue(shareBill.contains("org.eclipse.dirigible.sdk.mail.Html.escape(source.Note)"),
+                "a fan-out's html alternative must read the anchor through the record scope, escaped (#7488): " + shareBill);
         assertTrue(shareBill.contains("Map document = rows.isEmpty() ? null : renderDocument(source);"),
                 "a recordPrint fan-out must render the document once, before the loop - and not at all with no recipients");
         assertTrue(
@@ -5595,6 +5647,80 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("DisplacedStatus", nullValue()),
                 30);
 
+        // ---- Both capacities of a junction are enforced (#7448): a payment may exceed neither its
+        // pledge's total nor its fund's budget. The fund guard is the SECOND declaration, the one that
+        // used to be dropped at Generate with nothing in the output saying so - allocating 2000 out of a
+        // 1500 budget while every check reported success.
+        AtomicReference<Integer> fundId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> fundId.set(given().contentType("application/json")
+                                                            .body("{\"Budget\":1500}")
+                                                            .when()
+                                                            .post(API + "/pledgefund/PledgeFundController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        AtomicReference<Integer> firstPledge = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> firstPledge.set(given().contentType("application/json")
+                                                                 .body("{\"Total\":1000,\"Status\":1}")
+                                                                 .when()
+                                                                 .post(API + "/pledge/PledgeController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .path("Id")));
+        AtomicReference<Integer> secondPledge = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> secondPledge.set(given().contentType("application/json")
+                                                                  .body("{\"Total\":1000,\"Status\":1}")
+                                                                  .when()
+                                                                  .post(API + "/pledge/PledgeController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .extract()
+                                                                  .path("Id")));
+        // Within both capacities: 1000 of a 1000 pledge, 1000 of a 1500 budget.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + firstPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1000}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(200));
+        // The FIRST guard still refuses: 1500 against a 1000 pledge, whatever the fund has left.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1500}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Pledge capacity exceeded")));
+        // ...and so does the SECOND: 1000 more is inside the other pledge's total but overdraws the fund,
+        // which has 500 left. This is the request that used to return 200.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1000}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("PledgeFund capacity exceeded")));
+        // What fits under both is still accepted, and the fund's own roll-up follows it.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":500}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/pledgefund/PledgeFundController/" + fundId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Allocated", equalTo(1500.0F))
+                                                 .body("Unallocated", equalTo(0.0F)),
+                30);
+
         // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
         // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.
         // The override lives in the server-side session, so the sequence pins one session.
@@ -6807,6 +6933,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         for (ICollection child : collection.getCollections()) {
             collectPages(child, pages);
         }
+    }
+
+    /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
+    private static int countOf(String haystack, String needle) {
+        return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
     }
 
     private String contentOf(String fileName) {

@@ -92,7 +92,7 @@ class GlueResolvesTest {
         assertEquals("Id", resolve.get("keyProperty"));
         // onCreate binds to the unsuffixed base topic; the guard is open.
         assertEquals("", resolve.get("topicSuffix"));
-        assertEquals("true", resolve.get("guardExpression"));
+        assertEquals("true", GlueRendering.eventGuard(resolve));
 
         assertEquals("Driver", resolve.get("setProperty"));
         assertEquals("VehicleAssignment", resolve.get("registerEntity"));
@@ -155,6 +155,6 @@ class GlueResolvesTest {
         Map<String, Object> resolve = GlueIntentGenerator.buildResolvesForTest(model)
                                                          .get(0);
         assertEquals("-updated", resolve.get("topicSuffix"));
-        assertEquals("java.util.Objects.equals(entity.Status, 1)", resolve.get("guardExpression"));
+        assertEquals("java.util.Objects.equals(entity.Status, 1)", GlueRendering.eventGuard(resolve));
     }
 }

@@ -209,7 +209,7 @@ class GlueSendDocumentTest {
         assertEquals("Customer", notification.get("attachLanguageTargetEntity"));
         assertEquals("Customer", notification.get("attachLanguageTargetPerspective"));
         // ...and reads the language off it, falling back to the application language set when blank.
-        String expression = String.valueOf(notification.get("attachLanguageExpression"));
+        String expression = String.valueOf(GlueRendering.attachLanguage(notification));
         assertTrue(expression.contains("attachLanguageSource.Locale"), expression);
         assertTrue(expression.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"), expression);
     }
@@ -244,7 +244,7 @@ class GlueSendDocumentTest {
         // Present but empty: an undefined Velocity variable renders as its own name, so the notify
         // branch's #if must always have something to compare.
         assertEquals("", schedule.get("attach"));
-        assertEquals("", schedule.get("attachFileNameExpression"));
+        assertEquals("", GlueRendering.attachFileName(schedule));
     }
 
     /** A payroll-shaped fixture: a run whose payslips each go to their own employee. */
@@ -475,9 +475,9 @@ class GlueSendDocumentTest {
         assertEquals("recordPrint", transition.get("attach"));
         assertEquals("RequestForQuotation", transition.get("attachEntity"));
         assertEquals("Id", transition.get("attachKeyProperty"));
-        assertTrue(String.valueOf(transition.get("attachFileNameExpression"))
+        assertTrue(String.valueOf(GlueRendering.attachFileName(transition))
                          .contains("source.Number"),
-                "the file name must be read off the anchor record: " + transition.get("attachFileNameExpression"));
+                "the file name must be read off the anchor record: " + GlueRendering.attachFileName(transition));
     }
 
     @Test
@@ -633,13 +633,13 @@ class GlueSendDocumentTest {
         // The render language is a pre-rendered Java expression: a quoted literal (language:), a read
         // off the attachLanguageSource local (languageFrom:), or the run-time application-language
         // fallback - never a hardcoded "en".
-        assertEquals(languageExpression, entry.get("attachLanguageExpression"));
+        assertEquals(languageExpression, GlueRendering.attachLanguage(entry));
         // A document with a number: field names the attachment after it - the customer receives
         // INV0000042.pdf, not "Invoice 42.pdf" (which is only the fallback).
-        assertTrue(String.valueOf(entry.get("attachFileNameExpression"))
+        assertTrue(String.valueOf(GlueRendering.attachFileName(entry))
                          .contains("entity.Number"),
-                "the file name must prefer the document number: " + entry.get("attachFileNameExpression"));
-        assertTrue(String.valueOf(entry.get("attachFileNameExpression"))
+                "the file name must prefer the document number: " + GlueRendering.attachFileName(entry));
+        assertTrue(String.valueOf(GlueRendering.attachFileName(entry))
                          .endsWith("+ \".pdf\""),
                 "the attachment must be named as a PDF");
     }

@@ -79,7 +79,7 @@ class GlueOutboundTest {
         assertEquals("QUEUE", departure.get("channel"));
         assertEquals("sendToQueue", departure.get("producerMethod"));
         assertEquals(false, departure.get("hasGuard"));
-        assertEquals("true", departure.get("guardExpression"));
+        assertEquals("true", GlueRendering.eventGuard(departure));
         assertEquals(false, departure.get("hasPayload"));
         assertTrue(((List<Map<String, Object>>) departure.get("payloadFields")).isEmpty());
         assertTrue(((List<Map<String, Object>>) departure.get("relationLoads")).isEmpty(),
@@ -96,7 +96,7 @@ class GlueOutboundTest {
         assertEquals("TOPIC", departure.get("channel"));
         assertEquals("sendToTopic", departure.get("producerMethod"));
         assertEquals(true, departure.get("hasGuard"));
-        assertEquals("!java.util.Objects.equals(entity.Channel, \"internal\")", departure.get("guardExpression"));
+        assertEquals("!java.util.Objects.equals(entity.Channel, \"internal\")", GlueRendering.eventGuard(departure));
 
         assertEquals(true, departure.get("hasPayload"));
         List<Map<String, Object>> fields = (List<Map<String, Object>>) departure.get("payloadFields");
@@ -191,7 +191,7 @@ class GlueOutboundTest {
         Map<String, Object> integration = GlueIntentGenerator.buildIntegrationsForTest(model)
                                                              .get(0);
         assertEquals(true, integration.get("hasGuard"));
-        assertEquals("java.util.Objects.equals(entity.Channel, \"web\")", integration.get("guardExpression"));
+        assertEquals("java.util.Objects.equals(entity.Channel, \"web\")", GlueRendering.eventGuard(integration));
     }
 
     @Test

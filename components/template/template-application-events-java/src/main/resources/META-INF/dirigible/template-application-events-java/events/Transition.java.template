@@ -238,6 +238,13 @@ public class ${className}Transition {
             part.put("text", ${notifyBodyExpression});
             java.util.List<java.util.Map> parts = new java.util.ArrayList<>();
             parts.add(part);
+#if($notifyHtmlExpression)
+            java.util.Map htmlPart = new java.util.HashMap();
+            htmlPart.put("type", "text");
+            htmlPart.put("contentType", "text/html");
+            htmlPart.put("text", ${notifyHtmlExpression});
+            parts.add(htmlPart);
+#end
 #if($attach == "print")
             // attach: print - the record's own print template rendered to PDF server-side, so the
             // counterparty receives the document (the voided invoice itself), not just a notice.

@@ -172,7 +172,7 @@ class GlueWhenListTest {
                       - { name: done, kind: end }
                 """));
 
-        assertEquals("java.util.Objects.equals(entity.Status, 2) && java.util.Objects.equals(entity.Resolution, \"found\")", triggers.get(0)
-                                                                                                                                     .get("guardExpression"));
+        assertEquals("java.util.Objects.equals(entity.Status, 2) && java.util.Objects.equals(entity.Resolution, \"found\")",
+                GlueRendering.eventGuard(triggers.get(0)));
     }
 }

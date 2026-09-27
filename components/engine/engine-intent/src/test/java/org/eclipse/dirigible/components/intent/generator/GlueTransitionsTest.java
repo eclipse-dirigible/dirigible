@@ -65,7 +65,7 @@ class GlueTransitionsTest {
         assertEquals("currentStatus == 3 || currentStatus == 4", t.get("allowedExpr"));
         assertEquals("3, 4", t.get("fromStatuses"));
         assertEquals("org.eclipse.dirigible.sdk.utils.Calc.eval(\"Paid\", source, 6)" + ".compareTo(new java.math.BigDecimal(\"0\")) == 0",
-                t.get("guardExpr"));
+                GlueRendering.transitionGuard(t));
         assertEquals("Paid == 0", t.get("guardText"));
     }
 
@@ -74,8 +74,8 @@ class GlueTransitionsTest {
         IntentModel model = IntentParser.parse(YAML.replace("    when: \"Paid == 0\"\n", ""));
         Map<String, Object> t = GlueIntentGenerator.buildTransitionsForTest(model)
                                                    .get(0);
-        // The template's #if($guardExpr != "") renders nothing.
-        assertEquals("", t.get("guardExpr"));
+        // Rendered as the empty guardExpr, so the template's #if($guardExpr != "") renders nothing.
+        assertEquals("", GlueRendering.transitionGuard(t));
         assertEquals("", t.get("guardText"));
     }
 }

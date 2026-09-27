@@ -56,6 +56,18 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 rightPaneSize: 20,
                 rightPaneMinSize: 0,
                 rightPaneMaxSize: undefined,
+                // Opt-in (only the Workbench sets it): re-clicking the perspective's own activity-bar
+                // button opens / closes the left (Projects) pane. Off elsewhere, so the button keeps
+                // its plain re-select behaviour and no other perspective's left pane reacts.
+                leftPaneToggle: false,
+                // Width (px) the left pane reopens at when toggled back open; undefined restores its
+                // pre-collapse width instead.
+                leftPaneExpandSize: undefined,
+                // Opt-in (only the Workbench sets it): render the right (Assistant) pane like the bottom
+                // pane - a tab bar whose header X collapses the whole pane to 0 (no rail left behind),
+                // reopened from Window > Views like the Console/Terminal. Off elsewhere keeps the plain
+                // accordion right pane (e.g. the Git perspective's staging view).
+                rightPaneCollapsible: false,
                 bottomPaneSize: 30,
                 hideCenterPane: false,
                 hideCenterTabs: false,
@@ -63,7 +75,8 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 ...($scope.config.layoutSettings || {})
             };
             $scope.selection = {
-                selectedBottomTab: null
+                selectedBottomTab: null,
+                selectedRightTab: null
             };
             $scope.splitPanesState = {
                 main: [
@@ -263,6 +276,53 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
             $scope.isBottomPaneCollapsed = () => {
                 return $scope.splitPanesState.main.length < 2 || $scope.splitPanesState.main[1] == SplitPaneState.COLLAPSED;
             };
+
+            // The outer horizontal split renders its panes as [left?, center, right?], so the left pane,
+            // when present, is always the first entry of splitPanesState.side.
+            function leftPaneStateIndex() {
+                return $scope.leftTabs.length > 0 ? 0 : -1;
+            }
+
+            $scope.isLeftPaneCollapsed = () => {
+                const index = leftPaneStateIndex();
+                return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
+            };
+
+            // Opens / closes the left (Projects) pane. With leftPaneMinSize 0 the split collapses it to
+            // zero width (fully hidden) and restores its previous width on expand.
+            $scope.toggleLeftPane = () => {
+                const index = leftPaneStateIndex();
+                if (index < 0 || !$scope.splitPanesState.side) return;
+                $scope.splitPanesState.side[index] = $scope.isLeftPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
+            };
+
+            // The right pane, when present, is always the last entry of splitPanesState.side.
+            function rightPaneStateIndex() {
+                if ($scope.rightTabs.length === 0) return -1;
+                return ($scope.leftTabs.length > 0 ? 1 : 0) + 1;
+            }
+
+            $scope.isRightPaneCollapsed = () => {
+                const index = rightPaneStateIndex();
+                return index >= 0 && !!$scope.splitPanesState.side && $scope.splitPanesState.side[index] === SplitPaneState.COLLAPSED;
+            };
+
+            // Opens / closes the right (Assistant) pane. With rightPaneMinSize 0 the split collapses it
+            // to zero width (fully hidden, like the bottom pane); reopened from Window > Views, it
+            // restores its previous width.
+            $scope.toggleRightPane = () => {
+                const index = rightPaneStateIndex();
+                if (index < 0 || !$scope.splitPanesState.side) return;
+                $scope.splitPanesState.side[index] = $scope.isRightPaneCollapsed() ? SplitPaneState.EXPANDED : SplitPaneState.COLLAPSED;
+            };
+
+            // The right pane renders as a tab bar (opt-in), so keep a valid selected tab as its views
+            // change - a bk-icon-tab-bar with no selection renders an empty body.
+            $scope.$watchCollection('rightTabs', (tabs) => {
+                if (tabs && tabs.length && !tabs.some(t => t.id === $scope.selection.selectedRightTab)) {
+                    $scope.selection.selectedRightTab = tabs[0].id;
+                }
+            });
 
             $scope.isMoreTabsButtonVisible = (tabs) => tabs.some(x => x.isHidden);
 
@@ -729,6 +789,14 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                 $scope.$apply($scope.openView(data.id, data.params));
             });
 
+            // The perspective's activity-bar button lives in the shell (parent) frame; when the already
+            // active button is re-clicked the shell drives the left pane over the hub. Gated so only the
+            // opted-in perspective (the Workbench) reacts.
+            const toggleLeftPaneListener = Layout.onToggleLeftPane(() => {
+                if (!$scope.layoutSettings.leftPaneToggle) return;
+                $scope.$apply(() => $scope.toggleLeftPane());
+            });
+
             const onOpenEditorListener = Layout.onOpenEditor((data) => {
                 $scope.$apply(() => {
                     $scope.openEditor(
@@ -1070,6 +1138,12 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
                             rightViewTab.expanded = true;
                             $scope.rightTabs.push(rightViewTab);
                         }
+                        // When the pane renders as a tab bar, focus the opened view and reopen the pane
+                        // if it was collapsed to its rail (mirrors the bottom pane).
+                        if ($scope.layoutSettings.rightPaneCollapsible) {
+                            $scope.selection.selectedRightTab = rightViewTab.id;
+                            if ($scope.isRightPaneCollapsed()) $scope.toggleRightPane();
+                        }
 
                     } else if (view.region === 'center') {
                         let result = findCenterSplittedTabViewById(view.id);
@@ -1099,6 +1173,7 @@ if (typeof perspectiveData === 'undefined' && (!perspectiveData.id || !perspecti
 
             $scope.$on('$destroy', () => {
                 Layout.removeMessageListener(viewOpenListener);
+                Layout.removeMessageListener(toggleLeftPaneListener);
                 Layout.removeMessageListener(viewSetDirtyListener);
                 Layout.removeMessageListener(editorCloseListener);
                 Layout.removeMessageListener(editorCloseAllListener);

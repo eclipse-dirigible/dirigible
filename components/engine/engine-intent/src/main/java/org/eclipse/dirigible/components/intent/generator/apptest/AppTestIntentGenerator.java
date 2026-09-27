@@ -185,6 +185,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (hasSeed(model, name)) {
             out.put("expectSeedData", true);
         }
+        List<String> deleteGuards = processDeleteGuards(edm);
+        if (!deleteGuards.isEmpty()) {
+            out.put("deleteGuardedByProcess", deleteGuards);
+        }
         // personal (my) surface: a `personal: true` to-one relation makes the entity a personal
         // root - the generator emits an ADDITIONAL scoped <Entity>MyController whose contract the
         // runner's my flow drives: reads filtered to the identity-mapped user, the owner FK forced
@@ -271,7 +275,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (!compare.isEmpty()) {
             out.put("compare", compare);
         }
-        out.put("fields", fields(entity));
+        out.put("fields", fields(entity, edm));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
         if (!relations.isEmpty()) {
             out.put("relations", relations);
@@ -279,8 +283,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         return out;
     }
 
-    /** Non-PK, non-generated fields, with the metadata the runner needs to fill and assert them. */
-    private static List<Map<String, Object>> fields(EntityIntent entity) {
+    /**
+     * Non-PK, non-generated fields, with the metadata the runner needs to fill and assert them. The two
+     * attributes the generated form's own behaviour decides - whether the field has an editable input
+     * at all, and the shape a value must have to be accepted - are read back off the {@code .model}
+     * property rather than re-derived here, so the manifest cannot disagree with the app it describes.
+     */
+    private static List<Map<String, Object>> fields(EntityIntent entity, Map<String, Object> edm) {
+        Map<String, Map<String, Object>> properties = propertiesByName(edm);
         List<Map<String, Object>> fields = new ArrayList<>();
         for (FieldIntent field : entity.getFields()) {
             if (field.isPrimaryKey() || field.isGenerated()) {
@@ -298,14 +308,26 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (field.getLength() != null) {
                 out.put("length", field.getLength());
             }
+            Map<String, Object> property = properties.get(String.valueOf(out.get("name")));
             // Read-only must mirror the generated form exactly, or the runner waits forever on an
             // input that is not there: an author-marked field and a uuid render in the read-only
             // details block (no #f_<Name> input), a calculated field renders as a non-editable
             // input, an aggregate renders in the document totals footer, and a dependsOn field is
-            // auto-populated by its trigger relation's watcher (the runner must not fill it).
+            // auto-populated by its trigger relation's watcher (the runner must not fill it). The
+            // EDM's own `isReadOnlyProperty` joins them so a platform-owned field is covered by the
+            // one decision that already made it read-only - a `number:` field above all (dirigible
+            // #7411): the DAO stamps and then PRESERVES that column, so a runner that wrote it read
+            // its own value back unchanged and reported a correct module as broken.
             if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated() || field.isAggregate()
-                    || field.getDependsOn() != null) {
+                    || field.getDependsOn() != null || (property != null && "true".equals(string(property.get("isReadOnlyProperty"))))) {
                 out.put("readOnly", true);
+            }
+            // The input-format regex the generated controller rejects a non-matching value with (an
+            // authored `pattern:`, or the canonical address regex behind `format: email`), so the
+            // runner's sample generator can produce a value of that shape instead of a 400. Strings
+            // only: on a numeric property the same attribute is the DISPLAY format, not a guard.
+            if ("string".equals(out.get("type")) && property != null && !string(property.get("widgetPattern")).isBlank()) {
+                out.put("pattern", string(property.get("widgetPattern")));
             }
             out.put("major", field.isMajor());
             fields.add(out);
@@ -624,6 +646,39 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         String sanitized = name.toLowerCase()
                                .replaceAll("[^a-z0-9_]", "_");
         return Character.isDigit(sanitized.charAt(0)) ? "_" + sanitized : sanitized;
+    }
+
+    /**
+     * The labels of the processes whose {@code whenDeleted: refuse} guards this entity's REST delete
+     * (dirigible #7074) - the {@code .model}'s {@code processDeleteGuards} attribute, a comma-separated
+     * list of {@code <Process>:<Process label>} pairs. The runner must expect the delete of such a
+     * record to be REFUSED while its instance runs, instead of reporting the guard doing its job as a
+     * failure (dirigible #7411).
+     */
+    private static List<String> processDeleteGuards(Map<String, Object> edm) {
+        List<String> labels = new ArrayList<>();
+        String guards = string(edm.get("processDeleteGuards"));
+        for (String guard : guards.split(",")) {
+            String label = guard.contains(":") ? guard.substring(guard.indexOf(':') + 1) : guard;
+            if (!label.isBlank()) {
+                labels.add(label.trim());
+            }
+        }
+        return labels;
+    }
+
+    /** The {@code .model} entity's properties indexed by their PascalCase name. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Map<String, Object>> propertiesByName(Map<String, Object> edm) {
+        Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
+        if (edm.get("properties") instanceof List<?> list) {
+            for (Object property : list) {
+                if (property instanceof Map<?, ?> map && map.get("name") != null) {
+                    byName.put(String.valueOf(map.get("name")), (Map<String, Object>) map);
+                }
+            }
+        }
+        return byName;
     }
 
     private static String string(Object value) {

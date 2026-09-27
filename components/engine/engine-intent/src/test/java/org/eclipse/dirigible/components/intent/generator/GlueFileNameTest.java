@@ -45,7 +45,7 @@ class GlueFileNameTest {
 
     @Test
     void aSnapshotPatternBecomesASanitizingExpressionOverTheDocument() {
-        String expression = String.valueOf(snapshot(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true)).get("fileNameExpression"));
+        String expression = String.valueOf(GlueRendering.fileName(snapshot(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true))));
 
         // Every interpolated value goes through the SDK sanitizer; the literal separators are the
         // author's and are emitted verbatim.
@@ -61,7 +61,7 @@ class GlueFileNameTest {
 
     @Test
     void aSnapshotPatternWithoutTheVersionTokenGetsTheVersionSuffix() {
-        String expression = String.valueOf(snapshot(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true)).get("fileNameExpression"));
+        String expression = String.valueOf(GlueRendering.fileName(snapshot(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true))));
 
         // Two versions of a copy must never share a name, so a pattern that does not place the version
         // itself gets it appended.
@@ -71,7 +71,7 @@ class GlueFileNameTest {
     @Test
     void aSnapshotPatternThatPlacesTheVersionItselfGetsNoSuffix() {
         String expression =
-                String.valueOf(snapshot(yaml("{number}-v{Version}-{issued:yyyyMMdd}", NOTIFY_PATTERN, true)).get("fileNameExpression"));
+                String.valueOf(GlueRendering.fileName(snapshot(yaml("{number}-v{Version}-{issued:yyyyMMdd}", NOTIFY_PATTERN, true))));
 
         assertTrue(expression.contains("\"-v\" + version + \"-\""), "the authored version placement must be kept: " + expression);
         assertTrue(expression.endsWith("+ \".pdf\"") && !expression.endsWith("+ \"_v\" + version + \".pdf\""),
@@ -95,7 +95,7 @@ class GlueFileNameTest {
 
     @Test
     void anAttachmentPatternBecomesASanitizingExpressionOverTheRecord() {
-        String expression = String.valueOf(transition(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true)).get("attachFileNameExpression"));
+        String expression = String.valueOf(GlueRendering.attachFileName(transition(yaml(SNAPSHOT_PATTERN, NOTIFY_PATTERN, true))));
 
         assertTrue(expression.contains("FileNames.part(entity.Number)"), "a direct field must be read off the record: " + expression);
         assertTrue(expression.contains("FileNames.part(entity.Issued, \"yyyyMMdd\")"), "the date format must reach the SDK: " + expression);
@@ -130,8 +130,8 @@ class GlueFileNameTest {
     @Test
     void bothDefaultsAreTheDocumentNumberAndAgreeWithEachOther() {
         String withoutPatterns = yaml(null, null, true);
-        String mint = String.valueOf(snapshot(withoutPatterns).get("fileNameExpression"));
-        String mail = String.valueOf(transition(withoutPatterns).get("attachFileNameExpression"));
+        String mint = String.valueOf(GlueRendering.fileName(snapshot(withoutPatterns)));
+        String mail = String.valueOf(GlueRendering.attachFileName(transition(withoutPatterns)));
 
         // The document's own number, falling back to the entity name plus the id - the SAME expression
         // on both sides now. The mint adds the version, because a copy has one and a sent PDF has not.
@@ -144,8 +144,8 @@ class GlueFileNameTest {
     void aDocumentWithoutANumberFallsBackToItsEntityNameAndId() {
         String withoutNumber = yaml(null, null, false);
 
-        assertEquals("\"Invoice \" + document.Id + \"_v\" + version + \".pdf\"", snapshot(withoutNumber).get("fileNameExpression"));
-        assertEquals("\"Invoice \" + entity.Id + \".pdf\"", transition(withoutNumber).get("attachFileNameExpression"));
+        assertEquals("\"Invoice \" + document.Id + \"_v\" + version + \".pdf\"", GlueRendering.fileName(snapshot(withoutNumber)));
+        assertEquals("\"Invoice \" + entity.Id + \".pdf\"", GlueRendering.attachFileName(transition(withoutNumber)));
     }
 
     /**

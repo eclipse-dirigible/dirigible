@@ -116,7 +116,7 @@ class GlueEventGuardTest {
     private static String guard(List<Map<String, Object>> entries, String name) {
         for (Map<String, Object> entry : entries) {
             if (name.equals(entry.get("name"))) {
-                return String.valueOf(entry.get("guardExpression"));
+                return String.valueOf(GlueRendering.eventGuard(entry));
             }
         }
         throw new AssertionError("no glue entry [" + name + "] in " + entries);

@@ -286,10 +286,12 @@ class NotificationSupportTest {
 
     @Test
     void guardTranslatesSingleComparisonElseFiresAlways() {
-        assertEquals("true", NotificationSupport.guard(null));
-        assertEquals("true", NotificationSupport.guard("  "));
-        assertEquals("java.util.Objects.equals(entity.Status, \"APPROVED\")", NotificationSupport.guard("status == 'APPROVED'"));
-        assertEquals("!java.util.Objects.equals(entity.Status, \"CLOSED\")", NotificationSupport.guard("status != 'CLOSED'"));
-        assertEquals("true", NotificationSupport.guard("amount > 10 and status == 'X'"));
+        assertEquals("true", GlueRendering.eventGuardOf(NotificationSupport.guardTerms(null)));
+        assertEquals("true", GlueRendering.eventGuardOf(NotificationSupport.guardTerms("  ")));
+        assertEquals("java.util.Objects.equals(entity.Status, \"APPROVED\")",
+                GlueRendering.eventGuardOf(NotificationSupport.guardTerms("status == 'APPROVED'")));
+        assertEquals("!java.util.Objects.equals(entity.Status, \"CLOSED\")",
+                GlueRendering.eventGuardOf(NotificationSupport.guardTerms("status != 'CLOSED'")));
+        assertEquals("true", GlueRendering.eventGuardOf(NotificationSupport.guardTerms("amount > 10 and status == 'X'")));
     }
 }

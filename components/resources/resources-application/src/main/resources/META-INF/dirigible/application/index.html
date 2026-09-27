@@ -161,7 +161,7 @@
           <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
-                <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
+                <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0 || ($store.tenantUsers && $store.tenantUsers.visible)">
                   <button x-h-sidebar-menu-nav :data-active="settingsMode" @click="openSettings()">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
                   </button>
@@ -513,6 +513,7 @@
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
+  <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>

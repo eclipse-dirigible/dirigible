@@ -290,4 +290,159 @@ class GlueGeneratorTest {
         cell.put("name", name);
         return cell;
     }
+
+    /**
+     * Issue #7425: an assignment's Java is rendered from the reading the glue carries, and an entry
+     * written before the split - carrying the rendered {@code expr} itself - keeps it.
+     */
+    @Test
+    void anAssignmentsExpressionIsRenderedFromItsReading() {
+        Map<String, Object> read = new LinkedHashMap<>();
+        read.put("targetProp", "Customer");
+        read.put("reading", Map.of("kind", "read", "owner", "source", "property", "Customer"));
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("targetProp", "Date");
+        legacy.put("expr", "java.time.LocalDate.now()");
+
+        List<Map<String, Object>> rendered = GlueGenerator.assignments(List.of(read, legacy));
+
+        assertThat(rendered.get(0)).containsEntry("expr", "source.Customer")
+                                   .containsEntry("targetProp", "Customer");
+        assertThat(rendered.get(1)).containsEntry("expr", "java.time.LocalDate.now()");
+        assertThat(GlueGenerator.assignments(null)).isEmpty();
+    }
+
+    @Test
+    void aDerivedRowsGuardAndCellsAreRenderedFromTheirReadings() {
+        Map<String, Object> cell = new LinkedHashMap<>();
+        cell.put("targetProp", "Amount");
+        cell.put("reading", Map.of("kind", "calc", "text", "Net + Vat", "owner", "source", "scale", "2"));
+        Map<String, Object> guarded = new LinkedHashMap<>();
+        guarded.put("guardReading", Map.of("kind", "calcCompare", "owner", "source", "property", "Vat", "equal", false, "text", "0"));
+        guarded.put("assigns", List.of(cell));
+        Map<String, Object> unguarded = new LinkedHashMap<>();
+        unguarded.put("guardReading", Map.of());
+        unguarded.put("assigns", List.of());
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("guard", "Calc.eval(\"Old\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0");
+        legacy.put("assigns", List.of());
+
+        List<Map<String, Object>> rows = GlueGenerator.rows(List.of(guarded, unguarded, legacy));
+
+        assertThat(rows.get(0)).containsEntry("guard", "Calc.eval(\"Vat\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0");
+        assertThat(ModelValues.asMaps(rows.get(0)
+                                          .get("assigns"))
+                              .get(0)).containsEntry("expr", "Calc.eval(\"Net + Vat\", source, 2)");
+        // No guard renders as the empty string, which the template's own #if reads.
+        assertThat(rows.get(1)).containsEntry("guard", "");
+        assertThat(rows.get(2)).containsEntry("guard", "Calc.eval(\"Old\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0");
+    }
+
+    /**
+     * The classifier ternaries the posting handler null-guards are the cells carrying a rule-case
+     * reading - derived, in row and cell order, rather than shipped twice.
+     */
+    @Test
+    void theConditionalRuleGuardsAreTheRuleCaseCells() {
+        Map<String, Object> plain = new LinkedHashMap<>();
+        plain.put("targetProp", "Amount");
+        plain.put("reading", Map.of("kind", "read", "owner", "source", "property", "Total"));
+        Map<String, Object> ruleCase = new LinkedHashMap<>();
+        ruleCase.put("targetProp", "Account");
+        ruleCase.put("reading", Map.of("kind", "ruleCase", "by", "Method", "owner", "source", "cases",
+                List.of(Map.of("value", "1", "column", "CashAccount")), "otherwise", "BankAccount"));
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("assigns", List.of(plain, ruleCase));
+
+        List<String> guards = GlueGenerator.conditionalRuleGuards(GlueGenerator.rows(List.of(row)));
+
+        assertThat(guards).containsExactly(
+                "(Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"1\")) == 0 ? ruleRow.CashAccount : ruleRow.BankAccount)");
+    }
+
+    /**
+     * An event binding's guard is rendered from its neutral terms - {@code true} for none - and a
+     * descriptor written before the split keeps the rendered expression it carries.
+     */
+    @Test
+    void anEventGuardIsRenderedFromItsTerms() {
+        Map<String, Object> guarded = new LinkedHashMap<>();
+        guarded.put("guardTerms", List.of(term("Internal", false, "boolean", "true")));
+        Map<String, Object> unguarded = new LinkedHashMap<>();
+        unguarded.put("guardTerms", List.of());
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("guardExpression", "\"APPROVED\".equals(status)");
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        GlueGenerator.bindEventGuard(context, guarded);
+        assertThat(context).containsEntry("guardExpression", "!java.util.Objects.equals(entity.Internal, true)");
+        GlueGenerator.bindEventGuard(context, unguarded);
+        assertThat(context).containsEntry("guardExpression", "true");
+        GlueGenerator.bindEventGuard(context, legacy);
+        assertThat(context).containsEntry("guardExpression", "\"APPROVED\".equals(status)");
+        // The untyped guards of a trigger, a wait and a register lookup infer the type from the spelling.
+        Map<String, Object> untyped = new LinkedHashMap<>();
+        untyped.put("guardTerms", List.of(term("Status", true, "number", "3"), term("Rate", true, "number", "2.5")));
+        GlueGenerator.bindEventGuard(context, untyped);
+        assertThat(context).containsEntry("guardExpression",
+                "java.util.Objects.equals(entity.Status, 3) && java.util.Objects.equals(entity.Rate, 2.5)");
+    }
+
+    /**
+     * Every other expression key - a transition's guard (the evaluator qualified, the controller
+     * importing no Calc), a print attachment's language and file name, a timer's due moment - is bound
+     * from its reading, from the rendered key an older descriptor carries, or as the empty string when
+     * there is neither.
+     */
+    @Test
+    void anExpressionKeyIsBoundFromItsReadingOrItsRenderedFallback() {
+        Map<String, Object> reading = new LinkedHashMap<>();
+        reading.put("guardReading", Map.of("kind", "calcCompare", "owner", "source", "property", "Paid", "equal", true, "text", "0"));
+        reading.put("attachLanguage", Map.of("kind", "defaultLanguage"));
+        reading.put("attachFileName", Map.of());
+        reading.put("due", Map.of("kind", "due", "property", "DueAt", "shape", "timestamp"));
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        GlueGenerator.bindExpression(context, reading, "guardReading", "guardExpr", true);
+        GlueGenerator.bindExpression(context, reading, "attachLanguage", "attachLanguageExpression", false);
+        GlueGenerator.bindExpression(context, reading, "attachFileName", "attachFileNameExpression", false);
+        GlueGenerator.bindExpression(context, reading, "due", "dueExpression", false);
+
+        assertThat(
+                context).containsEntry("guardExpr",
+                        "org.eclipse.dirigible.sdk.utils.Calc.eval(\"Paid\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) == 0")
+                        .containsEntry("attachLanguageExpression", "org.eclipse.dirigible.sdk.print.Print.defaultLanguage()")
+                        .containsEntry("attachFileNameExpression", "")
+                        .containsEntry("dueExpression", "entity.DueAt == null"
+                                + " ? java.util.Date.from(java.time.Instant.parse(\"9999-12-31T00:00:00Z\")) : java.util.Date.from(entity.DueAt)");
+
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("attachLanguageExpression", "\"en\"");
+        GlueGenerator.bindExpression(context, legacy, "attachLanguage", "attachLanguageExpression", false);
+        GlueGenerator.bindExpression(context, legacy, "attachFileName", "attachFileNameExpression", false);
+        assertThat(context).containsEntry("attachLanguageExpression", "\"en\"")
+                           .containsEntry("attachFileNameExpression", "");
+    }
+
+    @Test
+    void aPropertyKeyTermIsRenderedFromTheAssignmentsReading() {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("property", "Period");
+        term.put("reading", Map.of("kind", "now", "shape", "month"));
+
+        List<Map<String, Object>> terms = GlueGenerator.uniqueTerms(List.of(term));
+
+        assertThat(terms.get(0)).containsEntry("expr", "java.time.YearMonth.now().toString()");
+    }
+
+    private static Map<String, Object> term(String property, boolean equal, String type, String value) {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("owner", "entity");
+        term.put("property", property);
+        term.put("equal", equal);
+        term.put("type", type);
+        term.put("value", value);
+        term.put("numericKey", false);
+        return term;
+    }
 }

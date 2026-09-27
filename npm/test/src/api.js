@@ -21,11 +21,19 @@ export function makeApi(request, manifest) {
     getResponse: (entity, id) => request.get(url(entity, '/' + id)),
     create: (entity, data) => request.post(url(entity), { data }).then(asJson),
     update: (entity, id, data) => request.put(url(entity, '/' + id), { data }).then(asJson),
+    // Answers whether the row is gone. A record whose process declares `whenDeleted: refuse` is
+    // REFUSED with 409 while that instance runs (dirigible #7074) - the guard doing its job, not a
+    // failure, so the caller is told rather than thrown at and its cleanup completes either way.
+    // Every other failing status still throws.
     remove: async (entity, id) => {
       const response = await request.delete(url(entity, '/' + id));
+      if (response.status() === 409 && entity.deleteGuardedByProcess?.length) {
+        return false;
+      }
       if (!response.ok()) {
         throw new Error(`DELETE ${response.url()} -> ${response.status()} ${await response.text()}`);
       }
+      return true;
     },
   };
 }

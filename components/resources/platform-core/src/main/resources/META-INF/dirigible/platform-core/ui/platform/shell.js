@@ -561,6 +561,13 @@ if (window !== top) {
               group,
             ) => {
               event.stopPropagation();
+              // Re-clicking the already active perspective's button opens / closes its left (Projects)
+              // pane instead of re-selecting it. Only the opted-in perspective (the Workbench) acts on
+              // the message; for the rest it is a no-op.
+              if (id === scope.activeId) {
+                new LayoutHub(id).toggleLeftPane();
+                return;
+              }
               if (URLParams.has("perspective") || URLParams.has("continue")) {
                 URLParams.delete("perspective");
                 URLParams.delete("continue");

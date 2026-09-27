@@ -68,8 +68,10 @@ export function crudFlow(manifest, entity, opts = {}) {
       record[handle.name] = updated;
     }
 
-    // delete (detail pane trash button, then the confirm dialog)
-    if (!skip.has('delete')) {
+    // delete (detail pane trash button, then the confirm dialog). An entity whose process declares
+    // `whenDeleted: refuse` answers the delete with an error toast while its instance runs - the
+    // create above started it - so the walk stops here and the REST flow asserts that refusal.
+    if (!skip.has('delete') && !entity.deleteGuardedByProcess?.length) {
       await dataRow(page, record[handle.name]).click();
       await page.getByRole('button', { name: 'Delete', exact: true }).first().click();
       const dialog = page.locator('[x-h-dialog-overlay][data-open]');

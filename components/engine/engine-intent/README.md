@@ -673,6 +673,19 @@ paid document) is never touched.
 Roll-ups compose transitively across a multi-level composition (leaf edit -> mid total -> top
 total); recomputation stops when values stop changing.
 
+A `capacity:` installs an overdraw guard in the CHILD's repository, and an entity carries one guard
+per capacity-bearing roll-up naming it. So a junction may be guarded on both its parents - the case
+the guard exists for: an allocation may exceed neither the invoice's payable nor the payment's
+amount - and both checks run on create and on update:
+
+```yaml
+rollups:
+  - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+      op: sum, of: amount, capacity: total, balance: balance }
+  - { name: paymentAllocated, entity: SalesInvoiceCustomerPayment, via: CustomerPayment,
+      field: allocated, op: sum, of: amount, capacity: amount, balance: unapplied }
+```
+
 Either end may be owned by another model. A cross-model PARENT is named by the `via` relation's own
 `model:` alias (the child is local and owns the event). A cross-model CHILD is named by the roll-up's
 `model:` plus a `parent:` naming the local entity the total lands on - the n:m allocation direction,

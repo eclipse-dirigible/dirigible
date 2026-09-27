@@ -108,7 +108,7 @@ class EdmModelRoundTripIT extends IntegrationTest {
 
     // A mostly same-model intent whose entities exercise the structured (List/Map) values #6826 was
     // losing: labelParts + uniqueConstraints + relatedEntities on Category, lookupColumns on Product's
-    // FK, checks on Booking, and rollupGuard on Booking (the child of the capacity-bearing seat
+    // FK, checks on Booking, and rollupGuards on Booking (the child of the capacity-bearing seat
     // roll-up). Category additionally carries scopedCalendars - Product's calendar filters
     // by it, so Category's pages link into it.
     //
@@ -278,7 +278,7 @@ class EdmModelRoundTripIT extends IntegrationTest {
         // otherwise there is nothing for the transform to read back. uniqueConstraints is excluded here:
         // it is owned by the composite-unique-key feature, which emits it as a <constraints> section, not
         // a JSON attribute.
-        for (String key : new String[] {"rollupGuard", "checks", "labelParts", "relatedEntities", "scopedCalendars", "lookupColumns",
+        for (String key : new String[] {"rollupGuards", "checks", "labelParts", "relatedEntities", "scopedCalendars", "lookupColumns",
                 "duplicateReset", "duplicateDefaults"}) {
             assertTrue(edm.contains(key + "=\""), "the .edm must carry the structured value [" + key + "] as an attribute");
         }
@@ -316,7 +316,7 @@ class EdmModelRoundTripIT extends IntegrationTest {
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "relatedEntities");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Category", "scopedCalendars");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "checks");
-        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "rollupGuard");
+        assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Booking", "rollupGuards");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateReset");
         assertEntityStructuredEquals(modelFromIntent, modelFromEdm, "Order", "duplicateDefaults");
         assertPropertyStructuredEquals(modelFromIntent, modelFromEdm, "Product", "Category", "lookupColumns");
@@ -330,12 +330,16 @@ class EdmModelRoundTripIT extends IntegrationTest {
                                          .size(),
                 "uniqueConstraints must appear exactly once - not duplicated by both the feature and this fix");
 
-        // The headline symptom: rollupGuard is a non-empty object on Booking after the round-trip.
-        JsonElement rollupGuard = entity(modelFromEdm, "Booking").get("rollupGuard");
-        assertNotNull(rollupGuard, "rollupGuard must survive the save-regenerate cycle");
-        assertTrue(rollupGuard.isJsonObject() && rollupGuard.getAsJsonObject()
-                                                            .size() > 0,
-                "rollupGuard must be a populated object, not an empty or stringified value");
+        // The headline symptom: rollupGuards is a non-empty list of populated objects on Booking after
+        // the round-trip (a list since #7448 - one guard per capacity-bearing roll-up).
+        JsonElement rollupGuards = entity(modelFromEdm, "Booking").get("rollupGuards");
+        assertNotNull(rollupGuards, "rollupGuards must survive the save-regenerate cycle");
+        assertTrue(rollupGuards.isJsonArray() && rollupGuards.getAsJsonArray()
+                                                             .size() > 0
+                && rollupGuards.getAsJsonArray()
+                               .get(0)
+                               .isJsonObject(),
+                "rollupGuards must be a populated list of objects, not an empty or stringified value");
 
         // 4. The real "future attributes cannot ship without .edm serialization" guard: every
         // entity/property key the intent's .model carries must survive intact in the one rebuilt from the

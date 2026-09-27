@@ -42,6 +42,16 @@
             <span x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
           </button>
         </li>
+        <!-- Users: a built-in entry for the owners of the current tenant (#7498) - who belongs to the tenant,
+             where each person stands, and an invitation for another one. Offered only when the platform
+             enables it and the caller holds the owner role; the section is the shared fragment the
+             tenantUsers store fetches. -->
+        <li x-h-list-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'tenant-users' })" @click="selectSetting({ id: 'tenant-users' })">
+            <svg role="presentation" x-h-lucide data-lucide="users"></svg>
+            <span x-text="T('application-core:shell.settings.tenantUsers', 'Users')"></span>
+          </button>
+        </li>
         <template x-for="item in visibleSettingsItems()" :key="item.id">
           <li x-h-list-item>
             <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
@@ -54,7 +64,7 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering'" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering' && settingsSelected !== 'tenant-users'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
@@ -230,6 +240,8 @@
         </template>
       </div>
     </div>
+    <!-- Users detail: the shared fragment of the tenantUsers store (application-core/shell/views/_tenant-users.html). -->
+    <div x-show="settingsSelected === 'tenant-users'" class="size-full overflow-auto" x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
             style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>

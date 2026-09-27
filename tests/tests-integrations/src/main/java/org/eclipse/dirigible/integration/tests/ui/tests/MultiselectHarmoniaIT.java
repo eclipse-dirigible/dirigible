@@ -105,9 +105,10 @@ class MultiselectHarmoniaIT extends UserInterfaceIntegrationTest {
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox", "Select Payer Types...");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Health fund");
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Corporate client");
-        // The trigger joins the selected labels - also the synchronization point for the two picks.
+        // The trigger joins the selected labels in OPTION order, not click order - and the options are
+        // sorted by label (#7464) - also the synchronization point for the two picks.
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.BUTTON, HtmlAttribute.ROLE, "combobox",
-                "Health fund, Corporate client");
+                "Corporate client, Health fund");
 
         // DESELECT one - the exact spot Harmonia 2.9.0 corrupted the bound array (the deselected key
         // kept serializing). The trigger dropping to the one remaining label proves the model shrank.

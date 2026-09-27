@@ -88,7 +88,7 @@ class GlueScheduleEscalationTest {
         assertEquals(Boolean.TRUE, schedule.get("hasGenUnique"));
         List<Map<String, Object>> unique = (List<Map<String, Object>>) schedule.get("genUnique");
         assertTrue(unique.stream()
-                         .anyMatch(u -> "Level".equals(u.get("property")) && "escalation.Id".equals(u.get("expr"))),
+                         .anyMatch(u -> "Level".equals(u.get("property")) && "escalation.Id".equals(GlueRendering.expr(u))),
                 "the level belongs in the key that makes each level send once: " + unique);
     }
 
@@ -97,9 +97,13 @@ class GlueScheduleEscalationTest {
     void theChosenLevelIsWrittenOntoTheGeneratedRecord() {
         List<Map<String, Object>> assignments = (List<Map<String, Object>>) dunning().get("genFieldAssignments");
 
-        assertTrue(assignments.contains(Map.of("targetProp", "Level", "expr", "escalation.Id")), "assignments: " + assignments);
+        assertTrue(GlueRendering.rendered(assignments)
+                                .contains(Map.of("targetProp", "Level", "expr", "escalation.Id")),
+                "assignments: " + assignments);
         // ...alongside what the author mapped - the escalation adds a column, it does not replace them.
-        assertTrue(assignments.contains(Map.of("targetProp", "SalesInvoice", "expr", "entity.Id")), "assignments: " + assignments);
+        assertTrue(GlueRendering.rendered(assignments)
+                                .contains(Map.of("targetProp", "SalesInvoice", "expr", "entity.Id")),
+                "assignments: " + assignments);
     }
 
     @Test

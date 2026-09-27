@@ -51,7 +51,8 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 - **list** — the plural title, a column header per major field, and (when `expectSeedData`) a row.
 - **crud** — UI create → filter → row appears; edit via the detail pane → save; delete → confirm → gone.
 - **rest** — the same CRUD over the generated Java controllers via `APIRequestContext` (isolates
-  backend vs UI failures), asserting the manifest's field names bind and delete yields 404.
+  backend vs UI failures), asserting the manifest's field names bind and delete yields 404 — or,
+  for an entity a `whenDeleted: refuse` process guards, that the refused record is still served.
 - **multilingual** — switch the shared language key, reload, a seeded row shows its translated name.
 - **my** — the personal (my) surface WIRE contract, when the manifest marks an entity `personal`:
   create through the scoped `<Entity>MyController` (owner FK forced server-side), every `sensitive`
@@ -63,6 +64,9 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 - **shell** (opt-in) — the shared application shell's nav item opens the module SPA in its iframe.
 
 Test records carry an `APPTEST-` prefix and are removed in teardown; seed data is never mutated.
+A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
+is never written or flipped by a flow (the manifest marks it `readOnly`), and a field declaring a
+`pattern:` gets a value of that shape rather than the marker string.
 
 ## Custom UI hooks
 
