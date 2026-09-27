@@ -183,6 +183,49 @@ A condition compares a `string`, an `integer`, a `long`, a `boolean` or a to-one
 an equality is exact on. A malformed condition, or a literal that is not a value of the property's
 type, is a validation error rather than a rule that silently never (or always) holds.
 
+### severity: warn - warn and confirm instead of refusing
+
+Every kind above refuses the write. Some rules describe a write that is legitimate and must stay
+possible, where the person saving only has to be told first - a second customer with the same name
+(two companies can share a registered name), an unusually large discount, a document line at price
+zero. Those are **warnings** (#7466):
+
+```yaml
+- name: Customer
+  checks:
+    - { kind: duplicate, fields: [name], message: "A customer with this name already exists" }
+    - { kind: compare, field: discount, op: le, value: 50, severity: warn, message: "A discount above 50%" }
+- name: SalesInvoice
+  checks:
+    # asked ONCE per document save, for all the lines that break it
+    - { kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }
+```
+
+- `severity: warn` softens an ungated row-level check (`compare`, `requiredWhen`, `forbidWhen`,
+  `exactlyOne`, `agree`). A gated check runs inside a workflow transition, where nobody can answer a
+  question, so the two are refused together.
+- `duplicate` - another record already carries the same `fields` (own fields or to-one relations).
+  Always a warning; the hard version is `unique:`.
+- `itemsCompare` - on the document: every item's `field` compared with `op` to the `value` literal.
+  `{count}` in the message is the number of lines that break it. Always a warning; the hard version is
+  a `compare` on the items entity.
+
+The generated repository collects the warnings a write raises (`warnings(entity)`) and the three
+generated controllers hand them to `org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed` before
+they persist. An unconfirmed warning is answered **`428 Precondition Required`**:
+
+```json
+{ "status": 428, "errorType": "ConfirmationRequired", "message": "A customer with this name already exists",
+  "warnings": [ { "code": "Customer.duplicate.0", "message": "A customer with this name already exists" } ] }
+```
+
+The caller repeats the same request with `X-Confirm-Warnings: Customer.duplicate.0` (comma-separated
+for several) and the write goes through. Confirmation is per code, so a warning that appears only on
+the repeat is asked about again. The generated UI does this for every form and line dialog through the
+shared API service: one confirm dialog listing all the warnings, then the repeat. A write with no HTTP
+caller (a process step, a job) is never stopped, and each confirmation is logged with the user who
+gave it.
+
 ## immutableWhen / immutable - user-write immutability
 
 ```yaml

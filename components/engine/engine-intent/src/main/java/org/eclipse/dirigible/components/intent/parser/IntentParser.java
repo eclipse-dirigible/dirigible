@@ -5425,6 +5425,15 @@ public final class IntentParser {
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
+        validateSeverity(check, subject, issues);
+        if ("duplicate".equals(kind)) {
+            validateDuplicateCheck(entity, check, subject, issues);
+            return;
+        }
+        if ("itemsCompare".equals(kind)) {
+            validateItemsCompareCheck(entity, check, entities, subject, issues);
+            return;
+        }
         if ("guard".equals(kind)) {
             // An aggregate guard names an aggregates: entry whose `of` is THIS entity (v1: the guarded
             // entity is the aggregate source, so the sum is recomputed race-free from the local store).
@@ -5531,7 +5540,101 @@ public final class IntentParser {
             return;
         }
         issues.add(subject
-                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
+                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual, itemsMin,"
+                + " duplicate or itemsCompare");
+    }
+
+    /** The row-level kinds a {@code severity: warn} may soften - the ones the controllers enforce. */
+    private static final Set<String> WARNABLE_KINDS = Set.of("compare", "requiredWhen", "forbidWhen", "exactlyOne", "agree");
+
+    /**
+     * {@code severity:} (#7466) is {@code error} (the default, a refusal) or {@code warn} (the soft
+     * tier: the person writing is told and confirms). A warning is asked of a PERSON, so it lives where
+     * a person writes - the generated controllers - which is why only the ungated row-level kinds take
+     * it: a gated check fires inside a workflow transition, where there is nobody to answer a prompt,
+     * and a guard already has its own soft outcomes ({@code task}, {@code reject}).
+     */
+    private static void validateSeverity(CheckIntent check, String subject, List<String> issues) {
+        String severity = check.getSeverity();
+        if (severity == null) {
+            return;
+        }
+        if (!"error".equals(severity) && !"warn".equals(severity)) {
+            issues.add(subject + " has unknown `severity` [" + severity + "] - expected error (the default) or warn");
+            return;
+        }
+        String kind = check.getKind();
+        if ("duplicate".equals(kind) || "itemsCompare".equals(kind)) {
+            if ("error".equals(severity)) {
+                issues.add(subject + " exists only as a warning and cannot carry `severity: error` - "
+                        + ("duplicate".equals(kind) ? "a hard refusal of a second record with the same values is `unique:`"
+                                : "a hard per-line rule is a `compare` check on the items entity"));
+            }
+            return;
+        }
+        if ("warn".equals(severity)) {
+            if (!WARNABLE_KINDS.contains(kind)) {
+                issues.add(subject + " cannot carry `severity: warn` - only the row-level kinds compare, requiredWhen, forbidWhen,"
+                        + " exactlyOne and agree (and duplicate, itemsCompare) are warnings a person can confirm");
+            } else if (check.getStatus() != null) {
+                issues.add(subject + " carries both `severity: warn` and a `status` gate - a gated check runs inside the workflow"
+                        + " transition, where there is nobody to confirm a warning; drop the gate or the severity");
+            }
+        }
+    }
+
+    /**
+     * A {@code duplicate} check (#7466): warn when another record already carries the same values in
+     * {@code fields} - the rule for which a hard {@code unique:} is wrong because two legitimate
+     * records may share them (two companies with the same registered name under different registration
+     * numbers). Each field is the entity's own field or to-one relation.
+     */
+    private static void validateDuplicateCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+        if (check.getFields() == null || check.getFields()
+                                              .isEmpty()) {
+            issues.add(subject + " requires `fields`: the fields of [" + entity.getName() + "] a second record must not repeat");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " is row-level and cannot carry a `status` gate - it is asked of the person saving the record");
+        }
+        for (String field : check.getFields()) {
+            if (field == null || !hasPropertyIgnoreCase(entity, field)) {
+                issues.add(subject + " field [" + field + "] is not a field or to-one relation of [" + entity.getName() + "]");
+            }
+        }
+    }
+
+    /**
+     * An {@code itemsCompare} check (#7466): document-level, declared on the master - every ITEM's
+     * {@code field} compared with {@code op} to the {@code value} literal, and the lines that break it
+     * reported in ONE warning when the document is saved, not one prompt per line (the reviewer's "at
+     * the end, when the whole document is saved"). The comparison is exactly a literal {@code compare}
+     * read off the items entity, so it is validated as one.
+     */
+    private static void validateItemsCompareCheck(EntityIntent entity, CheckIntent check, java.util.List<EntityIntent> entities,
+            String subject, List<String> issues) {
+        EntityIntent items = compositionChildOf(entity, entities);
+        if (items == null) {
+            issues.add(subject + " requires the entity to own a composition child (the document's items)");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " cannot carry a `status` gate - it is asked of the person saving the document");
+        }
+        if (check.getThan() != null) {
+            issues.add(subject + " compares each item with a `value` literal, not `than` another field");
+            return;
+        }
+        if (check.getValue() == null) {
+            issues.add(subject + " requires `value`: the literal each item's field is compared with");
+            return;
+        }
+        CheckIntent comparison = new CheckIntent();
+        comparison.setField(check.getField());
+        comparison.setOp(check.getOp());
+        comparison.setValue(check.getValue());
+        validateCompareCheck(items, comparison, subject + " on items [" + items.getName() + "]", issues);
     }
 
     /**

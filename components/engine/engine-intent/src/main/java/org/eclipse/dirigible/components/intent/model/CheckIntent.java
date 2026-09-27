@@ -46,6 +46,7 @@ import java.util.List;
  * is persisted carrying the {@link #status} gate seed id, i.e. at the workflow transition;</li>
  * <li>{@code itemsMin} (document-level): the document has at least {@link #count} items - same
  * gate.</li>
+ * <li>{@code duplicate} and {@code itemsCompare}: the soft tier only - see {@link #severity}.</li>
  * </ul>
  */
 public class CheckIntent {
@@ -120,6 +121,20 @@ public class CheckIntent {
     /** The user-facing message when the check fails. */
     private String message;
     /**
+     * What a failing check does to the write (issue #7466). {@code error} (the default) refuses it -
+     * every kind above. {@code warn} is the soft tier: the write stays legitimate and possible, but the
+     * person making it is told first and has to confirm - the generated controller answers
+     * {@code 428 Precondition Required} listing the warnings, and the same request repeated with their
+     * codes in {@code X-Confirm-Warnings} goes through. Taken by the ungated row-level kinds
+     * ({@code compare}, {@code requiredWhen}, {@code forbidWhen}, {@code exactlyOne}, {@code agree}),
+     * and implied by the two kinds that exist only as warnings: {@code duplicate} - another record
+     * already carries the same {@link #fields} (a second customer with the same name, where a hard
+     * unique key would be wrong) - and {@code itemsCompare} - document-level, every item's
+     * {@link #field} compared with {@link #op} to the {@link #value} literal, asked ONCE per document
+     * save for all the lines that break it (a line at price zero).
+     */
+    private String severity;
+    /**
      * {@code guard}: the name of an {@code aggregates:} entry whose {@code of} is THIS entity. The
      * guard recomputes that keyed sum from the store for the incoming record's key-tuple (race-free,
      * unlike the async-maintained target) and blocks the write when the post-state would break
@@ -177,6 +192,24 @@ public class CheckIntent {
 
     public void setWhen(Object when) {
         this.when = when;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
+    }
+
+    /**
+     * Whether this check is the soft tier - declared {@code severity: warn}, or a kind that exists only
+     * as a warning ({@code duplicate}, {@code itemsCompare}).
+     *
+     * @return true for a warning
+     */
+    public boolean isWarning() {
+        return "warn".equals(severity) || "duplicate".equals(kind) || "itemsCompare".equals(kind);
     }
 
     public String getOutcome() {

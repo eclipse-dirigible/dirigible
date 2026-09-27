@@ -2160,10 +2160,71 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (entity.getChecks() == null) {
             return checkMaps;
         }
+        int index = -1;
         for (org.eclipse.dirigible.components.intent.model.CheckIntent check : entity.getChecks()) {
+            index++;
             Map<String, Object> checkMap = new LinkedHashMap<>();
             checkMap.put("kind", check.getKind());
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            if (check.isWarning()) {
+                // The soft tier (#7466): the check is asked of the person writing instead of refusing
+                // the write. The code is what a caller echoes back to confirm it - stable across saves
+                // of the same model, since it is the check's own position in its entity's list.
+                checkMap.put("severity", "warn");
+                checkMap.put("code", entity.getName() + "." + check.getKind() + "." + index);
+            }
+            if ("duplicate".equals(check.getKind())) {
+                // Another record already carrying the same values (#7466) - a warning, never a
+                // refusal: that is `unique:`. Each field is an own field or a to-one (compared by FK).
+                if (check.getFields() == null || check.getFields()
+                                                      .isEmpty()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("fields", check.getFields()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .toList());
+                if (check.getMessage() == null || check.getMessage()
+                                                       .isBlank()) {
+                    checkMap.put("message", "Another " + IntentNaming.humanize(entity.getName()) + " with the same "
+                            + String.join(", ", check.getFields()
+                                                     .stream()
+                                                     .map(IntentNaming::humanize)
+                                                     .toList())
+                            + " already exists");
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
+            if ("itemsCompare".equals(check.getKind())) {
+                // Every LINE compared with a literal (#7466), reported once per document save for all
+                // the lines that break it. The literal is rendered exactly as a literal `compare`'s,
+                // typed by the item field it is compared with.
+                EntityIntent items = IntentEntities.documentItemsChild(entity.getName(), entities);
+                String comparison = compareOperator(check.getOp());
+                FieldIntent itemField = items == null ? null : fieldOf(items, check.getField());
+                if (itemField == null || comparison == null || check.getValue() == null) {
+                    continue; // the parser already reported it
+                }
+                CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(itemField.getType(), check.getValue());
+                if (!literal.valid()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("itemsEntity", items.getName());
+                checkMap.put("itemsFk", IntentEntities.itemsBackReference(items, entity.getName()));
+                checkMap.put("field", IntentNaming.pascalCase(check.getField()));
+                checkMap.put("op", comparison);
+                checkMap.put("value", literal.reading());
+                checkMap.put("numeric", isNumericType(itemField.getType()) ? "true" : "false");
+                if (check.getMessage() == null || check.getMessage()
+                                                       .isBlank()) {
+                    // `{count}` is the one placeholder the generated check fills: how many lines break it.
+                    checkMap.put("message", "{count} line(s) where " + IntentNaming.humanize(check.getField()) + " is not "
+                            + compareWords(check.getOp()) + " " + check.getValue());
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("guard".equals(check.getKind())) {
                 // Aggregate guard: recompute the named aggregate's keyed sum from THIS entity's store
                 // (the aggregate's `of` must be this entity - v1 self-referential) and block a write
@@ -2335,7 +2396,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // holds, a descriptor lets the generated view hide the child's Add/edit/delete affordance
                 // while the condition holds - the fromStatus (#7068) mechanism, no extra fetch. Absent
                 // (a record-local or non-master term), the server 400/ValidationException still holds.
-                List<Map<String, Object>> masterGuard = forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
+                // A WARNING hides nothing (#7466): the write it asks about stays possible, so the panel
+                // must keep offering it - the confirmation is asked when the person saves.
+                List<Map<String, Object>> masterGuard =
+                        check.isWarning() ? null : forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
                 if (masterGuard != null) {
                     checkMap.put("masterGuard", masterGuard);
                 }
@@ -2415,6 +2479,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             checkMaps.add(checkMap);
         }
         return checkMaps;
+    }
+
+    /** A comparison operator as the words a default warning message reads it in. */
+    private static String compareWords(String op) {
+        return switch (op == null ? ""
+                : op.trim()
+                    .toLowerCase(java.util.Locale.ROOT)) {
+            case "gt" -> "greater than";
+            case "ge" -> "at least";
+            case "lt" -> "less than";
+            case "le" -> "at most";
+            case "eq" -> "equal to";
+            default -> "different from";
+        };
     }
 
     /** The Java comparison the {@code compareTo} result is tested with, or null for an unknown op. */

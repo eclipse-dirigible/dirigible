@@ -577,6 +577,44 @@ class ModelParameterProcessorTest {
                                    .size());
     }
 
+    /**
+     * A warning (#7466) is asked of the person saving and refuses nothing, so it reaches the
+     * repository's {@code warnings()} list alone - not {@code validate()}, not the delete verb, not the
+     * master-detail guard - whatever its kind; its code gets the escaped twin the Java sites read.
+     */
+    @Test
+    void aWarningReachesOnlyTheWarningList() {
+        Map<String, Object> forbid = new LinkedHashMap<>();
+        forbid.put("kind", "forbidWhen");
+        forbid.put("severity", "warn");
+        forbid.put("code", "Invoice.forbidWhen.0");
+        forbid.put("message", "The \"invoice\" is issued");
+        Map<String, Object> duplicate = new LinkedHashMap<>();
+        duplicate.put("kind", "duplicate");
+        duplicate.put("severity", "warn");
+        duplicate.put("code", "Invoice.duplicate.1");
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("kind", "exactlyOne");
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Total", "DECIMAL"));
+        entity.put("checks", List.of(forbid, duplicate, refusing));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> warnings = ModelValues.asMaps(entity.get("warningChecks"));
+        assertEquals(2, warnings.size());
+        assertEquals("Invoice.forbidWhen.0", warnings.get(0)
+                                                     .get("codeJavaLiteral"));
+        assertEquals("The \\\"invoice\\\" is issued", warnings.get(0)
+                                                              .get("messageJavaLiteral"));
+        assertEquals(1, ModelValues.asList(entity.get("rowChecks"))
+                                   .size(),
+                "only the refusing check is validate()'s");
+        assertEquals(0, ModelValues.asList(entity.get("deleteChecks"))
+                                   .size());
+        assertEquals(0, ModelValues.asList(entity.get("forbidWhenGuards"))
+                                   .size());
+    }
+
     @Test
     void resolvesTheHopsAConditionalRequirementReadsItsValueThrough() {
         Map<String, Object> hop = new LinkedHashMap<>();

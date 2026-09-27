@@ -1498,6 +1498,78 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * The soft tier (#7466) reaches the {@code .model} as data: every warning carries
+     * {@code severity: warn} and the stable {@code code} a caller confirms it by, a {@code duplicate}
+     * its PascalCased fields, an {@code itemsCompare} the items it reads and a literal typed by the
+     * ITEM field - and a warning {@code forbidWhen} hides nothing in the master-detail panel, because
+     * the write it asks about stays possible.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void warningChecksCarryTheirSeverityCodeAndWhatTheyRead() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    checks:
+                      - { kind: duplicate, fields: [name] }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: compare, field: total, op: ge, value: 0, message: "A negative invoice" }
+                      - { kind: itemsCompare, field: price, op: gt, value: 0 }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: SalesInvoiceItem
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == 2", severity: warn, message: "The invoice is issued" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+
+        Map<String, Object> duplicate = ((List<Map<String, Object>>) entityByName(entities(model), "Customer").get("checks")).get(0);
+        assertEquals("warn", duplicate.get("severity"));
+        assertEquals("Customer.duplicate.0", duplicate.get("code"));
+        assertEquals(List.of("Name"), duplicate.get("fields"));
+        assertEquals("Another Customer with the same Name already exists", duplicate.get("message"));
+
+        List<Map<String, Object>> invoiceChecks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        // A refusing check stays exactly what it was - no severity, no code.
+        assertFalse(invoiceChecks.get(0)
+                                 .containsKey("severity"));
+        assertFalse(invoiceChecks.get(0)
+                                 .containsKey("code"));
+        Map<String, Object> items = invoiceChecks.get(1);
+        assertEquals("warn", items.get("severity"));
+        assertEquals("SalesInvoice.itemsCompare.1", items.get("code"));
+        assertEquals("SalesInvoiceItem", items.get("itemsEntity"));
+        assertEquals("SalesInvoice", items.get("itemsFk"));
+        assertEquals("Price", items.get("field"));
+        assertEquals(">", items.get("op"));
+        assertEquals("true", items.get("numeric"));
+        assertNotNull(items.get("value"));
+        assertEquals("{count} line(s) where Price is not greater than 0", items.get("message"));
+
+        Map<String, Object> forbid = ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceItem").get("checks")).get(0);
+        assertEquals("warn", forbid.get("severity"));
+        assertFalse(forbid.containsKey("masterGuard"), "a warning must not hide the panel's affordances: " + forbid);
+    }
+
+    /**
      * A guard on a TO-ONE is compared numerically, not with a boxed equality (#7237). The foreign-key
      * column is typed from the target's key, and for a cross-model target that key is only readable
      * from the owner's {@code .model}, where a {@code long} is as legal as an {@code integer} - an

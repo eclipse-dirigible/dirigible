@@ -1033,6 +1033,113 @@ class IntentParserTest {
         assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, status: 1,"), "cannot carry a `status` gate");
     }
 
+    /**
+     * The soft tier (#7466): the three cases the billing review asked for - a second customer with the
+     * same name, a second product with the same name, a document line at price zero - are warnings the
+     * person saving confirms, never refusals. A warning lives where a person writes, so only the
+     * ungated row-level kinds take {@code severity: warn}, and the two warning-only kinds refuse
+     * {@code severity: error}.
+     */
+    @Test
+    void warningChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    checks:
+                      - { kind: duplicate, fields: [name], message: "A customer with this name already exists" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: discount, type: decimal }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }
+                      - { kind: compare, field: total, op: le, value: 100000, severity: warn, message: "An unusually large invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent duplicate = model.getEntities()
+                                     .get(1)
+                                     .getChecks()
+                                     .get(0);
+        assertTrue(duplicate.isWarning(), "a duplicate is a warning without saying so");
+        List<CheckIntent> invoiceChecks = model.getEntities()
+                                               .get(2)
+                                               .getChecks();
+        assertTrue(invoiceChecks.get(0)
+                                .isWarning());
+        assertEquals("warn", invoiceChecks.get(1)
+                                          .getSeverity());
+        assertTrue(invoiceChecks.get(1)
+                                .isWarning());
+
+        // A relation repeats too (compared by its key).
+        IntentParser.parse(yaml.replace("fields: [name], message", "fields: [name, discount], message"));
+
+        assertCompareIssue(yaml.replace("fields: [name], message", "fields: [nickname], message"),
+                "field [nickname] is not a field or to-one relation of [Customer]");
+        assertCompareIssue(yaml.replace("fields: [name], message", "message"), "requires `fields`");
+        assertCompareIssue(yaml.replace("fields: [name], message", "fields: [name], severity: error, message"),
+                "a hard refusal of a second record with the same values is `unique:`");
+        assertCompareIssue(yaml.replace("severity: warn", "severity: soft"), "unknown `severity` [soft]");
+        // A gated check fires inside a transition, where nobody can answer the question.
+        assertCompareIssue(yaml.replace("severity: warn,", "severity: warn, status: 2,"), "there is nobody to confirm a warning");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt, value: 0, status: 2"),
+                "cannot carry a `status` gate");
+        // itemsCompare is a literal compare read off the ITEMS entity, validated as one.
+        assertCompareIssue(yaml.replace("field: price, op: gt", "field: cost, op: gt"),
+                "field [cost] is not a field of [SalesInvoiceItem]");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt, than: price"), "not `than`");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt"), "requires `value`");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0,", "field: price, op: gt, value: 0, severity: error,"),
+                "a hard per-line rule is a `compare` check on the items entity");
+        assertCompareIssue(yaml.replace("- { kind: duplicate, fields: [name]", "- { kind: itemsCompare, field: name, op: gt, value: 0"),
+                "requires the entity to own a composition child");
+    }
+
+    @Test
+    void severityWarnIsRefusedOnTheKindsNobodyIsAskedAbout() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    checks:
+                      - { kind: itemsMin, count: 1, status: 2, severity: warn, message: "Needs a line" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                """;
+        assertCompareIssue(yaml, "cannot carry `severity: warn`");
+    }
+
     private static void assertCompareIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
