@@ -1438,6 +1438,62 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code requiredWhen} condition may read the record a to-one points at (dirigible #7495): the
+     * value and the condition share ONE walker, so the customer is loaded once for both, and a to-one
+     * compared one hop away is compared by value - its Java width is the target key's (#7237).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void requiredWhenConditionReadsAToOneHopLoadedOnceWithTheValue() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: CustomerKind
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: vatNumber, type: string }
+                      - { name: vatRegistered, type: boolean }
+                    relations:
+                      - { name: Kind, kind: manyToOne, to: CustomerKind }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.vatNumber,
+                          when: ["Customer.Kind == 1", "Customer.vatRegistered == true", "sentMethod != 2"],
+                          message: "A VAT-registered business customer needs a VAT number" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        assertEquals(1, checks.size());
+        Map<String, Object> check = checks.get(0);
+        assertEquals(List.of(Map.of("owner", "hop0", "property", "Kind", "equal", true, "type", "long", "value", "1", "numericKey", true),
+                Map.of("owner", "hop0", "property", "VatRegistered", "equal", true, "type", "boolean", "value", "true", "numericKey",
+                        false),
+                Map.of("owner", "entity", "property", "SentMethod", "equal", false, "type", "integer", "value", "2", "numericKey", false)),
+                check.get("when"));
+        assertEquals("((hop0 == null ? null : hop0.Kind) != null && (hop0 == null ? null : hop0.Kind).longValue() == 1L)"
+                + " && java.util.Objects.equals((hop0 == null ? null : hop0.VatRegistered), true)"
+                + " && !java.util.Objects.equals(entity.SentMethod, 2)", guardJava(check));
+        assertEquals("(hop0 == null ? null : hop0.VatNumber)", check.get("valueExpression"));
+        // One load: the hop the value and the condition both read through.
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
+        assertEquals(1, loads.size());
+        assertEquals("entity.Customer", loads.get(0)
+                                             .get("sourceExpression"));
+        assertEquals("Customer", loads.get(0)
+                                      .get("entity"));
+    }
+
+    /**
      * An {@code agree} check emits BOTH sides as one hop each, sharing the walker - so the two records
      * are loaded once, by foreign key, and the comparison is between two properties of records neither
      * of which is the one being written (dirigible #7409).

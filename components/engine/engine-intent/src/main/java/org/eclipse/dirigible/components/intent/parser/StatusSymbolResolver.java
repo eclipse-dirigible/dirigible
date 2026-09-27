@@ -53,9 +53,9 @@ final class StatusSymbolResolver {
             Pattern.compile("(\\b[A-Za-z_][A-Za-z0-9_]*\\b)\\s*(==|!=|<>|<=|>=|=|<|>)\\s*([A-Za-z_][A-Za-z0-9_]*)\\b");
 
     /**
-     * A {@code forbidWhen} one-hop comparison {@code <Relation>.<field> ==|!= <NAME>} - the whole term,
-     * so the name on the right resolves against the RELATION TARGET's nomenclature rather than the
-     * record's own.
+     * A {@code forbidWhen} / {@code requiredWhen} one-hop comparison
+     * {@code <Relation>.<field> ==|!= <NAME>} - the whole term, so the name on the right resolves
+     * against the RELATION TARGET's nomenclature rather than the record's own.
      */
     private static final Pattern RELATION_COMPARISON = Pattern.compile("\\s*(\\w+)\\.(\\w+)\\s*(==|!=)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*");
 
@@ -201,13 +201,16 @@ final class StatusSymbolResolver {
                 String subject = "entity [" + entityName + "] check [" + text(check, "kind") + "]";
                 putResolved(check, "status", status, subject + " status");
                 putResolved(check, "setStatus", status, subject + " setStatus");
-                // A requiredWhen condition may be about the status itself ("required once ISSUED"), so
-                // it resolves like every other guard - the terms about other properties pass through. A
-                // forbidWhen additionally reads a parent's status one hop away (`SalesInvoice.Status ==
-                // PAID`), which resolves against the RELATION TARGET's nomenclature, not the record's -
-                // so it is routed to its own resolver, which falls back to the record-local rewrite for
-                // its record-own terms.
-                if ("forbidwhen".equals(lower(text(check, "kind")))) {
+                // A requiredWhen / forbidWhen condition may be about the status itself ("required once
+                // ISSUED"), so it resolves like every other guard - the terms about other properties pass
+                // through. Either may also read a status one hop away (`SalesInvoice.Status == PAID`,
+                // #7275; `Customer.Status == ACTIVE`, #7495), which resolves against the RELATION
+                // TARGET's nomenclature, not the record's - so both are routed to the hop-aware resolver,
+                // which falls back to the record-local rewrite for their record-own terms. The plain
+                // rewrite would match the `Status == PAID` tail of the path and resolve it against the
+                // record's own nomenclature: a wrong id, silently.
+                String kind = lower(text(check, "kind"));
+                if ("forbidwhen".equals(kind) || "requiredwhen".equals(kind)) {
                     rewriteForbidWhen(entityName, check, statusRelation, status, subject + " when");
                 } else {
                     rewriteWhen(check, statusRelation, status, subject + " when");
@@ -683,8 +686,8 @@ final class StatusSymbolResolver {
     }
 
     /**
-     * Rewrite a {@code forbidWhen} guard in place - each term either a one-hop
-     * {@code <Relation>.<field> ==|!= <NAME>} (dirigible #7275), whose name resolves against the
+     * Rewrite a {@code forbidWhen} / {@code requiredWhen} guard in place - each term either a one-hop
+     * {@code <Relation>.<field> ==|!= <NAME>} (dirigible #7275, #7495), whose name resolves against the
      * RELATION TARGET's nomenclature, or a record-local comparison that defers to the ordinary
      * record-scoped rewrite. A cross-model relation's nomenclature is seeded in its owner model, which
      * this parser cannot read, so a name there is refused with the numeric-id fallback - as every

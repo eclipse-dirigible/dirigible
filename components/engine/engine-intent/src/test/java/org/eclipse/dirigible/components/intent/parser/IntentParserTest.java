@@ -1202,14 +1202,91 @@ class IntentParserTest {
         // The one-hop relation must exist - the walker refuses a path that names nothing readable.
         assertForbidIssue(yaml.replace("SalesInvoice.Status ==", "Invoice.Status =="), "has no to-one relation [Invoice]");
 
-        // requiredWhen's grammar is unchanged: its condition stays record-local, so a dotted
-        // `Relation.field`
-        // term is not one of its own fields/to-ones and is refused (only a forbidWhen walks a hop). An
-        // integer literal here, so the status resolver leaves the term alone and the parser is what refuses
-        // it.
+        // A requiredWhen walks a dotted term the same way (#7495), so a hop naming nothing readable is
+        // refused by the walker - not waved through, and not read as a record-local property.
         String requiredDotted = yaml.replace("kind: forbidWhen, when: \"SalesInvoice.Status == PAID\",",
                 "kind: requiredWhen, field: amount, when: \"SalesInvoice.Amount == 5\",");
-        assertForbidIssue(requiredDotted, "is not a field or to-one relation of [SalesInvoiceCustomerPayment]");
+        assertForbidIssue(requiredDotted, "[SalesInvoice] has no field or to-one relation [Amount]");
+    }
+
+    @Test
+    void requiredWhenConditionMayReadAToOneHop() {
+        // Issue #7495: which of the customer's identifiers an invoice needs at issue depends on the
+        // CUSTOMER's kind - the condition reads the referenced row, as the value already could.
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 3, name: ISSUED }
+                  - name: customer-statuses
+                    entity: CustomerStatus
+                    rows:
+                      - { id: 1, name: PROSPECT }
+                      - { id: 2, name: ACTIVE }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: CustomerStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: CustomerKind
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: registrationNumber, type: string }
+                      - { name: vatNumber, type: string }
+                      - { name: vatRegistered, type: boolean }
+                    relations:
+                      - { name: Kind, kind: manyToOne, to: CustomerKind }
+                      - { name: Status, kind: manyToOne, to: CustomerStatus, function: EntityStatus, init: PROSPECT }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.registrationNumber, when: "Customer.Kind == 1", status: ISSUED,
+                          message: "A business customer needs a registration number" }
+                      - { kind: requiredWhen, field: Customer.vatNumber,
+                          when: ["Customer.Kind == 1", "Customer.vatRegistered == true", "Customer.Status == ACTIVE"],
+                          status: ISSUED, message: "A VAT-registered business customer needs a VAT number" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        java.util.List<org.eclipse.dirigible.components.intent.model.CheckIntent> checks = model.getEntities()
+                                                                                                .get(4)
+                                                                                                .getChecks();
+        assertEquals("Customer.Kind == 1", String.valueOf(checks.get(0)
+                                                                .getWhen()));
+        // A status NAME one hop away resolves against the CUSTOMER's nomenclature (ACTIVE -> 2), never
+        // against the invoice's own - where ACTIVE is no status at all, and a same-named one would be a
+        // different id.
+        assertEquals("[Customer.Kind == 1, Customer.vatRegistered == true, Customer.Status == 2]", String.valueOf(checks.get(1)
+                                                                                                                        .getWhen()));
+
+        // The hop's terminal must exist on the target.
+        assertForbidIssue(yaml.replace("when: \"Customer.Kind == 1\"", "when: \"Customer.Sort == 1\""),
+                "[Customer] has no field or to-one relation [Sort]");
+        // A to-one is compared by its integer key: a word there is not a value of it.
+        assertForbidIssue(yaml.replace("when: \"Customer.Kind == 1\"", "when: \"Customer.Kind == business\""),
+                "a [integer], with [business], which is not a value of that type");
+        // A mistyped literal against a hop field never holds, so it is refused like a record-local one.
+        assertForbidIssue(yaml.replace("\"Customer.vatRegistered == true\"", "\"Customer.vatRegistered == 'yes'\""),
+                "a [boolean], with ['yes'], which is not a value of that type");
+        // A misspelt status name one hop away is a validation error, never a silently-never-matching guard.
+        assertForbidIssue(yaml.replace("== ACTIVE", "== ACTIV"), "not a seeded status");
     }
 
     private static void assertForbidIssue(String yaml, String expected) {

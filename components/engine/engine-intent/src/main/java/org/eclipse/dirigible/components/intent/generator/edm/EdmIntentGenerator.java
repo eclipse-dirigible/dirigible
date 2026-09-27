@@ -2229,12 +2229,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if ("requiredWhen".equals(check.getKind())) {
-                // A conditionally required value (#7094): the condition compiled to a Java boolean over
-                // the record's own columns, and the value itself as a null-guarded expression - the
-                // record's own property, or a one-hop Relation.field, in which case the hops the reader
-                // must load ride along. Resolving the path HERE is what lets the check reach an entity
-                // owned by another model: the .model twin cannot re-derive the owner's generation
-                // folder, but the relation's `model:` alias travels with the hop.
+                // A conditionally required value (#7094): the value as a null-guarded expression and the
+                // condition as typed terms - each the record's own property, or a one-hop Relation.field
+                // (#7495: the customer's registration number is required when the CUSTOMER is a
+                // business), in which case the hops the reader must load ride along. Both go through ONE
+                // walker, so a hop the value and the condition share is loaded once. Resolving the paths
+                // HERE is what lets the check reach an entity owned by another model: the .model twin
+                // cannot re-derive the owner's generation folder, but the relation's `model:` alias
+                // travels with the hop.
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
                 ResolvePathSupport.Path path = walker.resolve(check.getField());
                 if (!path.resolved()) {
@@ -2242,7 +2244,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 checkMap.put("valueExpression", path.expression());
                 checkMap.put("label", path.label());
-                List<Map<String, Object>> when = requiredWhenTerms(entity, byName, check.getWhen());
+                List<Map<String, Object>> when = CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
                 if (when == null) {
                     continue; // the parser already reported it
                 }
@@ -2469,28 +2471,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Compiles a {@code requiredWhen} condition into the Java boolean the generated reader tests.
-     *
-     * <p>
-     * The compiler is {@link CheckSupport#condition}, shared with the {@code event.when} guard of the
-     * declarative glue lists (issue #7289): one grammar, one type rule and one rendering, so a guard
-     * cannot mean one thing on a check and another on a listener.
-     *
-     * @param entity the entity carrying the check
-     * @param byName the local entities by name (a to-one's key type comes from its target)
-     * @param when the authored condition
-     * @return the Java expression, or {@code null} when a comparison does not compile (the parser has
-     *         already reported it, and a condition that silently degrades to {@code true} would make
-     *         the value unconditionally required)
-     */
-    private static List<Map<String, Object>> requiredWhenTerms(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
-        return CheckSupport.conditionTerms(entity, byName, when);
-    }
-
-    /**
      * The generated loads a check's resolved paths need, in load order - a prefix always precedes what
-     * hangs off it. Shared by {@code requiredWhen} (its value path) and {@code forbidWhen} (its
-     * condition's one-hop terms), which both read a {@code Relation.field} the reader must fetch first.
+     * hangs off it. Shared by {@code requiredWhen} (its value path and its condition's one-hop terms)
+     * and {@code forbidWhen} (its condition's), which all read a {@code Relation.field} the reader must
+     * fetch first.
      */
     private static List<Map<String, Object>> pathLoadsOf(ResolvePathSupport.Walker walker) {
         List<Map<String, Object>> pathLoads = new ArrayList<>();
@@ -2510,10 +2494,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Reads a {@code forbidWhen} condition into the neutral terms the model carries (issue #7405). Each
      * term reads either the record's own property or a one-hop {@code Relation.field} whose parent the
-     * walker loads first - the added reach over {@code requiredWhen}, which is why a child can refuse a
-     * write on its parent's state. Typed against each operand's DECLARED type (a to-one by its integer
-     * foreign key), and null when a comparison does not read - the parser has already reported it, and
-     * a condition degrading to {@code true} would refuse every write.
+     * walker loads first, which is why a child can refuse a write on its parent's state. Typed against
+     * each operand's DECLARED type (a to-one by its integer foreign key), and null when a comparison
+     * does not read - the parser has already reported it, and a condition degrading to {@code true}
+     * would refuse every write.
      *
      * @param entity the entity carrying the check
      * @param byName the local entities by name

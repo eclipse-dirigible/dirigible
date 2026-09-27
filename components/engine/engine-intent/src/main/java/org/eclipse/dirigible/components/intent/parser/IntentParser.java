@@ -5242,11 +5242,13 @@ public final class IntentParser {
      * The value is the record's own field or a one-hop {@code Relation.field} over a to-one, walked
      * with the same resolver every other path in the DSL uses - so a cross-model target reads too, and
      * a path walking on past one is refused there. The condition is closed to the equality comparisons
-     * every other {@code when} guard takes, over the record's OWN properties: a condition the generator
-     * cannot compile would leave the value required unconditionally, which is a {@code required} nobody
-     * authored. The {@code status} gate is optional here, unlike on the document-level kinds - a rule
-     * about the row can hold from the first save, and a rule about the moment the value is finally
-     * needed (the transition that sends the document) names the status it is needed at.
+     * every other {@code when} guard takes, over the record's own properties or - like the value - a
+     * one-hop {@code Relation.property} (issue #7495: which of a customer's identifiers an invoice
+     * needs depends on the CUSTOMER's kind): a condition the generator cannot compile would leave the
+     * value required unconditionally, which is a {@code required} nobody authored. The {@code status}
+     * gate is optional here, unlike on the document-level kinds - a rule about the row can hold from
+     * the first save, and a rule about the moment the value is finally needed (the transition that
+     * sends the document) names the status it is needed at.
      */
     private static void validateRequiredWhen(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             String subject, List<String> issues) {
@@ -5270,7 +5272,14 @@ public final class IntentParser {
                 issues.add(subject + " when must not be an empty list");
             }
             for (String term : terms) {
-                validateGuardTerm(entity, byName, term, subject, issues);
+                // A bare property keeps the record-local check (and its case-insensitive lookup), so a
+                // condition naming no hop is accepted exactly as before; a path is walked like the value.
+                CheckSupport.Comparison comparison = CheckSupport.parse(term);
+                if (comparison != null && ResolvePathSupport.isPath(comparison.property())) {
+                    validateForbidWhenTerm(entity, byName, term, subject, issues);
+                } else {
+                    validateGuardTerm(entity, byName, term, subject, issues);
+                }
             }
         }
         if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
@@ -5332,9 +5341,9 @@ public final class IntentParser {
     /**
      * A {@code forbidWhen} check: the reject-twin of {@code requiredWhen} (dirigible #7275). It rejects
      * the write while its condition holds, carrying no {@code field}/value - only the condition and the
-     * message. Its one reach beyond {@code requiredWhen} is that a {@code when} term may name a one-hop
-     * {@code Relation.field}, so a composition child can refuse a write based on its parent's state (a
-     * payment allocation cannot be added to an already PAID invoice). The {@code status} gate is
+     * message. A {@code when} term may name a one-hop {@code Relation.field}, as a
+     * {@code requiredWhen}'s may, so a composition child can refuse a write based on its parent's state
+     * (a payment allocation cannot be added to an already PAID invoice). The {@code status} gate is
      * optional and routes enforcement exactly as {@code requiredWhen}'s does: without one, every user
      * write; with one, the repository at that status.
      */
@@ -5367,12 +5376,13 @@ public final class IntentParser {
     }
 
     /**
-     * One comparison of a {@code forbidWhen} condition: the property is the record's own field / to-one
-     * OR a one-hop {@code Relation.field}, walked with the same resolver every other path uses (a
-     * cross-model to-one may be the last hop). The literal must be a value of the compared type - a
-     * to-one is compared by its foreign key, an integer, so a status name has been resolved to its seed
-     * id by now; a comparison the generator could not compile would switch the rule off while looking
-     * authored, the silent failure this module refuses everywhere.
+     * One comparison of a {@code forbidWhen} condition, or a one-hop term of a {@code requiredWhen}'s:
+     * the property is the record's own field / to-one OR a one-hop {@code Relation.field}, walked with
+     * the same resolver every other path uses (a cross-model to-one may be the last hop). The literal
+     * must be a value of the compared type - a to-one is compared by its foreign key, an integer, so a
+     * status name has been resolved to its seed id by now; a comparison the generator could not compile
+     * would switch the rule off while looking authored, the silent failure this module refuses
+     * everywhere.
      */
     private static void validateForbidWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term, String subject,
             List<String> issues) {

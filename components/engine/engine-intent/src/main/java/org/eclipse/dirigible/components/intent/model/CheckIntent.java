@@ -32,15 +32,17 @@ import java.util.List;
  * mandatory);</li>
  * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
  * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
- * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
- * document is persisted carrying that status - the moment the value is finally needed;</li>
+ * the customer's address); a {@link #when} term may name a one-hop {@code Relation.field} too (a
+ * business customer's registration number, keyed on the customer's kind). Enforced on every user
+ * write, or, with a {@link #status} gate, when the document is persisted carrying that status - the
+ * moment the value is finally needed;</li>
  * <li>{@code forbidWhen}: the reject-twin of {@code requiredWhen} - reject the write while
  * {@link #when} holds (a payment allocation cannot be added to an already PAID invoice). It carries
- * no {@link #field}/value, only the condition; its one added reach is that a {@link #when} term may
- * name a one-hop {@code Relation.field}, so a child can test its parent (the status literal there
- * resolving against the relation target's nomenclature). Same gate rule as {@code requiredWhen}: no
- * gate = every user write (a 400 the generated controller raises), a gate = the repository when the
- * record is persisted carrying that status;</li>
+ * no {@link #field}/value, only the condition; a {@link #when} term may name a one-hop
+ * {@code Relation.field}, so a child can test its parent (the status literal there resolving
+ * against the relation target's nomenclature). Same gate rule as {@code requiredWhen}: no gate =
+ * every user write (a 400 the generated controller raises), a gate = the repository when the record
+ * is persisted carrying that status;</li>
  * <li>{@code itemsSumEqual} (document-level): the sums of the two {@link #over} fields across the
  * document's composition items are equal (the double-entry invariant) - enforced when the document
  * is persisted carrying the {@link #status} gate seed id, i.e. at the workflow transition;</li>
@@ -104,9 +106,9 @@ public class CheckIntent {
     private Integer count;
     /**
      * {@code requiredWhen} / {@code forbidWhen}: the condition - a {@code <Property> == <literal>} /
-     * {@code != } comparison, or a list of them (an implicit AND). {@code requiredWhen} reads the
-     * record's own properties; {@code forbidWhen} additionally accepts a one-hop {@code Relation.field}
-     * (a child testing its parent). A status name resolves to its seed id, as in every other guard.
+     * {@code != } comparison, or a list of them (an implicit AND), each over the record's own property
+     * or a one-hop {@code Relation.field} (a child testing its parent, an invoice testing its
+     * customer). A status name resolves to its seed id, as in every other guard.
      */
     private Object when;
     /**

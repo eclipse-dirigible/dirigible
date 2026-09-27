@@ -231,6 +231,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # rule only applies at the status the value is finally needed at.
                   - { kind: requiredWhen, field: Account.taxCode, when: "note == 'audited'", status: 2,
                       message: "An audited entry must be booked against an account carrying a tax code" }
+                  # ...and UNGATED with the CONDITION one hop away (#7495): which values a document
+                  # needs depends on the record it points at (a business customer needs a registration
+                  # number, an individual does not). One term per terminal kind - a field of the account
+                  # and a to-one of it, the latter compared by value - read through the SAME load the
+                  # gated check above uses, and enforced by the controller on every write.
+                  - { kind: requiredWhen, field: note, when: ["Account.taxCode == 'EXEMPT'", "Account.Parent != 0"],
+                      message: "An entry against a tax-exempt account must say why in its note" }
                   # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
                   # the two comparison families the generated code emits differently.
                   - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
@@ -2260,6 +2267,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && entryRepository.contains("AccountRepository().findById(hop0Fk)")
                         && entryRepository.contains("java.util.Objects.equals(entity.Note, \"audited\")"),
                 "checks: requiredWhen must load the hop, test the condition and refuse the empty value, got: " + entryRepository);
+        // ...and the CONDITION may read the hop too (#7495): the ungated twin lands in the controller,
+        // loading the account by FK and comparing its to-one BY VALUE - a boxed equality against a key
+        // whose Java width follows the target's would switch the rule off (#7237).
+        assertTrue(
+                entryController.contains("An entry against a tax-exempt account must say why in its note")
+                        && entryController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.TaxCode), \"EXEMPT\")")
+                        && entryController.contains("(hop0 == null ? null : hop0.Parent).longValue() == 0L"),
+                "checks: requiredWhen must read its condition through the hop, got: " + entryController);
         // ...and both gates must query the document's LINES. The items child used to be whichever
         // composition child a HashMap iteration yielded first, so a document that also owns a printed
         // copy, a payment allocation or a promotion counted THOSE rows (#7027) - an invoice guard that
@@ -4826,6 +4841,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          + uncodedAccount.get() + ",\"Note\":\"audited\",\"Status\":2}")
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + auditedEntry.get())
+                                                 .then()
+                                                 .statusCode(200));
+
+        // checks: requiredWhen with its CONDITION one hop away, at runtime (#7495): the note is
+        // required only against an account whose own tax code says it is exempt - the rule is decided
+        // by the RELATED row, so the same note-less entry is refused against one account and accepted
+        // against another.
+        AtomicInteger exemptAccount = new AtomicInteger();
+        restAssuredExecutor.execute(() -> exemptAccount.set(given().contentType("application/json")
+                                                                   .body("{\"Name\":\"Exempt\",\"TaxCode\":\"EXEMPT\"}")
+                                                                   .when()
+                                                                   .post(API + "/account/AccountController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + exemptAccount.get() + "}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message",
+                                                         containsString("An entry against a tax-exempt account must say why in its note")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + uncodedAccount.get() + "}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + exemptAccount.get()
+                                                         + ",\"Note\":\"export of services\"}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
                                                  .then()
                                                  .statusCode(200));
 
