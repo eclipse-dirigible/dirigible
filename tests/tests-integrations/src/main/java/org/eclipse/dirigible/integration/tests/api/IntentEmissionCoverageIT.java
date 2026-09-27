@@ -539,8 +539,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
-                  # my-list FK-lookup emission), while the owner relation gets no lookup at all
-                  - { name: Unit, kind: manyToOne, to: Unit }
+                  # my-list FK-lookup emission), while the owner relation gets no lookup at all. Its
+                  # pickable: rule (#7496) reaches the power form AND the personal one.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null], message: No unit price } }
 
               - name: ClaimLine
                 fields:
@@ -786,6 +787,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: secret,  type: decimal, sensitive: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
+                  # #7496: the partner form builds its options apart from the others, so it carries a rule too.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null] } }
 
               # BPM events wave 1 (wait + boundary timers): an RFQ whose flow escalates a stale
               # review (timeout), expires past its validity date (expire), and after review parks
@@ -913,8 +916,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
                   # an item-level to-one: the print feeder must feed it per row so an items-table
-                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
-                  - { name: Unit, kind: manyToOne, to: Unit }
+                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}. Its
+                  # pickable: rule (#7496) travels in the line dialog's column metadata.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null], else: hide } }
               # the RECIPIENT LIST of a bill: rows that are nobody's document - they only say who
               # gets the bill's own PDF (attach: recordPrint, one document to many recipients).
               - name: BillRecipient
@@ -3146,6 +3150,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myForm = contentOf("gen/emission/views/my/Claim-form.html");
         assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
+        // #7496: a pickable: rule reaches every picker that builds its own options - the power form,
+        // the personal and partner forms, and the line dialog's column metadata - and each view lists
+        // through visibleOptions with Harmonia's disabled/description contract on the option.
+        String unitRule = "{\"when\":[{\"property\":\"UnitPrice\",\"op\":\"present\"}]";
+        for (String picker : new String[] {contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js"),
+                contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js"),
+                contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js")}) {
+            assertTrue(picker.contains("this.pickableOptions(rows") && picker.contains(unitRule),
+                    "a to-one declaring pickable: must build its options through the rule");
+        }
+        for (String view : new String[] {contentOf("gen/emission/views/Claim/Claim-form.html"), myForm,
+                contentOf("gen/emission/views/partner/PartnerTicket-form.html")}) {
+            assertTrue(view.contains("visibleOptions(options") && view.contains(":aria-disabled=\"opt.disabled ? 'true' : null\""),
+                    "a pickable: picker must list visible options and mark a failing one disabled");
+        }
+        assertTrue(contentOf("gen/emission/js/components/pages/Bill/BillLine.detail.js").contains("pickable: " + unitRule),
+                "a line's pickable: rule must travel in the item dialog's column metadata");
         String myLineForm = contentOf("gen/emission/js/components/pages/my/ClaimLineMyFormPage.js");
         assertTrue(myLineForm.contains("ClaimLineMyController"), "a personal child gets its own my form page");
         // Regression guard (#6263): the personal pages must call the shared shell service object

@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
+import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
@@ -74,6 +75,7 @@ import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
+import org.eclipse.dirigible.components.intent.model.PickableIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
@@ -4214,6 +4216,9 @@ public final class IntentParser {
                 if (relation.getWhere() != null) {
                     validateWhere(entity, relation, byName, issues);
                 }
+                if (relation.getPickable() != null) {
+                    validatePickable(entity, relation, byName, issues);
+                }
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
@@ -4410,6 +4415,9 @@ public final class IntentParser {
         }
         if (!isBlank(relation.getWhenMasterDeleted())) {
             unsupported.add("whenMasterDeleted");
+        }
+        if (relation.getPickable() != null) {
+            unsupported.add("pickable");
         }
         if (!unsupported.isEmpty()) {
             issues.add(subject + " is a subset relation so it cannot declare " + unsupported
@@ -5772,6 +5780,96 @@ public final class IntentParser {
      * time, like the relation target itself). A composition parent FK is preset by the layout - never
      * picked - so a filter there is authoring noise and rejected.
      */
+    /**
+     * A {@code pickable:} rule (issue #7496) decides which TARGET rows a to-one's picker offers, so it
+     * sits only where a user picks: a manyToOne/oneToOne that is neither the composition parent (preset
+     * by the layout) nor the EntityStatus badge. Each term reads a property of the target - checked
+     * here for a same-model target, at generation against the owner's {@code .model} for a cross-model
+     * one - and a comparison with a value is held to the same types every other {@code when} guard is,
+     * because a picker that silently offers everything is the failure the rule exists to remove.
+     * {@code leafOnly} builds its options through the hierarchy path, which a rule would not reach, so
+     * the two are refused together rather than one quietly ignored.
+     */
+    private static void validatePickable(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "] pickable";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " is declared on a [" + relation.getKind() + "] relation - only a manyToOne/oneToOne has a picker");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is declared on a composition parent, which the layout presets and nobody picks");
+            return;
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is declared on an EntityStatus relation, which renders as a read-only badge");
+            return;
+        }
+        if (relation.isLeafOnly()) {
+            issues.add(subject + " cannot be combined with leafOnly - the hierarchy picker is built without it");
+        }
+        PickableIntent pickable = relation.getPickable();
+        String otherwise = pickable.getOtherwise();
+        if (otherwise != null && !PickableSupport.MARK.equals(otherwise) && !PickableSupport.HIDE.equals(otherwise)) {
+            issues.add(subject + " else [" + otherwise + "] must be `mark` (listed, disabled, with the message) or `hide` (not listed)");
+        }
+        List<String> terms = CheckSupport.terms(pickable.getWhen());
+        if (terms.isEmpty()) {
+            issues.add(subject + " requires `when`: the condition a " + relation.getTo() + " must meet to be picked, e.g."
+                    + " `when: [registrationNumber != null, active == true]`");
+            return;
+        }
+        EntityIntent target = relation.isCrossModel() ? null : byName.get(relation.getTo());
+        for (String term : terms) {
+            validatePickableTerm(subject, term, relation.getTo(), target, byName, issues);
+        }
+    }
+
+    /**
+     * One term of a {@code pickable:} rule, read over the target entity - or, with {@code target}
+     * {@code null} (a cross-model target), held to the grammar only.
+     */
+    private static void validatePickableTerm(String subject, String term, String targetName, EntityIntent target,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        PickableSupport.Term parsed = PickableSupport.parse(term);
+        if (parsed == null) {
+            issues.add(subject + " when [" + term + "] must be `<property> ==|!= <literal>` or `<property> ==|!= null` - several"
+                    + " conditions are written as a list, which is their AND");
+            return;
+        }
+        if (parsed.property()
+                  .contains(".")) {
+            issues.add(subject + " when [" + term + "] names a path - the rule reads the " + targetName + " row itself");
+            return;
+        }
+        if (target == null) {
+            return;
+        }
+        FieldIntent field = CheckSupport.field(target, parsed.property());
+        RelationIntent relation = field == null ? CheckSupport.toOne(target, parsed.property()) : null;
+        if (field == null && relation == null) {
+            issues.add(subject + " when [" + term + "] reads [" + parsed.property() + "], which is not a field or to-one relation of ["
+                    + targetName + "]");
+            return;
+        }
+        if (parsed.presence()) {
+            return;
+        }
+        String declared = field != null ? field.getType() : CheckSupport.relationKeyType(relation, byName);
+        String type = CheckSupport.guardType(declared);
+        if (field != null && !CheckSupport.GUARD_TYPES.contains(type)) {
+            issues.add(subject + " when [" + term + "] compares [" + parsed.property() + "], which is a [" + declared
+                    + "] field - a value comparison is on a string, an integer or a boolean; test any field for presence with"
+                    + " `!= null`");
+            return;
+        }
+        if (CheckSupport.javaLiteral(type, parsed.literal()) == null) {
+            issues.add(subject + " when [" + term + "] compares [" + parsed.property() + "], a [" + type + "], with [" + parsed.literal()
+                    + "], which is not a value of that type");
+        }
+    }
+
     private static void validateWhere(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";

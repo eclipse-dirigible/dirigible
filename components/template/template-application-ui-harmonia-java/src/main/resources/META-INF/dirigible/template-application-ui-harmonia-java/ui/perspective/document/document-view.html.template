@@ -191,8 +191,8 @@
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"></div>
               <div x-h-select-list>
-                <template x-for="opt in options${property.name}" :key="opt.value">
-                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                <template x-for="opt in #if($property.widgetPickable)visibleOptions(options${property.name}, form.${property.name})#{else}options${property.name}#end" :key="opt.value">
+                  <div x-h-select-option="opt.text" :data-value="String(opt.value)"#if($property.widgetPickable) :aria-disabled="opt.disabled ? 'true' : null" :data-description="opt.description || null"#end></div>
                 </template>
               </div>
             </div>
@@ -206,8 +206,8 @@
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
-              <template x-for="opt in options${property.name}" :key="opt.value">
-                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              <template x-for="opt in #if($property.widgetPickable)visibleOptions(options${property.name}, form.${property.name})#{else}options${property.name}#end" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"#if($property.widgetPickable) :aria-disabled="opt.disabled ? 'true' : null" :data-description="opt.description || null"#end></div>
               </template>
             </div>
           </div>
@@ -715,7 +715,7 @@
                       <div x-h-select-list>
                         <!-- dialogOptionsFor: the Depends-On-filtered set when active, else the full set. -->
                         <template x-for="opt in dialogOptionsFor(col.name)" :key="opt.value">
-                          <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                          <div x-h-select-option="opt.text" :data-value="String(opt.value)" :aria-disabled="opt.disabled ? 'true' : null" :data-description="opt.description || null"></div>
                         </template>
                       </div>
                     </div>

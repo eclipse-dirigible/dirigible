@@ -134,7 +134,12 @@ document.addEventListener('alpine:init', () => {
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
       try {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+#if($property.widgetPickable)
+        // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
+        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+#else
         loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} })));
+#end
       } catch (e) { loaded['${property.name}'] = []; }
 #end
 #end

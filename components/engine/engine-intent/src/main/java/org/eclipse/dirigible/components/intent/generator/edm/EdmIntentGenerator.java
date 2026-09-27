@@ -39,6 +39,7 @@ import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
+import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
@@ -585,6 +586,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
+                    putPickable(fkProperty, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -605,6 +607,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
+                putPickable(fkProperty, relation, null);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -1921,6 +1924,31 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String literal = value instanceof Number ? stripTrailingZero((Number) value) : String.valueOf(value);
         p.put("widgetOptionsFilterBy", by);
         p.put("widgetOptionsFilterValue", literal);
+    }
+
+    /**
+     * Emit the picker rule of a relation that declares {@code pickable:} (issue #7496) as the
+     * {@code widgetPickable} attribute: the rule as JSON ({@link PickableSupport#rule}), a scalar so it
+     * rides the {@code .edm} and the {@code .model} like every other widget attribute, and which every
+     * generated picker hands verbatim to the shared runtime as an object literal. The parser checked a
+     * same-model target's properties; a resolved cross-model target is checked here against the owner's
+     * {@code .model}, an unresolved one (the unit-test convention fallback) is not.
+     */
+    private static void putPickable(Map<String, Object> p, RelationIntent relation, Set<String> targetPropertyNames) {
+        if (relation.getPickable() == null) {
+            return;
+        }
+        if (targetPropertyNames != null) {
+            List<String> missing = PickableSupport.properties(relation.getPickable())
+                                                  .stream()
+                                                  .filter(property -> !targetPropertyNames.contains(property))
+                                                  .toList();
+            if (!missing.isEmpty()) {
+                throw new IntentValidationException(List.of("relation [" + relation.getName() + "] pickable reads " + missing
+                        + ", which the cross-model target [" + relation.getTo() + "] does not declare"));
+            }
+        }
+        p.put("widgetPickable", PickableSupport.rule(relation.getPickable()));
     }
 
     /**

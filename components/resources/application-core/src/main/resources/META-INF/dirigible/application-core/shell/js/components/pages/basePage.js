@@ -50,6 +50,57 @@ function basePage() {
     },
 
     /**
+     * Build relation-picker options from the target rows, applying the relation's `pickable:` rule
+     * (issue #7496) when it declares one.
+     *
+     * The rule is the generated `{ when: [{ property, op, value? }], hide, message }` literal. A row
+     * failing it stays in the list - the list also resolves the label of a value stored before the
+     * rule existed - but is `disabled` and carries the rule's `message` as its `description`, and is
+     * additionally `hidden` when the rule says `hide`; visibleOptions decides what the picker lists.
+     * The picker is not the gate: the server's own checks still refuse what a REST client submits.
+     */
+    pickableOptions(rows, key, text, rule) {
+      return (rows || []).map((row) => {
+        const option = { value: row[key], text: row[text] };
+        if (rule && !this.meetsPickable(row, rule.when)) {
+          option.disabled = true;
+          option.description = rule.message;
+          option.hidden = !!rule.hide;
+        }
+        return option;
+      });
+    },
+
+    /**
+     * Whether a target row meets every term of a `pickable:` rule. `present` / `absent` test for a
+     * value that is neither null nor blank; `eq` / `ne` compare its text with the authored literal,
+     * which is exact for the only types a rule compares (strings, whole numbers, booleans) and treats
+     * a missing value as unequal, as the server-side guards do.
+     */
+    meetsPickable(row, terms) {
+      return (terms || []).every((term) => {
+        const value = row ? row[term.property] : undefined;
+        const present = value != null && String(value).trim() !== '';
+        if (term.op === 'present') return present;
+        if (term.op === 'absent') return !present;
+        const equal = present && String(value) === String(term.value);
+        return term.op === 'eq' ? equal : !equal;
+      });
+    },
+
+    /**
+     * The options a picker lists: every option but the ones a `pickable: { else: hide }` rule hides -
+     * except the value (or, for a multi-select, the values) the record already holds, which stays
+     * listed, disabled, so the field still shows what is stored and why it could not be picked today.
+     */
+    visibleOptions(options, current) {
+      const held = new Set((Array.isArray(current) ? current : [current])
+        .filter((v) => v != null && v !== '')
+        .map((v) => String(v)));
+      return (options || []).filter((o) => !o.hidden || held.has(String(o.value)));
+    },
+
+    /**
      * Re-read this component's data whenever a custom action finishes.
      *
      * The customActions store raises `harmonia:action-done` after every action it runs (a transition,
