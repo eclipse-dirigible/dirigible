@@ -281,6 +281,9 @@
       "promptCancel": "Отказ",
       "promptRun": "Изпълни",
       "promptSelect": "Изберете..."
+    },
+    "list": {
+      "resizeColumn": "Промяна на ширината на колоната"
     }
   }
 }

@@ -36,7 +36,7 @@
        x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
 
   <div x-show="state === 'default'" x-h-table-container.scroll>
-    <table x-h-table data-borders="rows">
+    <table x-h-table x-list-columns data-borders="rows">
       <thead x-h-table-header>
         <tr x-h-table-row>
           <template x-for="col in columns" :key="col.name">

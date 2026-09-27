@@ -281,6 +281,9 @@
       "promptCancel": "Cancel",
       "promptRun": "Run",
       "promptSelect": "Select..."
+    },
+    "list": {
+      "resizeColumn": "Resize column"
     }
   }
 }

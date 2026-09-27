@@ -36,3 +36,50 @@ html, body { height: 100%; margin: 0; }
 [data-slot="dialog"] {
   max-height: calc(100vh - 2rem);
 }
+
+/*
+ * List column widths (issue #7467) - see App.listColumns in js/app.js, which sets the widths.
+ * A value that does not fit its column ends in an ellipsis (the full value is the cell's tooltip).
+ * Only the first header row truncates: the manage list's filter row holds dropdowns and date
+ * pickers that must not be clipped. The "no data" message (data-col-free) and the row-actions cell
+ * keep their overflow.
+ */
+table[data-list-columns] > thead > tr:first-child > th,
+table[data-list-columns] > tbody > tr > td:not([data-col-free]):not([data-row-actions]) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+table[data-list-columns] > thead > tr:first-child > th > .hbox { min-width: 0; }
+table[data-list-columns] > thead > tr:first-child > th > .hbox > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+table[data-list-columns] > thead > tr:first-child > th > .hbox > svg { flex-shrink: 0; }
+table[data-list-columns] > tbody > tr > td[data-col-free] { overflow: visible; }
+/* A badge (status column) truncates inside its cell rather than spilling out of it. */
+table[data-list-columns] > tbody > tr > td > [data-slot="badge"] {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The drag grip on a header's right edge. */
+table[data-list-columns] [data-col-grip] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  user-select: none;
+  z-index: 1;
+}
+table[data-list-columns] [data-col-grip]:hover,
+table[data-list-columns] [data-col-grip]:focus-visible,
+table[data-list-columns] [data-col-grip][data-dragging="true"] {
+  background: var(--border, currentColor);
+  outline: none;
+}

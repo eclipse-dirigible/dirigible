@@ -179,7 +179,7 @@
         </div>
 #end
         <div#if($hierarchyProperty) x-show="!treeVisible"#end x-h-table-container.scroll class="flex-1" data-border="true">
-          <table x-h-table data-borders="rows">
+          <table x-h-table x-list-columns data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
 #foreach($property in $properties)
@@ -194,7 +194,7 @@
                 </th>
 #end
 #end
-                <th x-h-table-head scope="col"></th>
+                <th x-h-table-head scope="col" data-col-actions></th>
               </tr>
               <!-- Per-column filter row: server-side (POST /search). String columns match LIKE,
                    FK columns are a dropdown (EQ by id), numbers/dates match EQ. A MULTISELECT column
@@ -242,7 +242,7 @@
             </thead>
             <tbody x-h-table-body>
               <tr x-show="displayState === 'no-results'" x-h-table-row>
-                <td x-h-table-cell x-text="T('$projectName:${tprefix}.messages.noData', 'No matching ${menuLabel}.')"></td>
+                <td x-h-table-cell data-col-free x-text="T('$projectName:${tprefix}.messages.noData', 'No matching ${menuLabel}.')"></td>
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">

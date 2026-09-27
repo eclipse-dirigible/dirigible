@@ -54,7 +54,7 @@
     <!-- Master list (fills the whole width until a record is selected) -->
     <div x-h-split-panel data-size="60%" data-min="280">
       <div x-h-table-container.scroll class="size-full">
-        <table x-h-table data-borders="rows">
+        <table x-h-table x-list-columns data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
 #foreach($property in $properties)
@@ -62,11 +62,11 @@
               <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end#visibleGate($property)>${property.name}</th>
 #end
 #end
-              <th x-h-table-head scope="col"></th>
+              <th x-h-table-head scope="col" data-col-actions></th>
             </tr>
           </thead>
           <tbody x-h-table-body>
-            <tr x-show="filteredMasters.length === 0" x-h-table-row><td x-h-table-cell x-text="T('$projectName:${tprefix}.messages.noData', 'No ${name}.')"></td></tr>
+            <tr x-show="filteredMasters.length === 0" x-h-table-row><td x-h-table-cell data-col-free x-text="T('$projectName:${tprefix}.messages.noData', 'No ${name}.')"></td></tr>
             <template x-for="row in pagedMasters" :key="row.${primaryKeysString}">
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
 #foreach($property in $properties)
