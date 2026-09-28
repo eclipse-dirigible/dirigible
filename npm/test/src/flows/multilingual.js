@@ -1,4 +1,5 @@
 import { expect, test } from '../fixtures.js';
+import { listCrumb } from './list.js';
 
 // The read-time translation overlay: switch the shared language key (what the Region &
 // Language setting writes), reload, and a known seed row shows its translated name.
@@ -9,7 +10,7 @@ export function multilingualFlow(manifest, entity) {
 
   test(`${entity.name}: ${sample.language} translation overlays on read`, async ({ page }) => {
     await page.goto(manifest.standaloneShell + entity.route);
-    await expect(page.locator('[x-h-toolbar-title]', { hasText: entity.labelPlural }).first()).toBeVisible();
+    await expect(listCrumb(page, entity)).toBeVisible();
     await page.evaluate((lang) => localStorage.setItem('codbex.harmonia.language', lang), sample.language);
     await page.reload();
     await expect(page.locator('tbody tr', { hasText: sample.translated }).first()).toBeVisible();

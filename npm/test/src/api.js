@@ -19,6 +19,8 @@ export function makeApi(request, manifest) {
     count: (entity) => request.get(url(entity, '/count')).then(asJson).then((body) => (typeof body === 'number' ? body : body.count)),
     get: (entity, id) => request.get(url(entity, '/' + id)).then(asJson),
     getResponse: (entity, id) => request.get(url(entity, '/' + id)),
+    // the generated controller's filtered read (what the list's filters POST): [{ propertyName, operator, value }]
+    search: (entity, conditions) => request.post(url(entity, '/search'), { data: { conditions } }).then(asJson),
     create: (entity, data) => request.post(url(entity), { data }).then(asJson),
     update: (entity, id, data) => request.put(url(entity, '/' + id), { data }).then(asJson),
     // Answers whether the row is gone. A record whose process declares `whenDeleted: refuse` is

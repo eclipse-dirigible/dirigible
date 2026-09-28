@@ -16,21 +16,31 @@ export async function fillField(page, field, value, opts = {}) {
   await input.fill(String(value));
 }
 
-// The x-h-select directive hides its input and builds a button[role=combobox] trigger
-// labelled by the field label; options carry role=option.
-export async function pickDropdown(page, relation, optionText) {
+// The x-h-select directive hides its input and appends a button[role=combobox] trigger beside it;
+// options carry role=option.
+// The generated manage/document forms give that input id="f_<Name>", so the trigger is reached
+// through its sibling - independent of how the field label reads. The accessible name is the
+// fallback for a form whose select input carries no id (the my/partner surfaces).
+async function relationTrigger(page, relation) {
+  const input = page.locator('#f_' + relation.name);
+  if (await input.count()) return input.locator('xpath=../button[@role="combobox"]');
   // Anchored prefix match: the combobox accessible name is the label plus the placeholder or
   // selected value ("Country Select a Country..."), so exact matching finds nothing - while a
   // bare substring match collides with longer sibling labels ("Type" also hits "Chart Type").
   const label = relation.label ?? relation.name;
   const anchored = new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
-  await page.getByRole('combobox', { name: anchored }).first().click();
+  return page.getByRole('combobox', { name: anchored }).first();
+}
+
+export async function pickDropdown(page, relation, optionText) {
+  const trigger = await relationTrigger(page, relation);
+  await trigger.click();
   const option = page.getByRole('option', { name: optionText }).first();
   try {
     await option.click({ timeout: 10_000 });
   } catch {
     // the option list re-rendered mid-click (async option load reflow) - reopen and retry
-    await page.getByRole('combobox', { name: anchored }).first().click();
+    await trigger.click();
     await option.click({ force: true });
   }
 }

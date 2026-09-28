@@ -1,14 +1,21 @@
 import { expect, test } from '../fixtures.js';
 import { labelOf } from '../sample-values.js';
 
-// The list page renders: plural title in the toolbar, then one of three bodies -
+// The shell breadcrumb's current crumb - the one page element every list layout shares that names
+// the entity (the sidebar label, which the manifest's labelPlural mirrors).
+export function listCrumb(page, entity) {
+  return page.locator('[x-h-breadcrumb-page]', { hasText: entity.labelPlural }).first();
+}
+
+// The list page renders under the shell breadcrumb naming it by its plural label (the #7491
+// manage list carries no title of its own), then one of three bodies -
 // a tree (hierarchy entities render role=treeitem nodes, no table), the table with one
 // column header per major field, or (when the entity has no rows yet) the empty state.
 // When seed data is expected, rows/nodes must actually be there.
 export function listFlow(manifest, entity) {
   test(`${entity.name}: list page renders the declared columns`, async ({ page }) => {
     await page.goto(manifest.standaloneShell + entity.route);
-    await expect(page.locator('[x-h-toolbar-title]', { hasText: entity.labelPlural }).first()).toBeVisible();
+    await expect(listCrumb(page, entity)).toBeVisible();
     if (entity.hierarchy) {
       if (entity.expectSeedData) {
         await expect(page.getByRole('treeitem').first()).toBeVisible();

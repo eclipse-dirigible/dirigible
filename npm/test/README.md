@@ -48,8 +48,10 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 
 ## Flows per entity
 
-- **list** — the plural title, a column header per major field, and (when `expectSeedData`) a row.
-- **crud** — UI create → filter → row appears; edit via the detail pane → save; delete → confirm → gone.
+- **list** — the shell breadcrumb naming the list by its plural label, a column header per major field,
+  and (when `expectSeedData`) a row.
+- **crud** — UI create → filter → row appears; edit via the row menu → save; delete via the row menu →
+  confirm → gone. A walk that fails halfway still removes its test row over REST.
 - **rest** — the same CRUD over the generated Java controllers via `APIRequestContext` (isolates
   backend vs UI failures), asserting the manifest's field names bind and delete yields 404 — or,
   for an entity a `whenDeleted: refuse` process guards, that the refused record is still served.
