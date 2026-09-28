@@ -59,6 +59,11 @@ class HarmoniaListColumnsIT {
             assertTrue(table.group()
                             .contains("x-list-columns"),
                     view + ": the list table does not use x-list-columns - its columns grow with their longest value");
+            // Harmonia's table reference: data-fixed is incompatible with the scroll container the lists sit
+            // in.
+            assertTrue(!table.group()
+                             .contains("data-fixed"),
+                    view + ": the list table sets Harmonia's data-fixed, which Harmonia does not support in a scroll container");
             Matcher noData = NO_DATA_CELL.matcher(content);
             while (noData.find()) {
                 assertTrue(noData.group()
@@ -89,6 +94,8 @@ class HarmoniaListColumnsIT {
         assertTrue(app.contains("data-col-grip") && app.contains("pointerdown"), "the columns cannot be dragged wider");
         assertTrue(app.contains("'title'"), "a truncated value shows no tooltip");
         assertTrue(!app.contains("localStorage"), "column widths are not persisted in v1 (#7467)");
+        assertTrue(!app.contains("'data-fixed'"),
+                "the policy must not switch on Harmonia's data-fixed - it is declared incompatible with scroll mode");
 
         String css = read("/META-INF/dirigible/application-core/shell/css/app.css");
         assertTrue(css.contains("table[data-list-columns]") && css.contains("text-overflow: ellipsis"),

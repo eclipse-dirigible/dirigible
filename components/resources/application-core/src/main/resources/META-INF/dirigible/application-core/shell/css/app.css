@@ -44,13 +44,18 @@ html, body { height: 100%; margin: 0; }
  * pickers that must not be clipped. The "no data" message (data-col-free) and the row-actions cell
  * keep their overflow.
  */
+/* Fixed layout here, not through Harmonia's data-fixed (declared incompatible with its scroll
+   container): App.listColumns always pairs it with an explicit table width, so the list scrolls. */
+table[data-list-columns] { table-layout: fixed; }
 table[data-list-columns] > thead > tr:first-child > th,
 table[data-list-columns] > tbody > tr > td:not([data-col-free]):not([data-row-actions]) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-table[data-list-columns] > thead > tr:first-child > th > .hbox { min-width: 0; }
+/* The header's label + sort icon row - a div or, on the manage list, the sort <button>, which would
+   otherwise shrink-wrap to its label and spill past the column instead of truncating it. */
+table[data-list-columns] > thead > tr:first-child > th > .hbox { min-width: 0; max-width: 100%; }
 table[data-list-columns] > thead > tr:first-child > th > .hbox > span {
   min-width: 0;
   overflow: hidden;

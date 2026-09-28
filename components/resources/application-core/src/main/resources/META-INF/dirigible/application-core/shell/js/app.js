@@ -197,8 +197,9 @@ document.addEventListener('alpine:init', () => App.leaveGuard.install());
  *     it - so loading, paging, sorting or filtering never moves a column.
  *   - TRUNCATION with a tooltip. A value that does not fit ends in an ellipsis; hovering the cell shows
  *     the whole value (a native title, set only while the text is actually cut).
- *   - DRAG to resize. Each header has a grip on its right edge (also keyboard-operable: ArrowLeft /
- *     ArrowRight). Widths are NOT persisted in v1: a reload starts from the defaults again.
+ *   - DRAG to resize. Each header has a grip on its right edge, a focusable separator operated like
+ *     Harmonia's Split gutter: ArrowLeft / ArrowRight by 10 px, with Shift by 100 px. Widths are NOT
+ *     persisted in v1: a reload starts from the defaults again.
  *
  * Until the user resizes a column, the widths are refitted to the list's width whenever it changes
  * (window resize, split-panel drag, a role-gated column appearing), with each kind's minimum as the
@@ -207,8 +208,18 @@ document.addEventListener('alpine:init', () => App.leaveGuard.install());
  *
  * Only the first header row sizes the table (the manage list's filter row below it is not truncated,
  * so its date pickers and dropdowns are never clipped); a cell marked `data-col-free` (the "no data"
- * message) and the row-actions cell keep their overflow. Harmonia's own `data-fixed` hook supplies
- * table-layout: fixed.
+ * message) and the row-actions cell keep their overflow.
+ *
+ * Deliberately NOT Harmonia's `data-fixed`: its table reference declares it incompatible with the
+ * scroll container (`x-h-table-container.scroll`) most lists sit in - Harmonia's table is `w-full`,
+ * so a fixed layout alone can never grow past the container and the columns would only squeeze. The
+ * policy sets table-layout: fixed in css/app.css TOGETHER with an explicit table width (the sum of
+ * the columns), which is what lets a fixed-layout list scroll sideways.
+ *
+ * The tooltip is the native `title`, not `x-h-tooltip`: Harmonia's tooltip is an absolutely
+ * positioned sibling of its trigger, so inside a truncating (overflow: hidden) cell it is clipped,
+ * and it has no "only while the text is cut" mode - it would need a trigger and a tooltip element
+ * in every cell of every row. The full value also stays one click away in the record's own form.
  */
 App.listColumns = {
   // Default and minimum widths per column kind, in rem so they follow the user's zoom/font size.
@@ -216,7 +227,9 @@ App.listColumns = {
   NUMBER_REM: 8,
   ACTIONS_REM: 3.5,
   MIN_REM: 3,
-  KEY_STEP_PX: 16,
+  // Keyboard steps, as Harmonia's Split gutter (3.2.0): an arrow moves 10 px, Shift + arrow 100 px.
+  KEY_STEP_PX: 10,
+  KEY_STEP_LARGE_PX: 100,
 
   rem() {
     return parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
@@ -295,11 +308,19 @@ App.listColumns = {
     grip.setAttribute('aria-orientation', 'vertical');
     grip.setAttribute('tabindex', '0');
     grip.setAttribute('aria-label', window.T('application-core:shell.list.resizeColumn', 'Resize column'));
+    const min = () => Math.round(this.MIN_REM * this.rem());
+    // A focusable separator is a widget: it announces the size it controls (here in pixels).
+    const announce = () => {
+      grip.setAttribute('aria-valuemin', String(min()));
+      grip.setAttribute('aria-valuenow', String(Math.round(th.getBoundingClientRect().width)));
+    };
     const resize = (width) => {
       state.userSized = true;
-      this.setWidth(th, Math.max(Math.round(this.MIN_REM * this.rem()), Math.round(width)));
+      this.setWidth(th, Math.max(min(), Math.round(width)));
       this.sync(state.table);
+      announce();
     };
+    grip.addEventListener('focus', announce);
     grip.addEventListener('pointerdown', (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -325,7 +346,8 @@ App.listColumns = {
       event.preventDefault();
       event.stopPropagation();
       const width = th.getBoundingClientRect().width;
-      resize(width + (event.key === 'ArrowRight' ? this.KEY_STEP_PX : -this.KEY_STEP_PX));
+      const step = event.shiftKey ? this.KEY_STEP_LARGE_PX : this.KEY_STEP_PX;
+      resize(width + (event.key === 'ArrowRight' ? step : -step));
     });
     th.appendChild(grip);
   },
@@ -360,8 +382,6 @@ App.listColumns = {
   attach(table) {
     const container = table.closest('[data-slot="table"]:not(table)') || table.parentElement;
     const state = { table, userSized: false, scheduled: false };
-    table.setAttribute('data-fixed', 'true');
-    table.classList.add('table-fixed');
     table.setAttribute('data-list-columns', '');
     const layout = () => {
       state.scheduled = false;
