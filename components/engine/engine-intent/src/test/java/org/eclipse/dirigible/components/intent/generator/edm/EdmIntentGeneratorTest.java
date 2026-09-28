@@ -1670,6 +1670,39 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code forbidWhen} reads its condition exactly as {@code requiredWhen} does (#7509): a
+     * record-local to-one is compared by value, since its key width follows the target's key (#7237),
+     * while the record's own integer field keeps the exact boxed equality its declared width allows.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void forbidWhenComparesARecordLocalToOneByValue() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: forbidWhen, when: ["Status == 4", "sentMethod != 1"],
+                          message: "A sent invoice cannot change its method" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> check = ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks")).get(0);
+        assertEquals("(entity.Status != null && entity.Status.longValue() == 4L)" + " && !java.util.Objects.equals(entity.SentMethod, 1)",
+                guardJava(check));
+        assertNull(check.get("pathLoads"));
+    }
+
+    /**
      * A {@code forbidWhen} (dirigible #7275) emits its condition as the Java boolean the reject tests,
      * the hop its one-hop term reads through (a child loading its parent by FK), no value expression,
      * and - when every term reads the composition master - the UI descriptor the detail panel hides the
@@ -1713,10 +1746,12 @@ class EdmIntentGeneratorTest {
         assertEquals(1, checks.size());
         Map<String, Object> check = checks.get(0);
         // The parent's status is loaded by FK and compared to the resolved seed id; there is no value.
+        // The status is a to-one, so its key is compared by value, not boxed (#7509, the #7237 class).
         assertEquals(
-                List.of(Map.of("owner", "hop0", "property", "Status", "equal", true, "type", "integer", "value", "7", "numericKey", false)),
+                List.of(Map.of("owner", "hop0", "property", "Status", "equal", true, "type", "long", "value", "7", "numericKey", true)),
                 check.get("when"));
-        assertEquals("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 7)", guardJava(check));
+        assertEquals("((hop0 == null ? null : hop0.Status) != null && (hop0 == null ? null : hop0.Status).longValue() == 7L)",
+                guardJava(check));
         assertNull(check.get("valueExpression"));
         List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
         assertEquals("hop0", loads.get(0)

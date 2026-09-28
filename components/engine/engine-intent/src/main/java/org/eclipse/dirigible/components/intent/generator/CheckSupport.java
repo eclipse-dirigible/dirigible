@@ -207,8 +207,10 @@ public final class CheckSupport {
     /**
      * Reads a condition whose comparisons may also name a one-hop {@code Relation.property} - the
      * {@code requiredWhen} guard over the record a to-one points at (issue #7495: "the customer's
-     * registration number is required when the customer is a business"). A bare property reads exactly
-     * as {@link #conditionTerms(EntityIntent, Map, Object)} reads it, so a condition that names none
+     * registration number is required when the customer is a business") - and the {@code forbidWhen}
+     * guard over a child's parent, which reads its condition through this same method (issue #7509), so
+     * the two kinds cannot type one term two ways. A bare property reads exactly as
+     * {@link #conditionTerms(EntityIntent, Map, Object)} reads it, so a condition that names none
      * produces the same terms; a path is resolved through the check's own walker, which is what loads
      * each hop once for the value and the condition together and null-guards it.
      *

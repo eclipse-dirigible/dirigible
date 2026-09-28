@@ -2362,10 +2362,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the inherited lock must consult the MASTER's repository, got: " + lineController);
         // forbidWhen (#7275) UNGATED + one hop to the PARENT: the row-level REST validation loads the
         // parent Entry by FK and refuses the write while it is POSTED - the reject-twin of requiredWhen,
-        // reading a value one hop away, with the status NAME resolved to its seed id.
+        // reading a value one hop away, with the status NAME resolved to its seed id. The status is a
+        // to-one, so its key is compared by value, never boxed (#7509).
         assertTrue(
                 lineController.contains("EntryRepository().findById(hop0Fk)")
-                        && lineController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)")
+                        && lineController.contains(
+                                "((hop0 == null ? null : hop0.Status) != null && (hop0 == null ? null : hop0.Status).longValue() == 2L)")
                         && lineController.contains("Cannot add a line to a posted entry"),
                 "an ungated forbidWhen must load the parent hop and refuse the write on the REST controller, got: " + lineController);
         // ...and the same rule reaches the DELETE verb (#7372): removing a guarded row is a change like

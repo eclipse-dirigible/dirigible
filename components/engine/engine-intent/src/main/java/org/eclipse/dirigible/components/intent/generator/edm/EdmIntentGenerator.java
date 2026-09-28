@@ -2401,9 +2401,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // now a term may read a value ONE HOP away (`SalesInvoice.Status == PAID`) so a child can
                 // refuse a write based on its parent - the hops the reader must load ride along exactly
                 // as requiredWhen's value path does. No value expression: the check rejects on the
-                // condition alone.
+                // condition alone. The condition is read by requiredWhen's reader, so a to-one term is
+                // compared by value there as here (#7509, the #7237 class).
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
-                List<Map<String, Object>> when = forbidWhenTerms(entity, byName, walker, check.getWhen());
+                List<Map<String, Object>> when = CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
                 if (when == null) {
                     continue; // the parser already reported it
                 }
@@ -2598,77 +2599,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Reads a {@code forbidWhen} condition into the neutral terms the model carries (issue #7405). Each
-     * term reads either the record's own property or a one-hop {@code Relation.field} whose parent the
-     * walker loads first, which is why a child can refuse a write on its parent's state. Typed against
-     * each operand's DECLARED type (a to-one by its integer foreign key), and null when a comparison
-     * does not read - the parser has already reported it, and a condition degrading to {@code true}
-     * would refuse every write.
-     *
-     * @param entity the entity carrying the check
-     * @param byName the local entities by name
-     * @param walker the shared path walker, which accumulates the hops the terms read through
-     * @param when the authored condition
-     * @return the terms, or {@code null} when a comparison does not read
-     */
-    private static List<Map<String, Object>> forbidWhenTerms(EntityIntent entity, Map<String, EntityIntent> byName,
-            ResolvePathSupport.Walker walker, Object when) {
-        List<Map<String, Object>> terms = new ArrayList<>();
-        for (String term : CheckSupport.terms(when)) {
-            CheckSupport.Comparison comparison = CheckSupport.parse(term);
-            if (comparison == null) {
-                return null;
-            }
-            String owner;
-            String property;
-            String type;
-            if (ResolvePathSupport.isPath(comparison.property())) {
-                ResolvePathSupport.Path path = walker.resolve(comparison.property());
-                if (!path.resolved()) {
-                    return null;
-                }
-                owner = path.owner();
-                property = path.property();
-                type = ResolvePathSupport.RELATION_TERMINAL.equals(path.terminalType()) ? "integer"
-                        : path.terminalType() != null ? path.terminalType() : inferGuardType(comparison.literal());
-            } else {
-                FieldIntent field = fieldOf(entity, comparison.property());
-                RelationIntent relation = field == null ? toOneOf(entity, comparison.property()) : null;
-                if (field == null && relation == null) {
-                    return null;
-                }
-                owner = CheckSupport.RECORD;
-                property = IntentNaming.pascalCase(comparison.property());
-                type = field != null ? field.getType() : relationKeyType(relation, byName);
-            }
-            Map<String, Object> read = CheckSupport.term(owner, property, comparison, type, false);
-            if (read == null) {
-                return null;
-            }
-            terms.add(read);
-        }
-        return terms.isEmpty() ? null : terms;
-    }
-
-    /**
-     * The guard type of a comparison against a cross-model terminal, whose declared type is not known
-     * here (its owner model is not loaded): inferred from the literal, which a cross-model status name
-     * has already been refused into a numeric seed id by the symbol resolver.
-     */
-    private static String inferGuardType(String literal) {
-        if (literal == null) {
-            return "string";
-        }
-        if (literal.startsWith("'") || literal.startsWith("\"")) {
-            return "string";
-        }
-        if (literal.matches("-?\\d+")) {
-            return "integer";
-        }
-        return "true".equals(literal) || "false".equals(literal) ? "boolean" : "string";
-    }
-
-    /**
      * The UI descriptor for a {@code forbidWhen} whose every term reads the composition MASTER of this
      * child (#7275): the master-detail panel already holds that record, so the generated view can hide
      * the child's Add/edit/delete affordance while the condition holds, with no extra fetch - the same
@@ -2722,21 +2652,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return null;
-    }
-
-    /**
-     * The declared type of a to-one relation's foreign key - the target's primary-key type, falling
-     * back to the integer intent keys always are when the target is owned by another model.
-     */
-    private static String relationKeyType(RelationIntent relation, Map<String, EntityIntent> byName) {
-        EntityIntent target = relation.getTo() == null ? null : byName.get(relation.getTo());
-        if (target != null) {
-            FieldIntent key = primaryKeyOf(target);
-            if (key != null && key.getType() != null) {
-                return key.getType();
-            }
-        }
-        return "integer";
     }
 
     /**
