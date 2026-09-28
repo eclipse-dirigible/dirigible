@@ -113,6 +113,17 @@ public class RelationIntent {
     private Map<String, Object> where;
 
     /**
+     * Optional picker rule (issue #7496): which TARGET rows this to-one's picker offers. A row failing
+     * the rule is shown disabled with a message ({@code else: mark}, the default) or left out
+     * ({@code else: hide}) - the customer with no registration number is visibly not pickable onto an
+     * invoice, instead of being discovered only when the invoice is refused at Issue. Unlike
+     * {@link #where} it names a completeness rule rather than narrowing to one value, and it never
+     * gates the server. Emitted as the {@code widgetPickable} attribute on the FK property. See
+     * {@link PickableIntent}.
+     */
+    private PickableIntent pickable;
+
+    /**
      * Restricts this to-one relation to LEAF nodes of its (hierarchical) target: the picker offers only
      * childless nodes and the generated REST validation rejects an FK to a node with children (e.g. a
      * journal line may reference an analytical account, never a synthetic one). Valid only when the
@@ -329,6 +340,14 @@ public class RelationIntent {
 
     public void setWhere(Map<String, Object> where) {
         this.where = where;
+    }
+
+    public PickableIntent getPickable() {
+        return pickable;
+    }
+
+    public void setPickable(PickableIntent pickable) {
+        this.pickable = pickable;
     }
 
     public String getWhenMasterDeleted() {

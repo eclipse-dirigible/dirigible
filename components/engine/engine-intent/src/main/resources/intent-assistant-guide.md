@@ -429,6 +429,20 @@ field may declare:
   still resolve. Not allowed on a composition parent (preset, never picked) or an `EntityStatus`.
   Canonical shape - a stock line's Product picker excluding services:
     `- { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }`
+- `pickable: { when: [<target property> != null, ...], else: mark|hide, message: <text> }` on a
+  manyToOne/oneToOne (#7496) - **a picker rule over the TARGET's rows**: this is how "a customer
+  with incomplete registration data cannot be picked onto an invoice" is declared, so the clerk
+  learns it at the picker instead of when the invoice is refused at Issue. `when` is one comparison
+  or a list (their AND) of `<property> ==|!= <literal>` - the same typed guard grammar a check's
+  `when` takes, over the target's own fields / to-one relations (no path) - plus `<property> != null`
+  (present: neither null nor blank) and `== null` (absent), which test any field type. `else: mark`
+  (the default) lists a failing row disabled with `message` under its name (absent, the rule text
+  is shown); `else: hide` leaves it out. A value the record already holds always keeps its label -
+  a now-failing one stays listed, disabled. **It governs the picker only**: a REST client bypasses
+  any picker, so pair it with the write-side rule (a `requiredWhen` over `Customer.registrationNumber`
+  at the status that needs it). Not on a composition parent, an `EntityStatus`, a subset, or with
+  `leafOnly`. Canonical shape:
+    `- { name: Customer, kind: manyToOne, to: Customer, pickable: { when: [registrationNumber != null, address != null], message: "Registration data incomplete" } }`
 - `immutableWhen: "<Status> == <seed id> [|| ...]"` (entity-level) - **status-scoped user-write
   immutability**: while the entity's `function: EntityStatus` relation satisfies the expression,
   update and delete through the REST surface are rejected with 409 (e.g.

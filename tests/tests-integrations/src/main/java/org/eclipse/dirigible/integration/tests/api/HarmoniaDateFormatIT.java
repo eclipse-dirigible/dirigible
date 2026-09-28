@@ -153,8 +153,11 @@ class HarmoniaDateFormatIT {
     void theListColumnFilterIsThePickerToo() throws Exception {
         String content = read("/META-INF/dirigible/template-application-ui-harmonia-java/ui/perspective/manage/list-view.html.template");
 
-        assertTrue(content.contains("x-h-date-picker-popup=\"HarmoniaFormat.pickerConfig()\" x-model=\"columnFilters[col.name]\""),
-                "the date column filter must bind the picker to the column filter");
+        // The filter moved out of the table into the Filter menu (#7491), so the picker now edits that
+        // menu's draft - applyFilterDraft writes it into columnFilters. Same picker, same instance
+        // pattern; only the model it binds moved.
+        assertTrue(content.contains("x-h-date-picker-popup=\"HarmoniaFormat.pickerConfig()\" x-model=\"filterDraft\""),
+                "the date column filter must bind the picker to the filter draft");
         assertTrue(!content.contains("'date' : 'text'"), "the native date input must be gone: " + content);
     }
 

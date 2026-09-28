@@ -125,7 +125,16 @@ document.addEventListener('alpine:init', () => {
       }
 
       // Entity route: top is the entity name; label it the same way the sidebar does.
-      const isList = segments.length === 1;
+      // /<Entity>/:id is the LIST with one of its rows selected - the record opens in a sheet over
+      // the table, not on a page of its own - so it is one crumb, the list's. Only the routes that
+      // really are their own page (/create, /:id/edit, /:id/preview) add a second one; without this
+      // the id fell through to the action branch and the trail read "Expenses > 4".
+      // Held to a KNOWN entity: /my/<Entity> and /partner/<Entity> are two segments as well, and
+      // their second one is the entity, which still earns its own crumb.
+      const knownEntity = Object.prototype.hasOwnProperty.call(this.navLabels, top);
+      const isRecordOnList =
+              knownEntity && segments.length === 2 && segments[1] !== 'create' && segments[1] !== 'list';
+      const isList = segments.length === 1 || isRecordOnList;
       const navKeys = window.__harmoniaNavKeys || {};
       crumbs.push({ label: window.T ? T(navKeys[top], this.navLabel(this.navLabels[top] || top)) : this.navLabel(this.navLabels[top] || top), route: isList ? null : '/' + top });
       if (!isList) {

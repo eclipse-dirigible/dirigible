@@ -91,6 +91,8 @@ entities:
 - { name: price, type: decimal,             dependsOn: { relation: Product, valueFrom: price } }
 # Static option filter - e.g. only stock-tracked products:
 - { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }
+# Picker rule - a customer failing it is shown disabled with the message (else: hide leaves it out):
+- { name: Customer, kind: manyToOne, to: Customer, pickable: { when: [registrationNumber != null], message: Registration data incomplete } }
 ```
 
 Entity-level extras: `order: [Id, Product, Quantity, ...]` sequences form controls/list columns;
