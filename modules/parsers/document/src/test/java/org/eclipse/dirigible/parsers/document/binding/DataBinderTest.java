@@ -459,12 +459,12 @@ public class DataBinderTest {
         Node root = parser.parse("<document><text>[{{Total:words(EUR)}}]</text><text>[{{Total:words(USD)}}]</text>"
                 + "<text>[{{Name:words(EUR)}}]</text><text>[{{Total:words}}]</text></document>");
         Map<String, Object> data = Map.of("Total", 10, "Name", "ACME");
-        Node english = new DataBinder("en").bind(root, data);
+        Node german = new DataBinder("de").bind(root, data);
         Node bulgarian = new DataBinder("bg").bind(root, data);
         Node unknown = binder.bind(root, data);
-        assertEquals("[]", english.children()
-                                  .get(0)
-                                  .text());
+        assertEquals("[]", german.children()
+                                 .get(0)
+                                 .text());
         assertEquals("[]", unknown.children()
                                   .get(0)
                                   .text());
@@ -473,6 +473,15 @@ public class DataBinderTest {
                                         .get(i)
                                         .text());
         }
+    }
+
+    @Test
+    public void wordsFormatSpellsInEnglishForAnEnglishTemplate() {
+        Node root = parser.parse("<document><text>{{Total:words(Currency)}}</text></document>");
+        Node bound = new DataBinder("en").bind(root, Map.of("Total", 5264.44, "Currency", "EUR"));
+        assertEquals("FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS", bound.children()
+                                                                                     .get(0)
+                                                                                     .text());
     }
 
     @Test

@@ -44,6 +44,7 @@ interface AmountInWords {
         return switch (language.trim()
                                .toLowerCase(Locale.ROOT)) {
             case "bg" -> new BulgarianAmountInWords();
+            case "en" -> new EnglishAmountInWords();
             default -> NONE;
         };
     }

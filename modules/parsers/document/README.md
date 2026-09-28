@@ -184,9 +184,16 @@ language, the one of the `Print/<lang>/` folder it was read from (`new DataBinde
 
 The argument is a path to the ISO 4217 currency code, or the code itself (`words(EUR)`) for a
 template of one currency. The whole amount is in words, the cents are two digits, both currency
-nouns are spelled out, in capitals. Bulgarian (`bg`) is the one language so far, naming the euro
-and the lev with the grammar a Bulgarian invoice needs (gender agreement - едно евро / един лев /
-две хиляди - and `и` before the last word of each three-digit group). The placeholder renders
+nouns are spelled out, in capitals. Two languages so far:
+
+- **Bulgarian** (`bg`) names the euro and the lev, with the grammar a Bulgarian invoice needs:
+  gender agreement (едно евро / един лев / две хиляди) and `и` before the last word of each
+  three-digit group.
+- **English** (`en`) names the euro, the lev, the US dollar and the pound sterling -
+  `FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS`: hyphenated tens (sixty-four), short
+  scales, and no `and` inside the number, so the only one joins the cents.
+
+The placeholder renders
 **empty**, never throws, in a language with no spelling, for a currency the language cannot name, for
 a non-numeric value and at a trillion or more. It combines with alternative operands like any other
 format.

@@ -55,9 +55,11 @@ class PrintRendererTest {
 
         String bulgarian = PrintRenderer.renderFo(template, "bg", data, ImageResolver.PASS_THROUGH);
         String english = PrintRenderer.renderFo(template, "en", data, ImageResolver.PASS_THROUGH);
+        String german = PrintRenderer.renderFo(template, "de", data, ImageResolver.PASS_THROUGH);
 
         assertTrue(bulgarian.contains("ПЕТ ХИЛЯДИ ДВЕСТА ШЕСТДЕСЕТ И ЧЕТИРИ ЕВРО И 44 ЕВРОЦЕНТА"), "a bg template spells it out");
-        assertFalse(english.contains("ЕВРО"), "a language with no spelling renders it empty");
+        assertTrue(english.contains("FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS"), "an en template spells it out");
+        assertFalse(german.contains("EURO"), "a language with no spelling renders it empty");
     }
 
     @Test
