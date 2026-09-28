@@ -2212,6 +2212,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                             .stream()
                                             .map(IntentNaming::pascalCase)
                                             .toList());
+                // A text member is compared ignoring case and surrounding spaces (#7524): the rule is
+                // "the same name typed again", which differs in case or a trailing space far more often
+                // than byte for byte - and a false positive only costs a confirmation.
+                checkMap.put("normalizedFields", check.getFields()
+                                                      .stream()
+                                                      .filter(field -> isTextType(fieldOf(entity, field)))
+                                                      .map(IntentNaming::pascalCase)
+                                                      .toList());
+                // `{match}` in the message names the record collided with: its label, or its id.
+                String label = IntentEntities.labelFieldOf(entity);
+                FieldIntent pk = IntentEntities.primaryKeyOf(entity);
+                if (!label.isEmpty() || pk != null) {
+                    checkMap.put("matchProperty", label.isEmpty() ? IntentNaming.pascalCase(pk.getName()) : label);
+                }
                 if (check.getMessage() == null || check.getMessage()
                                                        .isBlank()) {
                     checkMap.put("message", "Another " + IntentNaming.humanize(entity.getName()) + " with the same "
@@ -2562,6 +2576,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static boolean isNumericType(String type) {
         return type != null && NUMERIC_FIELD_TYPES.contains(type.trim()
                                                                 .toLowerCase(java.util.Locale.ROOT));
+    }
+
+    private static boolean isTextType(FieldIntent field) {
+        if (field == null || field.getType() == null) {
+            return false;
+        }
+        String type = field.getType()
+                           .trim()
+                           .toLowerCase(java.util.Locale.ROOT);
+        return "string".equals(type) || "text".equals(type);
     }
 
     private static FieldIntent fieldOf(EntityIntent entity, String name) {

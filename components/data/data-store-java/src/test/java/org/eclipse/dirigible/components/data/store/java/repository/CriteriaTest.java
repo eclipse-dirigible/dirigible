@@ -84,6 +84,21 @@ class CriteriaTest {
     }
 
     @Test
+    void aNormalizedEqualsFoldsCaseAndSpacesOnBothSides() {
+        // #7524: "ACME PROBE " is the same name typed again as the stored "Acme Probe".
+        Criteria criteria = Criteria.create()
+                                    .eqNormalized("name", "ACME PROBE ")
+                                    .eqNormalized("code", null);
+
+        assertEquals("from CustomerEntity where upper(trim(name)) = upper(trim(:p0)) and code is null",
+                criteria.append("from CustomerEntity"));
+        assertEquals("ACME PROBE ", criteria.parameters()
+                                            .get("p0"));
+        assertThrows(IllegalArgumentException.class, () -> Criteria.create()
+                                                                   .eqNormalized("name) or (1=1", "x"));
+    }
+
+    @Test
     void rejectsNonIdentifierPropertyNamesToPreventInjection() {
         assertThrows(IllegalArgumentException.class, () -> Criteria.create()
                                                                    .eq("status; drop table", "x"));

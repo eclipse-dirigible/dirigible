@@ -636,6 +636,9 @@ field may declare:
     another record already carries the same values. Use it where a hard `unique:` would be wrong -
     two companies may share a registered name under different registration numbers. Fields are own
     fields or to-one relations; it is always a warning (`severity: error` is refused - that is `unique:`).
+    A text field is compared ignoring case and surrounding spaces ("ACME Ltd" repeats "Acme Ltd "), and
+    `{match}` in the message is replaced with the existing record's label (its `name`, else its id) -
+    `message: "A customer with this name already exists: {match}"`.
   - `{ kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }`
     on the DOCUMENT (the master): every line's `field` compared with the `value` literal, asked ONCE
     when the document is saved for all the lines that break it - not once per line. `{count}` in the

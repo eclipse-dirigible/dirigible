@@ -1143,12 +1143,20 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #foreach($check in $warningChecks)
 #if($check.kind == "duplicate")
         // Another record carrying the same values (intent `checks: duplicate`): legitimate - two companies
-        // may share a registered name - so asked, not refused. An unset value repeats nothing.
+        // may share a registered name - so asked, not refused. An unset value repeats nothing, and a text
+        // value repeats whatever differs from it only in case or surrounding spaces.
         if (#foreach($field in $check.fields)entity.${field} != null#if($foreach.hasNext) && #end#end) {
             for (${name}Entity other : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($field in $check.fields)
-                                                                                                                         .eq("${field}", entity.${field})#end)) {
+#if($check.normalizedFields && $check.normalizedFields.contains($field))
+                                                                                                                         .eqNormalized("${field}", entity.${field})#else
+                                                                                                                         .eq("${field}", entity.${field})#end#end)) {
                 if (!java.util.Objects.equals(other.${pkPropertyName}, entity.${pkPropertyName})) {
+#if($check.matchProperty)
+                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
+                            "${check.messageJavaLiteral}".replace("{match}", String.valueOf(other.${check.matchProperty}))));
+#else
                     warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+#end
                     break;
                 }
             }

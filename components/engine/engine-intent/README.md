@@ -207,7 +207,9 @@ zero. Those are **warnings** (#7466):
   `exactlyOne`, `agree`). A gated check runs inside a workflow transition, where nobody can answer a
   question, so the two are refused together.
 - `duplicate` - another record already carries the same `fields` (own fields or to-one relations).
-  Always a warning; the hard version is `unique:`.
+  A `string`/`text` field is compared ignoring case and surrounding spaces, so "ACME Ltd" is asked
+  about when "Acme Ltd " exists; `{match}` in the message is the existing record's label (its `name`,
+  else its id). Always a warning; the hard version is `unique:`.
 - `itemsCompare` - on the document: every item's `field` compared with `op` to the `value` literal.
   `{count}` in the message is the number of lines that break it. Always a warning; the hard version is
   a `compare` on the items entity.

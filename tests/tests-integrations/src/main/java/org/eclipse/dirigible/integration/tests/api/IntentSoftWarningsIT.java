@@ -69,7 +69,7 @@ class IntentSoftWarningsIT extends IntegrationTest {
             entities:
               - name: Customer
                 checks:
-                  - { kind: duplicate, fields: [name], message: "A customer with this name already exists" }
+                  - { kind: duplicate, fields: [name], message: "A customer with this name already exists: {match}" }
                   - { kind: compare, field: discount, op: le, value: 50, severity: warn, message: "A discount above 50%" }
                 fields:
                   - { name: id,       type: integer, primaryKey: true, generated: true }
@@ -111,9 +111,17 @@ class IntentSoftWarningsIT extends IntegrationTest {
         // ...the second is asked about, and nothing is written until it is confirmed.
         warned(CUSTOMERS, "{\"Name\":\"Acme\"}", null).body("warnings", hasSize(1))
                                                       .body("warnings[0].code", equalTo(DUPLICATE))
-                                                      .body("warnings[0].message", equalTo("A customer with this name already exists"));
+                                                      .body("warnings[0].message",
+                                                              equalTo("A customer with this name already exists: Acme"));
         assertCount(CUSTOMERS, 1);
         create(CUSTOMERS, "{\"Name\":\"Acme\"}", DUPLICATE);
+        assertCount(CUSTOMERS, 2);
+        // The same name typed again rarely matches byte for byte (#7524): a different case and stray
+        // spaces are still asked about, and {match} names the stored record in its own spelling.
+        warned(CUSTOMERS, "{\"Name\":\"  ACME \"}", null).body("warnings", hasSize(1))
+                                                         .body("warnings[0].code", equalTo(DUPLICATE))
+                                                         .body("warnings[0].message",
+                                                                 equalTo("A customer with this name already exists: Acme"));
         assertCount(CUSTOMERS, 2);
 
         // A record never duplicates itself: saving a unique one again asks nothing.

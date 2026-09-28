@@ -1601,6 +1601,9 @@ class EdmIntentGeneratorTest {
         assertEquals("warn", duplicate.get("severity"));
         assertEquals("Customer.duplicate.0", duplicate.get("code"));
         assertEquals(List.of("Name"), duplicate.get("fields"));
+        // #7524: a text member is compared normalised, and `{match}` names the record by its label.
+        assertEquals(List.of("Name"), duplicate.get("normalizedFields"));
+        assertEquals("Name", duplicate.get("matchProperty"));
         assertEquals("Another Customer with the same Name already exists", duplicate.get("message"));
 
         List<Map<String, Object>> invoiceChecks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
@@ -1623,6 +1626,39 @@ class EdmIntentGeneratorTest {
         Map<String, Object> forbid = ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceItem").get("checks")).get(0);
         assertEquals("warn", forbid.get("severity"));
         assertFalse(forbid.containsKey("masterGuard"), "a warning must not hide the panel's affordances: " + forbid);
+    }
+
+    /**
+     * #7524: only a {@code duplicate}'s text members are compared normalised - a to-one is its FK and a
+     * number has no case - and on an entity with no label {@code {match}} names the record by its id.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aDuplicateNormalizesOnlyItsTextMembersAndMatchesByIdWithoutALabel() {
+        String yaml = """
+                name: stock
+                entities:
+                  - name: Warehouse
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Bin
+                    checks:
+                      - { kind: duplicate, fields: [code, note, shelf, Warehouse] }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                      - { name: note, type: text }
+                      - { name: shelf, type: integer }
+                    relations:
+                      - { name: Warehouse, kind: manyToOne, to: Warehouse }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "stock");
+
+        Map<String, Object> duplicate = ((List<Map<String, Object>>) entityByName(entities(model), "Bin").get("checks")).get(0);
+        assertEquals(List.of("Code", "Note", "Shelf", "Warehouse"), duplicate.get("fields"));
+        assertEquals(List.of("Code", "Note"), duplicate.get("normalizedFields"));
+        assertEquals("Id", duplicate.get("matchProperty"));
     }
 
     /**

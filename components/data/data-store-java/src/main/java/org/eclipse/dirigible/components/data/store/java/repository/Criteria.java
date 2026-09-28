@@ -73,6 +73,27 @@ public final class Criteria {
     }
 
     /**
+     * Equals, ignoring case and surrounding spaces
+     * ({@code upper(trim(property)) = upper(trim(value))}); NULL-SAFE like {@link #eq(String, Object)}.
+     * Both sides are normalised by the database, so the stored and the compared text are folded by the
+     * same rules - the lookup for "the same name typed again", which in practice differs from the
+     * stored one in case or a trailing space far more often than byte for byte (#7524).
+     *
+     * @param property the entity property name, of a text type
+     * @param value the text to match; null matches rows whose property is null
+     * @return this criteria
+     */
+    public Criteria eqNormalized(String property, String value) {
+        if (value == null) {
+            return isNull(property);
+        }
+        validate(property);
+        String name = bind(value);
+        conditions.add("upper(trim(" + property + ")) = upper(trim(:" + name + "))");
+        return this;
+    }
+
+    /**
      * Not equals ({@code property <> value}); NULL-SAFE - a null value renders
      * {@code property is not null}, the complement of {@link #eq(String, Object)}'s null form.
      *
