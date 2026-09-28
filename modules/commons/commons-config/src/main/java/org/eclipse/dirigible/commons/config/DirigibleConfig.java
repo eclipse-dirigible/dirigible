@@ -212,13 +212,17 @@ public enum DirigibleConfig {
      * another origin. Unset, the OAuth2 login profiles (cognito, keycloak, github) answer no
      * cross-origin request at all, while the basic profile keeps granting every origin - without
      * credentials. The STOMP handshake accepts those that name a host - a wildcard origin never reaches
-     * it, since a WebSocket handshake carries the session cookie.
+     * it - and a session opened from one of them is authenticated by its handshake cookie only with
+     * {@link #CORS_ALLOW_CREDENTIALS}; otherwise its CONNECT frame carries a bearer token.
      */
     CORS_ALLOWED_ORIGINS("DIRIGIBLE_CORS_ALLOWED_ORIGINS", null),
 
     /**
-     * Whether a cross-origin request from a configured origin may carry cookies and HTTP
-     * authentication. Refused together with a wildcard origin. A bearer-token client does not need it.
+     * Whether a cross-origin request from a configured origin may carry cookies and HTTP authentication
+     * - and, the same decision, whether a STOMP session opened cross-origin from such an origin is
+     * authenticated by the cookie or HTTP authentication of its handshake; without it the session's
+     * CONNECT frame needs a bearer token. Refused together with a wildcard origin. A bearer-token
+     * client does not need it.
      */
     CORS_ALLOW_CREDENTIALS("DIRIGIBLE_CORS_ALLOW_CREDENTIALS", Boolean.FALSE.toString()),
 
