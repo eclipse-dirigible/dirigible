@@ -20,7 +20,9 @@ import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
 import org.eclipse.dirigible.sdk.db.ValidationException;
+import org.eclipse.dirigible.sdk.db.Warning;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -89,6 +91,8 @@ public class ControllerInvoker {
     public void invoke(RouteMatch match, HttpServletRequest request, HttpServletResponse response) {
         try {
             invokeInternal(match, request, response);
+        } catch (ConfirmationRequiredException e) {
+            writeConfirmationRequired(response, e);
         } catch (ResponseStatusException e) {
             writeError(response, e);
         }
@@ -130,6 +134,11 @@ public class ControllerInvoker {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof ResponseStatusException rse) {
                 throw rse;
+            }
+            if (cause instanceof ConfirmationRequiredException confirmation) {
+                // A soft `severity: warn` check (#7466): the write is legitimate but must be confirmed
+                // first - neither a fault nor a refusal, so it is answered on its own status below.
+                throw confirmation;
             }
             if (cause instanceof ValidationException) {
                 // A client-side domain validation (a generated repository's checks: gate or capacity
@@ -266,6 +275,40 @@ public class ControllerInvoker {
                     .flush();
         } catch (IOException writeFailure) {
             LOGGER.warn("Could not write the error body for status [{}]: {}", status, writeFailure.getMessage());
+        }
+    }
+
+    /**
+     * Answers a write that raised unconfirmed warnings (#7466) with {@code 428 Precondition Required}:
+     * the compact error body plus the {@code warnings} the caller must confirm, each with the
+     * {@code code} it echoes back in {@code X-Confirm-Warnings} when it repeats the request.
+     */
+    private void writeConfirmationRequired(HttpServletResponse response, ConfirmationRequiredException e) {
+        if (response.isCommitted()) {
+            return;
+        }
+        int status = HttpStatus.PRECONDITION_REQUIRED.value();
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", status);
+        body.put("error", HttpStatus.PRECONDITION_REQUIRED.getReasonPhrase());
+        body.put("errorType", "ConfirmationRequired");
+        body.put("message", e.getMessage());
+        List<Map<String, Object>> warnings = new java.util.ArrayList<>();
+        for (Warning warning : e.getWarnings()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("code", warning.code());
+            entry.put("message", warning.message());
+            warnings.add(entry);
+        }
+        body.put("warnings", warnings);
+        try {
+            objectMapper.writeValue(response.getOutputStream(), body);
+            response.getOutputStream()
+                    .flush();
+        } catch (IOException writeFailure) {
+            LOGGER.warn("Could not write the confirmation body: {}", writeFailure.getMessage());
         }
     }
 

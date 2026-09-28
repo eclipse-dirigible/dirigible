@@ -1033,6 +1033,113 @@ class IntentParserTest {
         assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, status: 1,"), "cannot carry a `status` gate");
     }
 
+    /**
+     * The soft tier (#7466): the three cases the billing review asked for - a second customer with the
+     * same name, a second product with the same name, a document line at price zero - are warnings the
+     * person saving confirms, never refusals. A warning lives where a person writes, so only the
+     * ungated row-level kinds take {@code severity: warn}, and the two warning-only kinds refuse
+     * {@code severity: error}.
+     */
+    @Test
+    void warningChecksParseAndValidate() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    checks:
+                      - { kind: duplicate, fields: [name], message: "A customer with this name already exists" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: discount, type: decimal }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }
+                      - { kind: compare, field: total, op: le, value: 100000, severity: warn, message: "An unusually large invoice" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                      - { name: customer, kind: manyToOne, to: Customer }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent duplicate = model.getEntities()
+                                     .get(1)
+                                     .getChecks()
+                                     .get(0);
+        assertTrue(duplicate.isWarning(), "a duplicate is a warning without saying so");
+        List<CheckIntent> invoiceChecks = model.getEntities()
+                                               .get(2)
+                                               .getChecks();
+        assertTrue(invoiceChecks.get(0)
+                                .isWarning());
+        assertEquals("warn", invoiceChecks.get(1)
+                                          .getSeverity());
+        assertTrue(invoiceChecks.get(1)
+                                .isWarning());
+
+        // A relation repeats too (compared by its key).
+        IntentParser.parse(yaml.replace("fields: [name], message", "fields: [name, discount], message"));
+
+        assertCompareIssue(yaml.replace("fields: [name], message", "fields: [nickname], message"),
+                "field [nickname] is not a field or to-one relation of [Customer]");
+        assertCompareIssue(yaml.replace("fields: [name], message", "message"), "requires `fields`");
+        assertCompareIssue(yaml.replace("fields: [name], message", "fields: [name], severity: error, message"),
+                "a hard refusal of a second record with the same values is `unique:`");
+        assertCompareIssue(yaml.replace("severity: warn", "severity: soft"), "unknown `severity` [soft]");
+        // A gated check fires inside a transition, where nobody can answer the question.
+        assertCompareIssue(yaml.replace("severity: warn,", "severity: warn, status: 2,"), "there is nobody to confirm a warning");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt, value: 0, status: 2"),
+                "cannot carry a `status` gate");
+        // itemsCompare is a literal compare read off the ITEMS entity, validated as one.
+        assertCompareIssue(yaml.replace("field: price, op: gt", "field: cost, op: gt"),
+                "field [cost] is not a field of [SalesInvoiceItem]");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt, than: price"), "not `than`");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0", "field: price, op: gt"), "requires `value`");
+        assertCompareIssue(yaml.replace("field: price, op: gt, value: 0,", "field: price, op: gt, value: 0, severity: error,"),
+                "a hard per-line rule is a `compare` check on the items entity");
+        assertCompareIssue(yaml.replace("- { kind: duplicate, fields: [name]", "- { kind: itemsCompare, field: name, op: gt, value: 0"),
+                "requires the entity to own a composition child");
+    }
+
+    @Test
+    void severityWarnIsRefusedOnTheKindsNobodyIsAskedAbout() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    checks:
+                      - { kind: itemsMin, count: 1, status: 2, severity: warn, message: "Needs a line" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                """;
+        assertCompareIssue(yaml, "cannot carry `severity: warn`");
+    }
+
     private static void assertCompareIssue(String yaml, String expected) {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
@@ -1202,14 +1309,91 @@ class IntentParserTest {
         // The one-hop relation must exist - the walker refuses a path that names nothing readable.
         assertForbidIssue(yaml.replace("SalesInvoice.Status ==", "Invoice.Status =="), "has no to-one relation [Invoice]");
 
-        // requiredWhen's grammar is unchanged: its condition stays record-local, so a dotted
-        // `Relation.field`
-        // term is not one of its own fields/to-ones and is refused (only a forbidWhen walks a hop). An
-        // integer literal here, so the status resolver leaves the term alone and the parser is what refuses
-        // it.
+        // A requiredWhen walks a dotted term the same way (#7495), so a hop naming nothing readable is
+        // refused by the walker - not waved through, and not read as a record-local property.
         String requiredDotted = yaml.replace("kind: forbidWhen, when: \"SalesInvoice.Status == PAID\",",
                 "kind: requiredWhen, field: amount, when: \"SalesInvoice.Amount == 5\",");
-        assertForbidIssue(requiredDotted, "is not a field or to-one relation of [SalesInvoiceCustomerPayment]");
+        assertForbidIssue(requiredDotted, "[SalesInvoice] has no field or to-one relation [Amount]");
+    }
+
+    @Test
+    void requiredWhenConditionMayReadAToOneHop() {
+        // Issue #7495: which of the customer's identifiers an invoice needs at issue depends on the
+        // CUSTOMER's kind - the condition reads the referenced row, as the value already could.
+        String yaml = """
+                name: sales
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 3, name: ISSUED }
+                  - name: customer-statuses
+                    entity: CustomerStatus
+                    rows:
+                      - { id: 1, name: PROSPECT }
+                      - { id: 2, name: ACTIVE }
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: CustomerStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: CustomerKind
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: registrationNumber, type: string }
+                      - { name: vatNumber, type: string }
+                      - { name: vatRegistered, type: boolean }
+                    relations:
+                      - { name: Kind, kind: manyToOne, to: CustomerKind }
+                      - { name: Status, kind: manyToOne, to: CustomerStatus, function: EntityStatus, init: PROSPECT }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.registrationNumber, when: "Customer.Kind == 1", status: ISSUED,
+                          message: "A business customer needs a registration number" }
+                      - { kind: requiredWhen, field: Customer.vatNumber,
+                          when: ["Customer.Kind == 1", "Customer.vatRegistered == true", "Customer.Status == ACTIVE"],
+                          status: ISSUED, message: "A VAT-registered business customer needs a VAT number" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        java.util.List<org.eclipse.dirigible.components.intent.model.CheckIntent> checks = model.getEntities()
+                                                                                                .get(4)
+                                                                                                .getChecks();
+        assertEquals("Customer.Kind == 1", String.valueOf(checks.get(0)
+                                                                .getWhen()));
+        // A status NAME one hop away resolves against the CUSTOMER's nomenclature (ACTIVE -> 2), never
+        // against the invoice's own - where ACTIVE is no status at all, and a same-named one would be a
+        // different id.
+        assertEquals("[Customer.Kind == 1, Customer.vatRegistered == true, Customer.Status == 2]", String.valueOf(checks.get(1)
+                                                                                                                        .getWhen()));
+
+        // The hop's terminal must exist on the target.
+        assertForbidIssue(yaml.replace("when: \"Customer.Kind == 1\"", "when: \"Customer.Sort == 1\""),
+                "[Customer] has no field or to-one relation [Sort]");
+        // A to-one is compared by its integer key: a word there is not a value of it.
+        assertForbidIssue(yaml.replace("when: \"Customer.Kind == 1\"", "when: \"Customer.Kind == business\""),
+                "a [integer], with [business], which is not a value of that type");
+        // A mistyped literal against a hop field never holds, so it is refused like a record-local one.
+        assertForbidIssue(yaml.replace("\"Customer.vatRegistered == true\"", "\"Customer.vatRegistered == 'yes'\""),
+                "a [boolean], with ['yes'], which is not a value of that type");
+        // A misspelt status name one hop away is a validation error, never a silently-never-matching guard.
+        assertForbidIssue(yaml.replace("== ACTIVE", "== ACTIV"), "not a seeded status");
     }
 
     private static void assertForbidIssue(String yaml, String expected) {

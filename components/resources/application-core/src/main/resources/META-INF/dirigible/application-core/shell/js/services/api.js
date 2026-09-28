@@ -69,6 +69,7 @@ App.services.api = {
       case 404: return 'NotFound';
       case 409: return 'Conflict';
       case 422: return 'ValidationError';
+      case 428: return 'ConfirmationRequired';
       case 502: return 'UpstreamError';
       default:  return 'InternalServerError';
     }
@@ -107,6 +108,8 @@ App.services.api = {
     // override, the app's single language flag (the Region & Language store) applies as before.
     const language = opts.language !== undefined ? opts.language : this.language();
     if (language) headers['Accept-Language'] = language;
+    // The warning codes the user already confirmed for THIS write (the repeat below, #7466).
+    if (opts.confirmWarnings && opts.confirmWarnings.length) headers['X-Confirm-Warnings'] = opts.confirmWarnings.join(',');
 
     let r;
     try {
@@ -137,6 +140,18 @@ App.services.api = {
     let parsed = null;
     if (raw) {
       try { parsed = JSON.parse(raw); } catch (_) { /* non-JSON body */ }
+    }
+
+    // A soft `severity: warn` check (#7466): the write is legitimate but the user must confirm it
+    // first. Ask once, listing every warning, and repeat the SAME request naming the codes confirmed -
+    // so every generated form, line dialog and detail panel gets the prompt without a line of its own.
+    // A warning that appears only on the repeat (the data changed in between) is asked about again.
+    if (r.status === 428 && parsed && Array.isArray(parsed.warnings) && parsed.warnings.length && !isForm) {
+      const confirmed = await App.services.confirmWarnings(parsed.warnings);
+      if (confirmed) {
+        return this.request(method, url, body, { ...opts, confirmWarnings: parsed.warnings.map(w => w.code) });
+      }
+      throw new ApiError({ httpStatus: r.status, errorType: 'ConfirmationDeclined', errorMessage: parsed.message || 'Warnings not confirmed' });
     }
 
     const err = parsed && typeof parsed === 'object'
@@ -184,4 +199,79 @@ App.services.api = {
     }
     return all;
   },
+};
+
+/**
+ * Ask the user to confirm the warnings a write raised (#7466) - resolves true to go ahead. The page
+ * that made the call knows nothing about it: the dialog is mounted on the body for the one question
+ * and removed once answered. Rendered with the shell's Harmonia dialog when Alpine is running, and as
+ * the browser's own confirm otherwise (a standalone page), so the question is never skipped.
+ *
+ * @param warnings [{ code, message }] as the server listed them
+ * @returns {Promise<boolean>}
+ */
+App.services.confirmWarnings = function (warnings) {
+  const t = (key, fallback) => (typeof window.T === 'function' ? window.T(key, fallback) : fallback);
+  const title = t('warnings.title', 'Please confirm');
+  const question = t('warnings.question', 'Do you want to save anyway?');
+  const messages = warnings.map(w => w.message);
+  if (!window.Alpine || typeof document === 'undefined') {
+    return Promise.resolve(window.confirm(title + '\n\n' + messages.join('\n') + '\n\n' + question));
+  }
+  return new Promise(resolve => {
+    const host = document.createElement('div');
+    // Alpine initialises the Harmonia directives of the subtree; the dialog itself needs no state.
+    // It is mounted CLOSED and opened on the next frame: the overlay directive starts hidden and
+    // opens only on a CHANGE of data-open, which it can observe only once Alpine has attached it.
+    host.setAttribute('x-data', '{}');
+    host.innerHTML = `
+      <div x-h-dialog-overlay data-open="false">
+        <div x-h-dialog role="alertdialog" aria-modal="true">
+          <div x-h-dialog-header>
+            <h2 x-h-dialog-title></h2>
+          </div>
+          <div x-h-dialog-content>
+            <ul class="warnings-list"></ul>
+            <p class="warnings-question mt-2"></p>
+          </div>
+          <div x-h-dialog-footer>
+            <button type="button" x-h-button data-variant="outline" data-answer="no"></button>
+            <button type="button" x-h-button data-variant="primary" data-answer="yes"></button>
+          </div>
+        </div>
+      </div>`;
+    // Text goes in through textContent, never markup: the messages are authored in the model, but a
+    // dialog is no place to trust that.
+    host.querySelector('[x-h-dialog-title]').textContent = title;
+    const list = host.querySelector('.warnings-list');
+    for (const message of messages) {
+      const item = document.createElement('li');
+      item.textContent = message;
+      list.appendChild(item);
+    }
+    host.querySelector('.warnings-question').textContent = question;
+    const no = host.querySelector('[data-answer="no"]');
+    const yes = host.querySelector('[data-answer="yes"]');
+    no.textContent = t('warnings.cancel', 'Cancel');
+    yes.textContent = t('warnings.confirm', 'Save anyway');
+    const answer = (confirmed) => {
+      document.removeEventListener('keydown', onKey, true);
+      host.remove();
+      resolve(confirmed);
+    };
+    const onKey = (event) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        answer(false);
+      }
+    };
+    no.addEventListener('click', () => answer(false));
+    yes.addEventListener('click', () => answer(true));
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(host);
+    // A task, not a frame: Alpine attaches the directive in the microtask after the append, and a
+    // frame never comes in a background tab. Opening focuses the first button - Cancel, the answer
+    // that writes nothing.
+    setTimeout(() => host.querySelector('[x-h-dialog-overlay]').setAttribute('data-open', 'true'), 0);
+  });
 };

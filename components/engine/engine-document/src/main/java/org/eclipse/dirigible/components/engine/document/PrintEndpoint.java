@@ -103,7 +103,7 @@ class PrintEndpoint extends BaseEndpoint {
         String templateSource = findTemplate(entity, language);
         Map<String, Object> data = GSON.fromJson(body, new TypeToken<Map<String, Object>>() {}.getType());
 
-        byte[] pdf = PrintRenderer.renderPdf(templateSource, data, imageResolver);
+        byte[] pdf = PrintRenderer.renderPdf(templateSource, language, data, imageResolver);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_PDF);

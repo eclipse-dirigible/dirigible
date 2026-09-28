@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
+import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
@@ -74,6 +75,7 @@ import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
+import org.eclipse.dirigible.components.intent.model.PickableIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
@@ -4214,6 +4216,9 @@ public final class IntentParser {
                 if (relation.getWhere() != null) {
                     validateWhere(entity, relation, byName, issues);
                 }
+                if (relation.getPickable() != null) {
+                    validatePickable(entity, relation, byName, issues);
+                }
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
@@ -4410,6 +4415,9 @@ public final class IntentParser {
         }
         if (!isBlank(relation.getWhenMasterDeleted())) {
             unsupported.add("whenMasterDeleted");
+        }
+        if (relation.getPickable() != null) {
+            unsupported.add("pickable");
         }
         if (!unsupported.isEmpty()) {
             issues.add(subject + " is a subset relation so it cannot declare " + unsupported
@@ -5242,11 +5250,13 @@ public final class IntentParser {
      * The value is the record's own field or a one-hop {@code Relation.field} over a to-one, walked
      * with the same resolver every other path in the DSL uses - so a cross-model target reads too, and
      * a path walking on past one is refused there. The condition is closed to the equality comparisons
-     * every other {@code when} guard takes, over the record's OWN properties: a condition the generator
-     * cannot compile would leave the value required unconditionally, which is a {@code required} nobody
-     * authored. The {@code status} gate is optional here, unlike on the document-level kinds - a rule
-     * about the row can hold from the first save, and a rule about the moment the value is finally
-     * needed (the transition that sends the document) names the status it is needed at.
+     * every other {@code when} guard takes, over the record's own properties or - like the value - a
+     * one-hop {@code Relation.property} (issue #7495: which of a customer's identifiers an invoice
+     * needs depends on the CUSTOMER's kind): a condition the generator cannot compile would leave the
+     * value required unconditionally, which is a {@code required} nobody authored. The {@code status}
+     * gate is optional here, unlike on the document-level kinds - a rule about the row can hold from
+     * the first save, and a rule about the moment the value is finally needed (the transition that
+     * sends the document) names the status it is needed at.
      */
     private static void validateRequiredWhen(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             String subject, List<String> issues) {
@@ -5270,7 +5280,14 @@ public final class IntentParser {
                 issues.add(subject + " when must not be an empty list");
             }
             for (String term : terms) {
-                validateGuardTerm(entity, byName, term, subject, issues);
+                // A bare property keeps the record-local check (and its case-insensitive lookup), so a
+                // condition naming no hop is accepted exactly as before; a path is walked like the value.
+                CheckSupport.Comparison comparison = CheckSupport.parse(term);
+                if (comparison != null && ResolvePathSupport.isPath(comparison.property())) {
+                    validateForbidWhenTerm(entity, byName, term, subject, issues);
+                } else {
+                    validateGuardTerm(entity, byName, term, subject, issues);
+                }
             }
         }
         if (check.getStatus() != null && entityStatusRelationOf(entity) == null) {
@@ -5332,9 +5349,9 @@ public final class IntentParser {
     /**
      * A {@code forbidWhen} check: the reject-twin of {@code requiredWhen} (dirigible #7275). It rejects
      * the write while its condition holds, carrying no {@code field}/value - only the condition and the
-     * message. Its one reach beyond {@code requiredWhen} is that a {@code when} term may name a one-hop
-     * {@code Relation.field}, so a composition child can refuse a write based on its parent's state (a
-     * payment allocation cannot be added to an already PAID invoice). The {@code status} gate is
+     * message. A {@code when} term may name a one-hop {@code Relation.field}, as a
+     * {@code requiredWhen}'s may, so a composition child can refuse a write based on its parent's state
+     * (a payment allocation cannot be added to an already PAID invoice). The {@code status} gate is
      * optional and routes enforcement exactly as {@code requiredWhen}'s does: without one, every user
      * write; with one, the repository at that status.
      */
@@ -5367,12 +5384,13 @@ public final class IntentParser {
     }
 
     /**
-     * One comparison of a {@code forbidWhen} condition: the property is the record's own field / to-one
-     * OR a one-hop {@code Relation.field}, walked with the same resolver every other path uses (a
-     * cross-model to-one may be the last hop). The literal must be a value of the compared type - a
-     * to-one is compared by its foreign key, an integer, so a status name has been resolved to its seed
-     * id by now; a comparison the generator could not compile would switch the rule off while looking
-     * authored, the silent failure this module refuses everywhere.
+     * One comparison of a {@code forbidWhen} condition, or a one-hop term of a {@code requiredWhen}'s:
+     * the property is the record's own field / to-one OR a one-hop {@code Relation.field}, walked with
+     * the same resolver every other path uses (a cross-model to-one may be the last hop). The literal
+     * must be a value of the compared type - a to-one is compared by its foreign key, an integer, so a
+     * status name has been resolved to its seed id by now; a comparison the generator could not compile
+     * would switch the rule off while looking authored, the silent failure this module refuses
+     * everywhere.
      */
     private static void validateForbidWhenTerm(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String term, String subject,
             List<String> issues) {
@@ -5425,6 +5443,15 @@ public final class IntentParser {
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
+        validateSeverity(check, subject, issues);
+        if ("duplicate".equals(kind)) {
+            validateDuplicateCheck(entity, check, subject, issues);
+            return;
+        }
+        if ("itemsCompare".equals(kind)) {
+            validateItemsCompareCheck(entity, check, entities, subject, issues);
+            return;
+        }
         if ("guard".equals(kind)) {
             // An aggregate guard names an aggregates: entry whose `of` is THIS entity (v1: the guarded
             // entity is the aggregate source, so the sum is recomputed race-free from the local store).
@@ -5531,7 +5558,101 @@ public final class IntentParser {
             return;
         }
         issues.add(subject
-                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual or itemsMin");
+                + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual, itemsMin,"
+                + " duplicate or itemsCompare");
+    }
+
+    /** The row-level kinds a {@code severity: warn} may soften - the ones the controllers enforce. */
+    private static final Set<String> WARNABLE_KINDS = Set.of("compare", "requiredWhen", "forbidWhen", "exactlyOne", "agree");
+
+    /**
+     * {@code severity:} (#7466) is {@code error} (the default, a refusal) or {@code warn} (the soft
+     * tier: the person writing is told and confirms). A warning is asked of a PERSON, so it lives where
+     * a person writes - the generated controllers - which is why only the ungated row-level kinds take
+     * it: a gated check fires inside a workflow transition, where there is nobody to answer a prompt,
+     * and a guard already has its own soft outcomes ({@code task}, {@code reject}).
+     */
+    private static void validateSeverity(CheckIntent check, String subject, List<String> issues) {
+        String severity = check.getSeverity();
+        if (severity == null) {
+            return;
+        }
+        if (!"error".equals(severity) && !"warn".equals(severity)) {
+            issues.add(subject + " has unknown `severity` [" + severity + "] - expected error (the default) or warn");
+            return;
+        }
+        String kind = check.getKind();
+        if ("duplicate".equals(kind) || "itemsCompare".equals(kind)) {
+            if ("error".equals(severity)) {
+                issues.add(subject + " exists only as a warning and cannot carry `severity: error` - "
+                        + ("duplicate".equals(kind) ? "a hard refusal of a second record with the same values is `unique:`"
+                                : "a hard per-line rule is a `compare` check on the items entity"));
+            }
+            return;
+        }
+        if ("warn".equals(severity)) {
+            if (!WARNABLE_KINDS.contains(kind)) {
+                issues.add(subject + " cannot carry `severity: warn` - only the row-level kinds compare, requiredWhen, forbidWhen,"
+                        + " exactlyOne and agree (and duplicate, itemsCompare) are warnings a person can confirm");
+            } else if (check.getStatus() != null) {
+                issues.add(subject + " carries both `severity: warn` and a `status` gate - a gated check runs inside the workflow"
+                        + " transition, where there is nobody to confirm a warning; drop the gate or the severity");
+            }
+        }
+    }
+
+    /**
+     * A {@code duplicate} check (#7466): warn when another record already carries the same values in
+     * {@code fields} - the rule for which a hard {@code unique:} is wrong because two legitimate
+     * records may share them (two companies with the same registered name under different registration
+     * numbers). Each field is the entity's own field or to-one relation.
+     */
+    private static void validateDuplicateCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+        if (check.getFields() == null || check.getFields()
+                                              .isEmpty()) {
+            issues.add(subject + " requires `fields`: the fields of [" + entity.getName() + "] a second record must not repeat");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " is row-level and cannot carry a `status` gate - it is asked of the person saving the record");
+        }
+        for (String field : check.getFields()) {
+            if (field == null || !hasPropertyIgnoreCase(entity, field)) {
+                issues.add(subject + " field [" + field + "] is not a field or to-one relation of [" + entity.getName() + "]");
+            }
+        }
+    }
+
+    /**
+     * An {@code itemsCompare} check (#7466): document-level, declared on the master - every ITEM's
+     * {@code field} compared with {@code op} to the {@code value} literal, and the lines that break it
+     * reported in ONE warning when the document is saved, not one prompt per line (the reviewer's "at
+     * the end, when the whole document is saved"). The comparison is exactly a literal {@code compare}
+     * read off the items entity, so it is validated as one.
+     */
+    private static void validateItemsCompareCheck(EntityIntent entity, CheckIntent check, java.util.List<EntityIntent> entities,
+            String subject, List<String> issues) {
+        EntityIntent items = compositionChildOf(entity, entities);
+        if (items == null) {
+            issues.add(subject + " requires the entity to own a composition child (the document's items)");
+            return;
+        }
+        if (check.getStatus() != null) {
+            issues.add(subject + " cannot carry a `status` gate - it is asked of the person saving the document");
+        }
+        if (check.getThan() != null) {
+            issues.add(subject + " compares each item with a `value` literal, not `than` another field");
+            return;
+        }
+        if (check.getValue() == null) {
+            issues.add(subject + " requires `value`: the literal each item's field is compared with");
+            return;
+        }
+        CheckIntent comparison = new CheckIntent();
+        comparison.setField(check.getField());
+        comparison.setOp(check.getOp());
+        comparison.setValue(check.getValue());
+        validateCompareCheck(items, comparison, subject + " on items [" + items.getName() + "]", issues);
     }
 
     /**
@@ -5772,6 +5893,96 @@ public final class IntentParser {
      * time, like the relation target itself). A composition parent FK is preset by the layout - never
      * picked - so a filter there is authoring noise and rejected.
      */
+    /**
+     * A {@code pickable:} rule (issue #7496) decides which TARGET rows a to-one's picker offers, so it
+     * sits only where a user picks: a manyToOne/oneToOne that is neither the composition parent (preset
+     * by the layout) nor the EntityStatus badge. Each term reads a property of the target - checked
+     * here for a same-model target, at generation against the owner's {@code .model} for a cross-model
+     * one - and a comparison with a value is held to the same types every other {@code when} guard is,
+     * because a picker that silently offers everything is the failure the rule exists to remove.
+     * {@code leafOnly} builds its options through the hierarchy path, which a rule would not reach, so
+     * the two are refused together rather than one quietly ignored.
+     */
+    private static void validatePickable(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "] pickable";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " is declared on a [" + relation.getKind() + "] relation - only a manyToOne/oneToOne has a picker");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is declared on a composition parent, which the layout presets and nobody picks");
+            return;
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is declared on an EntityStatus relation, which renders as a read-only badge");
+            return;
+        }
+        if (relation.isLeafOnly()) {
+            issues.add(subject + " cannot be combined with leafOnly - the hierarchy picker is built without it");
+        }
+        PickableIntent pickable = relation.getPickable();
+        String otherwise = pickable.getOtherwise();
+        if (otherwise != null && !PickableSupport.MARK.equals(otherwise) && !PickableSupport.HIDE.equals(otherwise)) {
+            issues.add(subject + " else [" + otherwise + "] must be `mark` (listed, disabled, with the message) or `hide` (not listed)");
+        }
+        List<String> terms = CheckSupport.terms(pickable.getWhen());
+        if (terms.isEmpty()) {
+            issues.add(subject + " requires `when`: the condition a " + relation.getTo() + " must meet to be picked, e.g."
+                    + " `when: [registrationNumber != null, active == true]`");
+            return;
+        }
+        EntityIntent target = relation.isCrossModel() ? null : byName.get(relation.getTo());
+        for (String term : terms) {
+            validatePickableTerm(subject, term, relation.getTo(), target, byName, issues);
+        }
+    }
+
+    /**
+     * One term of a {@code pickable:} rule, read over the target entity - or, with {@code target}
+     * {@code null} (a cross-model target), held to the grammar only.
+     */
+    private static void validatePickableTerm(String subject, String term, String targetName, EntityIntent target,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        PickableSupport.Term parsed = PickableSupport.parse(term);
+        if (parsed == null) {
+            issues.add(subject + " when [" + term + "] must be `<property> ==|!= <literal>` or `<property> ==|!= null` - several"
+                    + " conditions are written as a list, which is their AND");
+            return;
+        }
+        if (parsed.property()
+                  .contains(".")) {
+            issues.add(subject + " when [" + term + "] names a path - the rule reads the " + targetName + " row itself");
+            return;
+        }
+        if (target == null) {
+            return;
+        }
+        FieldIntent field = CheckSupport.field(target, parsed.property());
+        RelationIntent relation = field == null ? CheckSupport.toOne(target, parsed.property()) : null;
+        if (field == null && relation == null) {
+            issues.add(subject + " when [" + term + "] reads [" + parsed.property() + "], which is not a field or to-one relation of ["
+                    + targetName + "]");
+            return;
+        }
+        if (parsed.presence()) {
+            return;
+        }
+        String declared = field != null ? field.getType() : CheckSupport.relationKeyType(relation, byName);
+        String type = CheckSupport.guardType(declared);
+        if (field != null && !CheckSupport.GUARD_TYPES.contains(type)) {
+            issues.add(subject + " when [" + term + "] compares [" + parsed.property() + "], which is a [" + declared
+                    + "] field - a value comparison is on a string, an integer or a boolean; test any field for presence with"
+                    + " `!= null`");
+            return;
+        }
+        if (CheckSupport.javaLiteral(type, parsed.literal()) == null) {
+            issues.add(subject + " when [" + term + "] compares [" + parsed.property() + "], a [" + type + "], with [" + parsed.literal()
+                    + "], which is not a value of that type");
+        }
+    }
+
     private static void validateWhere(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
             List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";

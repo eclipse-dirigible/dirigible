@@ -435,4 +435,61 @@ public class DataBinderTest {
                                       .get(0)
                                       .text());
     }
+
+    @Test
+    public void wordsFormatSpellsTheAmountInTheTemplateLanguage() {
+        Node root = parser.parse("<document><text>{{document.Total:words(document.Currency.Code)}}</text></document>");
+        Node bound = new DataBinder("bg").bind(root, Map.of("document", Map.of("Total", 5264.44, "Currency", Map.of("Code", "EUR"))));
+        assertEquals("ПЕТ ХИЛЯДИ ДВЕСТА ШЕСТДЕСЕТ И ЧЕТИРИ ЕВРО И 44 ЕВРОЦЕНТА", bound.children()
+                                                                                      .get(0)
+                                                                                      .text());
+    }
+
+    @Test
+    public void wordsFormatTakesALiteralCurrencyCodeAndANumericString() {
+        Node root = parser.parse("<document><text>{{Total:words(BGN)}}</text></document>");
+        Node bound = new DataBinder("bg").bind(root, Map.of("Total", "2.50"));
+        assertEquals("ДВА ЛЕВА И 50 СТОТИНКИ", bound.children()
+                                                    .get(0)
+                                                    .text());
+    }
+
+    @Test
+    public void wordsFormatRendersEmptyWhenItCannotSpell() {
+        Node root = parser.parse("<document><text>[{{Total:words(EUR)}}]</text><text>[{{Total:words(USD)}}]</text>"
+                + "<text>[{{Name:words(EUR)}}]</text><text>[{{Total:words}}]</text></document>");
+        Map<String, Object> data = Map.of("Total", 10, "Name", "ACME");
+        Node german = new DataBinder("de").bind(root, data);
+        Node bulgarian = new DataBinder("bg").bind(root, data);
+        Node unknown = binder.bind(root, data);
+        assertEquals("[]", german.children()
+                                 .get(0)
+                                 .text());
+        assertEquals("[]", unknown.children()
+                                  .get(0)
+                                  .text());
+        for (int i = 1; i < 4; i++) {
+            assertEquals("[]", bulgarian.children()
+                                        .get(i)
+                                        .text());
+        }
+    }
+
+    @Test
+    public void wordsFormatSpellsInEnglishForAnEnglishTemplate() {
+        Node root = parser.parse("<document><text>{{Total:words(Currency)}}</text></document>");
+        Node bound = new DataBinder("en").bind(root, Map.of("Total", 5264.44, "Currency", "EUR"));
+        assertEquals("FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS", bound.children()
+                                                                                     .get(0)
+                                                                                     .text());
+    }
+
+    @Test
+    public void wordsFormatCombinesWithAlternativePaths() {
+        Node root = parser.parse("<document><text>{{document.Gross:words(EUR)|document.Total:words(EUR)}}</text></document>");
+        Node bound = new DataBinder("bg").bind(root, Map.of("document", Map.of("Total", 1)));
+        assertEquals("ЕДНО ЕВРО И 00 ЕВРОЦЕНТА", bound.children()
+                                                      .get(0)
+                                                      .text());
+    }
 }

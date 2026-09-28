@@ -49,6 +49,20 @@ class PrintRendererTest {
     }
 
     @Test
+    void spellsTheAmountInTheLanguageOfTheTemplateFolder() {
+        String template = "<document><page><text>Словом: {{document.total:words(document.currency)}}</text></page></document>";
+        Map<String, Object> data = Map.of("document", Map.of("total", 5264.44, "currency", "EUR"));
+
+        String bulgarian = PrintRenderer.renderFo(template, "bg", data, ImageResolver.PASS_THROUGH);
+        String english = PrintRenderer.renderFo(template, "en", data, ImageResolver.PASS_THROUGH);
+        String german = PrintRenderer.renderFo(template, "de", data, ImageResolver.PASS_THROUGH);
+
+        assertTrue(bulgarian.contains("ПЕТ ХИЛЯДИ ДВЕСТА ШЕСТДЕСЕТ И ЧЕТИРИ ЕВРО И 44 ЕВРОЦЕНТА"), "a bg template spells it out");
+        assertTrue(english.contains("FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS"), "an en template spells it out");
+        assertFalse(german.contains("EURO"), "a language with no spelling renders it empty");
+    }
+
+    @Test
     void expandsTableRowsFromItems() {
         String fo = renderFo(TEMPLATE, data());
 
@@ -115,7 +129,7 @@ class PrintRendererTest {
      */
     @Test
     void anImageIsEmbeddedThroughTheHostResolver() {
-        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")),
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, "en", Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")),
                 source -> "data:image/png;base64,AAAA");
 
         assertTrue(fo.contains("<fo:external-graphic src=\"data:image/png;base64,AAAA\""), "the resolved source should be emitted");
@@ -124,14 +138,15 @@ class PrintRendererTest {
 
     @Test
     void anUnresolvableImageRendersNothing() {
-        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")), source -> null);
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, "en", Map.of("document", Map.of("Logo", "/Templates/Print/logo.png")),
+                source -> null);
 
         assertFalse(fo.contains("external-graphic"), "an image the host cannot read must not be rendered at all");
     }
 
     @Test
     void anImageWithNoBoundSourceIsNeverHandedToTheResolver() {
-        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, Map.of(), source -> {
+        String fo = PrintRenderer.renderFo(IMAGE_TEMPLATE, "en", Map.of(), source -> {
             throw new AssertionError("a blank source must not reach the resolver: [" + source + "]");
         });
 
@@ -147,7 +162,7 @@ class PrintRendererTest {
             """;
 
     private static String renderFo(String template, Map<String, Object> data) {
-        return PrintRenderer.renderFo(template, data, ImageResolver.PASS_THROUGH);
+        return PrintRenderer.renderFo(template, "en", data, ImageResolver.PASS_THROUGH);
     }
 
     private static Map<String, Object> data() {

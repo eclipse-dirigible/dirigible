@@ -25,6 +25,9 @@
 #macro(optionsFilterMeta $property)#if($property.widgetOptionsFilterBy), filter: { by: '${property.widgetOptionsFilterBy}', value: ${property.widgetOptionsFilterValueJs} }#end#end
 ## Hierarchy metadata (intent `hierarchy:` + `leafOnly:`): the item dialog's chooser indents by depth
 ## and offers leaves only; the table's label lookup stays on the full set.
+## Picker rule (intent `pickable:`): the item dialog lists a target row failing it disabled with the
+## rule's message, or hides it. Emitted as the object literal the model carries.
+#macro(pickableMeta $property)#if($property.widgetPickable), pickable: ${property.widgetPickable}#end#end
 #macro(hierMeta $property)#if($property.widgetLeafOnly && $property.widgetHierarchyProperty), hier: { parent: '${property.widgetHierarchyProperty}', leafOnly: true }#end#end
 ## Sensitive marker (intent `sensitive:`): the ADMIN surfaces still render the column, but a personal
 ## (my) surface must drop it entirely - the personal controller nulls the value on the wire, so
@@ -120,7 +123,7 @@ App.registerDetail('${masterEntity}', {
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($ereadonly = (($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)) || $property.isReadOnlyProperty == "true"))
 #if($property.widgetType == "DROPDOWN")
-    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#pickableMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
 #elseif($property.widgetType == "MULTISELECT")
 ## No `creatable` add-new (the return path writes a single value) and no dependsOn/hier metadata -
 ## a subset relation carries none of those. The static `where:` filter travels so the dialog chooser

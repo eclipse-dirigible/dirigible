@@ -37,6 +37,8 @@
       UpstreamError:          'A dependent service is unavailable. Please try again shortly.',
       InternalServerError:    'Something went wrong on our end. Please try again.',
       NetworkError:           'Unable to reach the server. Check your connection and try again.',
+      // The user answered "Cancel" to the warnings a save raised (#7466) - nothing was written.
+      ConfirmationDeclined:   'Not saved - the warnings were not confirmed.',
     },
 
     // 422 cause errorType -> per-field message. Extend as backend cause types appear.

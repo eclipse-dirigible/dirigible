@@ -231,6 +231,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # rule only applies at the status the value is finally needed at.
                   - { kind: requiredWhen, field: Account.taxCode, when: "note == 'audited'", status: 2,
                       message: "An audited entry must be booked against an account carrying a tax code" }
+                  # ...and UNGATED with the CONDITION one hop away (#7495): which values a document
+                  # needs depends on the record it points at (a business customer needs a registration
+                  # number, an individual does not). One term per terminal kind - a field of the account
+                  # and a to-one of it, the latter compared by value - read through the SAME load the
+                  # gated check above uses, and enforced by the controller on every write.
+                  - { kind: requiredWhen, field: note, when: ["Account.taxCode == 'EXEMPT'", "Account.Parent != 0"],
+                      message: "An entry against a tax-exempt account must say why in its note" }
                   # Two values of the SAME row, related (#7095) - one temporal pair and one numeric,
                   # the two comparison families the generated code emits differently.
                   - { kind: compare, field: due,  op: ge, than: date,  message: 'A "due" date is never before the entry date' }
@@ -539,8 +546,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
-                  # my-list FK-lookup emission), while the owner relation gets no lookup at all
-                  - { name: Unit, kind: manyToOne, to: Unit }
+                  # my-list FK-lookup emission), while the owner relation gets no lookup at all. Its
+                  # pickable: rule (#7496) reaches the power form AND the personal one.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null], message: No unit price } }
 
               - name: ClaimLine
                 fields:
@@ -786,6 +794,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: secret,  type: decimal, sensitive: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
+                  # #7496: the partner form builds its options apart from the others, so it carries a rule too.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null] } }
 
               # BPM events wave 1 (wait + boundary timers): an RFQ whose flow escalates a stale
               # review (timeout), expires past its validity date (expire), and after review parks
@@ -913,8 +923,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
                   # an item-level to-one: the print feeder must feed it per row so an items-table
-                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
-                  - { name: Unit, kind: manyToOne, to: Unit }
+                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}. Its
+                  # pickable: rule (#7496) travels in the line dialog's column metadata.
+                  - { name: Unit, kind: manyToOne, to: Unit, pickable: { when: [unitPrice != null], else: hide } }
               # the RECIPIENT LIST of a bill: rows that are nobody's document - they only say who
               # gets the bill's own PDF (attach: recordPrint, one document to many recipients).
               - name: BillRecipient
@@ -2260,6 +2271,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && entryRepository.contains("AccountRepository().findById(hop0Fk)")
                         && entryRepository.contains("java.util.Objects.equals(entity.Note, \"audited\")"),
                 "checks: requiredWhen must load the hop, test the condition and refuse the empty value, got: " + entryRepository);
+        // ...and the CONDITION may read the hop too (#7495): the ungated twin lands in the controller,
+        // loading the account by FK and comparing its to-one BY VALUE - a boxed equality against a key
+        // whose Java width follows the target's would switch the rule off (#7237).
+        assertTrue(
+                entryController.contains("An entry against a tax-exempt account must say why in its note")
+                        && entryController.contains("java.util.Objects.equals((hop0 == null ? null : hop0.TaxCode), \"EXEMPT\")")
+                        && entryController.contains("(hop0 == null ? null : hop0.Parent).longValue() == 0L"),
+                "checks: requiredWhen must read its condition through the hop, got: " + entryController);
         // ...and both gates must query the document's LINES. The items child used to be whichever
         // composition child a HashMap iteration yielded first, so a document that also owns a printed
         // copy, a payment allocation or a promotion counted THOSE rows (#7027) - an invoice guard that
@@ -2735,12 +2754,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
-        // The per-column filter must debounce (~300ms) and must never blank the table or show the
-        // empty state while a POST /search is in flight - it keeps the settled rows and only settles
-        // the empty state on a query that returned zero rows (issue #7461).
-        assertTrue(unitManageView.contains("@input.debounce.300ms=\"applyServerFilter()\""),
-                "the per-column text filter must debounce applyServerFilter (~300ms), not query per keystroke");
-        assertFalse(unitManageView.contains("@input.debounce.400ms"), "the pre-#7461 400ms debounce must be gone");
+        // The per-column filters live in the Filter menu (#7491), not in a row inside the table: the
+        // value is edited as a draft and applied once, so the list queries per applied filter rather
+        // than per keystroke - and no filter control sits in the table's header any more.
+        assertTrue(unitManageView.contains("@click=\"applyFilterDraft()\""),
+                "the Filter menu must apply the edited filter through applyFilterDraft");
+        assertFalse(unitManageView.contains("@input.debounce"),
+                "no filter control may debounce a query per keystroke from inside the table any more");
+        // ...and it must never blank the table or show the empty state while a POST /search is in
+        // flight - it keeps the settled rows and only settles the empty state on a query that
+        // returned zero rows (issue #7461).
+        assertTrue(unitManageView.contains("x-show=\"filtering\""),
+                "an in-flight filter query must be signalled rather than blanking the table (#7461)");
         assertTrue(unitManageList.contains("if (this.filtering) return this.items.length ? 'default' : 'loading'"),
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
@@ -2767,11 +2792,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterPage.contains("closeDetails()"), "the master page must define closeDetails()");
         assertTrue(unitManageList.contains("closeDetails()"), "the manage list page must define closeDetails()");
         for (String detailView : new String[] {unitManageView, campaignMasterView}) {
-            assertTrue(detailView.contains("@click=\"closeDetails()\""),
-                    "the detail panel toolbar must carry a close control wired to closeDetails()");
+            assertTrue(detailView.contains("@click=\"closeDetails()\""), "the detail panel must carry a control wired to closeDetails()");
             assertTrue(detailView.contains("@keydown.escape.window"), "Esc must dismiss the detail panel");
-            assertTrue(detailView.contains("defaults.close"), "the close control must use the translated Close label");
         }
+        // The manage list's record opens in a sheet OVER the list, so its dismissal is named after
+        // where it returns you (#7491); the master-detail pane closes a panel beside the list.
+        assertTrue(unitManageView.contains("defaults.backToList"),
+                "the record sheet's dismissal must use the translated Back to list label");
+        assertTrue(campaignMasterView.contains("defaults.close"),
+                "the master-detail panel's close control must use the translated Close label");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
@@ -3146,6 +3175,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myForm = contentOf("gen/emission/views/my/Claim-form.html");
         assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
+        // #7496: a pickable: rule reaches every picker that builds its own options - the power form,
+        // the personal and partner forms, and the line dialog's column metadata - and each view lists
+        // through visibleOptions with Harmonia's disabled/description contract on the option.
+        String unitRule = "{\"when\":[{\"property\":\"UnitPrice\",\"op\":\"present\"}]";
+        for (String picker : new String[] {contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js"),
+                contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js"),
+                contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js")}) {
+            assertTrue(picker.contains("this.pickableOptions(rows") && picker.contains(unitRule),
+                    "a to-one declaring pickable: must build its options through the rule");
+        }
+        for (String view : new String[] {contentOf("gen/emission/views/Claim/Claim-form.html"), myForm,
+                contentOf("gen/emission/views/partner/PartnerTicket-form.html")}) {
+            assertTrue(view.contains("visibleOptions(options") && view.contains(":aria-disabled=\"opt.disabled ? 'true' : null\""),
+                    "a pickable: picker must list visible options and mark a failing one disabled");
+        }
+        assertTrue(contentOf("gen/emission/js/components/pages/Bill/BillLine.detail.js").contains("pickable: " + unitRule),
+                "a line's pickable: rule must travel in the item dialog's column metadata");
         String myLineForm = contentOf("gen/emission/js/components/pages/my/ClaimLineMyFormPage.js");
         assertTrue(myLineForm.contains("ClaimLineMyController"), "a personal child gets its own my form page");
         // Regression guard (#6263): the personal pages must call the shared shell service object
@@ -4826,6 +4872,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          + uncodedAccount.get() + ",\"Note\":\"audited\",\"Status\":2}")
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + auditedEntry.get())
+                                                 .then()
+                                                 .statusCode(200));
+
+        // checks: requiredWhen with its CONDITION one hop away, at runtime (#7495): the note is
+        // required only against an account whose own tax code says it is exempt - the rule is decided
+        // by the RELATED row, so the same note-less entry is refused against one account and accepted
+        // against another.
+        AtomicInteger exemptAccount = new AtomicInteger();
+        restAssuredExecutor.execute(() -> exemptAccount.set(given().contentType("application/json")
+                                                                   .body("{\"Name\":\"Exempt\",\"TaxCode\":\"EXEMPT\"}")
+                                                                   .when()
+                                                                   .post(API + "/account/AccountController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .extract()
+                                                                   .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + exemptAccount.get() + "}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message",
+                                                         containsString("An entry against a tax-exempt account must say why in its note")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + uncodedAccount.get() + "}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-23\",\"Account\":" + exemptAccount.get()
+                                                         + ",\"Note\":\"export of services\"}")
+                                                 .when()
+                                                 .post(API + "/entry/EntryController")
                                                  .then()
                                                  .statusCode(200));
 

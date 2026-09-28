@@ -225,6 +225,30 @@ class ControllerInvokerBindingTest {
                 response.body());
     }
 
+    @Test
+    void unconfirmed_warnings_yield_428_listing_them() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("warn"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+        // A soft `severity: warn` check (#7466) is neither a fault nor a refusal: the caller is told
+        // which warnings to confirm, each with the code it echoes back in X-Confirm-Warnings.
+        assertEquals(HttpStatus.PRECONDITION_REQUIRED.value(), response.getStatus());
+        Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
+        assertEquals("ConfirmationRequired", body.get("errorType"));
+        List<?> warnings = (List<?>) body.get("warnings");
+        assertEquals(2, warnings.size());
+        assertEquals(Map.of("code", "Customer.duplicate.0", "message", "A customer with this name exists"), warnings.get(0));
+        assertEquals("Product.compare.1", ((Map<?, ?>) warnings.get(1)).get("code"));
+    }
+
     // --- fixtures --------------------------------------------------------------------------------
 
     @Controller
@@ -248,6 +272,13 @@ class ControllerInvokerBindingTest {
         @Get("/boom")
         public String boom() {
             throw new RuntimeException("kaboom");
+        }
+
+        @Get("/warn")
+        public String warn() {
+            throw new org.eclipse.dirigible.sdk.db.ConfirmationRequiredException(
+                    List.of(new org.eclipse.dirigible.sdk.db.Warning("Customer.duplicate.0", "A customer with this name exists"),
+                            new org.eclipse.dirigible.sdk.db.Warning("Product.compare.1", "The price is zero")));
         }
 
         @Get("/reject")

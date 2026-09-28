@@ -32,20 +32,23 @@ import java.util.List;
  * mandatory);</li>
  * <li>{@code requiredWhen}: {@link #field} - the record's own field, or a one-hop
  * {@code Relation.field} - must carry a value while {@link #when} holds (an e-mailed invoice needs
- * the customer's address). Enforced on every user write, or, with a {@link #status} gate, when the
- * document is persisted carrying that status - the moment the value is finally needed;</li>
+ * the customer's address); a {@link #when} term may name a one-hop {@code Relation.field} too (a
+ * business customer's registration number, keyed on the customer's kind). Enforced on every user
+ * write, or, with a {@link #status} gate, when the document is persisted carrying that status - the
+ * moment the value is finally needed;</li>
  * <li>{@code forbidWhen}: the reject-twin of {@code requiredWhen} - reject the write while
  * {@link #when} holds (a payment allocation cannot be added to an already PAID invoice). It carries
- * no {@link #field}/value, only the condition; its one added reach is that a {@link #when} term may
- * name a one-hop {@code Relation.field}, so a child can test its parent (the status literal there
- * resolving against the relation target's nomenclature). Same gate rule as {@code requiredWhen}: no
- * gate = every user write (a 400 the generated controller raises), a gate = the repository when the
- * record is persisted carrying that status;</li>
+ * no {@link #field}/value, only the condition; a {@link #when} term may name a one-hop
+ * {@code Relation.field}, so a child can test its parent (the status literal there resolving
+ * against the relation target's nomenclature). Same gate rule as {@code requiredWhen}: no gate =
+ * every user write (a 400 the generated controller raises), a gate = the repository when the record
+ * is persisted carrying that status;</li>
  * <li>{@code itemsSumEqual} (document-level): the sums of the two {@link #over} fields across the
  * document's composition items are equal (the double-entry invariant) - enforced when the document
  * is persisted carrying the {@link #status} gate seed id, i.e. at the workflow transition;</li>
  * <li>{@code itemsMin} (document-level): the document has at least {@link #count} items - same
  * gate.</li>
+ * <li>{@code duplicate} and {@code itemsCompare}: the soft tier only - see {@link #severity}.</li>
  * </ul>
  */
 public class CheckIntent {
@@ -104,9 +107,9 @@ public class CheckIntent {
     private Integer count;
     /**
      * {@code requiredWhen} / {@code forbidWhen}: the condition - a {@code <Property> == <literal>} /
-     * {@code != } comparison, or a list of them (an implicit AND). {@code requiredWhen} reads the
-     * record's own properties; {@code forbidWhen} additionally accepts a one-hop {@code Relation.field}
-     * (a child testing its parent). A status name resolves to its seed id, as in every other guard.
+     * {@code != } comparison, or a list of them (an implicit AND), each over the record's own property
+     * or a one-hop {@code Relation.field} (a child testing its parent, an invoice testing its
+     * customer). A status name resolves to its seed id, as in every other guard.
      */
     private Object when;
     /**
@@ -119,6 +122,20 @@ public class CheckIntent {
     private Integer status;
     /** The user-facing message when the check fails. */
     private String message;
+    /**
+     * What a failing check does to the write (issue #7466). {@code error} (the default) refuses it -
+     * every kind above. {@code warn} is the soft tier: the write stays legitimate and possible, but the
+     * person making it is told first and has to confirm - the generated controller answers
+     * {@code 428 Precondition Required} listing the warnings, and the same request repeated with their
+     * codes in {@code X-Confirm-Warnings} goes through. Taken by the ungated row-level kinds
+     * ({@code compare}, {@code requiredWhen}, {@code forbidWhen}, {@code exactlyOne}, {@code agree}),
+     * and implied by the two kinds that exist only as warnings: {@code duplicate} - another record
+     * already carries the same {@link #fields} (a second customer with the same name, where a hard
+     * unique key would be wrong) - and {@code itemsCompare} - document-level, every item's
+     * {@link #field} compared with {@link #op} to the {@link #value} literal, asked ONCE per document
+     * save for all the lines that break it (a line at price zero).
+     */
+    private String severity;
     /**
      * {@code guard}: the name of an {@code aggregates:} entry whose {@code of} is THIS entity. The
      * guard recomputes that keyed sum from the store for the incoming record's key-tuple (race-free,
@@ -177,6 +194,24 @@ public class CheckIntent {
 
     public void setWhen(Object when) {
         this.when = when;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
+    }
+
+    /**
+     * Whether this check is the soft tier - declared {@code severity: warn}, or a kind that exists only
+     * as a warning ({@code duplicate}, {@code itemsCompare}).
+     *
+     * @return true for a warning
+     */
+    public boolean isWarning() {
+        return "warn".equals(severity) || "duplicate".equals(kind) || "itemsCompare".equals(kind);
     }
 
     public String getOutcome() {

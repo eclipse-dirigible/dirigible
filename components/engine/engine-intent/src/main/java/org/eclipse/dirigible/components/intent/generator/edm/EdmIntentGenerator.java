@@ -39,6 +39,7 @@ import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
+import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
@@ -585,6 +586,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
+                    putPickable(fkProperty, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -605,6 +607,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
+                putPickable(fkProperty, relation, null);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -1924,6 +1927,31 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Emit the picker rule of a relation that declares {@code pickable:} (issue #7496) as the
+     * {@code widgetPickable} attribute: the rule as JSON ({@link PickableSupport#rule}), a scalar so it
+     * rides the {@code .edm} and the {@code .model} like every other widget attribute, and which every
+     * generated picker hands verbatim to the shared runtime as an object literal. The parser checked a
+     * same-model target's properties; a resolved cross-model target is checked here against the owner's
+     * {@code .model}, an unresolved one (the unit-test convention fallback) is not.
+     */
+    private static void putPickable(Map<String, Object> p, RelationIntent relation, Set<String> targetPropertyNames) {
+        if (relation.getPickable() == null) {
+            return;
+        }
+        if (targetPropertyNames != null) {
+            List<String> missing = PickableSupport.properties(relation.getPickable())
+                                                  .stream()
+                                                  .filter(property -> !targetPropertyNames.contains(property))
+                                                  .toList();
+            if (!missing.isEmpty()) {
+                throw new IntentValidationException(List.of("relation [" + relation.getName() + "] pickable reads " + missing
+                        + ", which the cross-model target [" + relation.getTo() + "] does not declare"));
+            }
+        }
+        p.put("widgetPickable", PickableSupport.rule(relation.getPickable()));
+    }
+
+    /**
      * Emit the leaf-only attributes for a relation that declares {@code leafOnly: true}: the picker
      * offers only childless nodes of the (hierarchical) target and the generated REST validation
      * rejects an FK to a node with children. Two scalar attrs: {@code widgetLeafOnly} plus
@@ -2160,10 +2188,71 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (entity.getChecks() == null) {
             return checkMaps;
         }
+        int index = -1;
         for (org.eclipse.dirigible.components.intent.model.CheckIntent check : entity.getChecks()) {
+            index++;
             Map<String, Object> checkMap = new LinkedHashMap<>();
             checkMap.put("kind", check.getKind());
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            if (check.isWarning()) {
+                // The soft tier (#7466): the check is asked of the person writing instead of refusing
+                // the write. The code is what a caller echoes back to confirm it - stable across saves
+                // of the same model, since it is the check's own position in its entity's list.
+                checkMap.put("severity", "warn");
+                checkMap.put("code", entity.getName() + "." + check.getKind() + "." + index);
+            }
+            if ("duplicate".equals(check.getKind())) {
+                // Another record already carrying the same values (#7466) - a warning, never a
+                // refusal: that is `unique:`. Each field is an own field or a to-one (compared by FK).
+                if (check.getFields() == null || check.getFields()
+                                                      .isEmpty()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("fields", check.getFields()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .toList());
+                if (check.getMessage() == null || check.getMessage()
+                                                       .isBlank()) {
+                    checkMap.put("message", "Another " + IntentNaming.humanize(entity.getName()) + " with the same "
+                            + String.join(", ", check.getFields()
+                                                     .stream()
+                                                     .map(IntentNaming::humanize)
+                                                     .toList())
+                            + " already exists");
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
+            if ("itemsCompare".equals(check.getKind())) {
+                // Every LINE compared with a literal (#7466), reported once per document save for all
+                // the lines that break it. The literal is rendered exactly as a literal `compare`'s,
+                // typed by the item field it is compared with.
+                EntityIntent items = IntentEntities.documentItemsChild(entity.getName(), entities);
+                String comparison = compareOperator(check.getOp());
+                FieldIntent itemField = items == null ? null : fieldOf(items, check.getField());
+                if (itemField == null || comparison == null || check.getValue() == null) {
+                    continue; // the parser already reported it
+                }
+                CheckSupport.CompareLiteral literal = CheckSupport.compareLiteral(itemField.getType(), check.getValue());
+                if (!literal.valid()) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("itemsEntity", items.getName());
+                checkMap.put("itemsFk", IntentEntities.itemsBackReference(items, entity.getName()));
+                checkMap.put("field", IntentNaming.pascalCase(check.getField()));
+                checkMap.put("op", comparison);
+                checkMap.put("value", literal.reading());
+                checkMap.put("numeric", isNumericType(itemField.getType()) ? "true" : "false");
+                if (check.getMessage() == null || check.getMessage()
+                                                       .isBlank()) {
+                    // `{count}` is the one placeholder the generated check fills: how many lines break it.
+                    checkMap.put("message", "{count} line(s) where " + IntentNaming.humanize(check.getField()) + " is not "
+                            + compareWords(check.getOp()) + " " + check.getValue());
+                }
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("guard".equals(check.getKind())) {
                 // Aggregate guard: recompute the named aggregate's keyed sum from THIS entity's store
                 // (the aggregate's `of` must be this entity - v1 self-referential) and block a write
@@ -2229,12 +2318,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             if ("requiredWhen".equals(check.getKind())) {
-                // A conditionally required value (#7094): the condition compiled to a Java boolean over
-                // the record's own columns, and the value itself as a null-guarded expression - the
-                // record's own property, or a one-hop Relation.field, in which case the hops the reader
-                // must load ride along. Resolving the path HERE is what lets the check reach an entity
-                // owned by another model: the .model twin cannot re-derive the owner's generation
-                // folder, but the relation's `model:` alias travels with the hop.
+                // A conditionally required value (#7094): the value as a null-guarded expression and the
+                // condition as typed terms - each the record's own property, or a one-hop Relation.field
+                // (#7495: the customer's registration number is required when the CUSTOMER is a
+                // business), in which case the hops the reader must load ride along. Both go through ONE
+                // walker, so a hop the value and the condition share is loaded once. Resolving the paths
+                // HERE is what lets the check reach an entity owned by another model: the .model twin
+                // cannot re-derive the owner's generation folder, but the relation's `model:` alias
+                // travels with the hop.
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
                 ResolvePathSupport.Path path = walker.resolve(check.getField());
                 if (!path.resolved()) {
@@ -2242,7 +2333,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 checkMap.put("valueExpression", path.expression());
                 checkMap.put("label", path.label());
-                List<Map<String, Object>> when = requiredWhenTerms(entity, byName, check.getWhen());
+                List<Map<String, Object>> when = CheckSupport.conditionTerms(entity, byName, walker, check.getWhen());
                 if (when == null) {
                     continue; // the parser already reported it
                 }
@@ -2335,7 +2426,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // holds, a descriptor lets the generated view hide the child's Add/edit/delete affordance
                 // while the condition holds - the fromStatus (#7068) mechanism, no extra fetch. Absent
                 // (a record-local or non-master term), the server 400/ValidationException still holds.
-                List<Map<String, Object>> masterGuard = forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
+                // A WARNING hides nothing (#7466): the write it asks about stays possible, so the panel
+                // must keep offering it - the confirmation is asked when the person saves.
+                List<Map<String, Object>> masterGuard =
+                        check.isWarning() ? null : forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
                 if (masterGuard != null) {
                     checkMap.put("masterGuard", masterGuard);
                 }
@@ -2417,6 +2511,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return checkMaps;
     }
 
+    /** A comparison operator as the words a default warning message reads it in. */
+    private static String compareWords(String op) {
+        return switch (op == null ? ""
+                : op.trim()
+                    .toLowerCase(java.util.Locale.ROOT)) {
+            case "gt" -> "greater than";
+            case "ge" -> "at least";
+            case "lt" -> "less than";
+            case "le" -> "at most";
+            case "eq" -> "equal to";
+            default -> "different from";
+        };
+    }
+
     /** The Java comparison the {@code compareTo} result is tested with, or null for an unknown op. */
     private static String compareOperator(String op) {
         if (op == null) {
@@ -2469,28 +2577,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Compiles a {@code requiredWhen} condition into the Java boolean the generated reader tests.
-     *
-     * <p>
-     * The compiler is {@link CheckSupport#condition}, shared with the {@code event.when} guard of the
-     * declarative glue lists (issue #7289): one grammar, one type rule and one rendering, so a guard
-     * cannot mean one thing on a check and another on a listener.
-     *
-     * @param entity the entity carrying the check
-     * @param byName the local entities by name (a to-one's key type comes from its target)
-     * @param when the authored condition
-     * @return the Java expression, or {@code null} when a comparison does not compile (the parser has
-     *         already reported it, and a condition that silently degrades to {@code true} would make
-     *         the value unconditionally required)
-     */
-    private static List<Map<String, Object>> requiredWhenTerms(EntityIntent entity, Map<String, EntityIntent> byName, Object when) {
-        return CheckSupport.conditionTerms(entity, byName, when);
-    }
-
-    /**
      * The generated loads a check's resolved paths need, in load order - a prefix always precedes what
-     * hangs off it. Shared by {@code requiredWhen} (its value path) and {@code forbidWhen} (its
-     * condition's one-hop terms), which both read a {@code Relation.field} the reader must fetch first.
+     * hangs off it. Shared by {@code requiredWhen} (its value path and its condition's one-hop terms)
+     * and {@code forbidWhen} (its condition's), which all read a {@code Relation.field} the reader must
+     * fetch first.
      */
     private static List<Map<String, Object>> pathLoadsOf(ResolvePathSupport.Walker walker) {
         List<Map<String, Object>> pathLoads = new ArrayList<>();
@@ -2510,10 +2600,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Reads a {@code forbidWhen} condition into the neutral terms the model carries (issue #7405). Each
      * term reads either the record's own property or a one-hop {@code Relation.field} whose parent the
-     * walker loads first - the added reach over {@code requiredWhen}, which is why a child can refuse a
-     * write on its parent's state. Typed against each operand's DECLARED type (a to-one by its integer
-     * foreign key), and null when a comparison does not read - the parser has already reported it, and
-     * a condition degrading to {@code true} would refuse every write.
+     * walker loads first, which is why a child can refuse a write on its parent's state. Typed against
+     * each operand's DECLARED type (a to-one by its integer foreign key), and null when a comparison
+     * does not read - the parser has already reported it, and a condition degrading to {@code true}
+     * would refuse every write.
      *
      * @param entity the entity carrying the check
      * @param byName the local entities by name

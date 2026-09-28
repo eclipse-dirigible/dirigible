@@ -223,6 +223,11 @@ public class ${name}MyController {
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
+#if($warningChecks && $warningChecks.size() > 0)
+        // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
+        // until the request confirms their codes - and only then persisted.
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+#end
 #if($hasDuplicateKeys)
         try {
             return scrub(repository.save(entity));
@@ -273,6 +278,11 @@ public class ${name}MyController {
         validate(entity);
 #if($hasReferenceValidations)
         validateReferences(entity);
+#end
+#if($warningChecks && $warningChecks.size() > 0)
+        // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
+        // until the request confirms their codes - and only then persisted.
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
 #end
 #if($hasDuplicateKeys)
         try {

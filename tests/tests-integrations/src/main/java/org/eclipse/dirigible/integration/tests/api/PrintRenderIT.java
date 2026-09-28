@@ -165,6 +165,8 @@ class PrintRenderIT extends IntegrationTest {
                         <column width="*" align="right">{{amount}}</column>
                     </table>
                     <total align="right">{{document.total}}</total>
+                    <!-- The amount in words, spelled out in the language of the template folder (en, bg). -->
+                    <text>{{document.total:words(EUR)}}</text>
                 </page>
             </document>
             """;

@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -131,6 +132,10 @@ class ExternalFrontendIT extends IntegrationTest {
     private static final List<String> READER_GROUPS = List.of("it-reader");
     private static final String BROWSER_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
     private static final String AXIOS_ACCEPT = "application/json, text/plain, */*";
+    /** A STOMP CONNECT as a SockJS client sends it over {@code xhr_send}: a JSON array of frames. */
+    private static final String SOCKJS_CONNECT = "[\"CONNECT\\naccept-version:1.2\\nheart-beat:0,0\\n\\n\\u0000\"]";
+    private static final String SOCKJS_DISCONNECT = "[\"DISCONNECT\\n\\n\\u0000\"]";
+    private static final String SOCKJS_SUBSCRIBE = "[\"SUBSCRIBE\\nid:sub-0\\ndestination:/user/queue/reply/before-connect\\n\\n\\u0000\"]";
 
     /**
      * Prints who the platform thinks is calling. {@code it-reader} and {@code it-writer} are roles no
@@ -168,6 +173,8 @@ class ExternalFrontendIT extends IntegrationTest {
     static void startIdentityProviderAndAllowTheOrigin() throws Exception {
         identityProvider = MockIdentityProvider.start();
         Configuration.set(DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey(), ORIGIN);
+        // the default, stated: a listed origin gets CORS, not the user's session (#7445)
+        Configuration.set(DirigibleConfig.CORS_ALLOW_CREDENTIALS.getKey(), Boolean.FALSE.toString());
         RestAssured.enableLoggingOfRequestAndResponseIfValidationFails();
         stompScheduler = new ThreadPoolTaskScheduler();
         stompScheduler.setThreadNamePrefix("external-frontend-it-stomp-");
@@ -475,7 +482,8 @@ class ExternalFrontendIT extends IntegrationTest {
     @Test
     void aCookieSessionConnectsWithoutABearerHeader() throws Exception {
         // the pages the platform serves - every shipped websocket page - authenticate their STOMP session
-        // by the handshake cookie alone, and the CONNECT gate must keep that open
+        // by the handshake cookie alone, and the CONNECT gate must keep that open: a same-origin
+        // handshake, which is what a request without an Origin header is
         String session = api().auth()
                               .oauth2(identityProvider.idToken("jane", DEVELOPER_GROUPS))
                               .when()
@@ -501,6 +509,177 @@ class ExternalFrontendIT extends IntegrationTest {
         } finally {
             stomp.disconnect();
         }
+    }
+
+    @Test
+    void aSameOriginCookieHandshakeWithTheBrowsersOriginConnects() throws Exception {
+        // a browser sends Origin on every WebSocket handshake, the pages the platform serves included; one
+        // naming the scheme, host and port the request arrived on is same-origin, so the cookie stays the
+        // STOMP user and the credentials setting plays no part (#7445)
+        WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
+        handshakeHeaders.setOrigin("http://localhost:" + port);
+        handshakeHeaders.add(HttpHeaders.COOKIE, "JSESSIONID=" + sessionOf("jane"));
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+
+        StompSession stomp = connect(handshakeHeaders, new StompHeaders(), handler);
+        try {
+            BlockingQueue<String> inbox = subscribe(stomp, "/user/queue/reply/same-origin");
+            awaitSubscription("jane", "/user/queue/reply/same-origin");
+            Awaitility.await()
+                      .atMost(15, TimeUnit.SECONDS)
+                      .pollInterval(500, TimeUnit.MILLISECONDS)
+                      .untilAsserted(() -> {
+                          messagingTemplate.convertAndSendToUser("jane", "/queue/reply/same-origin", "hello same origin");
+                          assertEquals("hello same origin", inbox.poll(500, TimeUnit.MILLISECONDS),
+                                  "the handshake cookie is the STOMP user");
+                      });
+            assertTrue(handler.errors.isEmpty());
+        } finally {
+            stomp.disconnect();
+        }
+    }
+
+    @Test
+    void aCrossOriginCookieSessionIsRefusedWithoutABearerToken() throws Exception {
+        // a listed origin gets CORS, not the user's session: DIRIGIBLE_CORS_ALLOW_CREDENTIALS is off
+        // here, so the cookie the handshake carries does not authenticate a session a page opened from
+        // its own origin (#7445)
+        WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
+        handshakeHeaders.setOrigin(ORIGIN);
+        handshakeHeaders.add(HttpHeaders.COOKIE, "JSESSIONID=" + sessionOf("jane"));
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+
+        assertThrows(ExecutionException.class, () -> connect(handshakeHeaders, new StompHeaders(), handler));
+        assertEquals("Unauthorized", handler.errors.poll(10, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void aCrossOriginBearerConnectOverridesTheCookieUser() throws Exception {
+        // the token is the identity such a session is meant to carry, whatever the handshake had
+        WebSocketHttpHeaders handshakeHeaders = new WebSocketHttpHeaders();
+        handshakeHeaders.setOrigin(ORIGIN);
+        handshakeHeaders.add(HttpHeaders.COOKIE, "JSESSIONID=" + sessionOf("jane"));
+        StompHeaders connectHeaders = new StompHeaders();
+        connectHeaders.add("Authorization", "Bearer " + identityProvider.idToken("bob", READER_GROUPS));
+        RecordingSessionHandler handler = new RecordingSessionHandler();
+
+        StompSession session = connect(handshakeHeaders, connectHeaders, handler);
+        try {
+            subscribe(session, "/user/queue/reply/cross-origin");
+            awaitSubscription("bob", "/user/queue/reply/cross-origin");
+            assertFalse(isSubscribed("jane", "/user/queue/reply/cross-origin"), "the cookie's user never reached the broker");
+            assertTrue(handler.errors.isEmpty());
+        } finally {
+            session.disconnect();
+        }
+    }
+
+    @Test
+    void aCrossOriginSockJsStreamingSessionIsRefusedWithoutABearerToken() throws Exception {
+        // the SockJS fallbacks are plain HTTP requests: the session is marked cross-origin on the
+        // request that creates it, so a CONNECT sent over xhr_send is held to the same rule as one on
+        // a WebSocket. The streaming request stays open until the session ends - which the refusal
+        // does - so its body is the whole conversation (a polling request would race the close and
+        // read the go-away frame instead)
+        String session = sessionOf("jane");
+        String transport = "/stomp/000/" + UUID.randomUUID() + "/";
+
+        CompletableFuture<String> stream = CompletableFuture.supplyAsync(() -> api().header("Origin", ORIGIN)
+                                                                                    .cookie("JSESSIONID", session)
+                                                                                    .when()
+                                                                                    .post(transport + "xhr_streaming")
+                                                                                    .then()
+                                                                                    .statusCode(200)
+                                                                                    .extract()
+                                                                                    .asString());
+        // the session exists once the streaming request has reached the server - before that a send
+        // is answered 404
+        Awaitility.await()
+                  .atMost(10, TimeUnit.SECONDS)
+                  .pollInterval(200, TimeUnit.MILLISECONDS)
+                  .until(() -> api().header("Origin", ORIGIN)
+                                    .cookie("JSESSIONID", session)
+                                    .contentType(ContentType.TEXT)
+                                    .body(SOCKJS_CONNECT)
+                                    .when()
+                                    .post(transport + "xhr_send")
+                                    .statusCode() == 204);
+
+        String frames = stream.get(15, TimeUnit.SECONDS);
+        // the stream opens with SockJS's 2 KB prelude, then the open frame
+        assertTrue(frames.contains("\no\n"), frames);
+        assertTrue(frames.contains("ERROR") && frames.contains("message:Unauthorized"), frames);
+        assertFalse(frames.contains("CONNECTED"), frames);
+    }
+
+    @Test
+    void aCrossOriginFrameBeforeConnectIsRefused() throws Exception {
+        // the gate sits on the CONNECT alone, and every frame Spring hands the inbound channel carries the
+        // handshake identity - so skipping the CONNECT would be the way past it, were it not that Spring
+        // refuses any frame arriving before one (an ERROR, then the close). That is Spring's sequencing,
+        // not a rule of the platform: pinned here so a version that relaxes it fails this test rather
+        // than reopening the gap (#7445)
+        String session = sessionOf("jane");
+        String transport = "/stomp/000/" + UUID.randomUUID() + "/";
+
+        CompletableFuture<String> stream = CompletableFuture.supplyAsync(() -> api().header("Origin", ORIGIN)
+                                                                                    .cookie("JSESSIONID", session)
+                                                                                    .when()
+                                                                                    .post(transport + "xhr_streaming")
+                                                                                    .then()
+                                                                                    .statusCode(200)
+                                                                                    .extract()
+                                                                                    .asString());
+        Awaitility.await()
+                  .atMost(10, TimeUnit.SECONDS)
+                  .pollInterval(200, TimeUnit.MILLISECONDS)
+                  .until(() -> api().header("Origin", ORIGIN)
+                                    .cookie("JSESSIONID", session)
+                                    .contentType(ContentType.TEXT)
+                                    .body(SOCKJS_SUBSCRIBE)
+                                    .when()
+                                    .post(transport + "xhr_send")
+                                    .statusCode() == 204);
+
+        String frames = stream.get(15, TimeUnit.SECONDS);
+        assertTrue(frames.contains("\no\n"), frames);
+        assertTrue(frames.contains("ERROR"), frames);
+        assertFalse(frames.contains("CONNECTED") || frames.contains("MESSAGE"), frames);
+        assertFalse(isSubscribed("jane", "/user/queue/reply/before-connect"), "the handshake identity never reached the broker");
+    }
+
+    @Test
+    void aSameOriginSockJsPollingSessionConnectsByItsCookie() {
+        String session = sessionOf("jane");
+        String transport = "/stomp/000/" + UUID.randomUUID() + "/";
+
+        api().cookie("JSESSIONID", session)
+             .when()
+             .post(transport + "xhr")
+             .then()
+             .statusCode(200)
+             .body(equalTo("o\n"));
+        api().cookie("JSESSIONID", session)
+             .contentType(ContentType.TEXT)
+             .body(SOCKJS_CONNECT)
+             .when()
+             .post(transport + "xhr_send")
+             .then()
+             .statusCode(204);
+        api().cookie("JSESSIONID", session)
+             .when()
+             .post(transport + "xhr")
+             .then()
+             .statusCode(200)
+             .body(containsString("CONNECTED"))
+             .body(containsString("user-name:jane"));
+        api().cookie("JSESSIONID", session)
+             .contentType(ContentType.TEXT)
+             .body(SOCKJS_DISCONNECT)
+             .when()
+             .post(transport + "xhr_send")
+             .then()
+             .statusCode(204);
     }
 
     @Test
@@ -561,7 +740,9 @@ class ExternalFrontendIT extends IntegrationTest {
     @Test
     void aSockJsTransportRequestFromTheListedOriginIsAnsweredWithCredentials() {
         // SockJS's XHR transports send credentials and need the answer to allow them - the STOMP endpoint
-        // answers its own CORS, whatever the platform's configuration says about credentials
+        // answers its own CORS, whatever the platform's configuration says about credentials. The
+        // answer is about the transport only: whether the cookie it carries authenticates the session
+        // is decided on the CONNECT (see the cross-origin cases above)
         api().header("Origin", ORIGIN)
              .when()
              .get("/stomp/info")
@@ -778,14 +959,16 @@ class ExternalFrontendIT extends IntegrationTest {
     private void awaitSubscription(String user, String destination) {
         Awaitility.await()
                   .atMost(10, TimeUnit.SECONDS)
-                  .until(() -> {
-                      SimpUser simpUser = simpUserRegistry.getUser(user);
-                      return simpUser != null && simpUser.getSessions()
-                                                         .stream()
-                                                         .flatMap(session -> session.getSubscriptions()
-                                                                                    .stream())
-                                                         .anyMatch(subscription -> destination.equals(subscription.getDestination()));
-                  });
+                  .until(() -> isSubscribed(user, destination));
+    }
+
+    private boolean isSubscribed(String user, String destination) {
+        SimpUser simpUser = simpUserRegistry.getUser(user);
+        return simpUser != null && simpUser.getSessions()
+                                           .stream()
+                                           .flatMap(session -> session.getSubscriptions()
+                                                                      .stream())
+                                           .anyMatch(subscription -> destination.equals(subscription.getDestination()));
     }
 
     /**

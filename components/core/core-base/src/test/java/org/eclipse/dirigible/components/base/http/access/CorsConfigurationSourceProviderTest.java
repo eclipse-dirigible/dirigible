@@ -195,6 +195,20 @@ class CorsConfigurationSourceProviderTest {
     }
 
     @Test
+    void theStompHandshakeIdentityCountsCrossOriginOnlyWithCredentialsForConfiguredOrigins() {
+        assertFalse(CorsConfigurationSourceProvider.stompCredentialsAllowed(), "unconfigured, no cross-origin handshake passes at all");
+
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(true);
+        assertFalse(CorsConfigurationSourceProvider.stompCredentialsAllowed(), "credentials without origins grant nothing");
+
+        DirigibleConfig.CORS_ALLOWED_ORIGINS.setStringValue("https://app.example.com");
+        assertTrue(CorsConfigurationSourceProvider.stompCredentialsAllowed());
+
+        DirigibleConfig.CORS_ALLOW_CREDENTIALS.setBooleanValue(false);
+        assertFalse(CorsConfigurationSourceProvider.stompCredentialsAllowed(), "a listed origin gets CORS, not the user's session");
+    }
+
+    @Test
     void credentialsForASchemelessPatternAreRefused() {
         // Spring compiles h* to h.* and full-matches it against the origin, so it admits
         // https://evil.example

@@ -174,6 +174,30 @@ expressions. It exists because an optional twin field is the normal shape of bus
 a locally registered name beside the canonical one must not leave a hole in a legal document when
 only one of the two is filled.
 
+**Amount in words** — the format `words(<currency>)` spells a money amount out in the template's
+language, the one of the `Print/<lang>/` folder it was read from (`new DataBinder(language)`):
+
+```xml
+<text>Словом: {{document.Total:words(document.Currency.Code)}}</text>
+<!-- ПЕТ ХИЛЯДИ ДВЕСТА ШЕСТДЕСЕТ И ЧЕТИРИ ЕВРО И 44 ЕВРОЦЕНТА -->
+```
+
+The argument is a path to the ISO 4217 currency code, or the code itself (`words(EUR)`) for a
+template of one currency. The whole amount is in words, the cents are two digits, both currency
+nouns are spelled out, in capitals. Two languages so far:
+
+- **Bulgarian** (`bg`) names the euro and the lev, with the grammar a Bulgarian invoice needs:
+  gender agreement (едно евро / един лев / две хиляди) and `и` before the last word of each
+  three-digit group.
+- **English** (`en`) names the euro, the lev, the US dollar and the pound sterling -
+  `FIVE THOUSAND TWO HUNDRED SIXTY-FOUR EUROS AND 44 CENTS`: hyphenated tens (sixty-four), short
+  scales, and no `and` inside the number, so the only one joins the cents.
+
+The placeholder renders
+**empty**, never throws, in a language with no spelling, for a currency the language cannot name, for
+a non-numeric value and at a trillion or more. It combines with alternative operands like any other
+format.
+
 **Row filtering** stays declarative — a value match, not an expression language: a `table`/`for`
 with `filter="kind"` keeps only the elements whose `kind` resolves truthy (in the row's scope),
 and adding `match="CONTRIBUTION | TAX"` narrows that to the listed `|`-separated literals. The

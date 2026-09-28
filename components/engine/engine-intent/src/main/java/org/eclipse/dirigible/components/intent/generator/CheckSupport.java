@@ -34,10 +34,11 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * rendered anywhere in this class any more.
  *
  * <p>
- * The condition is a closed set of equality comparisons over the record's own properties, ANDed. It
- * is deliberately not an expression language: a condition the generator cannot compile would leave
- * the value required unconditionally, i.e. a {@code required} nobody authored, and that failure is
- * silent in exactly the way this module refuses everywhere else.
+ * The condition is a closed set of equality comparisons, ANDed, over the record's own properties or
+ * a one-hop {@code Relation.property} (issue #7495). It is deliberately not an expression language:
+ * a condition the generator cannot compile would leave the value required unconditionally, i.e. a
+ * {@code required} nobody authored, and that failure is silent in exactly the way this module
+ * refuses everywhere else.
  *
  * <p>
  * The comparison is typed against the property's DECLARED type rather than generically, because a
@@ -49,12 +50,11 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 public final class CheckSupport {
 
     /**
-     * One comparison of a condition: a property of the record - or, for a {@code forbidWhen}, a one-hop
-     * {@code Relation.field} so a child can test its parent - against a literal: a number, a quoted
-     * string, a bare word (a status name is already its seed id here, resolved before the typed
-     * mapping) or a boolean. The optional {@code .segment} is what a {@code forbidWhen} adds over a
-     * {@code requiredWhen}, whose {@code when} stays record-local and refuses a dotted property at term
-     * validation.
+     * One comparison of a condition: a property of the record - or, for a {@code requiredWhen} /
+     * {@code forbidWhen}, a one-hop {@code Relation.field}, so a child can test its parent and a
+     * document its counterparty - against a literal: a number, a quoted string, a bare word (a status
+     * name is already its seed id here, resolved before the typed mapping) or a boolean. The glue
+     * {@code event.when} guard stays record-local and refuses a dotted property at term validation.
      */
     public static final Pattern TERM =
             Pattern.compile("\\s*(\\w+(?:\\.\\w+)?)\\s*(==|!=)\\s*('[^']*'|\"[^\"]*\"|-?\\d+|[A-Za-z_][A-Za-z0-9_\\-]*)\\s*");
@@ -195,24 +195,95 @@ public final class CheckSupport {
         List<Map<String, Object>> terms = new ArrayList<>();
         for (String term : terms(when)) {
             Comparison comparison = parse(term);
-            if (comparison == null) {
-                return null;
-            }
-            FieldIntent field = field(entity, comparison.property());
-            RelationIntent relation = field == null ? toOne(entity, comparison.property()) : null;
-            if (field == null && relation == null) {
-                return null;
-            }
-            String type = guardType(field != null ? field.getType() : relationKeyType(relation, byName));
-            boolean numericKey = field == null && NUMERIC_GUARD_TYPES.contains(type);
-            Map<String, Object> read =
-                    term(RECORD, IntentNaming.pascalCase(comparison.property()), comparison, numericKey ? "long" : type, numericKey);
+            Map<String, Object> read = comparison == null ? null : recordTerm(entity, byName, comparison);
             if (read == null) {
                 return null;
             }
             terms.add(read);
         }
         return terms.isEmpty() ? null : terms;
+    }
+
+    /**
+     * Reads a condition whose comparisons may also name a one-hop {@code Relation.property} - the
+     * {@code requiredWhen} guard over the record a to-one points at (issue #7495: "the customer's
+     * registration number is required when the customer is a business"). A bare property reads exactly
+     * as {@link #conditionTerms(EntityIntent, Map, Object)} reads it, so a condition that names none
+     * produces the same terms; a path is resolved through the check's own walker, which is what loads
+     * each hop once for the value and the condition together and null-guards it.
+     *
+     * <p>
+     * A path ending on a to-one compares its foreign key, whose Java width follows the TARGET's key and
+     * is therefore compared by value ({@code numericKey}) for the reason the record-local key is
+     * (#7237). So is a whole-number literal against a cross-model terminal, whose declared type is not
+     * known here: by value it reads right at any integer width, and against a non-numeric column it
+     * fails the compile rather than switching the rule off.
+     *
+     * @param entity the entity the condition is read off
+     * @param byName the local entities by name
+     * @param walker the walker shared with the check's other paths, which accumulates the hops read
+     * @param when the authored condition
+     * @return the terms, or {@code null} when there is no condition or a comparison does not read
+     */
+    public static List<Map<String, Object>> conditionTerms(EntityIntent entity, Map<String, EntityIntent> byName,
+            ResolvePathSupport.Walker walker, Object when) {
+        if (entity == null) {
+            return null;
+        }
+        List<Map<String, Object>> terms = new ArrayList<>();
+        for (String term : terms(when)) {
+            Comparison comparison = parse(term);
+            if (comparison == null) {
+                return null;
+            }
+            Map<String, Object> read =
+                    ResolvePathSupport.isPath(comparison.property()) ? pathTerm(walker.resolve(comparison.property()), comparison)
+                            : recordTerm(entity, byName, comparison);
+            if (read == null) {
+                return null;
+            }
+            terms.add(read);
+        }
+        return terms.isEmpty() ? null : terms;
+    }
+
+    /** A comparison over the record's own field or to-one, or {@code null} when it does not read. */
+    private static Map<String, Object> recordTerm(EntityIntent entity, Map<String, EntityIntent> byName, Comparison comparison) {
+        FieldIntent field = field(entity, comparison.property());
+        RelationIntent relation = field == null ? toOne(entity, comparison.property()) : null;
+        if (field == null && relation == null) {
+            return null;
+        }
+        String type = guardType(field != null ? field.getType() : relationKeyType(relation, byName));
+        boolean numericKey = field == null && NUMERIC_GUARD_TYPES.contains(type);
+        return term(RECORD, IntentNaming.pascalCase(comparison.property()), comparison, numericKey ? "long" : type, numericKey);
+    }
+
+    /** A comparison over a resolved one-hop path, or {@code null} when it does not read. */
+    private static Map<String, Object> pathTerm(ResolvePathSupport.Path path, Comparison comparison) {
+        if (!path.resolved()) {
+            return null;
+        }
+        String terminal = path.terminalType();
+        boolean wholeNumber = unquote(comparison.literal()).matches("-?\\d+") && !isQuoted(comparison.literal());
+        if (ResolvePathSupport.RELATION_TERMINAL.equals(terminal) || (terminal == null && wholeNumber)) {
+            return term(path.owner(), path.property(), comparison, "long", true);
+        }
+        String type =
+                terminal != null ? guardType(terminal) : isQuoted(comparison.literal()) ? "string" : literalType(comparison.literal());
+        if (!GUARD_TYPES.contains(type)) {
+            return null;
+        }
+        return term(path.owner(), path.property(), comparison, type, false);
+    }
+
+    private static boolean isQuoted(String literal) {
+        return literal.startsWith("'") || literal.startsWith("\"");
+    }
+
+    /** The type an unquoted, non-numeric literal against an unknown terminal reads as. */
+    private static String literalType(String literal) {
+        return "true".equals(literal) || "false".equals(literal) ? "boolean" : "string";
     }
 
     /**

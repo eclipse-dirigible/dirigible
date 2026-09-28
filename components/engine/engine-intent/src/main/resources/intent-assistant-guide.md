@@ -429,6 +429,20 @@ field may declare:
   still resolve. Not allowed on a composition parent (preset, never picked) or an `EntityStatus`.
   Canonical shape - a stock line's Product picker excluding services:
     `- { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }`
+- `pickable: { when: [<target property> != null, ...], else: mark|hide, message: <text> }` on a
+  manyToOne/oneToOne (#7496) - **a picker rule over the TARGET's rows**: this is how "a customer
+  with incomplete registration data cannot be picked onto an invoice" is declared, so the clerk
+  learns it at the picker instead of when the invoice is refused at Issue. `when` is one comparison
+  or a list (their AND) of `<property> ==|!= <literal>` - the same typed guard grammar a check's
+  `when` takes, over the target's own fields / to-one relations (no path) - plus `<property> != null`
+  (present: neither null nor blank) and `== null` (absent), which test any field type. `else: mark`
+  (the default) lists a failing row disabled with `message` under its name (absent, the rule text
+  is shown); `else: hide` leaves it out. A value the record already holds always keeps its label -
+  a now-failing one stays listed, disabled. **It governs the picker only**: a REST client bypasses
+  any picker, so pair it with the write-side rule (a `requiredWhen` over `Customer.registrationNumber`
+  at the status that needs it). Not on a composition parent, an `EntityStatus`, a subset, or with
+  `leafOnly`. Canonical shape:
+    `- { name: Customer, kind: manyToOne, to: Customer, pickable: { when: [registrationNumber != null, address != null], message: "Registration data incomplete" } }`
 - `immutableWhen: "<Status> == <seed id> [|| ...]"` (entity-level) - **status-scoped user-write
   immutability**: while the entity's `function: EntityStatus` relation satisfies the expression,
   update and delete through the REST surface are rejected with 409 (e.g.
@@ -607,6 +621,26 @@ field may declare:
   that owns several composition children (an invoice also owns its payment allocations, its
   promotions and its printed `function: Snapshot` copies) should flag its lines child
   `function: DocumentItem` and say so, rather than rely on the fallback.
+  **Warn instead of refuse - `severity: warn` (#7466).** Every kind above REFUSES the write. When
+  the write is legitimate and the user only has to be TOLD first ("warn me before a second customer
+  with the same name", "warn me when a line has price 0"), declare a warning: the generated
+  controller answers `428 Precondition Required` listing the warnings, the generated UI shows ONE
+  confirm dialog with all of them, and the save goes through when the user confirms (a REST client
+  repeats the request with the listed codes in the `X-Confirm-Warnings` header). Process steps and
+  jobs are never stopped by a warning. Three shapes:
+  - `severity: warn` on an UNGATED row-level check - `compare`, `requiredWhen`, `forbidWhen`,
+    `exactlyOne`, `agree`: `{ kind: compare, field: discount, op: le, value: 50, severity: warn,
+    message: "A discount above 50%" }`. Refused with a `status:` gate (a transition has nobody to
+    ask) and on the document-level kinds and `guard` (a guard has its own soft `outcome: task|reject`).
+  - `{ kind: duplicate, fields: [name], message: "A customer with this name already exists" }`:
+    another record already carries the same values. Use it where a hard `unique:` would be wrong -
+    two companies may share a registered name under different registration numbers. Fields are own
+    fields or to-one relations; it is always a warning (`severity: error` is refused - that is `unique:`).
+  - `{ kind: itemsCompare, field: price, op: gt, value: 0, message: "{count} line(s) at price zero" }`
+    on the DOCUMENT (the master): every line's `field` compared with the `value` literal, asked ONCE
+    when the document is saved for all the lines that break it - not once per line. `{count}` in the
+    message is replaced with the number of lines. Always a warning; a hard per-line rule is a
+    `compare` on the items entity.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a
@@ -4144,6 +4178,7 @@ or a seeded name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
+- "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)

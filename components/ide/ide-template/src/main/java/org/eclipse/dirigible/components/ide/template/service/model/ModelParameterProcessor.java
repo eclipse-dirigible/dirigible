@@ -223,12 +223,20 @@ final class ModelParameterProcessor {
         List<Object> documentChecks = new ArrayList<>();
         List<Object> forbidWhenGuards = new ArrayList<>();
         List<Object> deleteChecks = new ArrayList<>();
+        List<Object> warningChecks = new ArrayList<>();
         for (Map<String, Object> check : checks) {
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
             resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
-            if ("exactlyOne".equals(kind) || "agree".equals(kind)) {
+            if ("warn".equals(str(check, "severity"))) {
+                // The soft tier (#7466), whatever its kind: the repository collects what the write would
+                // warn about and the controllers ask the person before persisting. A warning refuses
+                // nothing, so it reaches neither validate(), nor the delete verb, nor the transition.
+                String code = str(check, "code");
+                check.put("codeJavaLiteral", JavaLiterals.escape(code == null ? str(entity, "name") + "." + kind : code));
+                warningChecks.add(check);
+            } else if ("exactlyOne".equals(kind) || "agree".equals(kind)) {
                 // Both hold from the first save and take no gate: one relates the row's own fields, the
                 // other the two records a junction row links (#7409).
                 rowChecks.add(check);
@@ -276,6 +284,7 @@ final class ModelParameterProcessor {
         entity.put("documentChecks", documentChecks);
         entity.put("forbidWhenGuards", forbidWhenGuards);
         entity.put("deleteChecks", deleteChecks);
+        entity.put("warningChecks", warningChecks);
     }
 
     /**

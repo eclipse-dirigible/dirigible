@@ -1438,6 +1438,62 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code requiredWhen} condition may read the record a to-one points at (dirigible #7495): the
+     * value and the condition share ONE walker, so the customer is loaded once for both, and a to-one
+     * compared one hop away is compared by value - its Java width is the target key's (#7237).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void requiredWhenConditionReadsAToOneHopLoadedOnceWithTheValue() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: CustomerKind
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: vatNumber, type: string }
+                      - { name: vatRegistered, type: boolean }
+                    relations:
+                      - { name: Kind, kind: manyToOne, to: CustomerKind }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: requiredWhen, field: Customer.vatNumber,
+                          when: ["Customer.Kind == 1", "Customer.vatRegistered == true", "sentMethod != 2"],
+                          message: "A VAT-registered business customer needs a VAT number" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: sentMethod, type: integer }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        assertEquals(1, checks.size());
+        Map<String, Object> check = checks.get(0);
+        assertEquals(List.of(Map.of("owner", "hop0", "property", "Kind", "equal", true, "type", "long", "value", "1", "numericKey", true),
+                Map.of("owner", "hop0", "property", "VatRegistered", "equal", true, "type", "boolean", "value", "true", "numericKey",
+                        false),
+                Map.of("owner", "entity", "property", "SentMethod", "equal", false, "type", "integer", "value", "2", "numericKey", false)),
+                check.get("when"));
+        assertEquals("((hop0 == null ? null : hop0.Kind) != null && (hop0 == null ? null : hop0.Kind).longValue() == 1L)"
+                + " && java.util.Objects.equals((hop0 == null ? null : hop0.VatRegistered), true)"
+                + " && !java.util.Objects.equals(entity.SentMethod, 2)", guardJava(check));
+        assertEquals("(hop0 == null ? null : hop0.VatNumber)", check.get("valueExpression"));
+        // One load: the hop the value and the condition both read through.
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
+        assertEquals(1, loads.size());
+        assertEquals("entity.Customer", loads.get(0)
+                                             .get("sourceExpression"));
+        assertEquals("Customer", loads.get(0)
+                                      .get("entity"));
+    }
+
+    /**
      * An {@code agree} check emits BOTH sides as one hop each, sharing the walker - so the two records
      * are loaded once, by foreign key, and the comparison is between two properties of records neither
      * of which is the one being written (dirigible #7409).
@@ -1495,6 +1551,78 @@ class EdmIntentGeneratorTest {
         Map<String, Object> refusing = checks.get(1);
         assertEquals("refuse", refusing.get("whenNull"));
         assertEquals("The Sales Invoice and the Customer Payment must have the same Customer", refusing.get("message"));
+    }
+
+    /**
+     * The soft tier (#7466) reaches the {@code .model} as data: every warning carries
+     * {@code severity: warn} and the stable {@code code} a caller confirms it by, a {@code duplicate}
+     * its PascalCased fields, an {@code itemsCompare} the items it reads and a literal typed by the
+     * ITEM field - and a warning {@code forbidWhen} hides nothing in the master-detail panel, because
+     * the write it asks about stays possible.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void warningChecksCarryTheirSeverityCodeAndWhatTheyRead() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Customer
+                    checks:
+                      - { kind: duplicate, fields: [name] }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    checks:
+                      - { kind: compare, field: total, op: ge, value: 0, message: "A negative invoice" }
+                      - { kind: itemsCompare, field: price, op: gt, value: 0 }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: SalesInvoiceItem
+                    checks:
+                      - { kind: forbidWhen, when: "SalesInvoice.Status == 2", severity: warn, message: "The invoice is issued" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+
+        Map<String, Object> duplicate = ((List<Map<String, Object>>) entityByName(entities(model), "Customer").get("checks")).get(0);
+        assertEquals("warn", duplicate.get("severity"));
+        assertEquals("Customer.duplicate.0", duplicate.get("code"));
+        assertEquals(List.of("Name"), duplicate.get("fields"));
+        assertEquals("Another Customer with the same Name already exists", duplicate.get("message"));
+
+        List<Map<String, Object>> invoiceChecks = (List<Map<String, Object>>) entityByName(entities(model), "SalesInvoice").get("checks");
+        // A refusing check stays exactly what it was - no severity, no code.
+        assertFalse(invoiceChecks.get(0)
+                                 .containsKey("severity"));
+        assertFalse(invoiceChecks.get(0)
+                                 .containsKey("code"));
+        Map<String, Object> items = invoiceChecks.get(1);
+        assertEquals("warn", items.get("severity"));
+        assertEquals("SalesInvoice.itemsCompare.1", items.get("code"));
+        assertEquals("SalesInvoiceItem", items.get("itemsEntity"));
+        assertEquals("SalesInvoice", items.get("itemsFk"));
+        assertEquals("Price", items.get("field"));
+        assertEquals(">", items.get("op"));
+        assertEquals("true", items.get("numeric"));
+        assertNotNull(items.get("value"));
+        assertEquals("{count} line(s) where Price is not greater than 0", items.get("message"));
+
+        Map<String, Object> forbid = ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceItem").get("checks")).get(0);
+        assertEquals("warn", forbid.get("severity"));
+        assertFalse(forbid.containsKey("masterGuard"), "a warning must not hide the panel's affordances: " + forbid);
     }
 
     /**

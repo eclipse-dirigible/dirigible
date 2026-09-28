@@ -60,7 +60,7 @@ public class PrintFacade {
         String template = cmsStore.findTemplate(entity, language)
                                   .orElseThrow(() -> new IOException(
                                           "No print template for entity [" + entity + "] and language [" + language + "]"));
-        return PrintRenderer.renderPdf(template, data, imageResolver);
+        return PrintRenderer.renderPdf(template, language, data, imageResolver);
     }
 
     /**

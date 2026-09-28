@@ -1125,6 +1125,135 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
     }
 #end
+#if($warningChecks && $warningChecks.size() > 0)
+
+    /**
+     * The soft checks (intent {@code checks:} with {@code severity: warn}, a {@code duplicate} or an
+     * {@code itemsCompare} - issue #7466): what this write would WARN about, never a refusal. The
+     * generated controllers hand the list to {@code Warnings.requireConfirmed} before they persist, so
+     * the person saving is asked first and a REST caller is told the same thing (428 with the codes it
+     * confirms in {@code X-Confirm-Warnings}). Nothing else calls it: a process step or a job writes on
+     * nobody's behalf, and a warning is a question for a person.
+     *
+     * @param entity the record about to be written (carrying its id on an update)
+     * @return the warnings, in declaration order; empty when there is nothing to confirm
+     */
+    public java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings(${name}Entity entity) {
+        java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings = new java.util.ArrayList<>();
+#foreach($check in $warningChecks)
+#if($check.kind == "duplicate")
+        // Another record carrying the same values (intent `checks: duplicate`): legitimate - two companies
+        // may share a registered name - so asked, not refused. An unset value repeats nothing.
+        if (#foreach($field in $check.fields)entity.${field} != null#if($foreach.hasNext) && #end#end) {
+            for (${name}Entity other : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()#foreach($field in $check.fields)
+                                                                                                                         .eq("${field}", entity.${field})#end)) {
+                if (!java.util.Objects.equals(other.${pkPropertyName}, entity.${pkPropertyName})) {
+                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                    break;
+                }
+            }
+        }
+#elseif($check.kind == "itemsCompare")
+        // Every line compared with a literal (intent `checks: itemsCompare`), asked ONCE for the whole
+        // document rather than once per line - the lines that break it are counted into the message.
+        if (entity.${pkPropertyName} != null) {
+            int breaking = 0;
+            for (${check.itemsEntity}Entity item : new ${check.itemsEntity}Repository().findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                       .eq("${check.itemsFk}", entity.${pkPropertyName}))) {
+#if($check.numeric == "true")
+                if (item.${check.field} != null && !(new java.math.BigDecimal(item.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#else
+                if (item.${check.field} != null && !(item.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#end
+                    breaking++;
+                }
+            }
+            if (breaking > 0) {
+                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
+                        "${check.messageJavaLiteral}".replace("{count}", String.valueOf(breaking))));
+            }
+        }
+#elseif($check.kind == "requiredWhen")
+        // A value expected while the condition holds (intent `checks: requiredWhen`, severity: warn).
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object requiredValue = ${check.valueExpression};
+            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            }
+        }
+#elseif($check.kind == "forbidWhen")
+        // A write to be confirmed while the condition holds (intent `checks: forbidWhen`, severity: warn).
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            if (${check.guardJavaExpression}) {
+                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            }
+        }
+#elseif($check.kind == "agree")
+        // Two relations expected to agree (intent `checks: agree`, severity: warn).
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+#end
+            Object agreeLeft = ${check.leftExpression};
+            Object agreeRight = ${check.rightExpression};
+#if($check.whenNull == "refuse")
+            if (agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)) {
+#else
+            if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
+#end
+                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            }
+        }
+#elseif($check.kind == "compare")
+        // A comparison expected to hold (intent `checks: compare`, severity: warn) - an absent operand is
+        // not a finding, exactly as for the refusing kind.
+#if($check.literalJavaExpression)
+        if (entity.${check.field} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
+#end
+            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+        }
+#else
+        if (entity.${check.field} != null && entity.${check.than} != null
+#if($check.numeric == "true")
+                && !(new java.math.BigDecimal(entity.${check.field}.toString()).compareTo(new java.math.BigDecimal(entity.${check.than}.toString())) ${check.op} 0)) {
+#else
+                && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
+#end
+            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+        }
+#end
+#elseif($check.kind == "exactlyOne")
+        // Exactly one of the fields expected (intent `checks: exactlyOne`, severity: warn).
+        {
+            int assigned = 0;
+#foreach($field in $check.fields)
+            if (entity.${field} != null) {
+                assigned++;
+            }
+#end
+            if (assigned != 1) {
+                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            }
+        }
+#end
+#end
+        return warnings;
+    }
+#end
 
     @Override
     public void delete(${name}Entity entity) {
