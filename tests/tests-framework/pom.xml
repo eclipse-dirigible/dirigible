@@ -46,7 +46,8 @@
         </dependency>
 
         <!-- The scheduler APIs whose beans PlatformSchedulersStopper destroys before the cleaner drops
-             the SystemDB schema they run on (#7285). Provided: the application under test brings them. -->
+             the SystemDB schema they run on (#7285). Provided, and looked up by name at runtime: the application
+             under test brings them, except that an edition without the BPM engine has no Flowable (#7540). -->
         <dependency>
             <groupId>org.quartz-scheduler</groupId>
             <artifactId>quartz</artifactId>

@@ -10,13 +10,12 @@
 package org.eclipse.dirigible.tests.base;
 
 import java.util.List;
-import org.flowable.engine.ProcessEngine;
-import org.quartz.Scheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.DefaultSingletonBeanRegistry;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ClassUtils;
 
 /**
  * Destroys the platform's schedulers before {@link DirigibleCleaner} drops the SystemDB schema they
@@ -44,8 +43,12 @@ class PlatformSchedulersStopper {
     /**
      * The process engine goes first - closing it unlocks the jobs its async executor holds, which is
      * work for the very scheduler that is stopped next.
+     * <p>
+     * Named rather than referenced: an edition without the BPM engine has no Flowable on its classpath,
+     * and a class literal here would fail the whole test context with a {@code NoClassDefFoundError}
+     * (#7540). A scheduler whose class is absent has no bean to stop.
      */
-    private static final List<Class<?>> SYSTEM_DB_SCHEDULER_TYPES = List.of(ProcessEngine.class, Scheduler.class);
+    private static final List<String> SYSTEM_DB_SCHEDULER_TYPES = List.of("org.flowable.engine.ProcessEngine", "org.quartz.Scheduler");
 
     private final ConfigurableListableBeanFactory beanFactory;
 
@@ -58,7 +61,11 @@ class PlatformSchedulersStopper {
             LOGGER.warn("Bean factory [{}] cannot destroy a single bean - the schedulers are left to the context close", beanFactory);
             return;
         }
-        SYSTEM_DB_SCHEDULER_TYPES.forEach(type -> stopSchedulersOfType(type, singletonRegistry));
+        ClassLoader classLoader = beanFactory.getBeanClassLoader();
+        SYSTEM_DB_SCHEDULER_TYPES.stream()
+                                 .filter(typeName -> ClassUtils.isPresent(typeName, classLoader))
+                                 .map(typeName -> ClassUtils.resolveClassName(typeName, classLoader))
+                                 .forEach(type -> stopSchedulersOfType(type, singletonRegistry));
     }
 
     private void stopSchedulersOfType(Class<?> schedulerType, DefaultSingletonBeanRegistry singletonRegistry) {

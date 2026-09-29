@@ -10,15 +10,21 @@
 package org.eclipse.dirigible.tests.base;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.function.Supplier;
 import org.flowable.engine.ProcessEngine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.quartz.Scheduler;
+import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.beans.factory.support.AbstractBeanDefinition;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.RootBeanDefinition;
@@ -76,6 +82,57 @@ class PlatformSchedulersStopperTest {
         DefaultListableBeanFactory emptyBeanFactory = new DefaultListableBeanFactory();
 
         new PlatformSchedulersStopper(emptyBeanFactory).stopSchedulers();
+    }
+
+    @Test
+    void shouldStopTheSchedulersThatExistInAnEditionWithoutTheBpmEngine() throws Exception {
+        // an edition without the BPM engine has no Flowable on its classpath: loading the stopper there
+        // must not fail the whole test context with a NoClassDefFoundError (#7540)
+        try (URLClassLoader edition = classLoaderWithoutFlowable()) {
+            beanFactory.setBeanClassLoader(edition);
+            Class<?> stopperType = edition.loadClass(PlatformSchedulersStopper.class.getName());
+            Constructor<?> constructor = stopperType.getDeclaredConstructor(ConfigurableListableBeanFactory.class);
+            constructor.setAccessible(true);
+            Method stopSchedulers = stopperType.getDeclaredMethod("stopSchedulers");
+            stopSchedulers.setAccessible(true);
+
+            stopSchedulers.invoke(constructor.newInstance(beanFactory));
+        }
+
+        verify(scheduler).shutdown();
+        verify(processEngine, never()).close();
+        verifyNoInteractions(unrelated);
+    }
+
+    /**
+     * Loads this package child-first from the compiled classes, over a parent that refuses every
+     * {@code org.flowable} class - the classpath of an edition without the BPM engine.
+     */
+    private static URLClassLoader classLoaderWithoutFlowable() {
+        ClassLoader withoutFlowable = new ClassLoader(PlatformSchedulersStopperTest.class.getClassLoader()) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.startsWith("org.flowable.")) {
+                    throw new ClassNotFoundException(name);
+                }
+                return super.loadClass(name, resolve);
+            }
+        };
+        URL compiledClasses = PlatformSchedulersStopper.class.getProtectionDomain()
+                                                             .getCodeSource()
+                                                             .getLocation();
+        return new URLClassLoader(new URL[] {compiledClasses}, withoutFlowable) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (!name.startsWith(PlatformSchedulersStopper.class.getPackageName() + ".")) {
+                    return super.loadClass(name, resolve);
+                }
+                synchronized (getClassLoadingLock(name)) {
+                    Class<?> loaded = findLoadedClass(name);
+                    return loaded != null ? loaded : findClass(name);
+                }
+            }
+        };
     }
 
     private <T> T registerSingleton(String beanName, Class<T> beanType, String destroyMethodName) {
