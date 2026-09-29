@@ -33,6 +33,13 @@ import org.springframework.stereotype.Component;
  * refusal has to be published after that event to win; the platform then flips to
  * {@code ACCEPTING_TRAFFIC} when the boot latch closes. Later passes (a publish) are deliberately
  * NOT bridged - a publish must never take a running application out of the load balancer.
+ *
+ * <p>
+ * {@code DIRIGIBLE_READINESS_REQUIRE_CLEAN_BOOT} makes the acceptance wait for a
+ * {@link PlatformReadiness#isCleanBoot() clean boot} as well (#7533): no failed artefact, and every
+ * class the AOT markers list registered. Off by default, so a deployment that wants to serve with a
+ * failed seed keeps doing so; a FAILED artefact that heals on a later retry pass releases the
+ * traffic then. The acceptance stays one-way either way.
  */
 @Component
 class ReadinessAvailabilityBridge {
@@ -53,26 +60,34 @@ class ReadinessAvailabilityBridge {
         if (!DirigibleConfig.READINESS_AVAILABILITY_BRIDGE_ENABLED.getBooleanValue()) {
             return;
         }
+        boolean requireCleanBoot = DirigibleConfig.READINESS_REQUIRE_CLEAN_BOOT.getBooleanValue();
         PlatformReadiness readiness = PlatformReadiness.getInstance();
-        if (readiness.isBootCompleted()) {
+        if (isReady(readiness, requireCleanBoot)) {
             // The first pass already depleted while the context was starting - nothing to hold back.
             return;
         }
         readiness.addStateListener(state -> {
-            if (PlatformReadiness.getInstance()
-                                 .isBootCompleted()) {
+            if (isReady(PlatformReadiness.getInstance(), requireCleanBoot)) {
                 acceptTraffic();
             }
         });
-        LOGGER.info("Refusing traffic until the first synchronization pass depletes its artefacts");
+        if (requireCleanBoot) {
+            LOGGER.info("Refusing traffic until the boot is complete and clean - no failed artefact, every AOT-listed class registered");
+        } else {
+            LOGGER.info("Refusing traffic until the first synchronization pass depletes its artefacts");
+        }
         AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.REFUSING_TRAFFIC);
+    }
+
+    private static boolean isReady(PlatformReadiness readiness, boolean requireCleanBoot) {
+        return requireCleanBoot ? readiness.isCleanBoot() : readiness.isBootCompleted();
     }
 
     private void acceptTraffic() {
         if (!trafficAccepted.compareAndSet(false, true)) {
             return;
         }
-        LOGGER.info("The first synchronization pass depleted - accepting traffic");
+        LOGGER.info("The boot completed - accepting traffic");
         AvailabilityChangeEvent.publish(eventPublisher, this, ReadinessState.ACCEPTING_TRAFFIC);
     }
 }

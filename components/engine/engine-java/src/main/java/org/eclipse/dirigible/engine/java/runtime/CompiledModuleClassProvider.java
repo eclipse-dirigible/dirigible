@@ -17,12 +17,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 
+import org.eclipse.dirigible.components.base.readiness.CompiledModulesCensus;
+import org.eclipse.dirigible.components.base.readiness.PlatformReadiness;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -116,7 +120,16 @@ public class CompiledModuleClassProvider {
      * @return whether anything was installed or recorded
      */
     public synchronized boolean rediscover(ClassLoader classLoader, boolean dispatch) {
-        List<LoadedClass> classes = discover(classLoader);
+        Discovery discovery = scan(classLoader);
+        CompiledModulesCensus census = discovery.census();
+        // Recorded before the empty no-op below: "no AOT module on the classpath" is a census too.
+        PlatformReadiness.getInstance()
+                         .recordCompiledModules(census);
+        if (census.registeredClasses() < census.expectedClasses()) {
+            LOGGER.error("Only [{}] of the [{}] class(es) listed by the [{}] AOT compiled module(s) could be registered",
+                    census.registeredClasses(), census.expectedClasses(), census.modules());
+        }
+        List<LoadedClass> classes = discovery.classes();
         if (classes.isEmpty() && !installedBefore) {
             return false;
         }
@@ -141,21 +154,32 @@ public class CompiledModuleClassProvider {
      * and skipped so one bad module cannot block the rest.
      */
     List<LoadedClass> discover(ClassLoader classLoader) {
-        Map<String, LoadedClass> result = new LinkedHashMap<>();
+        return scan(classLoader).classes();
+    }
+
+    /**
+     * Scan the classpath of the given classloader, keeping what the markers list beside what loaded.
+     * Package-visible for testing.
+     *
+     * @param classLoader the class loader to scan and load through
+     * @return the discovery
+     */
+    Discovery scan(ClassLoader classLoader) {
+        Discovery result = new Discovery();
         scanWithResolver(classLoader, result);
         if (classLoader instanceof ModulesClassLoader modulesClassLoader) {
             scanModuleJars(modulesClassLoader, result);
         }
-        return new ArrayList<>(result.values());
+        return result;
     }
 
     /**
      * Scan with the Spring pattern resolver.
      *
      * @param classLoader the class loader to scan and load through
-     * @param result the discovered classes, keyed by FQN
+     * @param result the discovery
      */
-    private void scanWithResolver(ClassLoader classLoader, Map<String, LoadedClass> result) {
+    private void scanWithResolver(ClassLoader classLoader, Discovery result) {
         Resource[] markers;
         try {
             markers = new PathMatchingResourcePatternResolver(classLoader).getResources(MARKER_PATTERN);
@@ -165,6 +189,7 @@ public class CompiledModuleClassProvider {
         }
         for (Resource marker : markers) {
             String project = projectOf(marker);
+            result.projects.add(project);
             List<String> classNames;
             try {
                 classNames = readClassNames(marker.getInputStream());
@@ -180,9 +205,9 @@ public class CompiledModuleClassProvider {
      * Scan the modules classloader's own jars entry-by-entry.
      *
      * @param classLoader the modules class loader
-     * @param result the discovered classes, keyed by FQN
+     * @param result the discovery
      */
-    private void scanModuleJars(ModulesClassLoader classLoader, Map<String, LoadedClass> result) {
+    private void scanModuleJars(ModulesClassLoader classLoader, Discovery result) {
         for (Path jarPath : classLoader.jars()) {
             try (JarFile jar = new JarFile(jarPath.toFile())) {
                 Enumeration<JarEntry> entries = jar.entries();
@@ -192,6 +217,7 @@ public class CompiledModuleClassProvider {
                     if (project == null) {
                         continue;
                     }
+                    result.projects.add(project);
                     List<String> classNames;
                     try (var in = jar.getInputStream(entry)) {
                         classNames = readClassNames(in);
@@ -211,16 +237,17 @@ public class CompiledModuleClassProvider {
      * @param project the owning project
      * @param classNames the listed class names
      * @param classLoader the class loader to load through
-     * @param result the discovered classes, keyed by FQN
+     * @param result the discovery
      */
-    private void load(String project, List<String> classNames, ClassLoader classLoader, Map<String, LoadedClass> result) {
+    private void load(String project, List<String> classNames, ClassLoader classLoader, Discovery result) {
         for (String fqn : classNames) {
-            if (result.containsKey(fqn)) {
+            result.listed.add(fqn);
+            if (result.loaded.containsKey(fqn)) {
                 continue;
             }
             try {
                 Class<?> type = Class.forName(fqn, true, classLoader);
-                result.put(fqn, new LoadedClass(project, fqn, type, type.getClassLoader()));
+                result.loaded.put(fqn, new LoadedClass(project, fqn, type, type.getClassLoader()));
             } catch (ClassNotFoundException | LinkageError e) {
                 LOGGER.error("Compiled-module class [{}] (project [{}]) could not be loaded: {}", fqn, project, e.getMessage(), e);
             }
@@ -259,6 +286,26 @@ public class CompiledModuleClassProvider {
         } catch (IOException e) {
             LOGGER.error("Failed to resolve the project of compiled-module marker [{}]: {}", marker, e.getMessage(), e);
             return "";
+        }
+    }
+
+    /**
+     * What one scan found: the classes that loaded (keyed by FQN, the first scan to load one wins),
+     * every class name a marker listed, and the projects carrying a marker. A module jar scanned twice
+     * - once by the resource scan, once entry-by-entry - counts once.
+     */
+    static final class Discovery {
+
+        private final Map<String, LoadedClass> loaded = new LinkedHashMap<>();
+        private final Set<String> listed = new HashSet<>();
+        private final Set<String> projects = new HashSet<>();
+
+        List<LoadedClass> classes() {
+            return new ArrayList<>(loaded.values());
+        }
+
+        CompiledModulesCensus census() {
+            return new CompiledModulesCensus(projects.size(), listed.size(), loaded.size());
         }
     }
 

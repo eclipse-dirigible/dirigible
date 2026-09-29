@@ -74,6 +74,12 @@ public enum DirigibleConfig {
     /** Bridge the platform readiness onto Spring's ApplicationAvailability (#6448). */
     READINESS_AVAILABILITY_BRIDGE_ENABLED("DIRIGIBLE_READINESS_AVAILABILITY_BRIDGE_ENABLED", Boolean.FALSE.toString()), //
 
+    /**
+     * With the availability bridge enabled, accept traffic only once the boot is also clean: no failed
+     * artefact and every AOT-listed class registered (#7533).
+     */
+    READINESS_REQUIRE_CLEAN_BOOT("DIRIGIBLE_READINESS_REQUIRE_CLEAN_BOOT", Boolean.FALSE.toString()), //
+
     /** Seconds an API client is asked to wait when the boot gate refuses a request (#6448). */
     READINESS_GATE_RETRY_AFTER_SECONDS("DIRIGIBLE_READINESS_GATE_RETRY_AFTER_SECONDS", "5"), //
 

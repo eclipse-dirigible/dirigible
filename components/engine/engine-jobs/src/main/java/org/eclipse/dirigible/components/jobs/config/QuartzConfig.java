@@ -44,8 +44,8 @@ class QuartzConfig {
     @Bean
     Scheduler scheduler(SchedulerFactoryBean factory, @Qualifier("SystemDB") DataSource systemDataSource,
             @SystemDataSourceName String systemDataSourceName, JobExecutionsCountListener jobExecutionsCountListener,
-            JobExecutionsDurationListener jobExecutionsDurationListener, JobFailuresCountListener jobFailuresCountListener)
-            throws SchedulerException {
+            JobExecutionsDurationListener jobExecutionsDurationListener, JobFailuresCountListener jobFailuresCountListener,
+            SchedulerActivity schedulerActivity) throws SchedulerException {
         factory.setDataSource(systemDataSource);
         DBConnectionManager.getInstance()
                            .addConnectionProvider(systemDataSourceName, new CustomConnectionProvider(systemDataSource));
@@ -59,6 +59,10 @@ class QuartzConfig {
                  .addJobListener(jobExecutionsDurationListener);
         scheduler.getListenerManager()
                  .addJobListener(jobFailuresCountListener);
+        scheduler.getListenerManager()
+                 .addTriggerListener(schedulerActivity.triggerListener());
+        scheduler.getListenerManager()
+                 .addSchedulerListener(schedulerActivity.schedulerListener());
 
         verifyTriggersAreReadable(scheduler);
 

@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyFactory;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatus;
 import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatus.Jobs.JobStatus;
+import org.eclipse.dirigible.components.base.readiness.ArtefactCensus;
 import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
@@ -427,6 +428,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             // waits for it - so the deferred cleanup happens promptly.
             boolean registryChangedDuringPass =
                     registryMutationTracker.isMutating() || registryMutationTracker.completedMutations() != mutationsBeforePass;
+            // The same walk takes the census of what stays registered (#7533), keyed so that a service
+            // shared by two synchronizers counts its artefacts once.
+            Map<String, Artefact> remaining = new HashMap<>();
             for (Synchronizer synchronizer : synchronizers) {
                 List<? extends Artefact> registered = synchronizer.getService()
                                                                   .getAll();
@@ -438,13 +442,18 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                                 logger.info(
                                         "Source of artefact [{}] is missing, but the registry changed during this pass - deferring its cleanup to the next one",
                                         artefact.getLocation());
+                                remaining.put(artefact.getKey(), artefact);
                             } else {
                                 synchronizer.cleanup(artefact);
                             }
+                        } else {
+                            remaining.put(artefact.getKey(), artefact);
                         }
                     }
                 }
             }
+            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                             .recordArtefacts(ArtefactCensus.of(remaining.values()));
             logger.trace("Cleaning up removed artefacts done.");
 
             // finishing

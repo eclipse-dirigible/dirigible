@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.base.readiness;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -55,6 +56,8 @@ public final class PlatformReadiness {
     private volatile int failedArtefacts = 0;
     private volatile int pendingArtefacts = 0;
     private volatile Instant since = Instant.now();
+    private volatile ArtefactCensus artefacts = ArtefactCensus.NONE;
+    private volatile CompiledModulesCensus compiledModules = null;
 
     private PlatformReadiness() {}
 
@@ -110,14 +113,62 @@ public final class PlatformReadiness {
         return since;
     }
 
+    /**
+     * Records the lifecycle census of every registered artefact, taken at the end of a pass (#7533).
+     *
+     * @param census the census
+     */
+    public void recordArtefacts(ArtefactCensus census) {
+        artefacts = census;
+    }
+
+    /** The artefact census of the last pass that took one ({@link ArtefactCensus#NONE} before). */
+    public ArtefactCensus getArtefacts() {
+        return artefacts;
+    }
+
+    /**
+     * Records what the last AOT compiled-module discovery found (#7533). It runs on the application
+     * ready event, independently of the synchronization passes, so the listeners are notified with the
+     * unchanged state - a consumer waiting for a {@link #isCleanBoot() clean boot} re-evaluates.
+     *
+     * @param census the census
+     */
+    public void recordCompiledModules(CompiledModulesCensus census) {
+        compiledModules = census;
+        notifyListeners(state.get());
+    }
+
+    /**
+     * The census of the last AOT compiled-module discovery.
+     *
+     * @return the census, empty until the discovery has run
+     */
+    public Optional<CompiledModulesCensus> getCompiledModules() {
+        return Optional.ofNullable(compiledModules);
+    }
+
+    /**
+     * Whether the boot is complete AND clean: no registered artefact is failed and the AOT discovery
+     * has run and registered every class its markers list (#7533). The stricter, opt-in readiness
+     * condition - {@link #isBootCompleted()} alone lets an instance serve with a failed seed.
+     *
+     * @return true when the instance booted with nothing missing
+     */
+    public boolean isCleanBoot() {
+        CompiledModulesCensus modules = compiledModules;
+        return isBootCompleted() && artefacts.failed() == 0 && modules != null && modules.complete();
+    }
+
     /** The ONE-WAY boot latch: true once the first pass has depleted - traffic is accepted. */
     public boolean isBootCompleted() {
         return bootCompleted.get();
     }
 
     /**
-     * Registers a listener notified after every state change. Listeners run on the synchronizer's
-     * thread, so a slow or throwing one must not disturb the pass - a failure is logged and swallowed.
+     * Registers a listener notified after every state change and after every compiled-module census.
+     * Listeners run on the synchronizer's thread, so a slow or throwing one must not disturb the pass -
+     * a failure is logged and swallowed.
      *
      * @param listener the listener
      */
@@ -132,6 +183,8 @@ public final class PlatformReadiness {
         failedArtefacts = 0;
         pendingArtefacts = 0;
         since = Instant.now();
+        artefacts = ArtefactCensus.NONE;
+        compiledModules = null;
         listeners.clear();
     }
 

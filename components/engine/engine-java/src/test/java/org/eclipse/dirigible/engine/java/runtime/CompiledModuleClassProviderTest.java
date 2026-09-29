@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.engine.java.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -20,9 +21,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
+import java.util.stream.Stream;
 
 import javax.tools.ToolProvider;
 
+import org.eclipse.dirigible.components.base.readiness.CompiledModulesCensus;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -76,8 +79,32 @@ class CompiledModuleClassProviderTest {
         }
     }
 
-    /** Builds an AOT module jar: one compiled class + its {@code .compiled} marker. */
-    private Path aotModuleJar(String project, String fqn) throws IOException {
+    /**
+     * A jar that loaded only partly must show in the census (#7533): the module is counted, both listed
+     * classes are expected, one is registered.
+     */
+    @Test
+    void the_census_counts_a_listed_class_that_did_not_load() throws IOException {
+        Path moduleJar = aotModuleJar("partial-mod", "partialmod.PresentFixture", "partialmod.MissingFixture");
+        CompiledModuleClassProvider provider = new CompiledModuleClassProvider(null, null);
+
+        try (ModulesClassLoader modules = new ModulesClassLoader(getClass().getClassLoader(), List.of(moduleJar))) {
+            CompiledModulesCensus census = provider.scan(modules)
+                                                   .census();
+
+            // The test classpath carries the aot-test-mod fixture marker as well.
+            assertEquals(2, census.modules());
+            assertEquals(3, census.expectedClasses());
+            assertEquals(2, census.registeredClasses());
+            assertFalse(census.complete(), "a class listed by a marker but not loaded must fail the census");
+        }
+    }
+
+    /**
+     * Builds an AOT module jar: one compiled class + its {@code .compiled} marker, which also lists the
+     * given names without packaging a class for them.
+     */
+    private Path aotModuleJar(String project, String fqn, String... unpackaged) throws IOException {
         String packageName = fqn.substring(0, fqn.lastIndexOf('.'));
         String className = fqn.substring(fqn.lastIndexOf('.') + 1);
         Path sourceDir = Files.createDirectories(tempDir.resolve("src")
@@ -96,7 +123,9 @@ class CompiledModuleClassProviderTest {
             out.write(Files.readAllBytes(classesDir.resolve(classEntry)));
             out.closeEntry();
             out.putNextEntry(new JarEntry("META-INF/dirigible/" + project + "/.compiled"));
-            out.write(fqn.getBytes(StandardCharsets.UTF_8));
+            out.write(String.join("\n", Stream.concat(Stream.of(fqn), Stream.of(unpackaged))
+                                              .toList())
+                            .getBytes(StandardCharsets.UTF_8));
             out.closeEntry();
         }
         return jar;

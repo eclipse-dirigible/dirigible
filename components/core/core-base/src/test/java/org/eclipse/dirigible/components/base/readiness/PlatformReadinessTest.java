@@ -13,6 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
 import org.eclipse.dirigible.components.base.readiness.PlatformReadiness.State;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,5 +62,32 @@ class PlatformReadinessTest {
         readiness.passCompleted(0);
         assertEquals(State.READY, readiness.getState(), "a clean pass clears the degradation");
         assertEquals(0, readiness.getFailedArtefacts());
+    }
+
+    @Test
+    void aCleanBootNeedsNoFailedArtefactAndEveryAotClassRegistered() {
+        readiness.passCompleted(0);
+        readiness.recordArtefacts(new ArtefactCensus(10, Map.of()));
+        assertFalse(readiness.isCleanBoot(), "the AOT discovery has not run yet");
+
+        readiness.recordCompiledModules(new CompiledModulesCensus(2, 5, 4));
+        assertFalse(readiness.isCleanBoot(), "a partly loaded AOT module is not a clean boot");
+
+        readiness.recordCompiledModules(new CompiledModulesCensus(2, 5, 5));
+        assertTrue(readiness.isCleanBoot());
+
+        readiness.recordArtefacts(new ArtefactCensus(10, Map.of("print", 1)));
+        assertFalse(readiness.isCleanBoot(), "a failed artefact is not a clean boot");
+        assertTrue(readiness.isBootCompleted(), "while the boot latch itself stays closed");
+    }
+
+    @Test
+    void theCompiledModulesCensusNotifiesTheListeners() {
+        List<State> notified = new ArrayList<>();
+        readiness.addStateListener(notified::add);
+
+        readiness.recordCompiledModules(new CompiledModulesCensus(0, 0, 0));
+
+        assertEquals(List.of(State.INITIALIZING), notified, "a consumer waiting for a clean boot must re-evaluate");
     }
 }
