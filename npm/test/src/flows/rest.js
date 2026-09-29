@@ -1,7 +1,7 @@
 import { makeApi } from '../api.js';
 import { expect, test } from '../fixtures.js';
 import { resolveRelationSamples } from '../form.js';
-import { handleField, sampleRecord } from '../sample-values.js';
+import { freshUniques, handleField, sampleRecord } from '../sample-values.js';
 
 // The same contract over the generated REST controllers, no browser: isolates backend
 // failures from UI failures and verifies the manifest's field names bind.
@@ -19,6 +19,7 @@ export function restFlow(manifest, entity, opts = {}) {
     for (const sample of await resolveRelationSamples(api, manifest, entity)) {
       payload[sample.relation.name] = sample.id;
     }
+    await freshUniques(client, entity, payload);
 
     const created = await client.create(entity, payload);
     const id = created?.[idProperty];

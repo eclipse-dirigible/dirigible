@@ -1,7 +1,7 @@
 import { makeApi } from '../api.js';
 import { expect, test } from '../fixtures.js';
 import { resolveRelationSamples } from '../form.js';
-import { sampleRecord } from '../sample-values.js';
+import { freshUniques, sampleRecord } from '../sample-values.js';
 
 // Wave 2 (UI parity): the personal PAGE renders what the wire serves. Driven by the same
 // own-row lifecycle as the wire test (created through the scoped controller, removed in the
@@ -88,6 +88,7 @@ export function myFlow(manifest, entity, opts = {}) {
     }
     // the owner FK is server-forced on the personal surface; sending a value must be pointless
     delete payload[entity.personal.owner];
+    await freshUniques(makeApi(api, manifest), entity, payload);
     return { payload, samples };
   }
 

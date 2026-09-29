@@ -1,7 +1,7 @@
 import { expect, test } from '../fixtures.js';
 import { makeApi } from '../api.js';
 import { fillField, fillForm, resolveRelationSamples } from '../form.js';
-import { handleField, sampleRecord } from '../sample-values.js';
+import { freshUniques, handleField, sampleRecord } from '../sample-values.js';
 
 // Server-side row lookup via the toolbar "Search <Entity>..." box - present on every list
 // layout (manage-list, master-detail, document) and searching the string columns server-side.
@@ -44,7 +44,7 @@ export function crudFlow(manifest, entity, opts = {}) {
   if (!handleField(entity)) return;
 
   test(`${entity.name}: create, edit and delete through the UI`, async ({ page, api }) => {
-    const record = sampleRecord(entity);
+    const record = await freshUniques(makeApi(api, manifest), entity, sampleRecord(entity));
     const handle = handleField(entity);
     const relationSamples = await resolveRelationSamples(api, manifest, entity);
 

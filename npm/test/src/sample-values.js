@@ -11,6 +11,7 @@ function rand(chars, n) {
 // cleanup marker and the searchable handle); short strings always contain a digit so
 // they can never collide with letter-only nomenclature seeds (ISO codes etc.).
 export function sampleValue(field) {
+  if (field.unique && field.type !== 'string') return uniqueValue(field);
   switch (field.type) {
     case 'string': {
       const len = field.length ?? 64;
@@ -62,6 +63,58 @@ function shaped(field, value) {
   return candidates.find((candidate) => candidate.length <= (field.length ?? 255) && regex.test(candidate)) ?? value;
 }
 
+// A `unique:` field refuses a second row carrying its value with 409 - the module's guard doing its
+// job. The per-type constants above are the one value certain to collide: with a seeded row, with
+// the row a parallel flow of the same run is creating, or with one an earlier failed run left
+// behind (dirigible #7530). So a unique field draws a fresh value per record, away from the range
+// an author seeds (a year, a small code): an integer in the hundred-thousands, a date in the 22nd
+// century. Strings need none of this - the marker above is already random.
+function uniqueValue(field) {
+  const n = 100000 + Math.floor(Math.random() * 900000);
+  switch (field.type) {
+    case 'integer':
+    case 'bigint':
+      return n;
+    case 'decimal':
+    case 'double':
+      return n + 0.25;
+    case 'date':
+    case 'timestamp':
+    case 'datetime': {
+      const at = new Date(Date.UTC(2100, 0, 1) + (n % 36500) * 86400000);
+      return field.type === 'date' ? at.toISOString().slice(0, 10) : at.toISOString().replace(/\.\d{3}Z$/, 'Z');
+    }
+    default:
+      return sampleValue({ ...field, unique: false });
+  }
+}
+
+// A drawn value is unlikely to collide, not certain not to - probe the live rows for each unique
+// field of the record through the controller's filtered read and redraw on a hit, so the create the
+// flow is about to send cannot be refused for a value that is already taken. The value goes as a
+// string - the controller coerces it to the property's own type (an Integer would not bind to a Long
+// or BigDecimal column). A probe that fails (an older controller without /search) keeps the value.
+export async function freshUniques(client, entity, record) {
+  let redrawn = false;
+  for (const field of editableFields(entity)) {
+    if (!field.unique || !(field.name in record)) continue;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      let rows;
+      try {
+        rows = await client.search(entity, [{ propertyName: field.name, operator: 'EQ', value: String(record[field.name]) }]);
+      } catch {
+        break;
+      }
+      if (!rows?.length) break;
+      record[field.name] = field.type === 'string' ? sampleValue(field) : uniqueValue(field);
+      redrawn = true;
+    }
+  }
+  // a redrawn field may be the right-hand side of a compare check - re-derive its left operand
+  if (redrawn) steerCompares(entity, record);
+  return record;
+}
+
 export function editableFields(entity) {
   return (entity.fields ?? []).filter((f) => !f.readOnly && !f.primaryKey && !f.generated);
 }
@@ -76,11 +129,16 @@ export function sampleRecord(entity) {
   for (const set of entity.exactlyOne ?? []) {
     for (const name of set.slice(1)) delete record[name];
   }
-  // a compare check relates the record's own field to a second value - another of its fields, or a
-  // literal - and the sample values above are per-type constants, so two dates come out EQUAL and a
-  // strict comparison (gt/lt/ne) would be rejected with 400, just as a sample quantity of 7 fails a
-  // `le 5`. Derive the left operand from whichever right-hand side the check names, by the smallest
-  // step that satisfies the declared operator (equality satisfies ge/le/eq).
+  steerCompares(entity, record);
+  return record;
+}
+
+// A compare check relates the record's own field to a second value - another of its fields, or a
+// literal - and the sample values above are per-type constants, so two dates come out EQUAL and a
+// strict comparison (gt/lt/ne) would be rejected with 400, just as a sample quantity of 7 fails a
+// `le 5`. Derive the left operand from whichever right-hand side the check names, by the smallest
+// step that satisfies the declared operator (equality satisfies ge/le/eq).
+function steerCompares(entity, record) {
   for (const check of entity.compare ?? []) {
     if (!(check.field in record)) continue;
     const type = (entity.fields ?? []).find((f) => f.name === check.field)?.type;
