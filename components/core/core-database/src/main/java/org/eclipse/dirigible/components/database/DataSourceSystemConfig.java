@@ -62,14 +62,21 @@ public class DataSourceSystemConfig {
 
         String systemDataSourceName = DirigibleConfig.SYSTEM_DATA_SOURCE_NAME.getStringValue();
         dataSourceProperties.setName(systemDataSourceName);
-        dataSourceProperties.setDriverClassName(Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DRIVER", "org.h2.Driver"));
-        dataSourceProperties.setUrl(
-                Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_URL", "jdbc:h2:file:./target/dirigible/h2/SystemDB;LOCK_TIMEOUT=10000"));
+        dataSourceProperties.setDriverClassName(getDriverClassName());
+        dataSourceProperties.setUrl(getUrl());
         dataSourceProperties.setUsername(Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_USERNAME", "sa"));
         dataSourceProperties.setPassword(Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_PASSWORD", ""));
         return dataSourceProperties.initializeDataSourceBuilder()
                                    .type(HikariDataSource.class)
                                    .build();
+    }
+
+    private static String getDriverClassName() {
+        return Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DRIVER", "org.h2.Driver");
+    }
+
+    private static String getUrl() {
+        return Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_URL", "jdbc:h2:file:./target/dirigible/h2/SystemDB;LOCK_TIMEOUT=10000");
     }
 
     /**
@@ -87,7 +94,9 @@ public class DataSourceSystemConfig {
      * configured; otherwise Hibernate resolves it from the SystemDB connection's own metadata. A
      * hard-coded default here is driver-blind: a deployment that points the SystemDB at PostgreSQL with
      * the four documented {@code DIRIGIBLE_DATABASE_SYSTEM_*} variables would render its DDL through
-     * the wrong dialect and fail at a distance.
+     * the wrong dialect and fail at a distance. A configured dialect of another database than the
+     * SystemDB driver's is refused by name ({@link SystemDialectVerifier}) rather than left to fail as
+     * {@code relation ... already exists}.
      * <p>
      * {@code hibernate.hbm2ddl.halt_on_error} is on: a system table that fails to create is never
      * survivable, and failing at the cause beats crashing three initializers later on a missing
@@ -108,8 +117,9 @@ public class DataSourceSystemConfig {
         em.setJpaVendorAdapter(vendorAdapter);
 
         Properties properties = new Properties();
-        String configuredDialect = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DIALECT");
+        String configuredDialect = Configuration.get(SystemDialectVerifier.DIALECT_KEY);
         if (configuredDialect != null && !configuredDialect.isBlank()) {
+            SystemDialectVerifier.verify(configuredDialect, getDriverClassName(), getUrl());
             properties.setProperty("hibernate.dialect", configuredDialect);
         } else {
             LOGGER.debug(
