@@ -940,6 +940,17 @@ public class ${name}Controller {
 
 #end
     private static void validate(${name}Entity entity) {
+#set($checksLoadHops = false)
+#foreach($check in $rowChecks)
+#if($check.pathLoads && $check.pathLoads.size() > 0)
+#set($checksLoadHops = true)
+#end
+#end
+#if($checksLoadHops)
+        // The rows the checks read through a to-one hop, loaded once per call and shared by every
+        // check walking the same relation - four checks over Customer.* cost one lookup, not four.
+        java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
+#end
 #if($rowChecks && $rowChecks.size() > 0)
 #foreach($check in $rowChecks)
 #if($check.kind == "requiredWhen")
@@ -949,7 +960,9 @@ public class ${name}Controller {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
@@ -963,7 +976,9 @@ public class ${name}Controller {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
@@ -977,7 +992,9 @@ public class ${name}Controller {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object agreeLeft = ${check.leftExpression};
             Object agreeRight = ${check.rightExpression};
@@ -1073,6 +1090,17 @@ public class ${name}Controller {
      * verb, and whether THAT is allowed is what {@code whenMasterDeleted:} declares.
      */
     private static void requireDeletable(${name}Entity entity) {
+#set($checksLoadHops = false)
+#foreach($check in $deleteChecks)
+#if($check.pathLoads && $check.pathLoads.size() > 0)
+#set($checksLoadHops = true)
+#end
+#end
+#if($checksLoadHops)
+        // The rows the checks read through a to-one hop, loaded once per call and shared by every
+        // check walking the same relation - four checks over Customer.* cost one lookup, not four.
+        java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
+#end
 #foreach($check in $deleteChecks)
 #if($check.status && $check.status != "")
         if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
@@ -1080,7 +1108,9 @@ public class ${name}Controller {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");

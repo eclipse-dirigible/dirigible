@@ -231,6 +231,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # rule only applies at the status the value is finally needed at.
                   - { kind: requiredWhen, field: Account.taxCode, when: "note == 'audited'", status: 2,
                       message: "An audited entry must be booked against an account carrying a tax code" }
+                  # ...and a second gated check over the SAME hop (#7526): the two share one load of
+                  # the account per write instead of each fetching it again.
+                  - { kind: requiredWhen, field: Account.name, when: "note == 'audited'", status: 2,
+                      message: "An audited entry must be booked against a named account" }
                   # ...and UNGATED with the CONDITION one hop away (#7495): which values a document
                   # needs depends on the record it points at (a business customer needs a registration
                   # number, an individual does not). One term per terminal kind - a field of the account
@@ -2271,6 +2275,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && entryRepository.contains("AccountRepository().findById(hop0Fk)")
                         && entryRepository.contains("java.util.Objects.equals(entity.Note, \"audited\")"),
                 "checks: requiredWhen must load the hop, test the condition and refuse the empty value, got: " + entryRepository);
+        // ...and every check walking the same relation shares ONE load of its row per call (#7526): the
+        // repository declares a single per-call map, and each check's hop goes through it keyed by the
+        // repository and the foreign key - N checks over Account.* cost one findById, not N.
+        String enforceChecks = entryRepository.substring(entryRepository.indexOf("private void enforceChecks("));
+        enforceChecks = enforceChecks.substring(0, enforceChecks.indexOf("\n    }\n"));
+        assertEquals(1, countOf(enforceChecks, "java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();"),
+                "enforceChecks must declare one shared map of loaded hops, got: " + enforceChecks);
+        assertEquals(2, countOf(enforceChecks, "AccountRepository:\" + hop0Fk"),
+                "both checks over Account.* must load the account through the shared map, got: " + enforceChecks);
         // ...and the CONDITION may read the hop too (#7495): the ungated twin lands in the controller,
         // loading the account by FK and comparing its to-one BY VALUE - a boxed equality against a key
         // whose Java width follows the target's would switch the rule off (#7237).

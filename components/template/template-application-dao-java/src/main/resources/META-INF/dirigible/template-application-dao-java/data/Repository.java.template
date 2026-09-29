@@ -1051,6 +1051,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * attempting an invalid transition) on the BPMN path.
      */
     private void enforceChecks(${name}Entity entity) {
+#set($checksLoadHops = false)
+#foreach($check in $documentChecks)
+#if($check.pathLoads && $check.pathLoads.size() > 0)
+#set($checksLoadHops = true)
+#end
+#end
+#if($checksLoadHops)
+        // The rows the checks read through a to-one hop, loaded once per call and shared by every
+        // check walking the same relation - four checks over Customer.* cost one lookup, not four.
+        java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
+#end
 #foreach($check in $documentChecks)
         if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
 #if($check.kind == "requiredWhen")
@@ -1059,7 +1070,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             // drafting before it. ${check.label} must carry a value while the condition holds.
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
@@ -1071,7 +1084,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             // first). On the synchronous #7014/#7063 path, so the refusal reaches the person who acted.
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
                 throw new ValidationException("${check.messageJavaLiteral}");
@@ -1139,6 +1154,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * @return the warnings, in declaration order; empty when there is nothing to confirm
      */
     public java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings(${name}Entity entity) {
+#set($checksLoadHops = false)
+#foreach($check in $warningChecks)
+#if($check.pathLoads && $check.pathLoads.size() > 0)
+#set($checksLoadHops = true)
+#end
+#end
+#if($checksLoadHops)
+        // The rows the checks read through a to-one hop, loaded once per call and shared by every
+        // check walking the same relation - four checks over Customer.* cost one lookup, not four.
+        java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
+#end
         java.util.List<org.eclipse.dirigible.sdk.db.Warning> warnings = new java.util.ArrayList<>();
 #foreach($check in $warningChecks)
 #if($check.kind == "duplicate")
@@ -1187,7 +1213,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
@@ -1199,7 +1227,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
                 warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
@@ -1210,7 +1240,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         {
 #foreach($load in $check.pathLoads)
             Object ${load.local}Fk = ${load.sourceExpression};
-            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null : new ${load.repositoryClass}().findById(${load.local}Fk);
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object agreeLeft = ${check.leftExpression};
             Object agreeRight = ${check.rightExpression};
