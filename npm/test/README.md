@@ -68,7 +68,9 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 Test records carry an `APPTEST-` prefix and are removed in teardown; seed data is never mutated.
 A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
 is never written or flipped by a flow (the manifest marks it `readOnly`), and a field declaring a
-`pattern:` gets a value of that shape rather than the marker string.
+`pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
+whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
+marker, so the controller's 400 names the field.
 
 ## Custom UI hooks
 

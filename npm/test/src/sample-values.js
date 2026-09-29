@@ -40,8 +40,10 @@ export function sampleValue(field) {
 // A `pattern:` field (an authored regex, or the address regex behind `format: email`) is rejected
 // by the generated controller with 400 unless the value has the declared shape, so the marker value
 // above has to be traded for one that matches: the candidates are tried in order and the first that
-// both matches and fits the declared length wins. A pattern nothing here matches keeps the plain
-// marker - the controller's own 400 then names the field and the pattern, which is the message the
+// both matches and fits the declared length wins. When nothing here matches (an IBAN-shaped regex
+// mixing character classes by position), an optional field is left unset - the record is valid
+// without it, and no flow needs it filled (dirigible #7525) - while a required one keeps the plain
+// marker: the controller's own 400 then names the field and the pattern, which is the message the
 // module author needs, and a silent near-miss would not.
 function shaped(field, value) {
   let regex;
@@ -59,7 +61,8 @@ function shaped(field, value) {
     token, // letters and digits, no separator
     rand(DIGITS, 10), // a numeric code
   ];
-  return candidates.find((candidate) => candidate.length <= (field.length ?? 255) && regex.test(candidate)) ?? value;
+  const match = candidates.find((candidate) => candidate.length <= (field.length ?? 255) && regex.test(candidate));
+  return match ?? (field.required ? value : undefined);
 }
 
 export function editableFields(entity) {
@@ -70,7 +73,10 @@ export function editableFields(entity) {
 // against live target rows).
 export function sampleRecord(entity) {
   const record = {};
-  for (const field of editableFields(entity)) record[field.name] = sampleValue(field);
+  for (const field of editableFields(entity)) {
+    const value = sampleValue(field);
+    if (value !== undefined) record[field.name] = value;
+  }
   // an exactlyOne check rejects a record where more than one of the named fields is set -
   // keep only the first of each declared set
   for (const set of entity.exactlyOne ?? []) {
