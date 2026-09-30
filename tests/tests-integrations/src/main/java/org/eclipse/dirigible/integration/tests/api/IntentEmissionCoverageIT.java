@@ -2261,10 +2261,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(docController.contains("A posted document must name its counterparty"),
                 "a requiredWhen on a button's status must not be left to the controllers the button bypasses, got: " + docController);
         String docGateRepository = contentOf("gen/emission/data/doc/DocRepository.java");
-        assertTrue(docGateRepository.contains("A posted document must name its counterparty")
-                && docGateRepository.contains("PartyRepository().findById(hop0Fk)"),
-                "a requiredWhen on a button's status must be enforced by the repository every writer reaches, got: "
-                        + docGateRepository);
+        assertTrue(
+                docGateRepository.contains("A posted document must name its counterparty")
+                        && docGateRepository.contains("PartyRepository().findById(hop0Fk)"),
+                "a requiredWhen on a button's status must be enforced by the repository every writer reaches, got: " + docGateRepository);
         // A guard on a TO-ONE is compared NUMERICALLY, not with a boxed equality (#7237): the FK
         // column is typed from the target's key, and a cross-model target's key is only readable from
         // the owner's .model, where a long is as legal as an integer - Objects.equals(Long, 2) never
@@ -5522,7 +5522,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // ...and the same post WITH a counterparty is accepted, so the guard is a condition and not a
         // plain `required` nobody authored - a draft without one saved fine above.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Id\":" + toOneGuarded.get() + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
+                                                 .body("{\"Id\":" + toOneGuarded.get()
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
                                                  .when()
                                                  .put(API + "/doc/DocController/" + toOneGuarded.get())
                                                  .then()
@@ -5555,7 +5556,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(400)
                                                  .body("message", containsString("A posted document must carry a positive amount")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Id\":" + gatedCompare.get() + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Party\":1}")
+                                                 .body("{\"Id\":" + gatedCompare.get()
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Party\":1}")
                                                  .when()
                                                  .put(API + "/doc/DocController/" + gatedCompare.get())
                                                  .then()

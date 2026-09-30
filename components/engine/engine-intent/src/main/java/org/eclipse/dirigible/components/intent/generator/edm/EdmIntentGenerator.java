@@ -2875,7 +2875,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Object value = term.get("value");
             if (CheckSupport.RECORD.equals(term.get("owner")) && statusProperty.equals(term.get("property"))
                     && Boolean.TRUE.equals(term.get("equal")) && value != null && String.valueOf(value)
-                                                                                       .matches("-?\\d+")
+                                                                                        .matches("-?\\d+")
                     && buttonTargets.contains(Integer.valueOf(String.valueOf(value)))) {
                 return Integer.valueOf(String.valueOf(value));
             }
