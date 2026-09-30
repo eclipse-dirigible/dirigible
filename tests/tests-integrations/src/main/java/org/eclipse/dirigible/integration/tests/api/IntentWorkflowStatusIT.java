@@ -136,7 +136,7 @@ class IntentWorkflowStatusIT extends IntegrationTest {
         // completes - the task stays in the inbox and the record where it was.
         String task = taskFor(invoice);
         completeRefused(task, "{}", "one of: approve");
-        completeRefused(task, "{\"action\":\"reject\"}", "The action [reject] is not one this task offers");
+        completeRefused(task, "{\"action\":\"reject\"}", "The action is not one this task offers - use one of: approve");
         read(invoice).body("Status", equalTo(1));
 
         // The flow's own writer is untouched: it reaches the repository through the targeted

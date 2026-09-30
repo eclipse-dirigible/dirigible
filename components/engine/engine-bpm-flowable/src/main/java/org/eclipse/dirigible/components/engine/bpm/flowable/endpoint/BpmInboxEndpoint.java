@@ -235,7 +235,9 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             return "This task is completed with an action - one of: " + String.join(", ", offered);
         }
         if (!offered.contains(String.valueOf(action))) {
-            return "The action [" + action + "] is not one this task offers - use one of: " + String.join(", ", offered);
+            // The refusal names what the task offers, never the value it was sent: echoing request input
+            // into a response body is a reflected XSS vector.
+            return "The action is not one this task offers - use one of: " + String.join(", ", offered);
         }
         return null;
     }
