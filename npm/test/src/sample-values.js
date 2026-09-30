@@ -1,4 +1,5 @@
 const ALPHA = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const LOWER = ALPHA.toLowerCase();
 const DIGITS = '0123456789';
 
 function rand(chars, n) {
@@ -33,6 +34,12 @@ export function sampleValue(field) {
       // full ISO instant: the generated Java entities bind java.time.Instant, which rejects a
       // zone-less value; the UI fill slices this to the datetime-local shape
       return '2026-07-08T10:00:00Z';
+    // the input shapes of an <input type="month|week"> - a month column is VARCHAR(7), so the
+    // default marker overflows it (dirigible #7545)
+    case 'month':
+      return '2026-07';
+    case 'week':
+      return '2026-W28';
     default:
       return 'APPTEST-' + rand(ALPHA + DIGITS, 6);
   }
@@ -61,6 +68,10 @@ function shaped(field, value) {
     `apptest.${token}@apptest.example.com`, // format: email and other address-shaped patterns
     token, // letters and digits, no separator
     rand(DIGITS, 10), // a numeric code
+    // a letters-only code (an ISO language or country code, ^[a-z]{2,3}$) - kept short, the shape
+    // such a pattern declares, and within the declared length (dirigible #7545)
+    rand(LOWER, Math.min(field.length ?? 3, 3)),
+    rand(ALPHA, Math.min(field.length ?? 3, 3)),
   ];
   const match = candidates.find((candidate) => candidate.length <= (field.length ?? 255) && regex.test(candidate));
   return match ?? (field.required ? value : undefined);
@@ -87,6 +98,10 @@ function uniqueValue(field) {
       const at = new Date(Date.UTC(2100, 0, 1) + (n % 36500) * 86400000);
       return field.type === 'date' ? at.toISOString().slice(0, 10) : at.toISOString().replace(/\.\d{3}Z$/, 'Z');
     }
+    case 'month':
+      return `${2100 + (n % 900)}-${String(1 + (n % 12)).padStart(2, '0')}`;
+    case 'week':
+      return `${2100 + (n % 900)}-W${String(1 + (n % 52)).padStart(2, '0')}`;
     default:
       return sampleValue({ ...field, unique: false });
   }
@@ -116,6 +131,65 @@ export async function freshUniques(client, entity, record) {
   // a redrawn field may be the right-hand side of a compare check - re-derive its left operand
   if (redrawn) steerCompares(entity, record);
   return record;
+}
+
+// A composite unique key (`unique: [ProjectTimesheet, Employee]` - one timesheet per employee per
+// project-month) refuses a second row carrying the same combination with 409, and the first row of
+// each relation is the combination a seed most likely holds already (dirigible #7545). Walk the
+// candidate rows of the key's relations (and redraw its own fields) until the controller's filtered
+// read finds no row with that combination, keeping every agree check satisfied. Answers the key no
+// free combination was found for - the flow skips with it - or null when the record is free. Call it
+// before the relation samples are copied into the record.
+export async function freshUniqueKeys(client, entity, record, samples) {
+  for (const key of entity.uniqueKeys ?? []) {
+    const related = key.map((name) => samples.find((s) => s.relation.name === name)).filter(Boolean);
+    const drawn = editableFields(entity).filter((f) => key.includes(f.name) && f.name in record);
+    // a member left unset is NULL, and a NULL never collides
+    if (related.length + drawn.length < key.length) continue;
+    let free = false;
+    for (const combination of combinations(related.map((s) => s.rows), related.length ? 50 : 5)) {
+      combination.forEach((row, i) => related[i].use(row));
+      if (!agreeing(entity, samples)) continue;
+      const value = (name) => related.find((s) => s.relation.name === name)?.id ?? record[name];
+      let rows;
+      try {
+        rows = await client.search(entity, key.map((name) => ({ propertyName: name, operator: 'EQ', value: String(value(name)) })));
+      } catch {
+        free = true; // an older controller without /search - keep the combination, as freshUniques does
+        break;
+      }
+      if (!rows?.length) {
+        free = true;
+        break;
+      }
+      for (const field of drawn) record[field.name] = field.type === 'string' ? sampleValue(field) : uniqueValue(field);
+    }
+    if (!free) return key;
+    if (drawn.length) steerCompares(entity, record);
+  }
+  return null;
+}
+
+// The first `limit` entries of the cartesian product of the candidate lists, in order - so the first
+// combination is the one the samples started with. No lists yields `limit` empty combinations: a key
+// of own fields only is retried by redrawing them.
+function* combinations(lists, limit) {
+  const index = lists.map(() => 0);
+  for (let produced = 0; produced < limit; produced++) {
+    yield lists.map((list, i) => list[index[i]]);
+    let i = lists.length - 1;
+    while (i >= 0 && ++index[i] === lists[i].length) index[i--] = 0;
+    if (lists.length && i < 0) return;
+  }
+}
+
+// Whether the relation samples satisfy every agree check of the entity (an unset side has nothing to
+// disagree about).
+export function agreeing(entity, samples) {
+  return (entity.agree ?? []).every((check) => {
+    const values = check.relations.map((name) => samples.find((s) => s.relation.name === name)?.row?.[check.onProperty]);
+    return values.some((value) => value == null) || values.every((value) => String(value) === String(values[0]));
+  });
 }
 
 export function editableFields(entity) {

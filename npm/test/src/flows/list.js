@@ -1,6 +1,11 @@
 import { expect, test } from '../fixtures.js';
 import { labelOf } from '../sample-values.js';
 
+// The calendar / slot-picker view root. The slots page renders `x-h-slot-picker.responsive`, and an
+// attribute selector matches an attribute NAME exactly, so the modifier form is listed with its dot
+// escaped (dirigible #7545).
+export const CALENDAR_OR_SLOTS = '[x-h-calendar], [x-h-slot-picker], [x-h-slot-picker\\.responsive]';
+
 // The shell breadcrumb's current crumb - the one page element every list layout shares that names
 // the entity (the sidebar label, which the manifest's labelPlural mirrors).
 export function listCrumb(page, entity) {
@@ -13,6 +18,8 @@ export function listCrumb(page, entity) {
 // column header per major field, or (when the entity has no rows yet) the empty state.
 // When seed data is expected, rows/nodes must actually be there.
 export function listFlow(manifest, entity) {
+  // no power page: a composition child is reached through its parent (dirigible #7545)
+  if (!entity.route) return;
   test(`${entity.name}: list page renders the declared columns`, async ({ page }) => {
     await page.goto(manifest.standaloneShell + entity.route);
     await expect(listCrumb(page, entity)).toBeVisible();
@@ -24,7 +31,7 @@ export function listFlow(manifest, entity) {
     }
     if (entity.layout === 'calendar' || entity.layout === 'slots') {
       // the view family renders a calendar / slot picker instead of the table
-      await expect(page.locator('[x-h-calendar], [x-h-slot-picker]').first()).toBeVisible();
+      await expect(page.locator(CALENDAR_OR_SLOTS).first()).toBeVisible();
       return;
     }
     // filter({ visible: true }): the empty-state markup stays in the DOM (x-show) above the

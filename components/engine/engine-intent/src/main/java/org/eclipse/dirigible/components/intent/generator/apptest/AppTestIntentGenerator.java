@@ -163,7 +163,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         out.put("labelPlural", stringOr(edm.get("menuLabel"), IntentNaming.pluralize(IntentNaming.humanize(name))));
         out.put("layout", layout(string(edm.get("layoutType")), "true".equals(string(edm.get("calendarView"))),
                 "true".equals(string(edm.get("slotsView")))));
-        out.put("route", "#/" + name);
+        // A composition child gets no power page of its own - the UI generator gives list and form
+        // pages to PRIMARY (and SETTING) entities only - even when it carries a layout that is not
+        // MANAGE_DETAILS (a child owning line items is a MANAGE_DOCUMENT, a Payslip under its
+        // PayrollRun). It is still described, for its REST and personal flows, but with no route the
+        // runner would open onto "Page not found" (dirigible #7545).
+        if (!"DEPENDENT".equals(string(edm.get("type")))) {
+            out.put("route", "#/" + name);
+        }
         out.put("navGroup", string(edm.get("perspectiveNavId")));
         out.put("api", "/" + sanitizeJavaIdentifier(string(edm.get("perspectiveName"))) + "/" + name + "Controller");
         out.put("table", string(edm.get("dataName")));
@@ -246,6 +253,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // and a sample quantity of 1 fails `gt 10` just as surely. The runner derives the left operand
         // from whichever right-hand side the check names.
         List<Map<String, Object>> compare = new ArrayList<>();
+        // agree checks: two to-one relations whose targets must point at the same onProperty - the
+        // first row of each target is an arbitrary pair, so the runner picks rows that agree
+        List<Map<String, Object>> agree = new ArrayList<>();
         for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
             if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
                                                                                            .isEmpty()) {
@@ -268,12 +278,41 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 }
                 compare.add(entry);
             }
+            if ("agree".equals(check.getKind()) && check.getRelations() != null && check.getRelations()
+                                                                                        .size() > 1
+                    && check.getOnProperty() != null) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("relations", check.getRelations()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .toList());
+                entry.put("onProperty", IntentNaming.pascalCase(check.getOnProperty()));
+                agree.add(entry);
+            }
         }
         if (!exactlyOne.isEmpty()) {
             out.put("exactlyOne", exactlyOne);
         }
         if (!compare.isEmpty()) {
             out.put("compare", compare);
+        }
+        if (!agree.isEmpty()) {
+            out.put("agree", agree);
+        }
+        // composite business keys: a second row carrying the same combination is refused with 409, and
+        // the first seeded row of each relation is the combination a seed most likely already holds -
+        // the runner chooses a combination no live row carries (dirigible #7545)
+        List<List<String>> uniqueKeys = entity.getUnique()
+                                              .stream()
+                                              .filter(unique -> !unique.getFields()
+                                                                       .isEmpty())
+                                              .map(unique -> unique.getFields()
+                                                                   .stream()
+                                                                   .map(IntentNaming::pascalCase)
+                                                                   .toList())
+                                              .toList();
+        if (!uniqueKeys.isEmpty()) {
+            out.put("uniqueKeys", uniqueKeys);
         }
         out.put("fields", fields(entity, edm));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);

@@ -11,7 +11,7 @@ const OVERLAY_TIMEOUT = 15_000;
 // Needs a concrete sample in the manifest: { language, base, translated }.
 export function multilingualFlow(manifest, entity) {
   const sample = entity.multilingualSample;
-  if (!entity.multilingual || !sample) return;
+  if (!entity.multilingual || !sample || !entity.route) return;
 
   test(`${entity.name}: ${sample.language} translation overlays on read`, async ({ page }) => {
     await page.goto(manifest.standaloneShell + entity.route);

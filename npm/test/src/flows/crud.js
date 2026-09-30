@@ -1,7 +1,7 @@
 import { expect, test } from '../fixtures.js';
 import { makeApi } from '../api.js';
 import { fillField, fillForm, resolveRelationSamples } from '../form.js';
-import { freshUniques, handleField, sampleRecord } from '../sample-values.js';
+import { freshUniqueKeys, freshUniques, handleField, sampleRecord } from '../sample-values.js';
 
 // Server-side row lookup via the toolbar "Search <Entity>..." box - present on every list
 // layout (manage-list, master-detail, document) and searching the string columns server-side.
@@ -36,6 +36,8 @@ export function crudFlow(manifest, entity, opts = {}) {
   const cfg = opts.extend?.entities?.[entity.name] ?? {};
   const skip = new Set(cfg.skip ?? []);
   if (skip.has('crud')) return;
+  // no power page to walk: a composition child is reached through its parent (dirigible #7545)
+  if (!entity.route) return;
   // A hierarchy entity lists as a tree, and a calendar/slots entity replaces the table page
   // entirely - no filter row / data rows to drive the walk below; create/read/update/delete
   // stays covered by the REST flow. Same for an entity without a string handle field (nothing
@@ -47,6 +49,8 @@ export function crudFlow(manifest, entity, opts = {}) {
     const record = await freshUniques(makeApi(api, manifest), entity, sampleRecord(entity));
     const handle = handleField(entity);
     const relationSamples = await resolveRelationSamples(api, manifest, entity);
+    const taken = await freshUniqueKeys(makeApi(api, manifest), entity, record, relationSamples);
+    test.skip(!!taken, `every ${entity.name} combination of the unique key [${taken}] tried already has a row`);
 
     const created = record[handle.name];
     const listRoute = entity.route.replace(/[#/]/g, '\\$&');
@@ -61,7 +65,7 @@ export function crudFlow(manifest, entity, opts = {}) {
       await page.getByRole('button', { name: 'Create', exact: true }).click();
       // A create lands on the NEW record's page when there is more to do there - a document's
       // line items, a manage record's detail collections - and on the list otherwise. Saving an
-      // edit is what returns to the list.
+      // edit returns to the list, except on a document, whose Save stays on it (#7359).
       const recordPage = entity.layout === 'document' ? '/[^/]+/edit' : '(/[^/]+/edit)?';
       await expect(page).toHaveURL(new RegExp(listRoute + recordPage + '$'));
       if (page.url().endsWith('/edit')) await page.goto(manifest.standaloneShell + entity.route);
@@ -78,7 +82,20 @@ export function crudFlow(manifest, entity, opts = {}) {
         // gets overwritten by the load and Save persists the OLD value
         await expect(page.locator('#f_' + handle.name)).toHaveValue(created);
         await fillField(page, handle, updated, opts);
-        await page.getByRole('button', { name: 'Save', exact: true }).click();
+        if (entity.layout === 'document') {
+          // A document Save STAYS on the document and re-reads it (#7359): wait for the update to
+          // land, then leave for the list the way a user does (dirigible #7545).
+          const save = page.getByRole('button', { name: 'Save', exact: true });
+          const saved = page.waitForResponse((response) => response.request().method() === 'PUT' && response.ok());
+          await save.click();
+          await saved;
+          // Save is disabled again once the re-read header is the new pristine state - leaving before
+          // that would meet the unsaved-changes guard
+          await expect(save).toBeDisabled();
+          await page.getByRole('button', { name: 'Back to list', exact: true }).click();
+        } else {
+          await page.getByRole('button', { name: 'Save', exact: true }).click();
+        }
         await expect(page).toHaveURL(new RegExp(listRoute + '$'));
         await filterBy(page, updated);
         await expect(dataRow(page, updated)).toHaveCount(1);

@@ -3657,6 +3657,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // fails the generated app test just as surely, so the runner needs the literal to steer by.
         assertTrue(testManifest.contains("\"field\": \"Paid\"") && testManifest.contains("\"value\": 0"),
                 "the manifest must carry a compare check's literal right-hand side too");
+        // ...and the two constraints a sample record meets only by choosing its relation rows (#7545):
+        // a composite unique key, whose first-row combination a seed most likely holds already, and
+        // the agree checks, whose two targets must point at the same third record.
+        String compactManifest = testManifest.replaceAll("\\s", "");
+        assertTrue(compactManifest.contains("\"uniqueKeys\":[[\"Party\",\"Code\"]]"),
+                "the manifest must carry PartyCode's composite unique key so the runner picks a free combination");
+        assertTrue(
+                compactManifest.contains("\"agree\":[{\"relations\":[\"Doc\",\"Entry\"],\"onProperty\":\"Status\"},"
+                        + "{\"relations\":[\"Entry\",\"Storno\"],\"onProperty\":\"Status\"}]"),
+                "the manifest must carry EntryLink's agree checks so the runner picks agreeing rows");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client

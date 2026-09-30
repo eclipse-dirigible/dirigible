@@ -312,6 +312,56 @@ class AppTestIntentGeneratorTest {
         assertEquals(List.of("Sales Invoice Posting"), invoice.get("deleteGuardedByProcess"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void omitsTheRouteOfAChildAndCarriesAgreeAndCompositeKeys() {
+        String intent = """
+                name: stock
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: Store
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                    relations:
+                      - { name: company, kind: manyToOne, to: Company, required: true }
+                  - name: Transfer
+                    unique:
+                      - fields: [fromStore, toStore]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200 }
+                    relations:
+                      - { name: fromStore, kind: manyToOne, to: Store, required: true }
+                      - { name: toStore, kind: manyToOne, to: Store, required: true }
+                    checks:
+                      - { kind: agree, relations: [fromStore, toStore], onProperty: company, message: "same company" }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Company", edmEntity("Company", "Company", "Companies", "MANAGE", "Stock", "stock", "KF_MOD_STOCK_COMPANY", false));
+        // a composition child owning line items: a document layout, yet no power page of its own
+        Map<String, Object> store = edmEntity("Store", "Store", "Stores", "MANAGE_DOCUMENT", "Stock", "", "KF_MOD_STOCK_STORE", false);
+        store.put("type", "DEPENDENT");
+        edm.put("Store", store);
+        edm.put("Transfer", edmEntity("Transfer", "Transfer", "Transfers", "MANAGE", "Stock", "stock", "KF_MOD_STOCK_TRANSFER", false));
+
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("stock", "stock", IntentParser.parse(intent), edm);
+
+        assertNull(entity(manifest, "Store").get("route"), "a DEPENDENT entity has no power page to route to");
+        assertEquals("#/Company", entity(manifest, "Company").get("route"));
+        Map<String, Object> transfer = entity(manifest, "Transfer");
+        assertEquals(List.of(List.of("FromStore", "ToStore")), transfer.get("uniqueKeys"));
+        List<Map<String, Object>> agree = (List<Map<String, Object>>) transfer.get("agree");
+        assertEquals(List.of("FromStore", "ToStore"), agree.get(0)
+                                                           .get("relations"));
+        assertEquals("Company", agree.get(0)
+                                     .get("onProperty"));
+        assertNull(entity(manifest, "Company").get("uniqueKeys"));
+    }
+
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
 
     private static Map<String, Map<String, Object>> edm() {
