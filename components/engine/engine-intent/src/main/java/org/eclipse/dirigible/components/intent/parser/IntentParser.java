@@ -6283,11 +6283,12 @@ public final class IntentParser {
     }
 
     /**
-     * A valueless key inside an arrival's {@code accept:} or {@code map:} is reported from the raw
-     * tree, because the typed mapping drops it: Gson omits a null value, so {@code accept: { type: }}
-     * arrives as an EMPTY gate - every message accepted - and {@code map: { email: }} as a field nobody
-     * fills. Both are the exact "authored, then silently dropped" outcome this parser refuses
-     * everywhere else, and neither is visible once the key is gone.
+     * A valueless key inside an arrival's {@code accept:} or {@code map:}, or inside a collection's
+     * element map, is reported from the raw tree, because the typed mapping drops it: Gson omits a null
+     * value, so {@code accept: { type: }} arrives as an EMPTY gate - every message accepted - and
+     * {@code map: { email: }} as a field nobody fills. Both are the exact "authored, then silently
+     * dropped" outcome this parser refuses everywhere else, and neither is visible once the key is
+     * gone.
      *
      * @param tree the raw YAML tree
      * @param issues the collecting issue list
@@ -6309,6 +6310,15 @@ public final class IntentParser {
                     if (entry.getValue() == null) {
                         issues.add(subject + " " + block + " [" + entry.getKey() + "] has no value"
                                 + ("accept".equals(block) ? " to gate on" : " - name the envelope key it is filled from"));
+                    } else if ("map".equals(block) && entry.getValue() instanceof Map<?, ?> collection
+                            && collection.get("map") instanceof Map<?, ?> elementMap) {
+                        // A collection's element map is dropped the same way one level down.
+                        for (Map.Entry<?, ?> element : elementMap.entrySet()) {
+                            if (element.getValue() == null) {
+                                issues.add(subject + " map [" + entry.getKey() + "] element [" + element.getKey()
+                                        + "] has no value - name the element key it is filled from, or [.] for the element itself");
+                            }
+                        }
                     }
                 }
             }
