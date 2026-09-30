@@ -11,9 +11,13 @@ package org.eclipse.dirigible.components.ide.template.service.model;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadataSource;
 
 import org.junit.jupiter.api.Test;
 
@@ -444,5 +448,87 @@ class GlueGeneratorTest {
         term.put("value", value);
         term.put("numericKey", false);
         return term;
+    }
+
+    /**
+     * A collection imports its child's repository and every element lookup's target repository, so both
+     * perspectives are sanitized into package segments, and the Criteria import is wanted even when
+     * only an element looks something up.
+     */
+    @Test
+    void anArrivalCollectionIsBoundWithItsPackageSegmentsResolved() throws IOException {
+        Map<String, Object> product = new LinkedHashMap<>();
+        product.put("local", "lookupLinesProduct");
+        product.put("targetEntity", "Product");
+        product.put("targetPerspective", "Product");
+        Map<String, Object> lines = new LinkedHashMap<>();
+        lines.put("local", "collectionLines");
+        lines.put("childEntity", "OrderLine");
+        lines.put("childPerspective", "PurchaseOrder");
+        lines.put("lookups", List.of(product));
+        Map<String, Object> arrival = arrival();
+        arrival.put("hasCollections", Boolean.TRUE);
+        arrival.put("collections", List.of(lines));
+
+        for (String collection : List.of("inbound", "inboundMessages", "inboundFiles")) {
+            Map<String, Object> context = boundArrival(collection, arrival);
+
+            assertThat(context).as(collection)
+                               .containsEntry("hasCollections", Boolean.TRUE)
+                               .containsEntry("hasLookups", Boolean.TRUE);
+            Map<?, ?> bound = (Map<?, ?>) ((List<?>) context.get("collections")).get(0);
+            assertThat(bound.get("javaChildPerspective")).isEqualTo("purchaseorder");
+            assertThat(bound.get("childEntity")).isEqualTo("OrderLine");
+            Map<?, ?> lookup = (Map<?, ?>) ((List<?>) bound.get("lookups")).get(0);
+            assertThat(lookup.get("javaTargetPerspective")).isEqualTo("product");
+        }
+        assertThat(lines).as("the descriptor itself is left untouched")
+                         .doesNotContainKey("javaChildPerspective");
+    }
+
+    /** A descriptor without collections - or one from before them - binds them empty. */
+    @Test
+    void anArrivalWithoutCollectionsBindsThemEmpty() throws IOException {
+        Map<String, Object> context = boundArrival("inboundMessages", arrival());
+
+        assertThat(context).containsEntry("hasCollections", Boolean.FALSE)
+                           .containsEntry("hasLookups", Boolean.FALSE);
+        assertThat((List<?>) context.get("collections")).isEmpty();
+    }
+
+    private static Map<String, Object> arrival() {
+        Map<String, Object> arrival = new LinkedHashMap<>();
+        arrival.put("name", "orders");
+        arrival.put("className", "Orders");
+        arrival.put("entity", "PurchaseOrder");
+        arrival.put("perspective", "PurchaseOrder");
+        arrival.put("hasEnvelope", Boolean.TRUE);
+        arrival.put("hasMap", Boolean.TRUE);
+        arrival.put("mapFields", List.of());
+        arrival.put("lookups", List.of());
+        return arrival;
+    }
+
+    private static Map<String, Object> boundArrival(String collection, Map<String, Object> arrival) throws IOException {
+        List<Map<String, Object>> contexts = new ArrayList<>();
+        ModelTemplateRenderer capturing = new ModelTemplateRenderer(null, null) {
+            @Override
+            String render(GenerationTemplateMetadataSource source, String content, Map<String, Object> parameters) {
+                contexts.add(parameters);
+                return "";
+            }
+
+            @Override
+            String renderPath(String location, String rename, Map<String, Object> parameters) {
+                return rename;
+            }
+        };
+        GenerationTemplateMetadataSource source = new GenerationTemplateMetadataSource();
+        source.setLocation("/events/" + collection + ".java.template");
+        source.setRename("gen/events/" + collection + ".java");
+        new GlueGenerator(capturing).generate(collection, source, "", Map.of(collection, List.of(arrival)),
+                new LinkedHashMap<>(Map.of("javaGenFolderName", "shop")));
+        assertThat(contexts).hasSize(1);
+        return contexts.get(0);
     }
 }

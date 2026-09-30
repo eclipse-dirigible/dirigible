@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-#if($lookups.size() > 0)
+#if($hasLookups)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
 import org.eclipse.dirigible.sdk.component.Component;
@@ -135,7 +135,9 @@ public class ${className}FileImport implements JobHandler {
                 continue;
             }
 #end
-#if($hasMap)
+#if($hasCollections)
+            persist(repository, envelope, index + 1);
+#elseif($hasMap)
             repository.save(project(envelope, index + 1));
 #else
             repository.save(records[index]);
@@ -200,6 +202,97 @@ public class ${className}FileImport implements JobHandler {
         entity.${lookup.property} = ${lookup.local}Matches.get(0).${lookup.targetKeyProperty};
 #end
         return entity;
+    }
+#end
+#if($hasCollections)
+
+    /**
+     * One envelope and its declared collections, written together. Every element is resolved first, so
+     * one bad element throws before anything of this record is written; the record and its child rows
+     * are then saved in one unit of work, so the record's create event finds every child.
+     */
+    private void persist(${entity}Repository repository, java.util.Map<?, ?> envelope, int record) {
+        ${entity}Entity entity = project(envelope, record);
+#foreach($collection in $collections)
+        java.util.List<gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity> ${collection.local} =
+                new java.util.ArrayList<>();
+        {
+            Object array = envelope.get(${collection.fromLiteral});
+            if (array != null && !(array instanceof java.util.List)) {
+                throw new IllegalArgumentException("record " + record + ": [" + ${collection.fromLiteral} + "] is not an array");
+            }
+            java.util.List<?> elements = array == null ? java.util.List.of() : (java.util.List<?>) array;
+#if($collection.hasMax)
+            if (elements.size() > ${collection.max}) {
+                throw new IllegalArgumentException("record " + record + ": [" + ${collection.fromLiteral} + "] holds " + elements.size() + " elements, more than the declared max ${collection.max}");
+            }
+#end
+#foreach($lookup in $collection.lookups)
+            java.util.Map<Object, gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Cache =
+                    new java.util.HashMap<>();
+#end
+            for (int index = 0; index < elements.size(); index++) {
+                Object element = elements.get(index);
+#if($collection.scalarElements)
+                if (element == null || element instanceof java.util.Map || element instanceof java.util.List) {
+                    throw new IllegalArgumentException("record " + record + ": element " + index + " of [" + ${collection.fromLiteral} + "] is not a value");
+                }
+#else
+                if (!(element instanceof java.util.Map<?, ?> item)) {
+                    throw new IllegalArgumentException("record " + record + ": element " + index + " of [" + ${collection.fromLiteral} + "] is not an object");
+                }
+#end
+                gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity child =
+                        new gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity();
+#foreach($field in $collection.mapFields)
+                {
+#if($collection.scalarElements)
+                    Object raw = element;
+#else
+                    Object raw = item.get(${field.fromLiteral});
+#end
+                    if (raw != null) {
+                        child.${field.property} = ${field.expression};
+                    }
+                }
+#end
+#foreach($lookup in $collection.lookups)
+#if($collection.scalarElements)
+                Object ${lookup.local}Key = element;
+#else
+                Object ${lookup.local}Key = item.get(${lookup.fromLiteral});
+                if (${lookup.local}Key == null) {
+                    throw new IllegalArgumentException("record " + record + ": element " + index + " of [" + ${collection.fromLiteral} + "] carries nothing to resolve ${lookup.property} by");
+                }
+#end
+                gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity ${lookup.local}Match =
+                        ${lookup.local}Cache.get(${lookup.local}Key);
+                if (${lookup.local}Match == null) {
+                    java.util.List<gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Matches =
+                            new gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Repository()
+                                    .findAll(Criteria.create()
+                                                     .eq("${lookup.byProperty}", ${lookup.byValueExpression}));
+                    if (${lookup.local}Matches.size() != 1) {
+                        throw new IllegalArgumentException("record " + record + ": element " + index + " of [" + ${collection.fromLiteral} + "]: no unique ${lookup.targetEntity} matches ${lookup.byProperty} [" + ${lookup.local}Key + "]");
+                    }
+                    ${lookup.local}Match = ${lookup.local}Matches.get(0);
+                    ${lookup.local}Cache.put(${lookup.local}Key, ${lookup.local}Match);
+                }
+                child.${lookup.property} = ${lookup.local}Match.${lookup.targetKeyProperty};
+#end
+                ${collection.local}.add(child);
+            }
+        }
+#end
+        org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.run(() -> {
+            ${entity}Entity saved = repository.save(entity);
+#foreach($collection in $collections)
+            for (gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity child : ${collection.local}) {
+                child.${collection.backRef} = saved.${collection.masterKey};
+                new gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Repository().save(child);
+            }
+#end
+        });
     }
 #end
 

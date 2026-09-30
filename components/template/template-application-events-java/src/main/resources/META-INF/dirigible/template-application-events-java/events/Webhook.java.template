@@ -1,6 +1,6 @@
 package gen.events.${javaGenFolderName};
 
-#if($lookups.size() > 0)
+#if($hasLookups)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
 import org.eclipse.dirigible.sdk.http.Body;
@@ -35,6 +35,12 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * The payload is an envelope, so it is read as one and projected onto the record by the declared
  * map - a key the map does not name is not the record's business. A business-key lookup that
  * resolves to no single row is answered 400 rather than stored as a null relation.
+#end
+#if($hasCollections)
+ *
+ * The declared collections map payload arrays onto composition child rows. Every element is resolved
+ * before anything is written, so one bad element is answered 400 and nothing is stored; then the
+ * record and its children are saved in one unit of work.
 #end
  */
 @Controller
@@ -96,6 +102,89 @@ public class ${className}Webhook {
         }
         entity.${lookup.property} = ${lookup.local}Matches.get(0).${lookup.targetKeyProperty};
 #end
+#foreach($collection in $collections)
+        java.util.List<gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity> ${collection.local} =
+                new java.util.ArrayList<>();
+        {
+            Object array = envelope.get(${collection.fromLiteral});
+            if (array != null && !(array instanceof java.util.List)) {
+                LOG.error("Inbound ${name}: a posted payload: [{}] is not an array - NOT ingested", ${collection.fromLiteral});
+                Response.setStatus(400);
+                return Json.stringify(java.util.Map.of("error", "[" + ${collection.fromLiteral} + "] is not an array"));
+            }
+            java.util.List<?> elements = array == null ? java.util.List.of() : (java.util.List<?>) array;
+#if($collection.hasMax)
+            if (elements.size() > ${collection.max}) {
+                LOG.error("Inbound ${name}: a posted payload: [{}] holds [{}] elements, more than the declared max ${collection.max} - NOT ingested", ${collection.fromLiteral}, elements.size());
+                Response.setStatus(400);
+                return Json.stringify(java.util.Map.of("error", "[" + ${collection.fromLiteral} + "] holds " + elements.size() + " elements, more than the declared max ${collection.max}"));
+            }
+#end
+#foreach($lookup in $collection.lookups)
+            java.util.Map<Object, gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Cache =
+                    new java.util.HashMap<>();
+#end
+            for (int index = 0; index < elements.size(); index++) {
+                Object element = elements.get(index);
+#if($collection.scalarElements)
+                if (element == null || element instanceof java.util.Map || element instanceof java.util.List) {
+                    LOG.error("Inbound ${name}: a posted payload: element [{}] of [{}] is not a value - NOT ingested", index, ${collection.fromLiteral});
+                    Response.setStatus(400);
+                    return Json.stringify(java.util.Map.of("error", "element " + index + " of [" + ${collection.fromLiteral} + "] is not a value"));
+                }
+#else
+                if (!(element instanceof java.util.Map<?, ?> item)) {
+                    LOG.error("Inbound ${name}: a posted payload: element [{}] of [{}] is not an object - NOT ingested", index, ${collection.fromLiteral});
+                    Response.setStatus(400);
+                    return Json.stringify(java.util.Map.of("error", "element " + index + " of [" + ${collection.fromLiteral} + "] is not an object"));
+                }
+#end
+                gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity child =
+                        new gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity();
+#foreach($field in $collection.mapFields)
+                {
+#if($collection.scalarElements)
+                    Object raw = element;
+#else
+                    Object raw = item.get(${field.fromLiteral});
+#end
+                    if (raw != null) {
+                        child.${field.property} = ${field.expression};
+                    }
+                }
+#end
+#foreach($lookup in $collection.lookups)
+#if($collection.scalarElements)
+                Object ${lookup.local}Key = element;
+#else
+                Object ${lookup.local}Key = item.get(${lookup.fromLiteral});
+                if (${lookup.local}Key == null) {
+                    LOG.error("Inbound ${name}: a posted payload: element [{}] of [{}] carries no [{}] to resolve ${lookup.property} by - NOT ingested", index, ${collection.fromLiteral}, ${lookup.fromLiteral});
+                    Response.setStatus(400);
+                    return Json.stringify(java.util.Map.of("error", "element " + index + " of [" + ${collection.fromLiteral} + "] carries nothing to resolve ${lookup.property} by"));
+                }
+#end
+                gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity ${lookup.local}Match =
+                        ${lookup.local}Cache.get(${lookup.local}Key);
+                if (${lookup.local}Match == null) {
+                    java.util.List<gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Entity> ${lookup.local}Matches =
+                            new gen.${javaGenFolderName}.data.${lookup.javaTargetPerspective}.${lookup.targetEntity}Repository()
+                                    .findAll(Criteria.create()
+                                                     .eq("${lookup.byProperty}", ${lookup.byValueExpression}));
+                    if (${lookup.local}Matches.size() != 1) {
+                        LOG.error("Inbound ${name}: a posted payload: element [{}] of [{}]: no unique ${lookup.targetEntity} matches ${lookup.byProperty} [{}] - NOT ingested", index, ${collection.fromLiteral}, ${lookup.local}Key);
+                        Response.setStatus(400);
+                        return Json.stringify(java.util.Map.of("error", "element " + index + " of [" + ${collection.fromLiteral} + "]: no unique ${lookup.targetEntity} matches ${lookup.byProperty} [" + ${lookup.local}Key + "]"));
+                    }
+                    ${lookup.local}Match = ${lookup.local}Matches.get(0);
+                    ${lookup.local}Cache.put(${lookup.local}Key, ${lookup.local}Match);
+                }
+                child.${lookup.property} = ${lookup.local}Match.${lookup.targetKeyProperty};
+#end
+                ${collection.local}.add(child);
+            }
+        }
+#end
 #elseif($hasEnvelope)
         // A gate without a map: what arrived IS the record, so it is read back out of the envelope the
         // gate needed. Only this shape pays for the round trip.
@@ -109,7 +198,21 @@ public class ${className}Webhook {
             return "{\"error\": \"empty or invalid payload\"}";
         }
 #end
+#if($hasCollections)
+        // The record and its child rows are one unit: see the class comment.
+        ${entity}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            ${entity}Entity parent = new ${entity}Repository().save(entity);
+#foreach($collection in $collections)
+            for (gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Entity child : ${collection.local}) {
+                child.${collection.backRef} = parent.${collection.masterKey};
+                new gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Repository().save(child);
+            }
+#end
+            return parent;
+        });
+#else
         ${entity}Entity saved = new ${entity}Repository().save(entity);
+#end
         return Json.stringify(saved);
     }
 }
