@@ -393,6 +393,42 @@ public class ${name}PartnerController {
                     "The ${masterLock.period.entity} covering this ${masterLock.entity} is closed - book the correction in an open period");
         }
 #end
+#foreach($ancestor in $masterLock.ancestors)
+#set($ancestorIndex = $foreach.count)
+#if($ancestorIndex == 1)
+#set($belowRow = "master")
+#else
+#set($belowIndex = $ancestorIndex - 1)
+#set($belowRow = "ancestor${belowIndex}")
+#end
+        // A lock reaches down the whole composition chain (#7550): the ${ancestor.entity} above
+        // freezes this ${name} as surely as its direct ${masterLock.entity} would.
+        if (${belowRow}.${ancestor.fkProperty} == null) {
+            return;
+        }
+        ${ancestor.entityClass} ancestor${ancestorIndex} = new ${ancestor.repositoryClass}().findOne(${belowRow}.${ancestor.fkProperty})
+                                                                        .orElse(null);
+        if (ancestor${ancestorIndex} == null) {
+            return;
+        }
+#if($ancestor.always || $ancestor.statusProperty)
+        if (!isAncestor${ancestorIndex}Mutable(ancestor${ancestorIndex})) {
+#if($ancestor.always)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} belongs to an append-only ${ancestor.entity} and can no longer be changed");
+#else
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${ancestor.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+        }
+#end
+#if($ancestor.period)
+        if (!isAncestor${ancestorIndex}PeriodOpen(ancestor${ancestorIndex}.${ancestor.period.dateProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${ancestor.period.entity} covering this ${ancestor.entity} is closed - book the correction in an open period");
+        }
+#end
+#end
     }
 #if($masterLock.always || $masterLock.statusProperty)
 
@@ -435,6 +471,48 @@ public class ${name}PartnerController {
         }
         return true;
     }
+#end
+#foreach($ancestor in $masterLock.ancestors)
+#set($ancestorIndex = $foreach.count)
+#if($ancestor.always || $ancestor.statusProperty)
+
+    private static boolean isAncestor${ancestorIndex}Mutable(${ancestor.entityClass} ancestor) {
+#if($ancestor.always)
+        return false;
+#else
+        if (ancestor.${ancestor.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${ancestor.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(ancestor.${ancestor.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
+    }
+#end
+#if($ancestor.period)
+
+    private boolean isAncestor${ancestorIndex}PeriodOpen(${ancestor.period.dateJavaClass} date) {
+        if (date == null) {
+            return true;
+        }
+        for (${ancestor.period.entityClass} period : new ${ancestor.period.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${ancestor.period.startProperty}", date)
+                                                                                   .ge("${ancestor.period.endProperty}", date))) {
+            if (period.${ancestor.period.statusProperty} != null) {
+                for (String closed : "${ancestor.period.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${ancestor.period.statusProperty}))) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+#end
 #end
 #end
 #if($immutableAlways || $immutableStatusProperty || $periodLock)

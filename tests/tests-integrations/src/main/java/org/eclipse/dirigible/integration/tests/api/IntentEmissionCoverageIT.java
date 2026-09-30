@@ -479,6 +479,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
 
+              # The lock reaches down the whole composition chain (#7550): a stage declares no lock of
+              # its own, yet its steps freeze with the campaign above both - the payroll run / payslip /
+              # payslip line shape, where the lines stayed writable after the run was posted.
+              - name: CampaignStage
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 100 }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
+              - name: CampaignStageStep
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 100 }
+                relations:
+                  - { name: CampaignStage, kind: manyToOne, to: CampaignStage, composition: true, required: true }
+
               # A calendar SCOPED by a MASTER (#6546). The scope target's record surfaces must link
               # into the filtered calendar - for a master that surface is the detail PANE of the
               # selected row, which is a different template from the form Person covers below. The
@@ -5124,6 +5140,66 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Title", equalTo("book the venue")));
+
+        // ...and a lock reaches the grandchildren too (#7550): the step of a stage is refused once the
+        // campaign above both is closed, although the stage declares no lock of its own - the walk goes
+        // from the step through its stage to the campaign. While the campaign was open all three wrote.
+        AtomicInteger stagedCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stagedCampaign.set(given().contentType("application/json")
+                                                                    .body("{\"Name\":\"Winter\"}")
+                                                                    .when()
+                                                                    .post(API + "/campaign/CampaignController")
+                                                                    .then()
+                                                                    .statusCode(200)
+                                                                    .extract()
+                                                                    .path("Id")));
+        AtomicInteger stage = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stage.set(given().contentType("application/json")
+                                                           .body("{\"Campaign\":" + stagedCampaign.get() + ",\"Title\":\"launch\"}")
+                                                           .when()
+                                                           .post(API + "/campaign/CampaignStageController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        AtomicInteger step = new AtomicInteger();
+        restAssuredExecutor.execute(() -> step.set(given().contentType("application/json")
+                                                          .body("{\"CampaignStage\":" + stage.get() + ",\"Title\":\"print flyers\"}")
+                                                          .when()
+                                                          .post(API + "/campaign/CampaignStageStepController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + stagedCampaign.get() + ",\"Name\":\"Winter\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + stagedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"CampaignStage\":" + stage.get() + ",\"Title\":\"late step\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignStageStepController")
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("The Campaign of this CampaignStageStep is immutable")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + step.get() + ",\"CampaignStage\":" + stage.get()
+                                                         + ",\"Title\":\"renamed\"}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Title", equalTo("print flyers")));
 
         // history: the whole life of the record is readable from one endpoint - the create, and the
         // status hop the user made with both sides of it recorded, so "who changed this from what"

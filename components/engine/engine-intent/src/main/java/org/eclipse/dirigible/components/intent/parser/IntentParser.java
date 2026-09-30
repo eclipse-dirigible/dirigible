@@ -3685,14 +3685,30 @@ public final class IntentParser {
                     + " - only a child collection can outlive its master's lock");
             return;
         }
-        EntityIntent parent = entityByName(model, master);
-        boolean masterLocks = parent == null || Boolean.TRUE.equals(parent.getImmutable())
-                || (parent.getImmutableWhen() != null && !parent.getImmutableWhen()
-                                                                .isBlank());
+        // A lock reaches down the whole composition chain (#7550), so the declaration is meaningful when
+        // ANY ancestor locks - up to one that itself outlives its own master's lock, where the chain stops.
+        boolean masterLocks = false;
+        Set<String> visited = new HashSet<>();
+        for (String ancestor = master; ancestor != null && visited.add(ancestor); ancestor = compositionParent.get(ancestor)) {
+            EntityIntent candidate = entityByName(model, ancestor);
+            if (candidate == null || locksItself(candidate)) {
+                masterLocks = true;
+                break;
+            }
+            if (!candidate.locksWithMaster()) {
+                break;
+            }
+        }
         if (!masterLocks) {
             issues.add("entity [" + name + "] declares locksWithMaster: false but its master [" + master
-                    + "] never locks (no immutableWhen / immutable) - the declaration would have no effect");
+                    + "] never locks (no immutableWhen / immutable on it or on its composition ancestors)"
+                    + " - the declaration would have no effect");
         }
+    }
+
+    private static boolean locksItself(EntityIntent entity) {
+        return Boolean.TRUE.equals(entity.getImmutable()) || (entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                                                          .isBlank());
     }
 
     private static void validateSnapshotLanguage(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
