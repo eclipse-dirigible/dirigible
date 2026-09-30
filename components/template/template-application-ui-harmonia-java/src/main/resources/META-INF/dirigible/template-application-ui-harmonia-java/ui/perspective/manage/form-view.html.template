@@ -669,7 +669,10 @@
 #elseif($property.widgetType == "MULTISELECT")
               <span class="text-sm wrap-anywhere" x-text="(Array.isArray(form.${property.name}) ? form.${property.name} : String(form.${property.name} || '').split(',')).filter(v => v !== '').map(v => (options${property.name}.find(o => String(o.value) === String(v).trim()) || {}).text || v).join(', ')"></span>
 #else
-              <span class="text-sm wrap-anywhere" x-text="form.${property.name}"></span>
+              <!-- Through the same formatter every other surface uses: these are the audit columns, so
+                   most of them ARE dates, and printed raw they read as the backend's serialization
+                   (2026-09-30T10:29) rather than the instance's date format. -->
+              <span class="text-sm wrap-anywhere" x-text="fieldText(form.${property.name}, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType)true#{else}false#end, null)"></span>
 #end
             </div>
 #end
