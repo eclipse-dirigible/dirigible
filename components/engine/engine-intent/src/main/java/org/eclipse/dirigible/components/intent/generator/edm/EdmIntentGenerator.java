@@ -2650,7 +2650,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> terms = new ArrayList<>();
         for (String term : CheckSupport.terms(when)) {
             CheckSupport.Comparison comparison = CheckSupport.parse(term);
-            if (comparison == null || !ResolvePathSupport.isPath(comparison.property())) {
+            // A null test (#7555) stays server-side: the panel compares the master's values with the
+            // authored literal as text, which would read `null` as the four-letter word.
+            if (comparison == null || CheckSupport.isNullTest(comparison) || !ResolvePathSupport.isPath(comparison.property())) {
                 return null;
             }
             String[] segments = comparison.property()

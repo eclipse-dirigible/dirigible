@@ -755,8 +755,10 @@ final class StatusSymbolResolver {
         while (matcher.find()) {
             String replacement = matcher.group();
             boolean aboutStatus = statusRelation == null || statusRelation.equalsIgnoreCase(matcher.group(1));
-            if (aboutStatus && !INTEGER.matcher(matcher.group(3))
-                                       .matches()) {
+            // `Status != null` tests whether the status is set at all (#7555) - no name to look up
+            boolean nullTest = "null".equals(matcher.group(3));
+            if (aboutStatus && !nullTest && !INTEGER.matcher(matcher.group(3))
+                                                    .matches()) {
                 if (!EQUALITY.contains(matcher.group(2))) {
                     issues.add(subject + " compares the status to the name [" + matcher.group(3) + "] with [" + matcher.group(2)
                             + "] - a status name has no ordering; use ==/!= per status, or a report `scope:`");

@@ -1746,6 +1746,53 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A condition can ask whether a value is there at all (#7555): {@code Payslip != null} is the only
+     * way to say "this row is linked to something", and a forbidWhen reaches the delete verb, so it is
+     * how a module refuses to delete a payroll entry once a payslip swept it up. A null test is
+     * meaningful for a value of any type - a date one hop away included, which an ordinary comparison
+     * refuses - and an EntityStatus relation's null test is not a status name to look up. A QUOTED
+     * {@code 'null'} stays the four-letter text.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void forbidWhenTestsWhetherAValueIsSet() {
+        String yaml = """
+                name: payroll
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Payslip
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: postedOn, type: date }
+                  - name: PayrollEntry
+                    checks:
+                      - { kind: forbidWhen, when: "Payslip != null", message: "An entry swept into a payslip is part of it" }
+                      - { kind: forbidWhen, when: "Payslip.postedOn != null", message: "The payslip of this entry is posted" }
+                      - { kind: forbidWhen, when: "Status != null", message: "A classified entry is fixed" }
+                      - { kind: forbidWhen, when: "note == 'null'", message: "Not a placeholder" }
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 100 }
+                    relations:
+                      - { name: Payslip, kind: manyToOne, to: Payslip }
+                      - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "payroll");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "PayrollEntry").get("checks");
+
+        assertEquals("(entity.Payslip != null)", guardJava(checks.get(0)));
+        String hop = guardJava(checks.get(1));
+        assertTrue(hop.endsWith(".PostedOn) != null)") && hop.contains(" == null ? null : "),
+                "the hop's date is null-tested through the hop's own null guard, got: " + hop);
+        assertEquals("(entity.Status != null)", guardJava(checks.get(2)));
+        assertEquals("java.util.Objects.equals(entity.Note, \"null\")", guardJava(checks.get(3)));
+    }
+
+    /**
      * A {@code forbidWhen} (dirigible #7275) emits its condition as the Java boolean the reject tests,
      * the hop its one-hop term reads through (a child loading its parent by FK), no value expression,
      * and - when every term reads the composition master - the UI descriptor the detail panel hides the

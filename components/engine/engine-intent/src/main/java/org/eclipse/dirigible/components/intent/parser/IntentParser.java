@@ -5413,7 +5413,7 @@ public final class IntentParser {
         CheckSupport.Comparison comparison = CheckSupport.parse(term);
         if (comparison == null) {
             issues.add(subject + " when [" + term + "] must be `<Property> ==|!= <literal>` or `<Relation>.<field> ==|!= <literal>`"
-                    + " - a number, a status name, a quoted string or a bare word");
+                    + " - a number, a status name, a quoted string, a bare word or null");
             return;
         }
         ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
@@ -5421,6 +5421,9 @@ public final class IntentParser {
         if (!path.resolved()) {
             issues.add(subject + " when " + path.failure());
             return;
+        }
+        if (CheckSupport.isNullTest(comparison)) {
+            return; // `<property> ==|!= null` - whether it is set at all, meaningful for any type (#7555)
         }
         String terminal = path.terminalType();
         if (terminal == null) {
