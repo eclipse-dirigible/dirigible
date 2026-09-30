@@ -725,7 +725,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates(), byName, compositionParents,
-                    crossModelLookup(context, usesByAlias));
+                    crossModelLookup(context, usesByAlias), transitionTargets(entity, model));
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -2188,7 +2188,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * templates need without re-deriving model structure.
      */
     private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities, List<AggregateIntent> aggregates,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
+            Set<Integer> buttonTargets) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
             return checkMaps;
@@ -2364,12 +2365,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // The gate is optional here: without one the rule holds on every user write (the REST
                 // surfaces enforce it, like exactlyOne), with one it is enforced by the repository when
                 // the record is persisted carrying that status - the moment the value is finally needed.
-                if (check.getStatus() != null) {
+                Integer gateStatus = check.getStatus() != null ? check.getStatus() : buttonGate(entity, when, buttonTargets);
+                if (gateStatus != null) {
                     RelationIntent gate = entityStatusRelation(entity);
                     if (gate == null) {
                         continue; // the parser already reported it
                     }
-                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("status", String.valueOf(gateStatus));
                     checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
                 }
                 checkMaps.add(checkMap);
@@ -2846,6 +2848,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         return rollupOwnedStatuses.getOrDefault(entity.getName(), List.of())
                                   .contains(statusProperty);
+    }
+
+    /**
+     * The gate an UNGATED {@code requiredWhen} takes from its own condition when that condition is a
+     * status a {@code transitions:} button sets (#7553): {@code when: "Status == POSTED"} on an entity
+     * a Post button moves. The button is the only way into that status - the controllers refuse the
+     * plain PUT of the value it sets - and it writes through the repository's targeted primitive, so a
+     * rule the controllers alone enforce would never run at the one moment it is about. Gated, the rule
+     * is the repository's and every writer reaches it: the button, a workflow, and a user edit of a
+     * record already in that status. A condition that does not name such a status keeps the ordinary
+     * controller routing.
+     *
+     * @param entity the entity the check sits on
+     * @param when the check's resolved condition terms (an implicit AND)
+     * @param buttonTargets the status values the entity's buttons set
+     * @return the status to gate on, or {@code null} to leave the check ungated
+     */
+    private static Integer buttonGate(EntityIntent entity, List<Map<String, Object>> when, Set<Integer> buttonTargets) {
+        RelationIntent status = entityStatusRelation(entity);
+        if (status == null || buttonTargets.isEmpty()) {
+            return null;
+        }
+        String statusProperty = IntentNaming.pascalCase(status.getName());
+        for (Map<String, Object> term : when) {
+            Object value = term.get("value");
+            if (CheckSupport.RECORD.equals(term.get("owner")) && statusProperty.equals(term.get("property"))
+                    && Boolean.TRUE.equals(term.get("equal")) && value != null && String.valueOf(value)
+                                                                                       .matches("-?\\d+")
+                    && buttonTargets.contains(Integer.valueOf(String.valueOf(value)))) {
+                return Integer.valueOf(String.valueOf(value));
+            }
+        }
+        return null;
     }
 
     /**

@@ -877,6 +877,55 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * An ungated {@code requiredWhen} conditioned on a status a button sets takes that status as its
+     * gate (#7553): the button is the only way into it and writes through the repository, so a
+     * controller-only rule would never run when the record is posted. A condition on any other status,
+     * or on no status, keeps the controller routing (no {@code status} key).
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void anUngatedRequiredWhenOnAButtonTargetIsGatedOnThatStatus() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: DocStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Doc
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: party, type: string }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - { kind: requiredWhen, field: party, when: "Status == POSTED", message: "posted needs a party" }
+                      - { kind: requiredWhen, field: party, when: "Status == DRAFT", message: "draft needs a party" }
+                      - { kind: requiredWhen, field: note, when: "party == 'x'", message: "x needs a note" }
+                transitions:
+                  - { name: post, forEntity: Doc, from: [1], setStatus: 2, label: Post }
+                seeds:
+                  - name: doc-statuses
+                    entity: DocStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: POSTED }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Doc").get("checks");
+        assertEquals("2", checks.get(0)
+                                .get("status"));
+        assertEquals("Status", checks.get(0)
+                                     .get("statusProperty"));
+        assertNull(checks.get(1)
+                         .get("status"));
+        assertNull(checks.get(2)
+                         .get("status"));
+    }
+
+    /**
      * A process or roll-up that owns the whole column wins over a button's narrower claim: no
      * {@code workflowStatusValues}, so every direct status change is refused.
      */
