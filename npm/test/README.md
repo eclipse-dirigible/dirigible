@@ -56,6 +56,9 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
   backend vs UI failures), asserting the manifest's field names bind and delete yields 404 — or,
   for an entity a `whenDeleted: refuse` process guards, that the refused record is still served.
 - **multilingual** — switch the shared language key, reload, a seeded row shows its translated name.
+  The assertion waits for the list's own data GET and allows 15 s; a failure names the
+  `Accept-Language` that GET sent, whether its body carried the expected word, and the table's first
+  row, so a slow render reads differently from a missing translation.
 - **my** — the personal (my) surface WIRE contract, when the manifest marks an entity `personal`:
   create through the scoped `<Entity>MyController` (owner FK forced server-side), every `sensitive`
   field null on the personal wire, the own row in the personal list, foreign rows 404 (when the
