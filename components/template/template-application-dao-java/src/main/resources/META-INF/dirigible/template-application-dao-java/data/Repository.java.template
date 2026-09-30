@@ -811,7 +811,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * back silently reverted whatever the user changed in that window (the lost-update family of #6226 /
      * #6306). The {@code "-updated"} event still fires so downstream reactions - notably a transitive
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
-     * persisted the full row. Routed through {@link #updateProperties} so an entity that declares
+     * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
+     * authored-change listener can skip a recompute that moved nothing it watches. Routed through
+     * {@link #updateProperties} so an entity that declares
      * {@code checks:} still runs its gate, a labelled entity still refreshes its stored display Name,
      * and a document line still resums the master it belongs to.
      */
@@ -820,8 +822,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             return 0;
         }
         // The event travels with the write: the resulting row is read back on the write's own
-        // connection, before its commit, and recorded in the event outbox alongside it.
-        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
+        // connection, before its commit, and recorded in the event outbox alongside it. It is MARKED
+        // with the columns written, so a listener that reacts to authored changes only - a settlement
+        // re-allocating a corrected payment - can tell this recompute from an edit (#7557).
+        return org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.run(values.keySet(),
+                () -> updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated"));
     }
 #if($phases && $phases != "")
 #foreach($phase in $phases.split(","))

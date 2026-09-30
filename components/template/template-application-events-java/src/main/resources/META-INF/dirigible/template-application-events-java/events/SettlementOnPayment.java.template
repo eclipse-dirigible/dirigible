@@ -3,6 +3,9 @@ package gen.events.${javaGenFolderName};
 import java.math.BigDecimal;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#if($topicSuffix == "-updated")
+import org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite;
+#end
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -28,7 +31,9 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Re
  * still unallocated#if($topicSuffix != ""), and releases the excess - newest allocation first - when the payment is corrected
  * to less than what it already covers#end. That is what makes it safe to bind to the payment's correction
  * event as well as to its create one, so a payment booked for the wrong amount, or completed after it
- * was created, is settled for the amount it actually carries.
+ * was created, is settled for the amount it actually carries.#if($topicSuffix == "-updated") A derived write of the payment (its
+ * allocated roll-up moving because an allocation was deleted by hand) is NOT a correction and is
+ * skipped - a person must be able to take an allocation off a document without it coming back.#end
  *
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
@@ -50,6 +55,16 @@ public class ${className} implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
+#if($topicSuffix == "-updated")
+        // A payment is "updated" by the platform too: deleting or creating an allocation moves the
+        // payment's allocated / unapplied roll-up, and that derived write publishes "-updated". It is
+        // NOT a correction of the payment - re-settling on it put a hand-deleted allocation straight
+        // back onto the same ${invoiceEntity} and made the delete impossible (#7557). Only a write that
+        // moved the amount or a match column is a reason to re-allocate.
+        if (DerivedWrite.touchedNoneOf(message, "${paymentPot}"#foreach($m in $match), "${m}"#end)) {
+            return;
+        }
+#end
         ${paymentEntity}Entity payment = Json.parse(message, ${paymentEntity}Entity.class);
         if (payment == null || payment.${paymentPk} == null || payment.${paymentPot} == null) {
             return;

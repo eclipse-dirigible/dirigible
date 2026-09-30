@@ -2969,6 +2969,14 @@ class IntentEngineIT extends IntegrationTest {
                 "a payment corrected below what it already covers should release the excess allocation");
         assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
                 "the release should give back the newest allocations first, through the junction repository");
+        // A derived write of the payment - its allocated roll-up moving because an allocation was
+        // deleted by hand - is not a correction, and re-settling on it put the allocation straight back
+        // (#7557). Only the pot and the match columns are a reason to re-allocate.
+        assertTrue(
+                codeOf("gen/events/settle/AutoSettleOnPaymentUpdated.java").contains(
+                        "if (DerivedWrite.touchedNoneOf(message, \"Amount\", \"Customer\")) {"),
+                "the correction listener must skip a derived write that moved neither the pot nor a match column");
+        assertFalse(onPayment.contains("DerivedWrite"), "a create event is never a derived write");
 
         // A corrected MATCH column (the payment re-filed under another Customer) re-targets the whole
         // allocation: the payment's DAO publishes "-rekeyed" for the move (the match columns are
