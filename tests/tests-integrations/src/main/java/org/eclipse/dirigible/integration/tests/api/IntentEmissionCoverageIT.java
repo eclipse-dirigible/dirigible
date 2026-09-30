@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
@@ -114,6 +115,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String STATEMENT_API = "/services/java/" + PROJECT + "/gen/entrysheet/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
+    /** An HTML comment in a generated view - its prose may name a flag the markup does not use. */
+    private static final Pattern HTML_COMMENT = Pattern.compile("(?s)<!--.*?-->");
+    /** A live reference to the page's {@code mutable} flag (not the word inside "immutable"). */
+    private static final Pattern MUTABLE_REFERENCE = Pattern.compile("\\bmutable\\b");
 
     private static final String INTENT_YAML_ENTITIES = """
             name: emission
@@ -2570,6 +2575,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
         assertTrue(billDocumentPage.contains("case 'DueOn': return this.displayDate(v);"),
                 "headerDisplay() must format the DATE field through the instance date format: " + billDocumentPage);
+        assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
+                "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
+        // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
+        // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
+        // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
+        // Ticket is a Document master with none of the three, on both the power and the my surface.
+        for (String view : List.of("gen/emission/views/Ticket/Ticket-document.html", "gen/emission/views/my/Ticket-document.html")) {
+            String markup = HTML_COMMENT.matcher(contentOf(view))
+                                        .replaceAll("");
+            assertFalse(MUTABLE_REFERENCE.matcher(markup)
+                                         .find(),
+                    "a document page without immutability must not reference the undefined mutable flag: " + view);
+        }
         // A full-row update() PRESERVES the system-owned columns over the payload - and reports the
         // discard when the payload carried a value of its own that is not the stored one (#6937).
         // Silence there made a system writer on the wrong path indistinguishable from a working one:
