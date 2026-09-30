@@ -3140,6 +3140,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the lookup resolves the target's unique field and stores its primary key");
         assertTrue(mapped.contains("no unique Person matches") && mapped.contains("NOT ingested"),
                 "an unresolvable lookup rejects the arrival rather than storing a null relation");
+        // Arrival collections (#7593) change nothing for an arrival that declares none: the record is
+        // still saved alone, outside any unit of work of the handler's own.
+        assertFalse(mapped.contains("UnitOfWork") || mapped.contains("collection"),
+                "an arrival without collections must keep saving the record alone, exactly as before");
 
         // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
         // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A

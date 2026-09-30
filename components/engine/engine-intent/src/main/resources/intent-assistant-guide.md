@@ -3736,6 +3736,53 @@ event fire exactly as for any other write. Do not map the primary key - it is ge
 the arrival's own identifier a `unique: true` field of its own instead (which is also what makes a
 redelivery refuse itself).
 
+#### collections - an array in the envelope becomes child rows
+
+An envelope often carries a **set**: an order with its lines, a request with the several items it
+applies to. Under the name of a `oneToMany` relation of `create:` whose target is a **composition
+child** of it, a `map:` value can be a collection - `from:` names the envelope key holding the array,
+and the collection's own `map:` fills one child row per element:
+
+```yaml
+inbound:
+  - name: orders
+    source: { queue: shop.orders }
+    create: PurchaseOrder
+    map:
+      orderNumber: orderNumber
+      lines:                                   # PurchaseOrder.lines -> PurchaseOrderLine (a composition child)
+        from: lines                            # the envelope key holding a JSON array
+        max: 100                               # optional: more elements reject the arrival
+        map:
+          quantity: qty                        # child field <- element key
+          product:  { lookup: Product, by: sku, from: sku }   # a lookup per element
+      tags:                                    # an array of bare values: "." is the element itself
+        from: tags
+        map: { label: "." }
+```
+
+- **Everything is resolved first, and nothing is written until then.** Any of these rejects the
+  **whole** arrival exactly as a failed lookup does (an ERROR log naming the element's index and
+  nothing stored; 400 on a webhook; the drop file moves to `failed`): the key is not an array, an
+  element is null or of the wrong shape (an object for named element keys, a value for `"."`), more
+  than `max` elements, an element without the key a lookup reads, or a lookup that matches no single
+  row.
+- **Then the record and all its children are saved in one unit of work.** The create events are
+  dispatched after it commits, so a process the record's `onCreate` starts already sees every child -
+  and one arrival starts **one** process instance, however many elements it carried. A drop file
+  saves one unit per record. The change history and document numbering stay outside the unit, as
+  they do for every unit of work.
+- An absent or empty array means no children. Elements are kept **as sent**: the construct takes no
+  position on duplicates - declare a child `unique:` and a duplicate refuses the arrival at save, like
+  any other constraint.
+- The element map fills the child's fields and to-one relations (a lookup included; a lookup's
+  `from: "."` reads the element itself). It may not name the child's primary key (generated on insert)
+  or its back-reference to the record (filled from the saved record), and it may not mix `"."` with
+  named element keys. `max` is a whole number from 1 to 10000.
+- Not supported: a nested collection (an array inside an element), a child that is not a composition
+  child of `create:` (an arrival creates only rows it owns), a child declared in another model, and
+  two collections filling the same child relation.
+
 ### outbound - the app raises an event for another system
 
 **Use when:** something **outside the app must be told** that a record happened, and it listens on a
@@ -4210,6 +4257,7 @@ or a seeded name.
 - "append a log / protocol / activity row every time a step completes (or a status is set)" -> **generates** with `event: { onStepCompleted: { process, step }, mode: append }`
 - "let an external system create X" -> **inbound** (`path` for HTTP, `source: { queue | topic }` for a message, `source: { folder, cron }` for dropped files)
 - "the arriving payload is an envelope, not the record" -> **inbound `map:`** (+ `lookup:` to turn a business key into a relation, and `accept:` to ignore the message types this app does not understand)
+- "the arriving payload carries an array - an order with its lines, a request with its items - and each element is a child row" -> **an inbound `map:` collection** (`<oneToMany>: { from, max?, map }` onto a composition child; one arrival = one record + its children in one transaction = one process instance)
 - "keep a running count of children on the parent" -> **rollups**
 - "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
 - "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**

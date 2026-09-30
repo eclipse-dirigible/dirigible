@@ -3,7 +3,9 @@
 A minimal intent project exercising **mapping on arrival**
 ([eclipse-dirigible/dirigible#6769](https://github.com/eclipse-dirigible/dirigible/issues/6769)):
 `accept:` (a type/version gate) and `map:` (an envelope-to-entity projection) on an `inbound` entry,
-including the `lookup:` that turns a **business key into a relation**.
+including the `lookup:` that turns a **business key into a relation** - and **arrival collections**
+([eclipse-dirigible/dirigible#7593](https://github.com/eclipse-dirigible/dirigible/issues/7593)), which
+turn an **array in the envelope into composition child rows**.
 
 This folder is both the **manual-testing project** (import it into a workspace and follow "Run it"
 below) and the fixture of **`IntentInboundMappingSampleIT`**, which drives the very same journey
@@ -38,6 +40,30 @@ The same `accept:`/`map:` block appears on both arrivals - a queue and a webhook
 describes the payload, not the transport. `AssignmentRole` is a `function: Setting` nomenclature, so
 its generated repository lives under the shared `Settings` perspective: the lookup's import resolves
 through it, which is exactly the resolution a settings-unaware one would get wrong.
+
+### Arrays become child rows
+
+An order arrives with its lines and its tags:
+
+```json
+{ "orderNumber": "PO-1",
+  "lines": [ { "sku": "A", "qty": 2 }, { "sku": "B", "qty": 1 } ],
+  "tags":  [ "rush", "gift" ] }
+```
+
+`lines` and `tags` are one-to-many relations of `PurchaseOrder` whose targets are composition
+children, so each takes a **collection**: `from:` names the array, and the collection's own `map:` fills
+one child row per element. A line's `sku` is a lookup like any other, and `tags` maps the bare element
+itself (`label: "."`). The arrival stores **one** `PurchaseOrder`, two `PurchaseOrderLine`s and two
+`PurchaseOrderTag`s.
+
+- **All or nothing.** Every element is resolved before anything is written. An unknown sku, a `null`
+  tag or a sixth line (the declared `max: 5`) rejects the whole order - the queue logs an ERROR naming
+  the element, the webhook answers **400** - and nothing of it is stored.
+- **One transaction, then one process.** The order and its lines are saved together, and the create
+  event is dispatched after the commit. The `CountLines` process it starts writes the number of lines it
+  found into `LinesSeen` (`custom/CountLinesTask.java`): **2** for the order above, which is the proof
+  that the lines were there before the process started.
 
 ## Run it
 
@@ -85,10 +111,30 @@ through it, which is exactly the resolution a settings-unaware one would get wro
    Mark the destination `global:` when the queue is a contract with another deployment (the platform's
    external-contract marker; the name is passed to the broker verbatim).
 
+8. The orders arrive the same two ways - posted to the webhook, or published by
+   `custom/OrderSender.java`:
+
+   ```bash
+   curl -u admin:admin -H 'Content-Type: application/json' \
+     -d '{"orderNumber":"PO-1","lines":[{"sku":"A","qty":2},{"sku":"B","qty":1}],"tags":["rush","gift"]}' \
+     http://localhost:8080/services/java/sample-intent-inbound-mapping/gen/events/assignments/OrderHookWebhook/orders
+
+   curl -u admin:admin -H 'Content-Type: application/json' \
+     -d '{"orderNumber":"PO-2","lines":[{"sku":"A","qty":1}],"tags":["gift"]}' \
+     http://localhost:8080/services/java/sample-intent-inbound-mapping/custom/OrderSender/send
+   ```
+
+   The seeds import two products, `A` and `B`. Change a sku to one that does not exist and the webhook
+   answers 400 and the queue logs the rejection under `gen.events.assignments.OrdersConsumer`; either
+   way no order, line or tag is stored. A moment after an accepted order, its `LinesSeen` shows how many
+   lines the `CountLines` process counted.
+
 Read the records back at:
 
 ```
 http://localhost:8080/services/java/sample-intent-inbound-mapping/gen/assignments/api/tenantuserassignment/TenantUserAssignmentController
+http://localhost:8080/services/java/sample-intent-inbound-mapping/gen/assignments/api/purchaseorder/PurchaseOrderController
+http://localhost:8080/services/java/sample-intent-inbound-mapping/gen/assignments/api/purchaseorder/PurchaseOrderLineController?PurchaseOrder=<id>
 ```
 
 or through the generated UI at
