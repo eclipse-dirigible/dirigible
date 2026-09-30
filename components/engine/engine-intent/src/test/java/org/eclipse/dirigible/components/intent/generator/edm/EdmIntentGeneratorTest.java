@@ -840,12 +840,13 @@ class EdmIntentGeneratorTest {
     }
 
     /**
-     * A {@code transitions:} button claims the column (#7553): the button carries its target seed id
-     * itself, so a plain PUT of that same value is a bypass of the button's own {@code from:}/{@code
-     * when:} guards, not a parallel legitimate write. The button's own write (the generated
-     * {@code Transition} controller) reaches the repository through the targeted {@code updateProperty}
-     * primitive, never through the entity controller this guard sits on, so refusing it here costs the
-     * button nothing.
+     * A {@code transitions:} button claims the VALUES it sets, not the column (#7553): the button
+     * carries its target seed id itself, so a plain PUT of that same value is a bypass of the button's
+     * own {@code from:}/{@code when:} guards, not a parallel legitimate write - but a Void button says
+     * nothing about who moves the record to any other status, so those stay ordinary edits. The
+     * button's own write (the generated {@code Transition} controller) reaches the repository through
+     * the targeted {@code updateProperty} primitive, never through the entity controller this guard
+     * sits on, so refusing it here costs the button nothing.
      */
     @Test
     void aTransitionTargetedStatusIsEmittedAsWorkflowOwned() {
@@ -863,12 +864,50 @@ class EdmIntentGeneratorTest {
                     relations:
                       - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                 transitions:
-                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 2, label: Void }
+                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 4, label: Void }
+                  - { name: reject, forEntity: JournalEntry, from: [1], setStatus: 3, label: Reject }
+                  - { name: rejectAgain, forEntity: JournalEntry, from: [2], setStatus: 3, label: Reject }
                 """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("workflowStatusProperty"));
         assertEquals("1", entry.get("workflowStatusInitial"));
+        // Ascending and de-duplicated: the controllers split it on ','.
+        assertEquals("3,4", entry.get("workflowStatusValues"));
+    }
+
+    /**
+     * A process or roll-up that owns the whole column wins over a button's narrower claim: no
+     * {@code workflowStatusValues}, so every direct status change is refused.
+     */
+    @Test
+    void aButtonOnAFlowOwnedStatusLeavesTheWholeColumnRefused() {
+        String yaml = """
+                name: vacations
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: VacationRequest }
+                    steps:
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
+                transitions:
+                  - { name: withdraw, forEntity: VacationRequest, from: [1], setStatus: 4, label: Withdraw }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vacations");
+        Map<String, Object> request = entityByName(entities(model), "VacationRequest");
+        assertEquals("Status", request.get("workflowStatusProperty"));
+        assertNull(request.get("workflowStatusValues"));
     }
 
     /**
@@ -909,6 +948,7 @@ class EdmIntentGeneratorTest {
         Map<String, Object> invoice = entityByName(entities(model), "Invoice");
         assertEquals("Status", invoice.get("workflowStatusProperty"));
         assertEquals("1", invoice.get("workflowStatusInitial"));
+        assertNull(invoice.get("workflowStatusValues"));
     }
 
     @Test

@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
@@ -2785,10 +2786,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static void putWorkflowStatus(Map<String, Object> entityMap, EntityIntent entity, IntentModel model,
             Map<String, List<String>> rollupOwnedStatuses) {
         RelationIntent status = entityStatusRelation(entity);
-        if (status == null || entity.getName() == null || !writesStatus(entity, status, model, rollupOwnedStatuses)) {
+        if (status == null || entity.getName() == null) {
+            return;
+        }
+        boolean ownsColumn = writesStatus(entity, status, model, rollupOwnedStatuses);
+        Set<Integer> buttonTargets = transitionTargets(entity, model);
+        if (!ownsColumn && buttonTargets.isEmpty()) {
             return;
         }
         entityMap.put("workflowStatusProperty", IntentNaming.pascalCase(status.getName()));
+        if (!ownsColumn) {
+            // Only buttons move it: what they own is the VALUES they set, not the column. A move to any
+            // other status stays an ordinary edit - the model declares no other writer for it, so refusing
+            // it would leave that status reachable from nowhere.
+            entityMap.put("workflowStatusValues", buttonTargets.stream()
+                                                               .map(String::valueOf)
+                                                               .collect(Collectors.joining(",")));
+        }
         if (status.getInit() != null && status.getInit()
                                               .matches("-?\\d+")) {
             // The one value a create may still carry: the status the record starts in. Anything else is
@@ -2799,11 +2813,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Whether a declared system writer is what moves this entity's status: a {@code setRelationField}
-     * step of a process THIS entity triggers, a capacity roll-up's {@code status:} (the entity is the
-     * roll-up's LOCAL parent), or a {@code transitions:} button targeting this entity (#7553 - a button
-     * carries its target seed id itself, so a plain PUT of that same value is a bypass of the button's
-     * own guards, not a parallel legitimate write). The state machine, {@code lifecycle:}, is
+     * Whether a declared system writer owns this entity's WHOLE status column: a
+     * {@code setRelationField} step of a process THIS entity triggers, or a capacity roll-up's
+     * {@code status:} (the entity is the roll-up's LOCAL parent). A {@code transitions:} button owns
+     * only the values it sets ({@link #transitionTargets}). The state machine, {@code lifecycle:}, is
      * unaffected either way - it is enforced in the repository, which every one of these writers still
      * reaches.
      *
@@ -2812,7 +2825,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * @param model the whole intent
      * @param rollupOwnedStatuses the roll-up-displaced status properties per LOCAL parent entity name
      *        ({@link #displacedStatusProperties(IntentModel, Map)})
-     * @return true when the status is a system writer's to write
+     * @return true when the whole status column is a system writer's to write
      */
     private static boolean writesStatus(EntityIntent entity, RelationIntent status, IntentModel model,
             Map<String, List<String>> rollupOwnedStatuses) {
@@ -2831,17 +2844,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
-        if (rollupOwnedStatuses.getOrDefault(entity.getName(), List.of())
-                               .contains(statusProperty)) {
-            return true;
-        }
+        return rollupOwnedStatuses.getOrDefault(entity.getName(), List.of())
+                                  .contains(statusProperty);
+    }
+
+    /**
+     * The status values a {@code transitions:} button targeting this entity sets (#7553). A button
+     * carries its target seed id itself, so a plain PUT of that same value is a bypass of the button's
+     * own {@code from:}/{@code when:} guards, not a parallel legitimate write. A button owns only the
+     * value it sets: a Cancel button says nothing about who moves the record to POSTED.
+     *
+     * @param entity the authored entity
+     * @param model the whole intent
+     * @return the target seed ids, ascending; empty when no button targets the entity
+     */
+    private static Set<Integer> transitionTargets(EntityIntent entity, IntentModel model) {
+        Set<Integer> targets = new TreeSet<>();
         for (TransitionIntent transition : model.getTransitions()) {
             if (entity.getName()
-                      .equals(transition.getForEntity())) {
-                return true;
+                      .equals(transition.getForEntity())
+                    && transition.getSetStatus() != null) {
+                targets.add(transition.getSetStatus());
             }
         }
-        return false;
+        return targets;
     }
 
     /**

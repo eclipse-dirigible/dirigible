@@ -4801,6 +4801,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // transitions: a button owns the status it SETS (#7553) - a plain PUT of CancelEntry's target
+        // bypasses the button's from/when guards and is refused. Any other status is not the button's,
+        // so the itemsMin refusal below is still the guard that answers a move to POSTED.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":3}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryController/" + entryId)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("changes through the workflow")));
+
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
