@@ -26,20 +26,23 @@ export function multilingualFlow(manifest, entity) {
 // Set the language key and reload, waiting for the list's own data GET (the paged getAll on the
 // entity's controller) so the assertion starts once the rows are on their way, and answering what
 // that read asked for and got back - which is what tells a slow render from a missing translation.
+// The wait is registered only once the reload has committed: registered before it, it also matched
+// a list GET still in flight from the document the reload replaced, whose body is gone (#7584). The
+// new document issues its own GET only after its scripts have loaded, so it cannot slip past.
 async function reloadIn(page, manifest, entity, language) {
   await page.evaluate(([key, lang]) => localStorage.setItem(key, lang), [LANGUAGE_KEY, language]);
   const controllerPath = manifest.restBase + entity.api;
-  const listRead = page.waitForResponse(
-    (response) => response.request().method() === 'GET' && new URL(response.url()).pathname === controllerPath,
+  await page.reload({ waitUntil: 'commit' });
+  const response = await page.waitForResponse(
+    (candidate) => candidate.request().method() === 'GET' && new URL(candidate.url()).pathname === controllerPath,
     { timeout: OVERLAY_TIMEOUT },
   );
-  await page.reload();
-  const response = await listRead;
   return {
     language,
     acceptLanguage: await response.request().headerValue('accept-language'),
     status: response.status(),
-    body: await response.text(),
+    // Only the diagnostic reads the body, so a body the browser no longer holds must not fail the flow.
+    body: await response.text().catch(() => null),
   };
 }
 
@@ -52,9 +55,14 @@ async function expectRowShowing(page, text, read) {
     throw new Error(
       `no list row shows '${text}' after reloading in '${read.language}': the list GET sent Accept-Language ` +
         `${read.acceptLanguage ?? '(none)'} and answered ${read.status}, ` +
-        `${read.body.includes(text) ? 'WITH' : 'WITHOUT'} '${text}' in its body; the table's first row reads ` +
+        `${describeBody(read.body, text)}; the table's first row reads ` +
         `${firstRow ? `'${firstRow}'` : '(no rows)'}`,
       { cause: error },
     );
   }
+}
+
+function describeBody(body, text) {
+  if (body === null) return 'its body unavailable';
+  return `${body.includes(text) ? 'WITH' : 'WITHOUT'} '${text}' in its body`;
 }
