@@ -16,6 +16,13 @@
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## A field shown as a value, not a control (the read-only cards): its display text through the
+## shared basePage.fieldDisplay - option label(s), instance date format, a float's own pattern, the
+## translated Yes/No (a checkbox's options are its two states) - and the row shown only when that
+## text is non-empty and the caller may see the field (issue #7522).
+#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")options['${property.name}']#{else}null#end#end
+#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '$!{property.widgetType}', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
+#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#valueDisplay($property) !== ''"#end
 <div x-data="${name}MyDocumentPage" class="vbox w-full">
 
   <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
@@ -153,8 +160,7 @@
     <!-- ===== Frozen header summary (issue #7501): once immutableWhen fires, the tall edit grid
          above (hidden by x-show="mutable" on it) is replaced by this concise Label:Value card - no
          input chrome, no blank rows, two columns. Same property set the edit grid renders; each
-         value is formatted by headerDisplay() (my-document-page.js.template) - the same widget-aware
-         formatting displayItem gives a line cell - so a DROPDOWN/MULTISELECT shows its label(s), a
+         value is formatted by the shared basePage.fieldDisplay() (#valueDisplay, issue #7522) - so a DROPDOWN/MULTISELECT shows its label(s), a
          date/number its instance format, a checkbox Yes/No, and visibility is gated on that formatted
          output rather than the raw form value (an empty MULTISELECT is an array, which a raw !== ''
          test would not catch). -->
@@ -164,9 +170,9 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{personalProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
 #if($property.widgetLabel)#set($frozenLabel = $property.widgetLabelJs)#else#set($frozenLabel = $property.name)#end
-          <div class="vbox" x-show="#if($property.roleRead)canSee('${property.name}') && #end headerDisplay('${property.name}') !== ''">
+          <div class="vbox" #valueGate($property)>
             <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${frozenLabel}')"></span>
-            <span class="text-sm wrap-anywhere#if($property.widgetType == "TEXTAREA") whitespace-pre-wrap#end" x-text="headerDisplay('${property.name}')"></span>
+            <span class="text-sm wrap-anywhere#if($property.widgetType == "TEXTAREA") whitespace-pre-wrap#end" x-text="#valueDisplay($property)"></span>
           </div>
 #end
 #end

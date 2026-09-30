@@ -568,6 +568,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # generated pages. Deliberately on the entity that also carries `sensitive:` and
                   # `history:`, where the three could collide.
                   - { name: bonus, type: decimal, visibleTo: [Payroll] }
+                  # #7522: read-only fields render in the Details card as VALUES - a date through the
+                  # instance format, a checkbox as its translated state - and a role-scoped one only
+                  # for a caller the server serves it to, on the power and the personal form alike.
+                  - { name: reviewedOn, type: date, readOnly: true, visibleTo: [Payroll] }
+                  - { name: approved, type: boolean, readOnly: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -2581,16 +2586,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Frozen header card (#7501): Bill is the fixture's only MANAGE_DOCUMENT master carrying
         // immutableWhen (function: Document + Status == 2), power-only (its Person relation carries
         // no personal: true, so it has no my-surface). The card must render (not merely disable the
-        // edit form) and format each value through headerDisplay() rather than the raw form value -
-        // a DATE field (dueOn) is the one the review's "raw model values" finding named.
+        // edit form) and format each value through the shared fieldDisplay() rather than the raw form
+        // value - a DATE field (dueOn) is the one the review's "raw model values" finding named.
         String billDocumentView = contentOf("gen/emission/views/Bill/Bill-document.html");
         assertTrue(billDocumentView.contains("x-show=\"!mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must render the frozen header card, not only disable the edit form");
-        assertTrue(billDocumentView.contains("headerDisplay('DueOn')"),
-                "the frozen header card must read a DATE field through headerDisplay(), not print the raw form value");
-        String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
-        assertTrue(billDocumentPage.contains("case 'DueOn': return this.displayDate(v);"),
-                "headerDisplay() must format the DATE field through the instance date format: " + billDocumentPage);
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.DueOn, 'DATE', '', null)\""),
+                "the frozen header card must read a DATE field through fieldDisplay(), not print the raw form value: " + billDocumentView);
+        // ...and so must the Details card beside it, the one the read-only fields live in (#7522):
+        // both cards share the helper, neither prints a raw form value.
+        assertTrue(billDocumentView.contains("fieldDisplay(form.SendOutcome, "),
+                "the Details card must read a read-only field through fieldDisplay(): " + billDocumentView);
+        assertFalse(billDocumentView.contains("x-text=\"form."), "no read-only card may print a raw form value: " + billDocumentView);
         assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
@@ -2913,6 +2920,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal list must drop the columns its own controller withholds");
         assertFalse(contentOf("gen/emission/views/Person/Person-form.html").contains("canSee("),
                 "an entity with no role-scoped field must carry no visibility gate at all");
+        // The read-only Details card (#7522): a role-scoped read-only field is gated like its input
+        // would be, and every value - the date, the checkbox, the audit timestamp - is formatted by
+        // the shared fieldDisplay(), with the row hidden on the FORMATTED output. The personal form
+        // renders the same card over its own (audit-free) property set.
+        String claimMyFormView = contentOf("gen/emission/views/my/Claim-form.html");
+        for (String form : List.of(claimForm, claimMyFormView)) {
+            assertTrue(form.contains("x-show=\"canSee('ReviewedOn') && fieldDisplay(form.ReviewedOn, 'DATE', '', null) !== ''\""),
+                    "a role-scoped read-only field must be gated on canSee and shown through fieldDisplay(): " + form);
+            assertTrue(
+                    form.contains("x-text=\"fieldDisplay(form.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
+                            && form.contains(".defaults.yes', 'Yes') }, { value: false, text: T('"),
+                    "a read-only checkbox must render its translated state, not the literal true/false: " + form);
+            assertFalse(form.contains("x-text=\"form."), "a read-only card must not print a raw form value: " + form);
+        }
+        assertTrue(claimForm.contains("x-text=\"fieldDisplay(form.CreatedAt, 'DATETIME-LOCAL', '', null)\""),
+                "an audit timestamp must render through the instance format, not as a raw ISO string: " + claimForm);
 
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),

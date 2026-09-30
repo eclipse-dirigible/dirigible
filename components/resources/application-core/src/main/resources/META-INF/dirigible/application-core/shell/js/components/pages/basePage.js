@@ -291,6 +291,42 @@ function basePage() {
     },
 
     /**
+     * Display text of a field shown as a value rather than a control - the read-only Details card and
+     * the frozen header card (issue #7522). The same formatting a line cell gets: a DROPDOWN resolves
+     * its option label, a MULTISELECT (an array or a stored "1,3" key list) its labels, a date goes
+     * through the instance date format, a float through its own pattern (passed only for a float, so
+     * an integer is not given decimals), a checkbox the label of its state - its options are the two
+     * states, `{ value: true|false, text }`, so the page supplies the translated Yes/No (English when
+     * it passes none). Empty - an empty MULTISELECT included - is '', so a card hides the row on THIS
+     * output rather than on the raw value.
+     */
+    fieldDisplay(value, widget, pattern, options) {
+      if (value === null || value === undefined || value === '') return '';
+      const label = (key) => {
+        const opt = (options || []).find((o) => String(o.value) === String(key));
+        return opt ? opt.text : String(key);
+      };
+      switch (widget) {
+        case 'DROPDOWN':
+        case 'DOCUMENT_STATUS':
+          return label(value);
+        case 'MULTISELECT':
+          return (Array.isArray(value) ? value : String(value).split(','))
+            .map((key) => String(key).trim())
+            .filter((key) => key !== '')
+            .map(label)
+            .join(', ');
+        case 'DATE':
+        case 'DATETIME-LOCAL':
+          return window.HarmoniaFormat.date(value);
+        case 'CHECKBOX':
+          return options ? label(Boolean(value)) : value ? 'Yes' : 'No';
+        default:
+          return pattern ? window.HarmoniaFormat.number(value, pattern, '') : String(value);
+      }
+    },
+
+    /**
      * Ask the entity's controller which fields it withholds from this caller. Failure leaves every
      * field visible: the values are stripped server-side either way, so the worst case is an empty
      * column the user can see is empty - never a field silently hidden from someone entitled to it.

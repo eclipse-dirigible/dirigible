@@ -11,6 +11,13 @@
 ## an unrestricted property. The server ignoring the field on writes stays the authoritative half;
 ## this only keeps an input that could never be saved off the form.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## A field shown as a value, not a control (the read-only cards): its display text through the
+## shared basePage.fieldDisplay - option label(s), instance date format, a float's own pattern, the
+## translated Yes/No (a checkbox's options are its two states) - and the row shown only when that
+## text is non-empty and the caller may see the field (issue #7522).
+#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
+#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '$!{property.widgetType}', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
+#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#valueDisplay($property) !== ''"#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")
@@ -541,15 +548,9 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
-            <div class="vbox" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+            <div class="vbox" #valueGate($property)>
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
-#if($property.widgetType == "DROPDOWN")
-              <span class="text-sm wrap-anywhere" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
-#elseif($property.widgetType == "MULTISELECT")
-              <span class="text-sm wrap-anywhere" x-text="(Array.isArray(form.${property.name}) ? form.${property.name} : String(form.${property.name} || '').split(',')).filter(v => v !== '').map(v => (options${property.name}.find(o => String(o.value) === String(v).trim()) || {}).text || v).join(', ')"></span>
-#else
-              <span class="text-sm wrap-anywhere" x-text="form.${property.name}"></span>
-#end
+              <span class="text-sm wrap-anywhere" x-text="#valueDisplay($property)"></span>
             </div>
 #end
 #end

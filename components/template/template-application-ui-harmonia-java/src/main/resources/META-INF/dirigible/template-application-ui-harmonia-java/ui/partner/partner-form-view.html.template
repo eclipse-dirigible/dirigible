@@ -20,6 +20,13 @@
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
 #macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## A field shown as a value, not a control (the read-only cards): its display text through the
+## shared basePage.fieldDisplay - option label(s), instance date format, a float's own pattern, the
+## translated Yes/No (a checkbox's options are its two states) - and the row shown only when that
+## text is non-empty and the caller may see the field (issue #7522).
+#macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")options['${property.name}']#{else}null#end#end
+#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '$!{property.widgetType}', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
+#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#valueDisplay($property) !== ''"#end
 <div x-data="${name}PartnerFormPage" class="vbox w-full">
 
   <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
@@ -167,9 +174,9 @@
       <div x-h-card-content class="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-2">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE"))
-        <div class="vbox min-w-0 wrap-anywhere" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
+        <div class="vbox min-w-0 wrap-anywhere" #valueGate($property)>
           <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>
-          <span class="text-sm" x-text="form.${property.name}"></span>
+          <span class="text-sm" x-text="#valueDisplay($property)"></span>
         </div>
 #end
 #end
