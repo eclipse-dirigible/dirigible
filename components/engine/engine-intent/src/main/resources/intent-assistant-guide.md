@@ -520,6 +520,21 @@ field may declare:
   writers are unaffected either way - they go through the repository, not the controller, so
   auto-settlement, roll-ups, workflow delegates and the void transition keep writing to children of
   a locked master.
+- `visibleWhen: <condition>` (on a **field**, or entity-level on a **composition child**) -
+  **show it only from a status on**. UI-only presentation: the generated form / document views leave
+  the field (or the child's detail panel on its master's page) out until the condition holds, so a
+  DRAFT invoice shows no empty payments, copies or reminders panel. It hides, never deletes: the
+  value is still served and stored, and a master that regresses to DRAFT keeps its child rows - only
+  the panel hides; the child's own write rules (`locksWithMaster`, `forbidWhen`) are unchanged. The
+  condition uses the `requiredWhen` grammar - `<Property> ==|!= <literal>`, a list = AND - with
+  statuses by seed name or id. On a field it reads the record's own fields and to-one relations; on
+  a child it reads the **master** and is written in the master's terms:
+  `- name: SalesInvoiceCustomerPayment` / `visibleWhen: "Status != DRAFT"`. A status name has no
+  ordering, so "from ISSUED on" is `Status != DRAFT` (plus `Status != <each earlier status>`), not
+  `Status >= ISSUED`. Refused on a `required` field (the create form would demand a value it hides -
+  use a status-gated `checks: requiredWhen`), on a non-child entity, and on a document's line items
+  (they are the document, not a panel). Composes with `visibleTo:` (both gates apply). List columns
+  are not gated - a column cannot hide per row.
 - `hierarchy: <RelationName>` (entity-level) - **tree entities**: names the entity's own optional
   to-one SELF-relation forming the tree edge (`hierarchy: Parent` with
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as an

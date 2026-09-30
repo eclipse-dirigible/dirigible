@@ -269,7 +269,10 @@ document.addEventListener('alpine:init', () => {
         restrictedFields: #if($child.restrictedFields)true#{else}false#end,
         // A see-only child (its composition edge declares personalReadOnly): the panel shows its rows
         // but never opens a create - the child's MyController refuses the write with 403.
-        readOnly: #if($child.readOnly)true#{else}false#end },
+        readOnly: #if($child.readOnly)true#{else}false#end,
+        // A status-gated panel (intent `visibleWhen:`, #7502): shown once its terms hold against the
+        // record this page holds (basePage.visibleWhenHolds).
+        visibleWhen: #if($child.visibleWhen)${child.visibleWhen}#{else}null#end },
 #end
     ],
 

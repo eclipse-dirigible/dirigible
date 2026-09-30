@@ -291,6 +291,23 @@ function basePage() {
     },
 
     /**
+     * Whether a status-gated panel shows (intent `visibleWhen:` on a composition child, dirigible
+     * #7502): every term - `{ property, equal, value }`, ANDed - holds against the master record the
+     * panel is rendered under. Values compare as text, so a numeric status FK matches its seed id
+     * whether the record carries it as a number or a string. A panel without terms always shows; one
+     * whose master is not loaded yet stays hidden rather than flashing up and disappearing.
+     */
+    visibleWhenHolds(terms, record) {
+      if (!Array.isArray(terms) || !terms.length) return true;
+      if (!record || typeof record !== 'object') return false;
+      return terms.every((t) => {
+        const cur = record[t.property];
+        const eq = String(cur === undefined || cur === null ? '' : cur) === String(t.value);
+        return t.equal ? eq : !eq;
+      });
+    },
+
+    /**
      * Ask the entity's controller which fields it withholds from this caller. Failure leaves every
      * field visible: the values are stripped server-side either way, so the worst case is an empty
      * column the user can see is empty - never a field silently hidden from someone entitled to it.

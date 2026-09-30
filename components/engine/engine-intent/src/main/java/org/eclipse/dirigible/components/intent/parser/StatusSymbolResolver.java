@@ -216,6 +216,25 @@ final class StatusSymbolResolver {
                     rewriteWhen(check, statusRelation, status, subject + " when");
                 }
             }
+            // visibleWhen (#7502). On a field it is about the record's own status ("show the paid date
+            // once PAID"), so it resolves like every other record-scoped guard. On the entity it gates the
+            // child's panel on its MASTER's page and is written in the master's terms, so its names resolve
+            // against the composition master's nomenclature - resolved against the child's own, a
+            // `Status != DRAFT` would name a status of an entity that usually has none.
+            for (Object fieldNode : asList(entity.get("fields"))) {
+                Map<?, ?> field = asMap(fieldNode);
+                if (field != null && field.get("visibleWhen") != null) {
+                    rewriteWhen(field, "visibleWhen", statusRelation, status,
+                            "entity [" + entityName + "] field [" + text(field, "name") + "] visibleWhen");
+                }
+            }
+            if (entity.get("visibleWhen") != null) {
+                String master = compositionMasterOf(entity);
+                if (master != null) {
+                    rewriteWhen(entity, "visibleWhen", statusRelationName(master), statusOf(master),
+                            "entity [" + entityName + "] visibleWhen");
+                }
+            }
         }
     }
 
@@ -670,9 +689,14 @@ final class StatusSymbolResolver {
      * seed id while the elements guarding other properties (a string trace field such as a lookup's
      * {@code outcome:}) pass through untouched.
      */
-    @SuppressWarnings("unchecked")
     private void rewriteWhen(Map<?, ?> owner, String statusRelation, Target target, String subject) {
-        Object value = owner.get("when");
+        rewriteWhen(owner, "when", statusRelation, target, subject);
+    }
+
+    /** {@link #rewriteWhen(Map, String, Target, String)} over a condition held under another key. */
+    @SuppressWarnings("unchecked")
+    private void rewriteWhen(Map<?, ?> owner, String key, String statusRelation, Target target, String subject) {
+        Object value = owner.get(key);
         if (value instanceof List<?> list) {
             List<Object> mutable = (List<Object>) list;
             for (int i = 0; i < mutable.size(); i++) {
@@ -681,8 +705,25 @@ final class StatusSymbolResolver {
                 }
             }
         } else if (value instanceof String expression) {
-            put(owner, "when", rewriteExpression(expression, statusRelation, target, subject));
+            put(owner, key, rewriteExpression(expression, statusRelation, target, subject));
         }
+    }
+
+    /**
+     * The composition master of a raw entity node: the target of its first local
+     * {@code composition: true} to-one, as {@code IntentEntities.compositionParents} reads it off the
+     * typed model; {@code null} for an entity that is nobody's child.
+     */
+    private static String compositionMasterOf(Map<?, ?> entity) {
+        for (Object node : asList(entity.get("relations"))) {
+            Map<?, ?> relation = asMap(node);
+            String kind = relation == null ? null : text(relation, "kind");
+            if (("manyToOne".equals(kind) || "oneToOne".equals(kind)) && Boolean.TRUE.equals(relation.get("composition"))
+                    && text(relation, "to") != null) {
+                return text(relation, "to");
+            }
+        }
+        return null;
     }
 
     /**

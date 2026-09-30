@@ -241,7 +241,7 @@
 
         <!-- One detail panel per registered detail; re-keyed on selection so it reloads. -->
         <template x-for="d in detailDefs" :key="d.entity + ':' + selectedId">
-          <div x-data="detailPanel(d, selectedId)" x-h-card>
+          <div x-data="detailPanel(d, selectedId)" x-show="visibleWhenHolds(d.visibleWhen, selected)" x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title x-text="d.label"></h3>
             </div>

@@ -15,7 +15,10 @@
 ## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
-#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## Status-gated field (intent `visibleWhen:`, #7502): absent until the condition holds against the
+## record the page shows (visibleWhenJs, rendered by ModelParameterProcessor). An element holds one
+## x-show, so a field carrying both gates gets them ANDed in it. UI-only - the value is still served.
+#macro(visibleGate $property)#if($property.roleRead && $property.visibleWhenJs) x-show="canSee('${property.name}') && ${property.visibleWhenJs}"#elseif($property.roleRead) x-show="canSee('${property.name}')"#elseif($property.visibleWhenJs) x-show="${property.visibleWhenJs}"#end#end
 <div x-data="${name}PartnerDocumentPage" class="vbox w-full">
 
   <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
@@ -161,7 +164,7 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{partnerProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
 #if($property.widgetLabel)#set($frozenLabel = $property.widgetLabelJs)#else#set($frozenLabel = $property.name)#end
-          <div class="vbox" x-show="#if($property.roleRead)canSee('${property.name}') && #end headerDisplay('${property.name}') !== ''">
+          <div class="vbox" x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end headerDisplay('${property.name}') !== ''">
             <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${frozenLabel}')"></span>
             <span class="text-sm wrap-anywhere#if($property.widgetType == "TEXTAREA") whitespace-pre-wrap#end" x-text="headerDisplay('${property.name}')"></span>
           </div>

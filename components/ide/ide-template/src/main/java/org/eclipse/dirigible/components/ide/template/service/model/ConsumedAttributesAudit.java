@@ -98,7 +98,7 @@ public class ConsumedAttributesAudit {
             "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty", "relationshipPartner", "relationshipPersonal",
             "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity", "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity",
             "widgetLength", "widgetOptionsEntityPerspectiveName", "widgetOptionsFilterBy", "widgetOptionsFilterValue",
-            "widgetOptionsFilterValueJs");
+            "widgetOptionsFilterValueJs", "visibleWhen");
 
     /**
      * Attributes the entity editor owns: it keeps them in the model for its own authoring surface

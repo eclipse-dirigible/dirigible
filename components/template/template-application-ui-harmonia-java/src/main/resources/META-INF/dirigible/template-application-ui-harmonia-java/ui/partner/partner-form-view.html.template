@@ -19,7 +19,10 @@
 ## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
 ## unrestricted property. Owning the record (or being the partner it belongs to) does not grant a
 ## role, so this surface hides exactly what its own controller strips from the wire.
-#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## Status-gated field (intent `visibleWhen:`, #7502): absent until the condition holds against the
+## record the page shows (visibleWhenJs, rendered by ModelParameterProcessor). An element holds one
+## x-show, so a field carrying both gates gets them ANDed in it. UI-only - the value is still served.
+#macro(visibleGate $property)#if($property.roleRead && $property.visibleWhenJs) x-show="canSee('${property.name}') && ${property.visibleWhenJs}"#elseif($property.roleRead) x-show="canSee('${property.name}')"#elseif($property.visibleWhenJs) x-show="${property.visibleWhenJs}"#end#end
 <div x-data="${name}PartnerFormPage" class="vbox w-full">
 
   <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
@@ -167,7 +170,7 @@
       <div x-h-card-content class="grid grid-cols-1 lg:grid-cols-2 gap-x-4 gap-y-2">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE"))
-        <div class="vbox min-w-0 wrap-anywhere" x-show="form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
+        <div class="vbox min-w-0 wrap-anywhere" x-show="#if($property.visibleWhenJs)${property.visibleWhenJs} &amp;&amp; #{end}form.${property.name} != null &amp;&amp; form.${property.name} !== ''">
           <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>
           <span class="text-sm" x-text="form.${property.name}"></span>
         </div>
@@ -182,7 +185,7 @@
     <template x-if="mode === 'edit'">
       <div class="vbox gap-4" style="max-width: 900px">
         <template x-for="child in children" :key="child.name">
-          <div x-h-card>
+          <div x-h-card x-show="visibleWhenHolds(child.visibleWhen, form)">
             <div x-h-card-header class="hbox items-center">
               <span x-h-card-title x-text="child.label"></span>
               <div class="flex-1"></div>

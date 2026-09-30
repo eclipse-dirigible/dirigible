@@ -131,6 +131,29 @@ final class ModelParameterProcessor {
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
         }
+        resolveVisibleWhen(entity);
+    }
+
+    /**
+     * Renders the {@code visibleWhen} conditions (dirigible #7502) into the JavaScript the views
+     * evaluate: on a property, the expression its form / document input's {@code x-show} folds in
+     * ({@code visibleWhenJs}); on a composition child, the term list its detail registration hands the
+     * shared panel ({@code visibleWhenTermsJs}), read against the master record. A condition that does
+     * not render leaves no key, so the templates emit no gate.
+     *
+     * @param entity the entity
+     */
+    private static void resolveVisibleWhen(Map<String, Object> entity) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String expression = VisibleWhenLiterals.formExpression(str(property, "visibleWhen"), entity);
+            if (expression != null) {
+                property.put("visibleWhenJs", expression);
+            }
+        }
+        String terms = VisibleWhenLiterals.termsLiteral(str(entity, "visibleWhen"));
+        if (terms != null) {
+            entity.put("visibleWhenTermsJs", terms);
+        }
     }
 
     /**
@@ -1186,6 +1209,11 @@ final class ModelParameterProcessor {
             // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, so the panel
             // must not offer it.
             panel.put("readOnly", readOnlyKey != null && truthy(child, readOnlyKey));
+            // A status-gated panel (intent `visibleWhen:`, #7502): the terms the scoped page reads
+            // against the record it holds before showing the panel. Absent = always shown.
+            if (child.get("visibleWhenTermsJs") != null) {
+                panel.put("visibleWhen", child.get("visibleWhenTermsJs"));
+            }
             panel.put("columns", panelColumns(child, fkProperty));
             children.add(panel);
         }

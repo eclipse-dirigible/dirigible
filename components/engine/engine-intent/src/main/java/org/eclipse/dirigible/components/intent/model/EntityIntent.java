@@ -190,6 +190,15 @@ public class EntityIntent {
      */
     private Boolean locksWithMaster;
     /**
+     * Status-gated panel ({@code visibleWhen}, dirigible #7502): on a composition child, the condition
+     * under which its detail panel shows on the MASTER's page, read against the master record the page
+     * holds and written in the master's own terms ({@code "Status != DRAFT"}). Until it holds the panel
+     * is absent - a draft invoice shows no empty payments panel. UI-only: the child's rows, its own
+     * write rules ({@code locksWithMaster}, {@code forbidWhen}) and its controller are unchanged, so a
+     * master that regresses keeps the rows and only hides the panel.
+     */
+    private Object visibleWhen;
+    /**
      * Optional hierarchy declaration: names this entity's to-one SELF-relation that forms the tree edge
      * (e.g. {@code hierarchy: Parent} on a chart-of-accounts Account). The generated list renders as a
      * tree, relations targeting this entity get a hierarchy-aware picker, and {@code leafOnly}
@@ -645,6 +654,14 @@ public class EntityIntent {
 
     public void setLocksWithMaster(Boolean locksWithMaster) {
         this.locksWithMaster = locksWithMaster;
+    }
+
+    public Object getVisibleWhen() {
+        return visibleWhen;
+    }
+
+    public void setVisibleWhen(Object visibleWhen) {
+        this.visibleWhen = visibleWhen;
     }
 
     public void setDuplicable(DuplicateIntent duplicable) {

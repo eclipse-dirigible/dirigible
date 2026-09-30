@@ -463,6 +463,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!entity.locksWithMaster()) {
                 entityMap.put("locksWithMaster", "false");
             }
+            // A status-gated detail panel (intent `visibleWhen:` on a composition child, #7502): the
+            // condition over the MASTER the panel is rendered under. The detail registration carries it
+            // to the shared panel, which stays absent until it holds - UI-only, the rows are untouched.
+            if (entity.getVisibleWhen() != null) {
+                entityMap.put("visibleWhen", visibleWhenCondition(entity.getVisibleWhen()));
+            }
             // Declared enrichment phases (#6929): the moments between "the row was inserted" and "the row
             // is complete". The Java DAO template turns each into an announce<Phase> method - the
             // enriching listener writes its values through that one call, so the value and the notice
@@ -1311,6 +1317,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String roles = String.join(",", field.getVisibleTo());
             p.put("roleRead", roles);
             p.put("roleWrite", roles);
+        }
+        if (field.getVisibleWhen() != null) {
+            // Status-gated field (intent `visibleWhen:`, #7502): the condition the generated form and
+            // document views fold into the field's x-show, read against the record they show. A scalar,
+            // so it round-trips through the .edm like any other attribute.
+            p.put("visibleWhen", visibleWhenCondition(field.getVisibleWhen()));
         }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
@@ -2665,6 +2677,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             terms.add(descriptor);
         }
         return terms.isEmpty() ? null : terms;
+    }
+
+    /**
+     * The model form of a {@code visibleWhen} condition (#7502): its terms, ANDed, each rewritten to
+     * the model's property name - {@code Status != 1 && Paid == true}. Status names are seed ids by now
+     * and the parser has held every term to the {@link CheckSupport#TERM} grammar, so the one scalar
+     * carries exactly what the authored condition said and the template layer re-reads it with that
+     * grammar.
+     *
+     * @param when the authored condition, a string or a list
+     * @return the condition, one scalar
+     */
+    private static String visibleWhenCondition(Object when) {
+        List<String> terms = new ArrayList<>();
+        for (String term : CheckSupport.terms(when)) {
+            CheckSupport.Comparison comparison = CheckSupport.parse(term);
+            if (comparison != null) {
+                terms.add(IntentNaming.pascalCase(comparison.property()) + (comparison.equal() ? " == " : " != ") + comparison.literal());
+            }
+        }
+        return String.join(" && ", terms);
     }
 
     /** The entity's to-one relation of that name, or {@code null}. */

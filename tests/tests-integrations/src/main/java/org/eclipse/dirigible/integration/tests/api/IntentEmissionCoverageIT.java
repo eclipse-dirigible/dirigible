@@ -256,7 +256,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: due,    type: date }
                   - { name: debit,  type: decimal, aggregate: true }
                   - { name: credit, type: decimal, aggregate: true }
-                  - { name: paid,   type: decimal }
+                  # visibleWhen (#7502) on a FIELD: the form leaves the input out until the entry is
+                  # POSTED - a status name, resolved against the entry's own nomenclature.
+                  - { name: paid,   type: decimal, visibleWhen: "Status == POSTED" }
                   - { name: note,   type: string, length: 200 }
                 relations:
                   - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
@@ -393,6 +395,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # not its lines. The document gate must count EntryLine - the child declared first -
               # however this entity's name happens to hash, which is what used to decide it.
               - name: EntryCopy
+                # visibleWhen (#7502) on a composition CHILD: the entry's page shows the copies panel
+                # only once the ENTRY is no longer a draft - written in the master's terms, resolved
+                # against the master's nomenclature, evaluated against the record the page holds.
+                visibleWhen: "Status != DRAFT"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
@@ -2207,6 +2213,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 linePatternRegister.contains("forbidWhen:") && linePatternRegister.contains("property: 'Status'")
                         && linePatternRegister.contains("value: '2'"),
                 "a forbidWhen over the composition master must reach the detail register as a UI guard, got: " + linePatternRegister);
+
+        // visibleWhen (#7502): the field gate reaches the entry form as the input's x-show, reading the
+        // live form and falling back to the init status on a create page that has none yet...
+        String entryForm = contentOf("gen/emission/views/Entry/Entry-form.html");
+        assertTrue(entryForm.contains("x-show=\"(form.Status == null || form.Status === '' ? '1' : String(form.Status)) === '2'\""),
+                "a field visibleWhen must reach the form input as its x-show gate, got: " + entryForm);
+        // ...and the panel gate reaches the child's detail registration as terms over the MASTER, which
+        // the form's detail panel evaluates against the record it holds.
+        String copyRegister = contentOf("gen/emission/js/components/pages/Entry/EntryCopy.detail.js");
+        assertTrue(copyRegister.contains("visibleWhen: [{ property: 'Status', equal: false, value: '1' }]"),
+                "a child visibleWhen must reach the detail register as master terms, got: " + copyRegister);
+        assertFalse(linePatternRegister.contains("visibleWhen:"), "an ungated child registers no gate");
+        assertTrue(entryForm.contains("x-show=\"visibleWhenHolds(d.visibleWhen, form)\""),
+                "the form's detail panels must be gated on the registered terms, got: " + entryForm);
 
         // number: stampOn: create - the generated DAO must allocate from the DECLARED series by
         // name (the shape deliberately never appears in generated code - it is tenant data).

@@ -10,7 +10,10 @@
 ## the value to - the page asked the controller which fields it withholds (canSee). Emits nothing for
 ## an unrestricted property. The server ignoring the field on writes stays the authoritative half;
 ## this only keeps an input that could never be saved off the form.
-#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## Status-gated field (intent `visibleWhen:`, #7502): absent until the condition holds against the
+## record the page shows (visibleWhenJs, rendered by ModelParameterProcessor). An element holds one
+## x-show, so a field carrying both gates gets them ANDed in it. UI-only - the value is still served.
+#macro(visibleGate $property)#if($property.roleRead && $property.visibleWhenJs) x-show="canSee('${property.name}') && ${property.visibleWhenJs}"#elseif($property.roleRead) x-show="canSee('${property.name}')"#elseif($property.visibleWhenJs) x-show="${property.visibleWhenJs}"#end#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")
@@ -337,7 +340,7 @@
     <div class="vbox gap-4 w-full"
          x-show="(isEdit || isPreview) && detailDefs.length && state !== 'loading' && state !== 'load-failure'">
       <template x-for="d in detailDefs" :key="d.entity + ':' + id">
-        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-h-card>
+        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-show="visibleWhenHolds(d.visibleWhen, form)" x-h-card>
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
             <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
@@ -541,7 +544,7 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
-            <div class="vbox" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+            <div class="vbox" x-show="#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
               <span class="text-sm wrap-anywhere" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>

@@ -115,6 +115,15 @@ public class FieldIntent {
      */
     private List<String> visibleTo = new ArrayList<>();
     /**
+     * Status-gated visibility ({@code visibleWhen}, dirigible #7502): the generated form and document
+     * views leave the field out until the condition holds against the record they show - the status
+     * gate {@link #visibleTo} is the role gate of. A comparison string or a list of them (an implicit
+     * AND), over the record's own fields and to-one relations, with the {@code requiredWhen} grammar; a
+     * status is named by its seed name or id. UI-only: the value is still served, stored and validated
+     * - a hidden field is never a deleted one.
+     */
+    private Object visibleWhen;
+    /**
      * Document role: marks this field as the document's <b>number/title</b> (widget {@code
      * DOCUMENT_NUMBER}). In the document (header-items) layout the value is shown in the form's title
      * (e.g. {@code SALES INVOICE 00001231}) instead of as an editable field.
@@ -500,5 +509,13 @@ public class FieldIntent {
 
     public void setVisibleTo(List<String> visibleTo) {
         this.visibleTo = visibleTo == null ? new ArrayList<>() : visibleTo;
+    }
+
+    public Object getVisibleWhen() {
+        return visibleWhen;
+    }
+
+    public void setVisibleWhen(Object visibleWhen) {
+        this.visibleWhen = visibleWhen;
     }
 }

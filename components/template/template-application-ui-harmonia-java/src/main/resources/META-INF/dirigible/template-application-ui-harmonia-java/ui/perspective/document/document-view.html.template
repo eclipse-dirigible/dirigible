@@ -15,7 +15,10 @@
 ## to - the page asked the controller which fields it withholds (canSee). Emits nothing for an
 ## unrestricted property. The redaction applied to every response stays the authoritative one; this
 ## only keeps a control that could never show or save a value off the page.
-#macro(visibleGate $property)#if($property.roleRead) x-show="canSee('${property.name}')"#end#end
+## Status-gated field (intent `visibleWhen:`, #7502): absent until the condition holds against the
+## record the page shows (visibleWhenJs, rendered by ModelParameterProcessor). An element holds one
+## x-show, so a field carrying both gates gets them ANDed in it. UI-only - the value is still served.
+#macro(visibleGate $property)#if($property.roleRead && $property.visibleWhenJs) x-show="canSee('${property.name}') && ${property.visibleWhenJs}"#elseif($property.roleRead) x-show="canSee('${property.name}')"#elseif($property.visibleWhenJs) x-show="${property.visibleWhenJs}"#end#end
 <div x-data="${name}DocumentPage" class="vbox w-full">
 ## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
 ## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).
@@ -302,7 +305,7 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.aggregate != "true" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.widgetType != "DOCUMENT_STATUS" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
 #if($property.widgetLabel)#set($frozenLabel = $property.widgetLabelJs)#else#set($frozenLabel = $property.name)#end
-          <div class="vbox" x-show="#if($property.roleRead)canSee('${property.name}') && #end headerDisplay('${property.name}') !== ''">
+          <div class="vbox" x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end headerDisplay('${property.name}') !== ''">
             <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${frozenLabel}')"></span>
             <span class="text-sm wrap-anywhere#if($property.widgetType == "TEXTAREA") whitespace-pre-wrap#end" x-text="headerDisplay('${property.name}')"></span>
           </div>
@@ -462,9 +465,11 @@
          creating or deleting a junction row fires the child create/-deleted event the paid/balance/
          status rollup listens to, so the document totals self-heal. Edit is intentionally omitted (a
          correction is remove-the-wrong-row + add-the-right-one). Add/create returns to THIS document
-         (returnTo override) rather than the detail's default list. Only once the document exists. ===== -->
+         (returnTo override) rather than the detail's default list. Only once the document exists. A
+         status-gated child (intent `visibleWhen:`, #7502) stays absent until its terms hold against the
+         document (the page's live `form`), so a draft shows no empty payments panel. ===== -->
     <template x-for="d in secondaryDetails" :key="d.entity + ':' + id">
-      <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-h-card class="w-full">
+      <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-show="visibleWhenHolds(d.visibleWhen, form)" x-h-card class="w-full">
         <div x-h-card-header>
           <h3 x-h-card-title x-text="T(d.tkey, d.label)"></h3>
           <div x-h-card-action x-show="masterId && (!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
@@ -645,7 +650,7 @@
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
-            <div class="vbox" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+            <div class="vbox" x-show="#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
               <span class="text-sm wrap-anywhere" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>

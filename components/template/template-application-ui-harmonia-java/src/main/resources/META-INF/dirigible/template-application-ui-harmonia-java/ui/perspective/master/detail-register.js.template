@@ -83,6 +83,13 @@ App.registerDetail('${masterEntity}', {
   // stops offering a click it would refuse. One entry per forbidWhen; each is a list of ANDed terms.
   forbidWhen: [#foreach($guard in $forbidWhenGuards)[#foreach($t in $guard){ property: '${t.property}', equal: ${t.equal}, value: '${t.value}' }, #end], #end],
 #end
+#if($visibleWhenTermsJs)
+  // A status-gated panel (intent `visibleWhen:` on this composition child, dirigible #7502): whoever
+  // renders it - the master's detail panel, a document's secondary panels - leaves it out until every
+  // term holds against the master record it is rendered under (basePage.visibleWhenHolds). UI-only: the
+  // rows and their write rules are untouched, so a master that regresses keeps them and hides the panel.
+  visibleWhen: ${visibleWhenTermsJs},
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)
