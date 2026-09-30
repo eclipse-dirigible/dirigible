@@ -122,9 +122,13 @@ export async function fillForm(page, manifest, entity, record, relationSamples, 
     if (record[field.name] === undefined) continue;
     await fillField(page, field, record[field.name], opts);
   }
+  // a readOnly relation renders as a disabled combobox (an update-time calculated action, a
+  // platform-owned FK) - the server sets it, so there is nothing to pick (dirigible #7554); the
+  // REST flows still post its sample, which the calculated action overwrites or checks
+  const pickable = relationSamples.filter((s) => !s.relation.readOnly);
   // cascade order: a dependsOn trigger must be picked BEFORE its dependent, so the narrowed
   // option list is the one the dependent's sample was chosen from
-  const triggers = relationSamples.filter((s) => !s.relation.dependsOn);
-  const dependents = relationSamples.filter((s) => s.relation.dependsOn);
+  const triggers = pickable.filter((s) => !s.relation.dependsOn);
+  const dependents = pickable.filter((s) => s.relation.dependsOn);
   for (const sample of [...triggers, ...dependents]) await pickDropdown(page, sample.relation, sample.label);
 }
