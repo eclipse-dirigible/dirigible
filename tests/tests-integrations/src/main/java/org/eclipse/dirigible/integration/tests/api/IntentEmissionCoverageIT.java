@@ -53,6 +53,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -2591,6 +2592,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
         assertTrue(billDocumentPage.contains("case 'DueOn': return this.displayDate(v);"),
                 "headerDisplay() must format the DATE field through the instance date format: " + billDocumentPage);
+        // ...and a DROPDOWN field resolves its option label through the component's own options (#7576):
+        // a bare options<Prop> is valid JavaScript until it runs, then throws a ReferenceError in the
+        // method body and the card drops every relation - so run it rather than match its text.
+        assertEquals("Ann", frozenHeaderDisplay(billDocumentPage, "BillDocumentPage", "Person", "optionsPerson"),
+                "the frozen header card must show a DROPDOWN relation's option label");
         assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
@@ -7132,6 +7138,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
     private static int countOf(String haystack, String needle) {
         return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
+    }
+
+    /**
+     * Run a generated document page's headerDisplay() for a frozen record whose DROPDOWN field holds 7
+     * and whose options list 7 as "Ann". The page registers itself through Alpine.data inside an
+     * alpine:init listener; both are stubbed, and baseFormPage contributes nothing headerDisplay reads.
+     */
+    private static String frozenHeaderDisplay(String pageScript, String componentName, String property, String optionsMember) {
+        try (Context context = Context.create("js")) {
+            context.eval("js", "var pages = {};" + "var document = { addEventListener: (event, callback) => callback() };"
+                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } };" + "var baseFormPage = () => ({});");
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.form." + property + " = 7; page." + optionsMember
+                            + " = [{ value: 7, text: 'Ann' }]; return page.headerDisplay('" + property + "'); })()")
+                          .asString();
+        }
     }
 
     private String contentOf(String fileName) {
