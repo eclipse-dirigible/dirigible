@@ -1017,7 +1017,9 @@ public class ${name}Controller {
 #end
 
 #end
-    private static void validate(${name}Entity entity) {
+    // Public so a process task's write-back (the generated <Process><Step>Write delegate) holds the
+    // reviewer's edits to exactly these rules and messages before it writes them (#7552).
+    public static void validate(${name}Entity entity) {
 #set($checksLoadHops = false)
 #foreach($check in $rowChecks)
 #if($check.pathLoads && $check.pathLoads.size() > 0)

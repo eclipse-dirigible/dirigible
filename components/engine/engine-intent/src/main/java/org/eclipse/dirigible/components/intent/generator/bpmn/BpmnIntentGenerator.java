@@ -304,6 +304,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 nodes.add(setter.step());
             }
         }
+        // Every writer runs in the completing transaction too (#7552): it validates the reviewer's edits
+        // with the entity's own rules before writing them, and a refusal has to roll the completion back
+        // and reach the person who submitted the form - behind an async boundary it failed in a
+        // background job instead, after the task had already gone, stranding the record.
+        for (Map.Entry<String, String> writer : writerByProcessTask.entrySet()) {
+            String process = writer.getKey()
+                                   .substring(0, writer.getKey()
+                                                       .indexOf('/'));
+            byProcess.computeIfAbsent(process, name -> new HashSet<>())
+                     .add(IntentNaming.camelCase(writer.getValue()));
+        }
         return byProcess;
     }
 
