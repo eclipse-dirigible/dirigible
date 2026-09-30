@@ -18,6 +18,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.TestContexts;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
@@ -310,6 +312,86 @@ class AppTestIntentGeneratorTest {
                          .get("pattern"));
         // the process guard: the delete of a record whose instance still runs is refused with 409
         assertEquals(List.of("Sales Invoice Posting"), invoice.get("deleteGuardedByProcess"));
+    }
+
+    /** dirigible #7534: the translated seed rows leave the untranslated ISO code out. */
+    private static final String LANGUAGES = """
+            name: languages
+            languages: [en, bg]
+            entities:
+              - name: Language
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, required: true, unique: true, length: 3 }
+                  - { name: name, type: string, required: true, length: 100 }
+            seeds:
+              - name: languages
+                entity: Language
+                rows:
+                  - { id: 1, code: en, name: English }
+              - name: languages-bg
+                entity: Language
+                language: bg
+                rows:
+                  - %s
+            """;
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void takesTheSampleFromAFieldTheTranslatedRowCarries() {
+        IntentModel languages = IntentParser.parse(LANGUAGES.formatted("{ id: 1, name: \"Английски\" }"));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        // `code` comes first and has a language column, but the bg row does not set it - the sample
+        // must come from `name`, the first field BOTH rows carry
+        assertEquals(Map.of("language", "bg", "base", "English", "translated", "Английски"), language.get("multilingualSample"));
+        assertTrue(context.getIssues()
+                          .isEmpty(),
+                String.valueOf(context.getIssues()));
+    }
+
+    @Test
+    void reportsATranslationSampleThatCannotBeDerived() {
+        IntentModel languages = IntentParser.parse(LANGUAGES.formatted("{ id: 2, name: \"Английски\" }"));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        assertEquals(Boolean.TRUE, language.get("multilingual"));
+        assertNull(language.get("multilingualSample"));
+        // the dropped assertion is named, never silent
+        assertEquals(1, context.getIssues()
+                               .size());
+        String issue = context.getIssues()
+                              .get(0);
+        assertTrue(issue.contains("[Language]") && issue.contains("[bg]") && issue.contains("languages-bg"), issue);
+    }
+
+    @Test
+    void staysQuietWithoutInlineTranslatedRows() {
+        // only a base seed: nothing to assert, nothing to report
+        IntentModel languages = IntentParser.parse(LANGUAGES.substring(0, LANGUAGES.indexOf("  - name: languages-bg")));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        assertNull(language.get("multilingualSample"));
+        assertTrue(context.getIssues()
+                          .isEmpty(),
+                String.valueOf(context.getIssues()));
+    }
+
+    private static Map<String, Map<String, Object>> languagesEdm() {
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Language", edmEntity("Language", "Language", "Languages", "MANAGE_LIST", "Settings", "master-data",
+                "KF_MOD_LANGUAGES_LANGUAGE", true));
+        return edm;
     }
 
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
