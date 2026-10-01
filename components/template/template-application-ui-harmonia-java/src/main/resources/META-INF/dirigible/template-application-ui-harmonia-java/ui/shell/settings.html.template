@@ -166,15 +166,18 @@
              the host's own directives - this ref, the x-show - stay live. Deliberately not an
              x-html="content" binding: Alpine re-runs such an effect on its own account and the
              re-run replaced the whole subtree, destroying the list's Filter popover and its record
-             sheet in the tick they opened. x-h-include reports no failure of its own, so the page
-             waits for the fragment:loaded it dispatches (see awaitFragment). -->
+             sheet in the tick they opened. Both outcomes are the directive's own events, bound on
+             this element because neither bubbles: fragment:loaded once the fragment is in and
+             initialized, fragment:error with the status when the response was not 200 or a script in
+             it failed. -->
         <div class="vbox flex-1 overflow-hidden" x-show="entityUrl" x-cloak>
           <div class="p-4" x-show="loading"><div x-h-spinner></div></div>
           <div x-h-alert data-variant="negative" role="alert" class="m-4" x-show="error">
             <div x-h-alert-description x-text="error"></div>
           </div>
           <div class="size-full min-w-0" x-show="!loading &amp;&amp; !error"
-               x-ref="entityView" x-h-include="entityUrl" @fragment:loaded="onFragmentLoaded()"></div>
+               x-ref="entityView" x-h-include="entityUrl" @fragment:loaded="onFragmentLoaded()"
+               @fragment:error="onFragmentError($event.detail.url, $event.detail.status)"></div>
         </div>
       </div>
     </div>

@@ -44,6 +44,12 @@ class HarmoniaFieldDisplayIT {
             "perspective/document/document-view.html.template", "my/my-form-view.html.template", "my/my-document-view.html.template",
             "partner/partner-form-view.html.template", "partner/partner-document-view.html.template");
 
+    /**
+     * The record page formats its values through its own preview helpers ({@code fieldText} and friends
+     * in {@code form-page.js}, issue #7491), so only its role gate goes through the shared one.
+     */
+    private static final String RECORD_PAGE = "perspective/manage/form-view.html.template";
+
     private static final String OPTIONS = "[{ value: 1, text: 'Draft' }, { value: 3, text: 'Sent' }]";
 
     @Test
@@ -103,8 +109,11 @@ class HarmoniaFieldDisplayIT {
             String content = read(UI_BASE + view);
             assertTrue(content.contains("#macro(valueDisplay $property)fieldDisplay(form.${property.name}, "),
                     view + " does not define its value display over the shared fieldDisplay()");
-            assertTrue(content.contains("x-text=\"#valueDisplay($property)\"") && content.contains("#valueGate($property)"),
-                    view + " renders a read-only card that does not go through the shared helper");
+            assertTrue(content.contains("#valueGate($property)"), view + " gates a read-only card row outside the shared helper");
+            if (!RECORD_PAGE.equals(view)) {
+                assertTrue(content.contains("x-text=\"#valueDisplay($property)\""),
+                        view + " renders a read-only card that does not go through the shared helper");
+            }
             assertTrue(content.contains("#macro(valueGate $property)x-show=\"#if($property.roleRead)canSee('${property.name}') && #end"),
                     view + " shows a role-scoped read-only field without asking canSee()");
             assertFalse(content.contains("x-text=\"form."), view + " prints a raw form value");

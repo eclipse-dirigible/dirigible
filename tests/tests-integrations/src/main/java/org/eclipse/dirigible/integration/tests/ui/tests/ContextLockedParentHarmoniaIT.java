@@ -98,12 +98,15 @@ class ContextLockedParentHarmoniaIT extends UserInterfaceIntegrationTest {
      * two {@code x-if} branches inside the same row have been decided too. Polled before the control is
      * classified, so a page that has not painted the form can no longer be reported as a form that
      * painted without the control (issue #7282 - the flake was the shell rendering its DEFAULT route,
-     * and the old script classified that as {@code missing} exactly like the defect).
+     * and the old script classified that as {@code missing} exactly like the defect). The field is
+     * found as the label's nearest ANCESTOR rather than its parent: since #7491 the form renders the
+     * label inside a per-mode wrapper (preview shows values, edit shows controls), and how deep it sits
+     * is presentation, not the contract this test is about.
      */
     private static final String FORM_READY_STATE = """
             var label = document.querySelector('label[for="f_SalesInvoice"]');
-            var field = label ? label.parentElement : null;
-            return field && field.getAttribute('data-slot') === 'field' ? 'ready' : 'not-rendered';
+            var field = label ? label.closest('[data-slot="field"]') : null;
+            return field ? 'ready' : 'not-rendered';
             """;
 
     /**

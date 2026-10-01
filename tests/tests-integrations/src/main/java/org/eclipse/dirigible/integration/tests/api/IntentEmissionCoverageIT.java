@@ -2593,6 +2593,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "immutableWhen on a MANAGE_DOCUMENT master must render the frozen header card, not only disable the edit form");
         assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.DueOn, 'DATE', '', null)\""),
                 "the frozen header card must read a DATE field through fieldDisplay(), not print the raw form value: " + billDocumentView);
+        // ...and a DROPDOWN relation through its option label (#7576): the options travel as the Alpine
+        // scope's options<Prop>, which an x-text expression resolves, so the card cannot drop the relation.
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.Person, 'DROPDOWN', '', optionsPerson)\""),
+                "the frozen header card must show a DROPDOWN relation's option label through fieldDisplay(): " + billDocumentView);
         // ...and so must the Details card beside it, the one the read-only fields live in (#7522):
         // both cards share the helper, neither prints a raw form value.
         assertTrue(billDocumentView.contains("fieldDisplay(form.SendOutcome, "),
@@ -2921,20 +2925,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(contentOf("gen/emission/views/Person/Person-form.html").contains("canSee("),
                 "an entity with no role-scoped field must carry no visibility gate at all");
         // The read-only Details card (#7522): a role-scoped read-only field is gated like its input
-        // would be, and every value - the date, the checkbox, the audit timestamp - is formatted by
-        // the shared fieldDisplay(), with the row hidden on the FORMATTED output. The personal form
-        // renders the same card over its own (audit-free) property set.
+        // would be, with the row hidden on the shared fieldDisplay() output. The personal form prints
+        // every value through fieldDisplay(); the record page (#7491) prints through its own preview
+        // helpers - a checkbox as its translated state, an audit timestamp in the instance format.
         String claimMyFormView = contentOf("gen/emission/views/my/Claim-form.html");
         for (String form : List.of(claimForm, claimMyFormView)) {
             assertTrue(form.contains("x-show=\"canSee('ReviewedOn') && fieldDisplay(form.ReviewedOn, 'DATE', '', null) !== ''\""),
-                    "a role-scoped read-only field must be gated on canSee and shown through fieldDisplay(): " + form);
-            assertTrue(
-                    form.contains("x-text=\"fieldDisplay(form.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
-                            && form.contains(".defaults.yes', 'Yes') }, { value: false, text: T('"),
-                    "a read-only checkbox must render its translated state, not the literal true/false: " + form);
+                    "a role-scoped read-only field must be gated on canSee and its formatted value: " + form);
             assertFalse(form.contains("x-text=\"form."), "a read-only card must not print a raw form value: " + form);
         }
-        assertTrue(claimForm.contains("x-text=\"fieldDisplay(form.CreatedAt, 'DATETIME-LOCAL', '', null)\""),
+        assertTrue(
+                claimMyFormView.contains("x-text=\"fieldDisplay(form.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
+                        && claimMyFormView.contains(".defaults.yes', 'Yes') }, { value: false, text: T('"),
+                "a read-only checkbox must render its translated state, not the literal true/false: " + claimMyFormView);
+        assertTrue(claimForm.contains("x-text=\"checkboxText(form.Approved)\""),
+                "a read-only checkbox on the record page must render its translated state, not the literal true/false: " + claimForm);
+        assertTrue(claimForm.contains("x-text=\"fieldText(form.CreatedAt, true, false, null)\""),
                 "an audit timestamp must render through the instance format, not as a raw ISO string: " + claimForm);
 
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");

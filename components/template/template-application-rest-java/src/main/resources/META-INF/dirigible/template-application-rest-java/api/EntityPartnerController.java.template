@@ -182,7 +182,7 @@ public class ${name}PartnerController {
         }
 #end
 #end
-#if($workflowStatusProperty)
+#if($workflowStatusProperty && !$workflowStatusPreserveOnly)
         requireWorkflowStatusOnCreate(entity);
 #end
         // Validated LAST, on what will actually be written: the owner is forced above and the
@@ -546,6 +546,7 @@ public class ${name}PartnerController {
     // updateProperty / updateProperties primitives, never through this controller, so refusing the
     // column here takes nothing away from them: it closes the plain create/update that would otherwise
     // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
+#if(!$workflowStatusPreserveOnly)
     private void requireWorkflowStatusOnCreate(${name}Entity entity) {
         if (entity.${workflowStatusProperty} == null) {
             // Nothing said: the record starts where the model says it starts (the relation's `init:`,
@@ -560,6 +561,7 @@ public class ${name}PartnerController {
         throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
     }
 
+#end
     // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
     // the stored row rather than refused, which is also what stops a partial payload from erasing the
     // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
@@ -568,13 +570,17 @@ public class ${name}PartnerController {
             entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
             return;
         }
+#if(!$workflowStatusPreserveOnly)
         if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
         }
+#end
     }
 
+#if(!$workflowStatusPreserveOnly)
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#end
 #end
 #if($processDeleteGuards)
 

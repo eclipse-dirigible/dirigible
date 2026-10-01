@@ -4920,8 +4920,15 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must publish the entity's -updated topic, got: " + writer);
         assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = writer.indexOf("repository.updateProperties(id, values)");
-        int reload = writer.indexOf("repository.findById(id)");
+        // the LAST load: the first is the pre-write one the edits are validated on (#7552)
+        int reload = writer.lastIndexOf("repository.findById(id)");
         assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
+        // The edits are held to the entity's own rules - its controller's validation - BEFORE anything is
+        // written, and a refusal is the client validation the inbox answers with a 400 (#7552).
+        int validate = writer.indexOf("SalesOrderController.validate(edited);");
+        assertTrue(validate > 0 && validate < write, "the edited row must be validated before the targeted write, got: " + writer);
+        assertTrue(writer.contains("throw new ValidationException(refusal.getReason(), refusal);"),
+                "a refusal must surface as the client validation the inbox reports");
     }
 
     @Test
