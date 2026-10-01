@@ -370,38 +370,6 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
-#if($preservedOnUpdate.size() > 0)
-        // System-owned fields survive a create payload just as they survive an update one (#7549):
-        // readOnly, roll-up/aggregate targets, ProcessId(s) and the like are computed by the platform
-        // or a system writer, never by the caller's own POST. Dropped BEFORE applyDefaults and the
-        // create-time calculations, so only a default, a calculatedOnCreate or a system writer fills
-        // them. There is no stored row to restore from at create time (unlike update()), so a dropped
-        // value is simply cleared rather than replaced - the create-time fill logic below (a default,
-        // a uuid/number stamp, a calculated action) then runs exactly as it would for an omitted value.
-        // A number/uuid stamp is excluded here: it discards a client value itself, immediately below,
-        // because a plain `type: uuid` field is deliberately still seedable/importable (#7548).
-#if($reportedOnUpdate.size() > 0)
-        java.util.List<String> discardedOnCreate = new java.util.ArrayList<>();
-#end
-#foreach($property in $preservedOnUpdate)
-#if(!$property.generatedUuid && !$property.numberStampOnCreate)
-#if(!$property.isDateType)
-        if (isDiscardedByPreservation(entity.${property.name}, null)) {
-            discardedOnCreate.add("${property.name}=" + entity.${property.name});
-        }
-#end
-        entity.${property.name} = null;
-#end
-#end
-#if($reportedOnUpdate.size() > 0)
-        if (!discardedOnCreate.isEmpty()) {
-            LOG.warn("A create of ${name} carried system-owned {} - discarded. save() never accepts"
-                    + " these columns from the payload; a writer that computes them must use the"
-                    + " targeted updateProperty / updateProperties / updateDerived after create.",
-                    discardedOnCreate);
-        }
-#end
-#end
 #applyDefaults()
 #normalizeSubsets()
 #if($lifecycleInitialStatus)

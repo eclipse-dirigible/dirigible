@@ -19,6 +19,26 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 #set($hasDuplicateKeys = true)
 #end
 
+## System-owned columns a user CREATE must never take from the payload (#7549), consumed by create():
+## the same set the generated repository's update() preserves from the stored row - an author's
+## readOnly, the roll-up/aggregate targets, ProcessId(s), a label's Name - minus the number/uuid
+## stamps, which discard a client value in save() themselves (#7548). The predicate is the one that
+## builds preservedOnUpdate in Repository.java.template: keep the two in step. The drop lives on the
+## REST surface and never in the repository, because save() is the create path of every system
+## writer - the attachment upload, the snapshot mint, a create-from, a posting - and those assign
+## exactly these columns by design (#7620).
+#set($systemOwnedOnCreate = [])
+#set($reportedOnCreate = [])
+#foreach($property in $properties)
+#if(!$property.dataPrimaryKey && !$property.generatedUuid && !$property.numberStampOnCreate && ($property.isReadOnlyProperty || ($property.aggregate && !$property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)))
+#set($ignore = $systemOwnedOnCreate.add($property))
+## A date is dropped but not reported: the form's round-trip is lossy (whole minutes, midnight), so a
+## differing date says nothing about who wrote it - the line reportedOnUpdate draws as well.
+#if(!$property.isDateType)
+#set($ignore = $reportedOnCreate.add($property))
+#end
+#end
+#end
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
@@ -33,6 +53,10 @@ import org.eclipse.dirigible.sdk.http.PathParam;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.Put;
 import org.eclipse.dirigible.sdk.http.QueryParam;
+#if($reportedOnCreate.size() > 0)
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 import org.eclipse.dirigible.sdk.security.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -77,6 +101,11 @@ import java.util.Map;
 @Documentation("${projectName} - ${name} partner controller")
 public class ${name}PartnerController {
 
+#if($reportedOnCreate.size() > 0)
+    /** Reports a system-owned column a create carried a value for - see dropSystemOwnedOnCreate. */
+    private static final Logger LOG = Logging.getLogger("gen.${javaGenFolderName}.api.${javaPerspectiveName}.${name}PartnerController");
+
+#end
     private final ${name}Repository repository;
     private final ${partnerIdentityRepositoryClass} identityRepository;
 #if($partnerParent)
@@ -197,6 +226,11 @@ public class ${name}PartnerController {
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
         org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+#end
+#if($systemOwnedOnCreate.size() > 0)
+        // After every check above, so what a create refuses is unchanged; before the save, so the
+        // repository never sees a caller's value for a column it does not own (#7549, #7620).
+        dropSystemOwnedOnCreate(entity);
 #end
 #if($hasDuplicateKeys)
         try {
@@ -720,6 +754,40 @@ public class ${name}PartnerController {
 #end
 
 
+#if($systemOwnedOnCreate.size() > 0)
+    /**
+     * Drops the system-owned columns a create carried (#7549): the readOnly fields, the roll-up and
+     * aggregate targets, ProcessId(s), a label's Name - what update() preserves from the stored row.
+     * The platform or a system writer fills them on create, never the request. Reported like
+     * update()'s discard (#6937), so a client computing its own value for one of them is told rather
+     * than silently ignored; a date is dropped but not reported, its round-trip being lossy.
+     *
+     * <p>
+     * This lives on the REST surface and NOT in the repository's save() on purpose: save() is the
+     * create path of every system writer - the attachment upload, the snapshot mint, a create-from, a
+     * posting - and those assign exactly these columns by design (#7620).
+     */
+    private static void dropSystemOwnedOnCreate(${name}Entity entity) {
+#if($reportedOnCreate.size() > 0)
+        java.util.List<String> discarded = new java.util.ArrayList<>();
+#end
+#foreach($property in $systemOwnedOnCreate)
+#if(!$property.isDateType)
+        if (entity.${property.name} != null) {
+            discarded.add("${property.name}=" + entity.${property.name});
+        }
+#end
+        entity.${property.name} = null;
+#end
+#if($reportedOnCreate.size() > 0)
+        if (!discarded.isEmpty()) {
+            LOG.warn("A create of ${name} carried system-owned {} - discarded. These columns are filled by"
+                    + " the platform or a system writer, never from the request.", discarded);
+        }
+#end
+    }
+
+#end
     /**
      * The same value validation the power surface applies (${name}Controller.validate) - required
      * fields, declared lengths, format patterns and row-level checks. The personal surface is the one
