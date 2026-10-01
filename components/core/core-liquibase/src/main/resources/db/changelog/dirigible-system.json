@@ -10901,6 +10901,388 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "drop-DIRIGIBLE_APPLICATION_USER_ROLES",
+        "author": "dirigible",
+        "comment": "Tenant users v2: the application's users became a replica that only the external provisioning system writes (DIRIGIBLE_TENANT_USERS / DIRIGIBLE_TENANT_USER_ROLES). The v1 rows are dropped on purpose and not migrated - the provisioning system rebuilds the replica with its next full resync.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "tableExists": {
+              "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "dropTable": {
+              "cascadeConstraints": true,
+              "tableName": "DIRIGIBLE_APPLICATION_USER_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "drop-DIRIGIBLE_APPLICATION_USERS",
+        "author": "dirigible",
+        "comment": "Tenant users v2: the application's users became a replica that only the external provisioning system writes (DIRIGIBLE_TENANT_USERS / DIRIGIBLE_TENANT_USER_ROLES). The v1 rows are dropped on purpose and not migrated - the provisioning system rebuilds the replica with its next full resync.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "tableExists": {
+              "tableName": "DIRIGIBLE_APPLICATION_USERS"
+            }
+          }
+        ],
+        "changes": [
+          {
+            "dropTable": {
+              "cascadeConstraints": true,
+              "tableName": "DIRIGIBLE_APPLICATION_USERS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_USERS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENUSER_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_USERS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_EMAIL",
+                    "type": "VARCHAR(320)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_STATUS",
+                    "type": "VARCHAR(50)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_REVISION",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_INVITED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_INVITED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_LAST_CHANGED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_LAST_CHANGED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_LAST_ERROR_CODE",
+                    "type": "VARCHAR(64)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_LAST_ERROR_MESSAGE",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSER_LAST_SIGN_IN_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_USERS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_USER_ROLES",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENUSERROLE_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_USER_ROLES"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSERROLE_USER_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSERROLE_ROLE",
+                    "type": "VARCHAR(100)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSERROLE_STATE",
+                    "type": "VARCHAR(50)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSERROLE_GRANTED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENUSERROLE_GRANTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_USER_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_USERS_TENANT_EMAIL",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_USERS_TENANT_EMAIL",
+                  "tableName": "DIRIGIBLE_TENANT_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENUSER_TENANT_ID, TENUSER_EMAIL",
+              "constraintName": "UK_DIRIGIBLE_TENANT_USERS_TENANT_EMAIL",
+              "tableName": "DIRIGIBLE_TENANT_USERS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_USER_ROLES_USER_ROLE",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_USER_ROLES_USER_ROLE",
+                  "tableName": "DIRIGIBLE_TENANT_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENUSERROLE_USER_ID, TENUSERROLE_ROLE",
+              "constraintName": "UK_DIRIGIBLE_TENANT_USER_ROLES_USER_ROLE",
+              "tableName": "DIRIGIBLE_TENANT_USER_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "FK_DIRIGIBLE_TENANT_USER_ROLES__TENUSERROLE_USER_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_TENANT_USER_ROLES__TENUSERROLE_USER_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_TENANT_USER_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addForeignKeyConstraint": {
+              "baseColumnNames": "TENUSERROLE_USER_ID",
+              "baseTableName": "DIRIGIBLE_TENANT_USER_ROLES",
+              "constraintName": "FK_DIRIGIBLE_TENANT_USER_ROLES__TENUSERROLE_USER_ID",
+              "deferrable": false,
+              "initiallyDeferred": false,
+              "onDelete": "CASCADE",
+              "onUpdate": "RESTRICT",
+              "referencedColumnNames": "TENUSER_ID",
+              "referencedTableName": "DIRIGIBLE_TENANT_USERS",
+              "validate": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "IX_DIRIGIBLE_TENANT_USERS_TENUSER_TENANT_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_TENANT_USERS_TENUSER_TENANT_ID",
+                  "tableName": "DIRIGIBLE_TENANT_USERS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createIndex": {
+              "columns": [
+                {
+                  "column": {
+                    "name": "TENUSER_TENANT_ID"
+                  }
+                }
+              ],
+              "indexName": "IX_DIRIGIBLE_TENANT_USERS_TENUSER_TENANT_ID",
+              "tableName": "DIRIGIBLE_TENANT_USERS"
+            }
+          }
+        ]
+      }
     }
   ]
 }

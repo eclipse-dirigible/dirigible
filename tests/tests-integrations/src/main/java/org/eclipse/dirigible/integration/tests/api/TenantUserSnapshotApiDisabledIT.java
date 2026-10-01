@@ -22,12 +22,12 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.annotation.DirtiesContext;
 
 /**
- * Without the tenant provisioning API there is no users callback either. The users registry itself
- * (entities, repository, service) always exists - the Owner-facing endpoints share it - so what is
+ * Without the tenant provisioning API there is no users snapshot endpoint either. The replica
+ * itself (entities, repository) always exists - the Owner-facing endpoints read it - so what is
  * pinned is the endpoint, by name.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
-class ApplicationUsersProvisioningApiDisabledIT extends IntegrationTest {
+class TenantUserSnapshotApiDisabledIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
@@ -37,7 +37,7 @@ class ApplicationUsersProvisioningApiDisabledIT extends IntegrationTest {
 
     /** An administrator, so a 404 says "no such endpoint" rather than "not for you". */
     @Test
-    void theUsersCallbackDoesNotAnswer() {
+    void theUsersSnapshotEndpointDoesNotAnswer() {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/tenant-provisioning/tenants/anything/users")
                                                  .then()
@@ -45,11 +45,11 @@ class ApplicationUsersProvisioningApiDisabledIT extends IntegrationTest {
     }
 
     @Test
-    void theUsersCallbackEndpointIsNotABean() {
+    void theUsersSnapshotEndpointIsNotABean() {
         boolean present = Arrays.stream(applicationContext.getBeanDefinitionNames())
                                 .map(applicationContext::getType)
                                 .anyMatch(type -> type != null && type.getName()
-                                                                      .equals("org.eclipse.dirigible.components.tenants.users.ApplicationUserProvisioningEndpoint"));
-        assertTrue(!present, "the users callback must not exist without the tenant provisioning API");
+                                                                      .equals("org.eclipse.dirigible.components.tenants.users.TenantUserSnapshotEndpoint"));
+        assertTrue(!present, "the users snapshot endpoint must not exist without the tenant provisioning API");
     }
 }

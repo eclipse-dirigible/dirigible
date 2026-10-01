@@ -10,16 +10,16 @@
 package org.eclipse.dirigible.components.tenants.users;
 
 /**
- * Where one role of an application user stands: asked for, granted, or refused.
+ * Where one role of a {@link TenantUser} stands. A role with no row is not held.
  */
-public enum ApplicationUserRoleState {
+public enum TenantUserRoleState {
 
-    /** The request for the role was published and not answered yet. */
-    REQUESTED,
-
-    /** The role is granted - the person holds the identity-provider group. */
+    /** The role is held. */
     GRANTED,
 
-    /** The latest request for the role failed. */
-    FAILED
+    /** A request adds the role, and it is not applied yet. */
+    ADDING,
+
+    /** The role is held, and a request removes it. */
+    REMOVING
 }
