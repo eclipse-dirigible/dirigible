@@ -174,6 +174,91 @@ public final class KeycloakTestContainer {
     /**
      * Creates the realm and its client.
      */
+    /**
+     * The id of a user, by email.
+     *
+     * @param email the email
+     * @return the id
+     */
+    public synchronized String userIdByEmail(String email) {
+        HttpResponse<String> found =
+                call("GET", "/admin/realms/" + REALM + "/users?exact=true&email=" + URLEncoder.encode(email, StandardCharsets.UTF_8), "");
+        return idIn(found, "user [" + email + "]");
+    }
+
+    /**
+     * Adds an existing user to a group, creating the group first when it does not exist. Adding a
+     * member again is no change.
+     *
+     * @param email the user's email
+     * @param group the group name
+     */
+    public synchronized void addUserToGroup(String email, String group) {
+        ensureGroup(group);
+        send("PUT", "/admin/realms/" + REALM + "/users/" + userIdByEmail(email) + "/groups/" + groupId(group), "", 204);
+    }
+
+    /**
+     * Removes a user from a group. A group that does not exist, or a user who is not in it, is no
+     * change.
+     *
+     * @param email the user's email
+     * @param group the group name
+     */
+    public synchronized void removeUserFromGroup(String email, String group) {
+        HttpResponse<String> found = findGroup(group);
+        if (found.statusCode() == 200 && found.body()
+                                              .trim()
+                                              .equals("[]")) {
+            return;
+        }
+        send("DELETE", "/admin/realms/" + REALM + "/users/" + userIdByEmail(email) + "/groups/" + idIn(found, "group [" + group + "]"), "",
+                204);
+    }
+
+    /**
+     * The realm's access token lifespan.
+     *
+     * @return the lifespan in seconds
+     */
+    public synchronized int accessTokenLifespan() {
+        HttpResponse<String> realm = call("GET", "/admin/realms/" + REALM, "");
+        Matcher lifespan = Pattern.compile("\"accessTokenLifespan\"\\s*:\\s*(\\d+)")
+                                  .matcher(realm.body());
+        if (!lifespan.find()) {
+            throw new IllegalStateException("The realm carries no access token lifespan: " + realm.body());
+        }
+        return Integer.parseInt(lifespan.group(1));
+    }
+
+    /**
+     * Sets the realm's access token lifespan. The realm is shared by every test of the JVM, so a caller
+     * restores the value it read with {@link #accessTokenLifespan()}.
+     *
+     * @param seconds the lifespan in seconds
+     */
+    public synchronized void setAccessTokenLifespan(int seconds) {
+        send("PUT", "/admin/realms/" + REALM, "{\"accessTokenLifespan\":" + seconds + "}", 204);
+    }
+
+    private String groupId(String group) {
+        return idIn(findGroup(group), "group [" + group + "]");
+    }
+
+    /** The top-level groups named exactly so - the tenant groups are all top-level. */
+    private HttpResponse<String> findGroup(String group) {
+        return call("GET", "/admin/realms/" + REALM + "/groups?exact=true&search=" + URLEncoder.encode(group, StandardCharsets.UTF_8), "");
+    }
+
+    private static String idIn(HttpResponse<String> response, String what) {
+        Matcher id = Pattern.compile("\"id\"\\s*:\\s*\"([^\"]+)\"")
+                            .matcher(response.body());
+        if (response.statusCode() != 200 || !id.find()) {
+            throw new IllegalStateException("Keycloak has no " + what + ": " + response.statusCode() + " " + response.body());
+        }
+        return id.group(1);
+    }
+
     private void createRealm() {
         send("POST", "/admin/realms", "{\"realm\":\"" + REALM + "\",\"enabled\":true,\"sslRequired\":\"none\"}", 201);
         String client = "{\"clientId\":\"" + CLIENT_ID + "\",\"secret\":\"" + CLIENT_SECRET + "\",\"publicClient\":false,"

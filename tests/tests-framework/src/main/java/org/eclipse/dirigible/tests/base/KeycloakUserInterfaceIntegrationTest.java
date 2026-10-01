@@ -96,7 +96,10 @@ public abstract class KeycloakUserInterfaceIntegrationTest extends UserInterface
      * @param role the role
      */
     protected void grant(String email, DirigibleTestTenant tenant, String role) {
-        KEYCLOAK.ensureUser(email, PASSWORD, tenant.getId() + "." + APP_ID + "." + role);
+        String group = tenant.getId() + "." + APP_ID + "." + role;
+        KEYCLOAK.ensureUser(email, PASSWORD, group);
+        // ensureUser leaves an existing user as it is, so the group is added explicitly
+        KEYCLOAK.addUserToGroup(email, group);
     }
 
     /**

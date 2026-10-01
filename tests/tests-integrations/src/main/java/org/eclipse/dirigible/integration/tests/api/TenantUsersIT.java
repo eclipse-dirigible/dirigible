@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.integration.tests.api;
 
+import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.drainQueue;
+import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.pushSnapshot;
+import static org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport.receive;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,14 +28,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
 import org.eclipse.dirigible.components.api.messaging.TimeoutException;
+import org.eclipse.dirigible.integration.tests.support.TenantUsersTestSupport;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,7 +47,6 @@ import org.junit.jupiter.api.TestMethodOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
@@ -80,7 +81,6 @@ class TenantUsersIT extends IntegrationTest {
     private static final String OWNER = "owner@example.com";
     private static final String MEMBER = "member@example.com";
     private static final String ANN = "ann@example.com";
-    private static final String GRANTED_AT = "2026-09-30T10:00:00Z";
 
     private static DirigibleTestTenant tenant;
 
@@ -109,7 +109,7 @@ class TenantUsersIT extends IntegrationTest {
         createTenants(created);
         waitForTenantProvisioning(created);
         tenant = created;
-        drainTheQueue();
+        drainQueue(QUEUE);
     }
 
     @Test
@@ -154,7 +154,7 @@ class TenantUsersIT extends IntegrationTest {
                                .get("requestId")
                                .asText();
 
-        JsonNode message = json.readTree(MessagingFacade.receiveFromQueue(QUEUE, 10_000));
+        JsonNode message = receive(QUEUE, 10_000);
         assertEquals(requestId, message.get("requestId")
                                        .asText());
         assertEquals("tenant.user.change.requested", message.get("type")
@@ -181,8 +181,14 @@ class TenantUsersIT extends IntegrationTest {
     @Test
     @Order(3)
     void theListShowsWhatTheProvisioningSystemWrote() throws Exception {
-        snapshot(1, member(OWNER, 1, "ASSIGNED", role("Owner", "GRANTED")),
-                member(ANN, 1, "PENDING", role("Owner", "ADDING"), role("User", "ADDING")));
+        pushSnapshot(mvc, tenant.getId(), 1, TenantUsersTestSupport.user(OWNER)
+                                                                   .revision(1)
+                                                                   .role("Owner", "GRANTED"),
+                TenantUsersTestSupport.user(ANN)
+                                      .revision(1)
+                                      .status("PENDING")
+                                      .role("Owner", "ADDING")
+                                      .role("User", "ADDING"));
 
         MockHttpSession owner = enter(OWNER, "Owner");
         JsonNode ann = userNamed(owner, ANN);
@@ -202,7 +208,10 @@ class TenantUsersIT extends IntegrationTest {
     @Test
     @Order(4)
     void aGrantedSnapshotShowsTheRolesGranted() throws Exception {
-        snapshot(2, member(ANN, 2, "ASSIGNED", role("Owner", "GRANTED"), role("User", "GRANTED")));
+        pushSnapshot(mvc, tenant.getId(), 2, TenantUsersTestSupport.user(ANN)
+                                                                   .revision(2)
+                                                                   .role("Owner", "GRANTED")
+                                                                   .role("User", "GRANTED"));
 
         JsonNode ann = userNamed(enter(OWNER, "Owner"), ANN);
         assertEquals("ASSIGNED", ann.get("status")
@@ -232,7 +241,7 @@ class TenantUsersIT extends IntegrationTest {
                                                     .contentType(MediaType.APPLICATION_JSON)
                                                     .content("{\"roles\":[\"User\"],\"expectedRevision\":2}"))
            .andExpect(status().isAccepted());
-        JsonNode message = json.readTree(MessagingFacade.receiveFromQueue(QUEUE, 10_000));
+        JsonNode message = receive(QUEUE, 10_000);
         assertEquals("UPDATE_ROLES", message.get("action")
                                             .asText());
         assertEquals(List.of("User"), json.convertValue(message.get("roles"), List.class));
@@ -240,7 +249,9 @@ class TenantUsersIT extends IntegrationTest {
                                .asLong());
 
         // the provisioning system applies it
-        snapshot(3, member(ANN, 3, "ASSIGNED", role("User", "GRANTED")));
+        pushSnapshot(mvc, tenant.getId(), 3, TenantUsersTestSupport.user(ANN)
+                                                                   .revision(3)
+                                                                   .role("User", "GRANTED"));
     }
 
     @Test
@@ -272,14 +283,16 @@ class TenantUsersIT extends IntegrationTest {
                                                       .contentType(MediaType.APPLICATION_JSON)
                                                       .content("{\"expectedRevision\":3}"))
            .andExpect(status().isAccepted());
-        JsonNode message = json.readTree(MessagingFacade.receiveFromQueue(QUEUE, 10_000));
+        JsonNode message = receive(QUEUE, 10_000);
         assertEquals("REMOVE", message.get("action")
                                       .asText());
         assertFalse(message.has("roles"), "a removal carries no roles");
         assertEquals(3, message.get("expectedRevision")
                                .asLong());
 
-        snapshot(4, member(ANN, 4, "REMOVED"));
+        pushSnapshot(mvc, tenant.getId(), 4, TenantUsersTestSupport.user(ANN)
+                                                                   .revision(4)
+                                                                   .status("REMOVED"));
         mvc.perform(get(USERS).session(owner)
                               .with(authentication(person(OWNER, "Owner"))))
            .andExpect(status().isOk())
@@ -329,43 +342,6 @@ class TenantUsersIT extends IntegrationTest {
         return session;
     }
 
-    @SafeVarargs
-    private void snapshot(long revision, Map<String, Object>... users) throws Exception {
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("complete", false);
-        body.put("revision", revision);
-        body.put("users", List.of(users));
-        mvc.perform(put("/services/tenant-provisioning/tenants/" + tenant.getId() + "/users").with(authentication(provisioner()))
-                                                                                             .contentType(MediaType.APPLICATION_JSON)
-                                                                                             .content(json.writeValueAsString(body)))
-           .andExpect(status().isOk());
-    }
-
-    @SafeVarargs
-    private static Map<String, Object> member(String email, long revision, String status, Map<String, Object>... roles) {
-        Map<String, Object> user = new LinkedHashMap<>();
-        user.put("email", email);
-        user.put("revision", revision);
-        user.put("status", status);
-        user.put("roles", new ArrayList<>(List.of(roles)));
-        user.put("invitedBy", OWNER);
-        user.put("invitedAt", GRANTED_AT);
-        user.put("lastChangedBy", OWNER);
-        user.put("lastChangedAt", GRANTED_AT);
-        return user;
-    }
-
-    private static Map<String, Object> role(String role, String state) {
-        Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("role", role);
-        entry.put("state", state);
-        if (!"ADDING".equals(state)) {
-            entry.put("grantedBy", OWNER);
-            entry.put("grantedAt", GRANTED_AT);
-        }
-        return entry;
-    }
-
     private JsonNode userNamed(MockHttpSession owner, String email) throws Exception {
         String body = mvc.perform(get(USERS).session(owner)
                                             .with(authentication(person(OWNER, "Owner"))))
@@ -403,18 +379,4 @@ class TenantUsersIT extends IntegrationTest {
                 List.of(new SimpleGrantedAuthority("ROLE_" + role)), "keycloak");
     }
 
-    private static Authentication provisioner() {
-        return new UsernamePasswordAuthenticationToken("provisioner", "n/a",
-                List.of(new SimpleGrantedAuthority("ROLE_TENANT_PROVISIONER")));
-    }
-
-    private static void drainTheQueue() {
-        try {
-            while (true) {
-                MessagingFacade.receiveFromQueue(QUEUE, 50);
-            }
-        } catch (TimeoutException expected) {
-            // drained
-        }
-    }
 }
