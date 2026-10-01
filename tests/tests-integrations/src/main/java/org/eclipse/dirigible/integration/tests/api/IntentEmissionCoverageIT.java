@@ -2257,26 +2257,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("emission.model").contains("\"calculatedActionOnCreate\": \"QuoteTariffAction\""),
                 "the relation's calculated action must reach the .model property every downstream template reads");
 
-        // An UNGATED requiredWhen is a row check: it holds on every user write, so it lands in each
-        // generated controller's validate() rather than in the repository's gated block - the same
-        // split exactlyOne has always had, and the reason `status:` is optional on this kind.
+        // A requiredWhen conditioned on a status a BUTTON sets is the repository's (#7553): PostDoc is
+        // the only way into POSTED and writes through the repository's targeted primitive, so a rule
+        // left in the controllers' validate() would never run when a document is posted. The gate is
+        // derived from the condition - the model still authors it ungated.
         String docController = contentOf("gen/emission/api/doc/DocController.java");
+        assertFalse(docController.contains("A posted document must name its counterparty"),
+                "a requiredWhen on a button's status must not be left to the controllers the button bypasses, got: " + docController);
+        String docGateRepository = contentOf("gen/emission/data/doc/DocRepository.java");
         assertTrue(
-                docController.contains("A posted document must name its counterparty")
-                        && docController.contains("PartyRepository().findById(hop0Fk)")
-                        && docController.contains("(entity.Status != null && entity.Status.longValue() == 2L)"),
-                "an ungated requiredWhen must be enforced on every REST write, with the status NAME resolved to its seed id, got: "
-                        + docController);
+                docGateRepository.contains("A posted document must name its counterparty")
+                        && docGateRepository.contains("PartyRepository().findById(hop0Fk)"),
+                "a requiredWhen on a button's status must be enforced by the repository every writer reaches, got: " + docGateRepository);
         // A guard on a TO-ONE is compared NUMERICALLY, not with a boxed equality (#7237): the FK
         // column is typed from the target's key, and a cross-model target's key is only readable from
         // the owner's .model, where a long is as legal as an integer - Objects.equals(Long, 2) never
         // holds, so the boxed form would switch the rule off while looking authored. That the guard
         // actually fires is asserted over REST in assertRuntimeEnforcement.
-        assertFalse(docController.contains("java.util.Objects.equals(entity.Status, 2)"),
-                "a to-one guard must not be a boxed equality against an int literal, got: " + docController);
-        String docGateRepository = contentOf("gen/emission/data/doc/DocRepository.java");
-        assertFalse(docGateRepository.contains("A posted document must name its counterparty"),
-                "an ungated check is not the repository's - a gate it does not carry cannot be tested there");
+        assertFalse(docGateRepository.contains("java.util.Objects.equals(entity.Status, 2)"),
+                "a to-one guard must not be a boxed equality against an int literal, got: " + docGateRepository);
         // ...while a GATED comparison against a literal (#7338) is the repository's, guarded on the
         // status the document is being persisted with - so a draft may still carry nothing.
         assertTrue(
@@ -4838,6 +4837,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // transitions: a button owns the status it SETS (#7553) - a plain PUT of CancelEntry's target
+        // bypasses the button's from/when guards and is refused. Any other status is not the button's,
+        // so the itemsMin refusal below is still the guard that answers a move to POSTED.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":3}")
+                                                 .when()
+                                                 .put(API + "/entry/EntryController/" + entryId)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("changes through the workflow")));
+
         // checks: itemsMin - carrying the gate status with no lines must be rejected.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2}")
@@ -5520,9 +5530,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // .model, where a long is as legal as an integer). A boxed Objects.equals(Long, 2) never
         // holds, so the rule would look authored and enforce nothing - which is exactly what a
         // generated-source assertion alone cannot tell apart from a working guard.
+        //
+        // POSTED is the PostDoc button's status (#7553): a plain PUT of it is refused as a bypass of
+        // the button, so the rule is exercised the one way a document gets posted - through the button,
+        // whose targeted write reaches the rule in the repository (the gate derived from the condition).
+        String postDoc = "/services/java/" + PROJECT + "/gen/events/emission/PostDocTransition/run";
         AtomicInteger toOneGuarded = new AtomicInteger();
         restAssuredExecutor.execute(() -> toOneGuarded.set(given().contentType("application/json")
-                                                                  .body("{\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
+                                                                  .body("{\"Date\":\"2026-01-18\",\"Amount\":10}")
                                                                   .when()
                                                                   .post(API + "/doc/DocController")
                                                                   .then()
@@ -5530,19 +5545,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .extract()
                                                                   .path("Id")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + toOneGuarded.get() + "}")
+                                                 .when()
+                                                 .post(postDoc)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("A posted document must name its counterparty")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1)));
+        // ...and the same post WITH a counterparty is accepted, so the guard is a condition and not a
+        // plain `required` nobody authored - a draft without one saved fine above.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + toOneGuarded.get()
-                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2}")
+                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Party\":1}")
                                                  .when()
                                                  .put(API + "/doc/DocController/" + toOneGuarded.get())
                                                  .then()
-                                                 .statusCode(400));
-        // ...and the same move WITH a counterparty is accepted, so the guard is a condition and not a
-        // plain `required` nobody authored.
+                                                 .statusCode(200));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Id\":" + toOneGuarded.get()
-                                                         + ",\"Date\":\"2026-01-18\",\"Amount\":10,\"Status\":2,\"Party\":1}")
+                                                 .body("{\"id\":" + toOneGuarded.get() + "}")
                                                  .when()
-                                                 .put(API + "/doc/DocController/" + toOneGuarded.get())
+                                                 .post(postDoc)
                                                  .then()
                                                  .statusCode(200));
 
@@ -5560,18 +5586,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .extract()
                                                                   .path("Id")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Id\":" + gatedCompare.get()
-                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":0,\"Status\":2,\"Party\":1}")
+                                                 .body("{\"id\":" + gatedCompare.get() + "}")
                                                  .when()
-                                                 .put(API + "/doc/DocController/" + gatedCompare.get())
+                                                 .post(postDoc)
                                                  .then()
                                                  .statusCode(400)
                                                  .body("message", containsString("A posted document must carry a positive amount")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + gatedCompare.get()
-                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Status\":2,\"Party\":1}")
+                                                         + ",\"Date\":\"2026-01-19\",\"Amount\":25,\"Party\":1}")
                                                  .when()
                                                  .put(API + "/doc/DocController/" + gatedCompare.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + gatedCompare.get() + "}")
+                                                 .when()
+                                                 .post(postDoc)
                                                  .then()
                                                  .statusCode(200));
 
@@ -5668,13 +5699,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + "/doc/DocController/" + doc.get())
                                                  .then()
                                                  .statusCode(200));
-        // (3) Entering the lifecycle anywhere but at its declared start: a Doc filed as POSTED.
+        // (3) Entering the lifecycle anywhere but at its declared start: a Doc filed as POSTED. POSTED
+        // is the PostDoc button's status, so the controller refuses it first as a bypass of the button
+        // (#7553, 409) - the repository's lifecycle start guard stands behind it for every other writer.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Date\":\"2026-01-19\",\"Amount\":10,\"Status\":2}")
                                                  .when()
                                                  .post(API + "/doc/DocController")
                                                  .then()
-                                                 .statusCode(400));
+                                                 .statusCode(409));
 
         // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
         // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.

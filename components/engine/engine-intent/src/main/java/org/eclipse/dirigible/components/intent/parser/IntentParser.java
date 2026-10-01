@@ -4221,6 +4221,7 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["
                             + relation.getTo() + "]");
                 }
+                validateWhenTargetDeleted(entity, relation, crossModel, issues);
                 if (relation.getDependsOn() != null) {
                     String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
                     boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
@@ -4434,6 +4435,9 @@ public final class IntentParser {
         }
         if (!isBlank(relation.getWhenMasterDeleted())) {
             unsupported.add("whenMasterDeleted");
+        }
+        if (!isBlank(relation.getWhenTargetDeleted())) {
+            unsupported.add("whenTargetDeleted");
         }
         if (relation.getPickable() != null) {
             unsupported.add("pickable");
@@ -5126,6 +5130,48 @@ public final class IntentParser {
                 }
                 return;
             }
+        }
+    }
+
+    /**
+     * {@code whenTargetDeleted: restrict} on a to-one association refuses a DELETE of the TARGET while
+     * this entity still references it, naming both entities and the count (v1 same-model only - the
+     * generated repository constructs the target's repository directly, which a cross-model reference
+     * cannot resolve; the cross-model case is deferred follow-up work). Valid only on a
+     * manyToOne/oneToOne that is NOT a composition - composition already answers "what happens to my
+     * children when I, the master, am deleted" through {@link #validateWhenMasterDeleted}, and this key
+     * is the opposite direction: what happens to ME when the entity I POINT AT is deleted.
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param crossModel whether the relation targets another intent model
+     * @param issues the issue list to add to
+     */
+    private static void validateWhenTargetDeleted(EntityIntent entity, RelationIntent relation, boolean crossModel, List<String> issues) {
+        String whenTargetDeleted = relation.getWhenTargetDeleted();
+        if (whenTargetDeleted == null) {
+            return;
+        }
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        String value = whenTargetDeleted.trim();
+        if (!"restrict".equals(value)) {
+            issues.add(subject + " whenTargetDeleted [" + whenTargetDeleted
+                    + "] must be `restrict` (refuse the target's delete while this relation still references it) - `nullify`/`cascade` are not supported yet");
+            return;
+        }
+        if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+            issues.add(subject + " declares whenTargetDeleted but only a manyToOne/oneToOne association points at a target whose"
+                    + " delete this could restrict");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject
+                    + " is a composition so its master's delete is whenMasterDeleted's question, not whenTargetDeleted's - the target here is the PARENT this entity is a detail of");
+            return;
+        }
+        if (crossModel) {
+            issues.add(subject
+                    + " is cross-model so whenTargetDeleted is not yet supported - the target's repository is generated in another model and cannot be constructed here");
         }
     }
 

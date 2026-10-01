@@ -93,6 +93,7 @@ final class ModelParameterProcessor {
             collectScopedChildren(entities);
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
+            resolveDeleteRestrictors(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -1040,6 +1041,41 @@ final class ModelParameterProcessor {
         String statusProperty = str(entity, "immutableStatusProperty");
         return truthy(entity, "immutableAlways") || (statusProperty != null && !statusProperty.isEmpty())
                 || entity.get("periodLock") != null;
+    }
+
+    /**
+     * Resolves each entity's {@code deleteRestrictors} (intent {@code whenTargetDeleted: restrict})
+     * into the referencing entity's generated FQN, so the DAO can construct that repository directly
+     * and query it - same-model only, exactly like {@link #inheritMasterLock} resolves a composition
+     * parent's coordinates from the child's own FK metadata.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveDeleteRestrictors(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> restrictors = asMaps(entity.get("deleteRestrictors"));
+            if (restrictors.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> resolved = new ArrayList<>();
+            for (Map<String, Object> restrictor : restrictors) {
+                Map<String, Object> referencing = findEntity(entities, str(restrictor, "referencingEntity"));
+                if (referencing == null) {
+                    continue; // the referencing entity was not generated - drop rather than emit a broken reference
+                }
+                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
+                String referencingPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + ".";
+                restrictor.put("entityClass", referencingPackage + str(referencing, "name") + "Entity");
+                restrictor.put("repositoryClass", referencingPackage + str(referencing, "name") + "Repository");
+                // The refusal names the referencing entity the way a person reading the page knows it,
+                // not by its raw identifier - the same source the composition cascade's own refusal
+                // uses for its child.
+                restrictor.put("referencingLabel", strOr(referencing, "entityLabel", str(referencing, "name")));
+                resolved.add(restrictor);
+            }
+            entity.put("deleteRestrictors", resolved);
+        }
     }
 
     /**

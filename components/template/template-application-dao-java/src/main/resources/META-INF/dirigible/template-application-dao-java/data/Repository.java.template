@@ -267,6 +267,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
 #if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
+#if($deleteRestrictors && $deleteRestrictors.size() > 0)
+import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+#end
 #if($multilingual == "true")
 #if(!$documentMaster)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
@@ -1356,6 +1359,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
+#if($deleteRestrictors && $deleteRestrictors.size() > 0)
+        requireNotReferenced(entity.${pkPropertyName});
+#end
 #if($compositionChildren && $compositionChildren.size() > 0)
         // The record and the children it owns leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through the cascade would commit some of
@@ -1396,6 +1402,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
+#if($deleteRestrictors && $deleteRestrictors.size() > 0)
+        requireNotReferenced(id);
+#end
 #if($compositionChildren && $compositionChildren.size() > 0)
         // One transaction for the record and the children it owns - see delete(entity).
         UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
@@ -1480,6 +1489,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
         }
 #end
+#end
+    }
+#end
+#if($deleteRestrictors && $deleteRestrictors.size() > 0)
+
+    /**
+     * Refuses this ${name}'s delete while another record still references it (intent
+     * {@code whenTargetDeleted: restrict}). Checked before any composition cascade, on both {@code
+     * delete} and {@code deleteById} - a restricted reference is not this record's own child to sweep
+     * away with it.
+     *
+     * <p>
+     * A read-then-act guard, like every other reference check the platform generates: a row inserted
+     * between this count and the delete is not seen. Closing that needs a database constraint, which
+     * this platform deliberately does not emit for a foreign key - referential integrity is a
+     * business-layer check here.
+     */
+    private void requireNotReferenced(Object id) {
+        if (id == null) {
+            return;
+        }
+#foreach($restrictor in $deleteRestrictors)
+        int ${restrictor.referencingEntity}Referencing = new ${restrictor.repositoryClass}()
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${restrictor.fkProperty}", id))
+                .size();
+        if (${restrictor.referencingEntity}Referencing > 0) {
+            // The count is the caller's next question - "what still points at this?" - so the refusal
+            // answers it rather than making them go and look.
+            throw new DeleteRestrictionException("This ${entityLabel} is referenced by " + ${restrictor.referencingEntity}Referencing
+                    + " ${restrictor.referencingLabel} record(s) and cannot be deleted");
+        }
 #end
     }
 #end

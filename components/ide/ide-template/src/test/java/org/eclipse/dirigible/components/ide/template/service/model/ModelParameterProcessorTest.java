@@ -778,6 +778,49 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * whenTargetDeleted: restrict (intent #7547) - the target carries FACTS only (the referencing
+     * entity's name + its FK property); this pass resolves the referencing entity's own generated
+     * coordinates into the FQNs the DAO constructs directly, same as
+     * {@link #aCompositionChildInheritsItsMastersStatusLock} resolves the PARENT's.
+     */
+    @Test
+    void aDeleteRestrictorResolvesToTheReferencingEntitysFqn() {
+        Map<String, Object> category = entity("ExpenseCategory", "expenses", property("Id", "INTEGER"));
+        Map<String, Object> restrictor = new LinkedHashMap<>();
+        restrictor.put("referencingEntity", "Expense");
+        restrictor.put("fkProperty", "Category");
+        category.put("deleteRestrictors", new java.util.ArrayList<>(List.of(restrictor)));
+        Map<String, Object> expense = entity("Expense", "expenses", property("Id", "INTEGER"));
+
+        ModelParameterProcessor.process(model(category, expense), javaParameters());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> restrictors = (List<Map<String, Object>>) category.get("deleteRestrictors");
+        assertEquals(1, restrictors.size());
+        assertEquals("gen.sales_order.data.expenses.ExpenseEntity", restrictors.get(0)
+                                                                               .get("entityClass"));
+        assertEquals("gen.sales_order.data.expenses.ExpenseRepository", restrictors.get(0)
+                                                                                   .get("repositoryClass"));
+        // The refusal names the referencing entity the way the page does, not by its raw identifier.
+        assertEquals("Expense", restrictors.get(0)
+                                           .get("referencingLabel"));
+    }
+
+    /** A restrictor naming an entity that was not generated is dropped, not emitted broken. */
+    @Test
+    void anUnresolvableDeleteRestrictorIsDropped() {
+        Map<String, Object> category = entity("ExpenseCategory", "expenses", property("Id", "INTEGER"));
+        Map<String, Object> restrictor = new LinkedHashMap<>();
+        restrictor.put("referencingEntity", "Ghost");
+        restrictor.put("fkProperty", "Category");
+        category.put("deleteRestrictors", new java.util.ArrayList<>(List.of(restrictor)));
+
+        ModelParameterProcessor.process(model(category), javaParameters());
+
+        assertEquals(List.of(), category.get("deleteRestrictors"));
+    }
+
+    /**
      * Date-based immutability (intent {@code immutableInPeriod:}): the guarded entity names the
      * register and its own date, the register carries its bounds and closed statuses, and only this
      * pass knows both plus the package each one is generated into.

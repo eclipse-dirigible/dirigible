@@ -249,6 +249,27 @@ class ControllerInvokerBindingTest {
         assertEquals("Product.compare.1", ((Map<?, ?>) warnings.get(1)).get("code"));
     }
 
+    @Test
+    void delete_restriction_exception_yields_409() {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("deleteMe"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+        // whenTargetDeleted: restrict (#7547) - the row is well-formed, the refusal is about OTHER rows
+        // that reference it right now, so it is a 409 Conflict, not a 400.
+        assertEquals(HttpStatus.CONFLICT.value(), response.getStatus());
+        assertTrue(response.body()
+                           .contains("referenced by"),
+                response.body());
+    }
+
     // --- fixtures --------------------------------------------------------------------------------
 
     @Controller
@@ -284,6 +305,11 @@ class ControllerInvokerBindingTest {
         @Get("/reject")
         public String reject() {
             throw new org.eclipse.dirigible.sdk.db.ValidationException("debits must equal credits");
+        }
+
+        @Get("/delete-me")
+        public String deleteMe() {
+            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException("This Category is referenced by Expense records");
         }
     }
 

@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.intent.LoggedValue;
+import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -186,14 +187,18 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
         }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        // What an ungated, status-conditioned requiredWhen takes its gate from (#7595) - the same rule
+        // the EDM generator routes that check into the repository by, so a step writing a derived gate
+        // status is kept synchronous exactly when the repository will refuse it.
+        Map<String, Set<Integer>> statusTargets = CheckSupport.systemStatusTargets(model, setters);
         // The status writes a checks: gate stands in front of run INSIDE the completing transaction
         // (no flowable:async), so their rejection reaches the person who acted - see
         // synchronousNodes.
-        Map<String, Set<String>> synchronousByProcess = synchronousNodes(setters, byName, userTaskKeys, writerByProcessTask);
+        Map<String, Set<String>> synchronousByProcess = synchronousNodes(setters, byName, statusTargets, userTaskKeys, writerByProcessTask);
         // The authored steps whose status write a gate stands in front of - what render() walks BACK
         // from, to pull the rest of the completing transaction (the delegates a reaching user task
         // inserts, the resolvers of the nodes between) in with them.
-        Map<String, Set<String>> gatedStepsByProcess = gatedSteps(setters, byName);
+        Map<String, Set<String>> gatedStepsByProcess = gatedSteps(setters, byName, statusTargets);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
         String candidateGroupsExtra = String.join(",", context.getSettings()
@@ -283,15 +288,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      *
      * @param setters every validated field setter of the model
      * @param byName the model's entities, by name
+     * @param statusTargets the status ids a system writer moves each entity to
+     *        ({@link CheckSupport#systemStatusTargets})
      * @param userTaskKeys the {@code <process>/<step>} keys of the authored user tasks
      * @param writerByProcessTask the writer delegate class per {@code <process>/<task>} key
      * @return the node ids to emit synchronously, per process name
      */
     private static Map<String, Set<String>> synchronousNodes(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName,
-            Set<String> userTaskKeys, Map<String, String> writerByProcessTask) {
+            Map<String, Set<Integer>> statusTargets, Set<String> userTaskKeys, Map<String, String> writerByProcessTask) {
         Map<String, Set<String>> byProcess = new HashMap<>();
         for (SetFieldSupport.Setter setter : setters) {
-            if (!setter.relation() || !gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+            if (!setter.relation() || !gatesACheck(byName.get(setter.entity()), setter.field(), setter.value(), statusTargets)) {
                 continue;
             }
             String key = setter.process() + "/" + setter.step();
@@ -331,12 +338,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      *
      * @param setters every validated field setter of the model
      * @param byName the model's entities, by name
+     * @param statusTargets the status ids a system writer moves each entity to
      * @return the authored step names carrying a gated status write, per process name
      */
-    private static Map<String, Set<String>> gatedSteps(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName) {
+    private static Map<String, Set<String>> gatedSteps(List<SetFieldSupport.Setter> setters, Map<String, EntityIntent> byName,
+            Map<String, Set<Integer>> statusTargets) {
         Map<String, Set<String>> byProcess = new HashMap<>();
         for (SetFieldSupport.Setter setter : setters) {
-            if (setter.relation() && gatesACheck(byName.get(setter.entity()), setter.field(), setter.value())) {
+            if (setter.relation() && gatesACheck(byName.get(setter.entity()), setter.field(), setter.value(), statusTargets)) {
                 byProcess.computeIfAbsent(setter.process(), process -> new HashSet<>())
                          .add(setter.step());
             }
@@ -351,9 +360,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * @param entity the trigger entity the setter writes, may be {@code null}
      * @param field the PascalCase property the setter assigns
      * @param value the assigned value (a status seed id for a relation setter)
+     * @param statusTargets the status ids a system writer moves each entity to - a check's gate may be
+     *        derived from its condition ({@link CheckSupport#effectiveGate})
      * @return {@code true} when the write is gated by a check
      */
-    private static boolean gatesACheck(EntityIntent entity, String field, String value) {
+    private static boolean gatesACheck(EntityIntent entity, String field, String value, Map<String, Set<Integer>> statusTargets) {
         if (entity == null || entity.getChecks() == null) {
             return false;
         }
@@ -369,7 +380,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         for (CheckIntent check : entity.getChecks()) {
             // Only the document-level kinds carry a status gate; a guard's own status is its rejection
             // outcome (setStatus), not a precondition on the write.
-            if (target.equals(check.getStatus())) {
+            if (target.equals(CheckSupport.effectiveGate(entity, check, statusTargets.get(entity.getName())))) {
                 return true;
             }
         }

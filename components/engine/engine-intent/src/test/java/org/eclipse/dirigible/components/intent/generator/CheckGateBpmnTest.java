@@ -139,8 +139,45 @@ class CheckGateBpmnTest {
                       - { role: Clerk, description: Clerk, can: [Invoice:read] }
                     """;
 
+    /**
+     * An UNGATED requiredWhen whose condition names the status a step writes (#7595): the rule is the
+     * repository's (its gate derived from the condition), so the step writing it must run in the
+     * completing transaction exactly as for an authored gate - or the refusal dead-letters.
+     */
+    private static final String DERIVED_GATE_YAML = """
+            name: leave
+            entities:
+              - name: RequestStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Request
+                checks:
+                  - { kind: requiredWhen, field: approver, when: "Status == 3", message: "An approved request names its approver" }
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: approver, type: string, length: 100 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+            processes:
+              - name: RequestApproval
+                trigger: { onCreate: Request }
+                steps:
+                  - { name: review,  kind: userTask,    args: { assignee: manager, form: ReviewRequest, next: approve } }
+                  - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3, next: archive } }
+                  - { name: archive, kind: serviceTask, args: { setRelationField: Status, value: 4, next: done } }
+                  - { name: done,    kind: end }
+            forms:
+              - { name: ReviewRequest, forEntity: Request, fields: [approver], actions: [approve] }
+            """;
+
     private static String bpmn(String process) {
-        IntentModel model = IntentParser.parse(YAML);
+        return bpmn(YAML, process);
+    }
+
+    private static String bpmn(String yaml, String process) {
+        IntentModel model = IntentParser.parse(yaml);
         IRepository repository = mock(IRepository.class);
         IResource missing = mock(IResource.class);
         when(repository.getResource(anyString())).thenReturn(missing);
@@ -200,6 +237,15 @@ class CheckGateBpmnTest {
         String bpmn = bpmn("InvoiceApproval");
 
         assertSynchronous(bpmn, "approve");
+    }
+
+    @Test
+    void aStatusSetGatingADerivedRequiredWhenRunsInTheCompletingTransaction() {
+        String bpmn = bpmn(DERIVED_GATE_YAML, "RequestApproval");
+
+        assertSynchronous(bpmn, "approve");
+        // 4 is named by no condition, so that write keeps its boundary.
+        assertAsynchronous(bpmn, "archive");
     }
 
     @Test

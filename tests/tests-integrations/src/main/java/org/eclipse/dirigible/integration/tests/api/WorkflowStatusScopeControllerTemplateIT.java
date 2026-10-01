@@ -31,14 +31,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>
  * A status a process step or a capacity roll-up COMPUTES is owned wholesale - an omitted value is
- * preserved AND a differing one refused. A status only a {@code transitions:} button writes is
- * PRESERVED but never refused: the button writes one declared seed id rather than computing the
- * column, and both stronger readings take a working feature away - claiming the whole column
- * strands every status no button targets ({@code IntentEmissionCoverageIT}'s Entry, whose one
- * Cancel button left its ordinary PUT to the POSTED gate refused), while refusing just the targeted
- * values collides with the {@code checks:} design, whose gated rules are enforced on the plain
- * update path against a gate status that is normally exactly what a button writes (the same
- * fixture's Doc). Which hand moves are legal is {@code lifecycle:}'s question.
+ * preserved AND any differing one refused. A status only {@code transitions:} buttons write is
+ * owned per VALUE (#7595): a move to a value a button sets is refused (it would bypass the button's
+ * {@code from:}/{@code when:} guards), any other move stays an ordinary edit, so an entity whose
+ * one button is Cancel can still be posted by hand. The {@code checks:} rules conditioned on a
+ * button's status are routed to the repository the button writes through, so refusing the value
+ * takes none of them away ({@code IntentEmissionCoverageIT} drives them through
+ * {@code PostDocTransition}).
  *
  * <p>
  * Rendering needs nothing from a running instance, so this boots no application context and uses
@@ -71,24 +70,33 @@ class WorkflowStatusScopeControllerTemplateIT {
     }
 
     /**
-     * A transitions-only status: the omitted-value data loss is fixed (the stored status is kept), but
-     * nothing is refused - a gated `checks:` rule is enforced on the plain update path and its gate
-     * status is normally exactly what a button writes, so refusing here would remove that feature.
+     * A transitions-only status: an omitted value is preserved, a move to a value a button sets is
+     * refused, and any other move is let through to the repository.
      */
     @Test
-    void aTransitionOwnedStatusIsOnlyPreservedOnEverySurface() throws Exception {
+    void aTransitionOwnedStatusRefusesOnlyTheButtonsValuesOnEverySurface() throws Exception {
         for (String template : CONTROLLERS) {
             Map<String, Object> context = context();
-            context.put("workflowStatusPreserveOnly", "true");
+            context.put("workflowStatusValues", "2,3");
             String rendered = render(template, context);
 
-            // The half that IS the defect: an omitted status is taken from the stored row, not nulled.
             assertTrue(rendered.contains("entity.Status = stored.Status;"), template + " must preserve an omitted status");
-            // ...and nothing else of the guard survives, so an ordinary edit still reaches the
-            // repository, where the checks: gate and lifecycle: refuse what they are there to refuse.
-            assertFalse(rendered.contains("WORKFLOW_STATUS_REFUSAL"), template + " must not refuse a transition-owned status: " + template);
-            assertFalse(rendered.contains("requireWorkflowStatusOnCreate"), template + " must not guard the create verb");
+            assertTrue(rendered.contains("requireWorkflowStatusOnCreate(entity);"), template + " must guard the create verb");
+            assertTrue(rendered.contains("&& isButtonOwnedStatus(entity.Status)"),
+                    template + " must refuse an update only when it moves to a button's value");
+            assertTrue(rendered.contains("if (!isButtonOwnedStatus(entity.Status)) {"),
+                    template + " must let a create carry a status no button sets");
+            assertTrue(rendered.contains("for (String owned : \"2,3\".split(\",\")) {"),
+                    template + " must render the buttons' values into the helper");
             assertNoUnresolvedReferences(rendered);
+        }
+    }
+
+    /** A computed status carries no per-value scope, so the helper is not emitted at all. */
+    @Test
+    void aComputedStatusEmitsNoButtonScope() throws Exception {
+        for (String template : CONTROLLERS) {
+            assertFalse(render(template, context()).contains("isButtonOwnedStatus"), template + " must not scope a computed status");
         }
     }
 
@@ -107,7 +115,7 @@ class WorkflowStatusScopeControllerTemplateIT {
     private static void assertNoUnresolvedReferences(String rendered) {
         for (String line : rendered.split("\n")) {
             if (line.contains("WorkflowStatus") || line.contains("WORKFLOW_STATUS_REFUSAL")
-                    || line.contains("requireWorkflowStatusOnCreate")) {
+                    || line.contains("requireWorkflowStatusOnCreate") || line.contains("ButtonOwnedStatus")) {
                 assertFalse(line.contains("${"), "an unresolved template reference survived into the guard: " + line);
             }
         }

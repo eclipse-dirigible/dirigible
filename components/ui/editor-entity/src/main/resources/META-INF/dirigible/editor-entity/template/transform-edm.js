@@ -24,7 +24,7 @@ import { XML } from "@aerokit/sdk/utils";
 // duplicate it (#6826).
 // 'rollupGuard' (singular) is the pre-#7448 shape, kept so an .edm authored before the guard became
 // a list still parses back into an object rather than a JSON string.
-const ENTITY_STRUCTURED = ['rollupGuards', 'rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities', 'scopedCalendars', 'lifecycleStatusNameList', 'duplicateReset', 'duplicateDefaults'];
+const ENTITY_STRUCTURED = ['rollupGuards', 'rollupGuard', 'checks', 'labelParts', 'aggregateKeys', 'groupingKeys', 'relatedEntities', 'scopedCalendars', 'deleteRestrictors', 'lifecycleStatusNameList', 'duplicateReset', 'duplicateDefaults'];
 const PROPERTY_STRUCTURED = ['lookupColumns'];
 // Document level (#6882): the structured values the .model carries ABOVE its entities.
 const MODEL_STRUCTURED = ['languages', 'widgets', 'customActionLabels', 'processTaskLabels'];

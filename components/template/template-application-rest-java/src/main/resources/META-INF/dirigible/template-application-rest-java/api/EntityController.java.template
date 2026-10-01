@@ -224,7 +224,7 @@ public class ${name}Controller {
 #if($isEntityPropertySecurityEnabled)
         applyOnCreate(entity);
 #end
-#if($workflowStatusProperty && !$workflowStatusPreserveOnly)
+#if($workflowStatusProperty)
         requireWorkflowStatusOnCreate(entity);
 #end
         validate(entity);
@@ -749,7 +749,6 @@ public class ${name}Controller {
     // updateProperty / updateProperties primitives, never through this controller, so refusing the
     // column here takes nothing away from them: it closes the plain create/update that would otherwise
     // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
-#if(!$workflowStatusPreserveOnly)
     private void requireWorkflowStatusOnCreate(${name}Entity entity) {
         if (entity.${workflowStatusProperty} == null) {
             // Nothing said: the record starts where the model says it starts (the relation's `init:`,
@@ -761,13 +760,23 @@ public class ${name}Controller {
             return;
         }
 #end
+#if($workflowStatusValues)
+        if (!isButtonOwnedStatus(entity.${workflowStatusProperty})) {
+            return;
+        }
+#end
         throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
     }
 
-#end
     // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
     // the stored row rather than refused, which is also what stops a partial payload from erasing the
     // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
+#if($workflowStatusValues)
+    // Only `transitions:` buttons move it here (#7553), and a button owns the value it sets, not the
+    // column: a move to one of ${workflowStatusValues} bypasses that button's from/when guards and is
+    // refused, a move to any other status is an ordinary edit (lifecycle:, in the repository, still
+    // guards it).
+#end
     private void applyWorkflowStatus(Object id, ${name}Entity entity) {
         ${name}Entity stored = repository.findOne(id).orElse(null);
         if (stored == null) {
@@ -777,17 +786,25 @@ public class ${name}Controller {
             entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
             return;
         }
-#if(!$workflowStatusPreserveOnly)
-        if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
+        if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})#if($workflowStatusValues)
+                && isButtonOwnedStatus(entity.${workflowStatusProperty})#{end}) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
         }
-#end
     }
+#if($workflowStatusValues)
 
-#if(!$workflowStatusPreserveOnly)
+    private static boolean isButtonOwnedStatus(Object status) {
+        for (String owned : "${workflowStatusValues}".split(",")) {
+            if (owned.equals(String.valueOf(status))) {
+                return true;
+            }
+        }
+        return false;
+    }
+#end
+
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
-#end
 
 #end
 #if($processDeleteGuards)

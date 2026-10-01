@@ -148,6 +148,16 @@ public class RelationIntent {
     private String whenMasterDeleted;
 
     /**
+     * What a DELETE of this to-one relation's TARGET does when this entity still references it -
+     * {@code restrict} refuses the target's delete while any referencing row exists, naming both
+     * entities and the count. Valid on a {@code manyToOne}/{@code oneToOne} that is NOT a
+     * {@code composition} (composition already answers this through {@code whenMasterDeleted}) and, in
+     * this v1, only same-model - the target's repository is constructed directly, which a cross-model
+     * reference cannot resolve.
+     */
+    private String whenTargetDeleted;
+
+    /**
      * Marks this to-one relation as the OWNER of the record for the personal surface: on the generated
      * personal (my) REST controller, reads are filtered to the logged-in user's mapped identity record
      * and writes force this FK server-side. Valid only when the target entity declares
@@ -366,6 +376,21 @@ public class RelationIntent {
      */
     public boolean isMasterDeleteRefused() {
         return "refuse".equals(whenMasterDeleted == null ? null : whenMasterDeleted.trim());
+    }
+
+    public String getWhenTargetDeleted() {
+        return whenTargetDeleted;
+    }
+
+    public void setWhenTargetDeleted(String whenTargetDeleted) {
+        this.whenTargetDeleted = whenTargetDeleted;
+    }
+
+    /**
+     * @return true when {@code whenTargetDeleted: restrict} was authored
+     */
+    public boolean isTargetDeleteRestricted() {
+        return "restrict".equals(whenTargetDeleted == null ? null : whenTargetDeleted.trim());
     }
 
     public boolean isLeafOnly() {

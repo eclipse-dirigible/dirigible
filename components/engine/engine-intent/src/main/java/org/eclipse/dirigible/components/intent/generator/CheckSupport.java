@@ -10,17 +10,22 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 
 /**
  * The condition of a {@code checks: requiredWhen} entry - the grammar the parser refuses on and the
@@ -620,5 +625,86 @@ public final class CheckSupport {
             return literal.substring(1, literal.length() - 1);
         }
         return literal;
+    }
+
+    /**
+     * The status seed ids a SYSTEM writer moves each entity's {@code function: EntityStatus} FK to,
+     * keyed by entity name: a {@code transitions:} button's {@code setStatus} and a {@code processes:}
+     * step's {@code setRelationField} on that FK (#7595). Neither comes through a REST controller - the
+     * button and the step both write through the repository's targeted {@code updateProperties} - so a
+     * check that only the controllers run never fires when either of them moves the record.
+     *
+     * @param model the whole intent
+     * @param setters the model's validated field setters ({@link SetFieldSupport#setters})
+     * @return the targeted seed ids per entity name; an entity with none is absent
+     */
+    public static Map<String, Set<Integer>> systemStatusTargets(IntentModel model, List<SetFieldSupport.Setter> setters) {
+        Map<String, Set<Integer>> targets = new HashMap<>();
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (transition.getForEntity() != null && transition.getSetStatus() != null) {
+                targets.computeIfAbsent(transition.getForEntity(), entity -> new TreeSet<>())
+                       .add(transition.getSetStatus());
+            }
+        }
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        for (SetFieldSupport.Setter setter : setters) {
+            EntityIntent entity = byName.get(setter.entity());
+            RelationIntent status = entity == null ? null : IntentEntities.entityStatusRelation(entity);
+            if (!setter.relation() || status == null || !IntentNaming.pascalCase(status.getName())
+                                                                     .equals(setter.field())
+                    || setter.value() == null || !setter.value()
+                                                        .trim()
+                                                        .matches("-?\\d+")) {
+                continue;
+            }
+            targets.computeIfAbsent(setter.entity(), name -> new TreeSet<>())
+                   .add(Integer.valueOf(setter.value()
+                                              .trim()));
+        }
+        return targets;
+    }
+
+    /**
+     * The status a check is gated on: its authored {@code status:}, else - for an UNGATED
+     * {@code requiredWhen} - the status its own condition names, when that status is one a system
+     * writer moves the record to (#7595). {@code when: "Status == APPROVED"} on an entity a workflow
+     * step approves is a rule about the approval; left ungated it is emitted into the controllers'
+     * {@code validate()}, which the step never reaches (base-sales-invoices verified it live: an Issue
+     * with no reason went through until the author added the gate by hand). Gated, the repository
+     * enforces it on every writer, and the BPMN generator keeps the step that writes the status in the
+     * completing transaction, so the refusal reaches the person who acted instead of dead-lettering.
+     * Both generators read the gate HERE, so they cannot disagree about it.
+     *
+     * @param entity the entity the check sits on
+     * @param check the check
+     * @param systemTargets the status ids a system writer moves this entity to
+     *        ({@link #systemStatusTargets})
+     * @return the gate status, or {@code null} when the check is ungated
+     */
+    public static Integer effectiveGate(EntityIntent entity, CheckIntent check, Set<Integer> systemTargets) {
+        if (check.getStatus() != null) {
+            return check.getStatus();
+        }
+        if (!"requiredWhen".equals(check.getKind()) || systemTargets == null || systemTargets.isEmpty()) {
+            return null;
+        }
+        RelationIntent status = IntentEntities.entityStatusRelation(entity);
+        if (status == null) {
+            return null;
+        }
+        String statusProperty = IntentNaming.pascalCase(status.getName());
+        for (String term : terms(check.getWhen())) {
+            Comparison comparison = parse(term);
+            if (comparison == null || !comparison.equal() || ResolvePathSupport.isPath(comparison.property())
+                    || !statusProperty.equals(IntentNaming.pascalCase(comparison.property()))) {
+                continue;
+            }
+            String literal = comparison.literal()
+                                       .trim();
+            if (literal.matches("-?\\d+") && systemTargets.contains(Integer.valueOf(literal))) {
+                return Integer.valueOf(literal);
+            }
+        }
+        return null;
     }
 }

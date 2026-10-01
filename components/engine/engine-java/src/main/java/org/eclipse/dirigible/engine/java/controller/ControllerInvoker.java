@@ -21,6 +21,7 @@ import java.util.Map;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
+import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.db.Warning;
 import org.slf4j.Logger;
@@ -148,6 +149,15 @@ public class ControllerInvoker {
                                                                                  .fqn(),
                         method.getName(), cause.getMessage());
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, cause.getMessage(), cause);
+            }
+            if (cause instanceof DeleteRestrictionException) {
+                // whenTargetDeleted: restrict - the row still exists, the request is well-formed, and the
+                // only reason it is refused is other rows that reference it RIGHT NOW - a conflict with
+                // current state, not a malformed request.
+                LOGGER.debug("Controller [{}#{}] refused the delete: {}", match.entry()
+                                                                               .fqn(),
+                        method.getName(), cause.getMessage());
+                throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
             }
             LOGGER.error("Controller [{}#{}] threw: {}", match.entry()
                                                               .fqn(),

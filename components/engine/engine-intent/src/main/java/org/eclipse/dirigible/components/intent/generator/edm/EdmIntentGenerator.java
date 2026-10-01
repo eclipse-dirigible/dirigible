@@ -22,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
@@ -31,6 +32,7 @@ import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
+import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
@@ -184,6 +186,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> settingEntities = settingEntities(entities);
         Set<String> triggerTargets = TriggerSupport.triggerTargetEntities(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
+        // The status ids a button or a workflow step moves each entity to - what an ungated, status-
+        // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
+        // generator reads it through.
+        Map<String, Set<Integer>> systemStatusTargets = CheckSupport.systemStatusTargets(model, SetFieldSupport.setters(model));
         Map<String, UsesIntent> usesByAlias = new LinkedHashMap<>();
         for (UsesIntent uses : model.getUses()) {
             if (uses.getModel() != null) {
@@ -724,7 +730,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("groupingSourcePk", groupingPk == null ? "Id" : IntentNaming.pascalCase(groupingPk.getName()));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, entities, model.getAggregates(), byName, compositionParents,
-                    crossModelLookup(context, usesByAlias));
+                    crossModelLookup(context, usesByAlias), systemStatusTargets.getOrDefault(entity.getName(), Set.of()));
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -752,6 +758,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
         buildScopedCalendars(entities, builtByName);
+        // The reverse index of whenTargetDeleted: restrict - a target entity must know every same-model
+        // relation that restricts its delete, which its own declaration cannot see (only the REFERENCING
+        // side authors the key). Same sweep reason as the two above.
+        buildDeleteRestrictors(entities, builtByName);
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -2187,7 +2197,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * templates need without re-deriving model structure.
      */
     private static List<Map<String, Object>> buildChecks(EntityIntent entity, List<EntityIntent> entities, List<AggregateIntent> aggregates,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel,
+            Set<Integer> systemTargets) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
             return checkMaps;
@@ -2363,12 +2374,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // The gate is optional here: without one the rule holds on every user write (the REST
                 // surfaces enforce it, like exactlyOne), with one it is enforced by the repository when
                 // the record is persisted carrying that status - the moment the value is finally needed.
-                if (check.getStatus() != null) {
+                // A condition naming a status a button or a workflow step writes gates the rule on it
+                // (#7595): those writers never reach the controllers, so ungated it would never run
+                // at the moment it is about.
+                Integer gateStatus = CheckSupport.effectiveGate(entity, check, systemTargets);
+                if (gateStatus != null) {
                     RelationIntent gate = entityStatusRelation(entity);
                     if (gate == null) {
                         continue; // the parser already reported it
                     }
-                    checkMap.put("status", String.valueOf(check.getStatus()));
+                    checkMap.put("status", String.valueOf(gateStatus));
                     checkMap.put("statusProperty", IntentNaming.pascalCase(gate.getName()));
                 }
                 checkMaps.add(checkMap);
@@ -2788,12 +2803,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (status == null || entity.getName() == null) {
             return;
         }
-        boolean computed = writesStatus(entity, status, model, rollupOwnedStatuses);
-        List<String> transitionTargets = transitionTargets(entity, model);
-        if (!computed && transitionTargets.isEmpty()) {
+        boolean ownsColumn = writesStatus(entity, status, model, rollupOwnedStatuses);
+        Set<Integer> buttonTargets = transitionTargets(entity, model);
+        if (!ownsColumn && buttonTargets.isEmpty()) {
             return;
         }
         entityMap.put("workflowStatusProperty", IntentNaming.pascalCase(status.getName()));
+        if (!ownsColumn) {
+            // Only buttons move it: what they own is the VALUES they set, not the column. A move to any
+            // other status stays an ordinary edit - the model declares no other writer for it, so refusing
+            // it would leave that status reachable from nowhere.
+            entityMap.put("workflowStatusValues", buttonTargets.stream()
+                                                               .map(String::valueOf)
+                                                               .collect(Collectors.joining(",")));
+        }
         if (status.getInit() != null && status.getInit()
                                               .matches("-?\\d+")) {
             // The one value a create may still carry: the status the record starts in. Anything else is
@@ -2801,67 +2824,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // declared at all.
             entityMap.put("workflowStatusInitial", status.getInit());
         }
-        if (!computed) {
-            // Transitions alone PRESERVE the column without claiming it (#7553). The half of the issue
-            // that is unambiguously a defect is the data loss - a PUT that simply omits the status
-            // NULLED it - and that is fixed for every owner alike. The refusal is deliberately NOT
-            // extended here, twice over: claiming the whole column would strand every status no button
-            // targets (an entity whose one button is Cancel would lose its ordinary DRAFT -> POSTED
-            // edit), and refusing just the targeted VALUES collides with the `checks:` design, where a
-            // gated check is enforced on the plain save/update path and its gate status is normally
-            // exactly what a button writes - so both readings remove a working feature to deliver this
-            // one. Which hand moves are legal is `lifecycle:`'s question, enforced in the repository
-            // precisely because writers other than the button exist. A process or a roll-up COMPUTES
-            // the column, so there the whole column stays claimed and this attribute is absent.
-            entityMap.put("workflowStatusPreserveOnly", "true");
-        }
     }
 
     /**
-     * The status seed ids the {@code transitions:} buttons targeting this entity write - the values a
-     * plain create/update may not hand in, because the button carries them itself.
-     *
-     * @param entity the authored entity
-     * @param model the whole intent
-     * @return the distinct targeted seed ids, in declaration order; empty when no button targets it
-     */
-    private static List<String> transitionTargets(EntityIntent entity, IntentModel model) {
-        List<String> targets = new ArrayList<>();
-        for (TransitionIntent transition : model.getTransitions()) {
-            if (!entity.getName()
-                       .equals(transition.getForEntity())) {
-                continue;
-            }
-            if (transition.getSetStatus() == null) {
-                continue; // refused by the parser; nothing to own
-            }
-            String setStatus = String.valueOf(transition.getSetStatus());
-            if (!targets.contains(setStatus)) {
-                targets.add(setStatus);
-            }
-        }
-        return targets;
-    }
-
-    /**
-     * Whether a declared system writer COMPUTES this entity's status - a {@code setRelationField} step
-     * of a process THIS entity triggers, or a capacity roll-up's {@code status:} (the entity being the
-     * roll-up's LOCAL parent). Either one owns the WHOLE column: the value is derived state, not
-     * something anybody hands in.
-     *
-     * <p>
-     * A {@code transitions:} button is deliberately NOT here: it writes one declared seed id rather
-     * than computing the column, so it earns the PRESERVE half of the guard (an omitted status is no
-     * longer nulled - #7553's data loss) and not the refusal. See
-     * {@link #putWorkflowStatus(Map, EntityIntent, IntentModel, Map)} for why both stronger readings
-     * take a working feature away, and {@code lifecycle:} for the construct that does guard hand moves.
+     * Whether a declared system writer owns this entity's WHOLE status column: a
+     * {@code setRelationField} step of a process THIS entity triggers, or a capacity roll-up's
+     * {@code status:} (the entity is the roll-up's LOCAL parent). A {@code transitions:} button owns
+     * only the values it sets ({@link #transitionTargets}). The state machine, {@code lifecycle:}, is
+     * unaffected either way - it is enforced in the repository, which every one of these writers still
+     * reaches.
      *
      * @param entity the authored entity
      * @param status its {@code function: EntityStatus} relation
      * @param model the whole intent
      * @param rollupOwnedStatuses the roll-up-displaced status properties per LOCAL parent entity name
      *        ({@link #displacedStatusProperties(IntentModel, Map)})
-     * @return true when the status is a system writer's to write
+     * @return true when the whole status column is a system writer's to write
      */
     private static boolean writesStatus(EntityIntent entity, RelationIntent status, IntentModel model,
             Map<String, List<String>> rollupOwnedStatuses) {
@@ -2882,6 +2860,28 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         return rollupOwnedStatuses.getOrDefault(entity.getName(), List.of())
                                   .contains(statusProperty);
+    }
+
+    /**
+     * The status values a {@code transitions:} button targeting this entity sets (#7553). A button
+     * carries its target seed id itself, so a plain PUT of that same value is a bypass of the button's
+     * own {@code from:}/{@code when:} guards, not a parallel legitimate write. A button owns only the
+     * value it sets: a Cancel button says nothing about who moves the record to POSTED.
+     *
+     * @param entity the authored entity
+     * @param model the whole intent
+     * @return the target seed ids, ascending; empty when no button targets the entity
+     */
+    private static Set<Integer> transitionTargets(EntityIntent entity, IntentModel model) {
+        Set<Integer> targets = new TreeSet<>();
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (entity.getName()
+                      .equals(transition.getForEntity())
+                    && transition.getSetStatus() != null) {
+                targets.add(transition.getSetStatus());
+            }
+        }
+        return targets;
     }
 
     /**
@@ -3035,6 +3035,55 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             List<Map<String, Object>> links =
                     (List<Map<String, Object>>) targetMap.computeIfAbsent("scopedCalendars", key -> new ArrayList<Map<String, Object>>());
             links.add(link);
+        }
+    }
+
+    /**
+     * Emits the {@code deleteRestrictors} model attribute on the entity a {@code whenTargetDeleted:
+     * restrict} relation POINTS AT - the reverse of the declaration, same reason
+     * {@link #buildScopedCalendars} runs its own sweep: only the referencing side authors the key, and
+     * it may be declared before or after the target entity.
+     *
+     * <p>
+     * Same-model only (the parser already refuses a cross-model {@code whenTargetDeleted}) - the
+     * generated repository constructs each referencing entity's repository directly, by its generated
+     * FQN, which only resolves within this model's own generation folder.
+     *
+     * <p>
+     * Carries FACTS only (the referencing entity's authored name and its FK property) - never a package
+     * or a class name. The referencing entity's OWN generated coordinates (its perspective, and from
+     * that its FQN) are resolved once, canonically, by {@code ModelParameterProcessor} at
+     * Java-generation time - the same division of labour as {@code masterLock} and every other
+     * cross-entity reference in this pipeline, so the two cannot drift.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     */
+    private static void buildDeleteRestrictors(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
+        for (EntityIntent entity : entities) {
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            if (entityMap == null) {
+                continue; // an unnamed / skipped entity
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (!relation.isTargetDeleteRestricted() || relation.isCrossModel()) {
+                    // The parser refuses a cross-model whenTargetDeleted, so this only guards a
+                    // hand-authored model reaching the generator another way - the sweep must never
+                    // stamp a restrictor whose repository this model does not generate.
+                    continue;
+                }
+                Map<String, Object> targetMap = builtByName.get(relation.getTo());
+                if (targetMap == null) {
+                    continue; // unknown target, reported by the parser
+                }
+                Map<String, Object> restrictor = new LinkedHashMap<>();
+                restrictor.put("referencingEntity", entity.getName());
+                restrictor.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
+                @SuppressWarnings("unchecked")
+                List<Map<String, Object>> restrictors = (List<Map<String, Object>>) targetMap.computeIfAbsent("deleteRestrictors",
+                        key -> new ArrayList<Map<String, Object>>());
+                restrictors.add(restrictor);
+            }
         }
     }
 
@@ -4338,8 +4387,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults",
-            "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "groupingKeys", "relatedEntities", "scopedCalendars", "deleteRestrictors", "lifecycleStatusNameList", "duplicateReset",
+            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

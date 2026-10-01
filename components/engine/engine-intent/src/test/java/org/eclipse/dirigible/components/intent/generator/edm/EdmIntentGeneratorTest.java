@@ -835,20 +835,18 @@ class EdmIntentGeneratorTest {
         Map<String, Object> request = entityByName(entities(model), "VacationRequest");
         assertEquals("Status", request.get("workflowStatusProperty"));
         assertEquals("1", request.get("workflowStatusInitial"));
-        // A process COMPUTES the column, so #7339's wholesale claim is unchanged: not preserve-only,
-        // so a differing value is still refused.
-        assertNull(request.get("workflowStatusPreserveOnly"));
         // Same status nomenclature, no flow over it - an ordinary writable column.
         assertNull(entityByName(entities(model), "Employee").get("workflowStatusProperty"));
     }
 
     /**
-     * A {@code transitions:} button claims the column (#7553): the button carries its target seed id
-     * itself, so a plain PUT of that same value is a bypass of the button's own {@code from:}/{@code
-     * when:} guards, not a parallel legitimate write. The button's own write (the generated
-     * {@code Transition} controller) reaches the repository through the targeted {@code updateProperty}
-     * primitive, never through the entity controller this guard sits on, so refusing it here costs the
-     * button nothing.
+     * A {@code transitions:} button claims the VALUES it sets, not the column (#7553): the button
+     * carries its target seed id itself, so a plain PUT of that same value is a bypass of the button's
+     * own {@code from:}/{@code when:} guards, not a parallel legitimate write - but a Void button says
+     * nothing about who moves the record to any other status, so those stay ordinary edits. The
+     * button's own write (the generated {@code Transition} controller) reaches the repository through
+     * the targeted {@code updateProperty} primitive, never through the entity controller this guard
+     * sits on, so refusing it here costs the button nothing.
      */
     @Test
     void aTransitionTargetedStatusIsEmittedAsWorkflowOwned() {
@@ -866,45 +864,139 @@ class EdmIntentGeneratorTest {
                     relations:
                       - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                 transitions:
-                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 2, label: Void }
+                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 4, label: Void }
+                  - { name: reject, forEntity: JournalEntry, from: [1], setStatus: 3, label: Reject }
+                  - { name: rejectAgain, forEntity: JournalEntry, from: [2], setStatus: 3, label: Reject }
                 """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("workflowStatusProperty"));
         assertEquals("1", entry.get("workflowStatusInitial"));
-        // A button writes one declared seed id rather than computing the column, so it earns the
-        // PRESERVE half only - an omitted status is kept instead of nulled, and nothing is refused.
-        assertEquals("true", entry.get("workflowStatusPreserveOnly"));
+        // Ascending and de-duplicated: the controllers split it on ','.
+        assertEquals("3,4", entry.get("workflowStatusValues"));
     }
 
     /**
-     * The transition case is preserve-only however many buttons the entity carries: refusing a value a
-     * button happens to write would take away the plain update path a gated {@code checks:} rule is
-     * enforced on, whose gate status is normally exactly that value.
+     * An ungated {@code requiredWhen} conditioned on a status a button sets takes that status as its
+     * gate (#7553): the button is the only way into it and writes through the repository, so a
+     * controller-only rule would never run when the record is posted. A condition on any other status,
+     * or on no status, keeps the controller routing (no {@code status} key).
      */
+    @SuppressWarnings("unchecked")
     @Test
-    void severalTransitionsStillOnlyPreserveTheColumn() {
+    void anUngatedRequiredWhenOnAButtonTargetIsGatedOnThatStatus() {
         String yaml = """
                 name: ledger
                 entities:
-                  - name: EntryStatus
+                  - name: DocStatus
                     kind: setting
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
-                  - name: JournalEntry
+                  - name: Doc
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: party, type: string }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - { kind: requiredWhen, field: party, when: "Status == POSTED", message: "posted needs a party" }
+                      - { kind: requiredWhen, field: party, when: "Status == DRAFT", message: "draft needs a party" }
+                      - { kind: requiredWhen, field: note, when: "party == 'x'", message: "x needs a note" }
+                transitions:
+                  - { name: post, forEntity: Doc, from: [1], setStatus: 2, label: Post }
+                seeds:
+                  - name: doc-statuses
+                    entity: DocStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: POSTED }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Doc").get("checks");
+        assertEquals("2", checks.get(0)
+                                .get("status"));
+        assertEquals("Status", checks.get(0)
+                                     .get("statusProperty"));
+        assertNull(checks.get(1)
+                         .get("status"));
+        assertNull(checks.get(2)
+                         .get("status"));
+    }
+
+    /**
+     * The same derivation for a status a workflow step writes (#7595): the step's setRelationField goes
+     * through the repository too, so a controller-only rule would never run at approval - the hole
+     * base-sales-invoices closed by hand with an explicit gate.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void anUngatedRequiredWhenOnAStepWrittenStatusIsGatedOnThatStatus() {
+        String yaml = """
+                name: leave
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Request
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: approver, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - { kind: requiredWhen, field: approver, when: "Status == 3", message: "approved needs an approver" }
+                      - { kind: requiredWhen, field: approver, when: "Status == 5", message: "nobody writes 5" }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: Request }
+                    steps:
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "leave");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Request").get("checks");
+        assertEquals("3", checks.get(0)
+                                .get("status"));
+        assertNull(checks.get(1)
+                         .get("status"));
+    }
+
+    /**
+     * A process or roll-up that owns the whole column wins over a button's narrower claim: no
+     * {@code workflowStatusValues}, so every direct status change is refused.
+     */
+    @Test
+    void aButtonOnAFlowOwnedStatusLeavesTheWholeColumnRefused() {
+        String yaml = """
+                name: vacations
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:
-                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: VacationRequest }
+                    steps:
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
                 transitions:
-                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 3, label: Void }
-                  - { name: close, forEntity: JournalEntry, from: [1], setStatus: 4, label: Close }
+                  - { name: withdraw, forEntity: VacationRequest, from: [1], setStatus: 4, label: Withdraw }
                 """;
-        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
-        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
-        assertEquals("Status", entry.get("workflowStatusProperty"));
-        assertEquals("true", entry.get("workflowStatusPreserveOnly"));
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vacations");
+        Map<String, Object> request = entityByName(entities(model), "VacationRequest");
+        assertEquals("Status", request.get("workflowStatusProperty"));
+        assertNull(request.get("workflowStatusValues"));
     }
 
     /**
@@ -945,9 +1037,7 @@ class EdmIntentGeneratorTest {
         Map<String, Object> invoice = entityByName(entities(model), "Invoice");
         assertEquals("Status", invoice.get("workflowStatusProperty"));
         assertEquals("1", invoice.get("workflowStatusInitial"));
-        // A roll-up COMPUTES the column, so it claims the whole of it - not preserve-only, exactly as a
-        // process-owned status behaves since #7339.
-        assertNull(invoice.get("workflowStatusPreserveOnly"));
+        assertNull(invoice.get("workflowStatusValues"));
     }
 
     @Test
@@ -2628,6 +2718,62 @@ class EdmIntentGeneratorTest {
         List<Map<String, Object>> entities = entities(model);
         assertEquals("true", entityByName(entities, "EmployeeDayAllocation").get("detailCalendar"));
         assertNull(entityByName(entities, "EmployeeTimesheet").get("scopedCalendars"));
+    }
+
+    @Test
+    // whenTargetDeleted: restrict (#7547) is authored on the REFERENCING side, so its own sweep
+    // stamps the reverse index onto the TARGET - facts only (which entity, which FK), never a URL or
+    // a package: those are resolved once at Java-generation time.
+    void whenTargetDeletedEmitsTheReverseIndexOnItsTarget() {
+        String yaml = """
+                name: expenses
+                entities:
+                  - name: ExpenseCategory
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true }
+                  - name: Expense
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: category, kind: manyToOne, to: ExpenseCategory, required: true, whenTargetDeleted: restrict }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses");
+        List<Map<String, Object>> entities = entities(model);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> restrictors =
+                (List<Map<String, Object>>) entityByName(entities, "ExpenseCategory").get("deleteRestrictors");
+        assertEquals(1, restrictors.size());
+        assertEquals("Expense", restrictors.get(0)
+                                           .get("referencingEntity"));
+        assertEquals("Category", restrictors.get(0)
+                                            .get("fkProperty"));
+
+        // Nothing is stamped on the declaring (Expense) side - the reverse index lives only on the
+        // target, which is the entity whose delete gets guarded.
+        assertNull(entityByName(entities, "Expense").get("deleteRestrictors"));
+    }
+
+    @Test
+    // No whenTargetDeleted anywhere -> no attribute at all, so an existing model regenerates
+    // byte-identically.
+    void noWhenTargetDeletedEmitsNoDeleteRestrictors() {
+        String yaml = """
+                name: expenses
+                entities:
+                  - name: ExpenseCategory
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Expense
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: category, kind: manyToOne, to: ExpenseCategory, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses");
+        assertNull(entityByName(entities(model), "ExpenseCategory").get("deleteRestrictors"));
     }
 
     @Test
