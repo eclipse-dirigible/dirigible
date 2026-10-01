@@ -36,17 +36,17 @@
 #end
         </div>
 #elseif($el.controlId == "header")
-        <h1 x-h-text.h3 class="mb-2 col-span-12 text-2xl font-semibold tracking-tight"#tlabel($el)>$!el.label</h1>
+        <h1 x-h-text.h3 class="mb-2 sm:col-span-2 text-2xl font-semibold tracking-tight"#tlabel($el)>$!el.label</h1>
 #elseif($el.controlId == "paragraph")
-        <p x-h-text class="col-span-12"#tlabel($el)>$!el.label</p>
+        <p x-h-text class="sm:col-span-2"#tlabel($el)>$!el.label</p>
 #elseif($el.controlId == "line")
-        <hr x-h-separator class="col-span-12" />
+        <hr x-h-separator class="sm:col-span-2" />
 #elseif($el.controlId == "spacer")
         <div class="flex-1"></div>
 #elseif($el.controlId == "link")
         <a x-h-button data-variant="link" href="$!el.url"#tlabel($el)>$!el.label</a>
 #elseif($el.controlId == "input-textarea")
-        <div x-h-field class="col-span-12">
+        <div x-h-field class="sm:col-span-2">
           <label x-h-label for="$el.id"#tlabel($el)>$!el.label</label>
           <textarea x-h-textarea id="$el.id" rows="4" x-model="model.$el.model"#if($el.readonly) readonly#end></textarea>
         </div>
@@ -208,13 +208,13 @@
         <div x-h-card-content style="flex: 1 1 auto; display: flex; flex-direction: column;">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
 #if($metadata.steps && $metadata.steps.size() > 0)
-        <hr class="col-span-12 mb-4" style="border: none; border-top: 1px solid var(--border);" />
+        <hr class="sm:col-span-2 mb-4" style="border: none; border-top: 1px solid var(--border);" />
         <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
              relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
              active step = the current status name (model.$metadata.statusVar).
              `label` stays the untranslated seed name because it is what the record's status value is
              MATCHED against; `title` is the same name resolved through the catalog and is what shows. -->
-        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-12 mb-4">
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="sm:col-span-2 mb-4">
           <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label.replace($SQ, $ESCSQ)', title: #if($s.translation)T('${projectName}:${tprefix}.t.${s.translation.replace($SQ, $ESCSQ)}', '$s.label.replace($SQ, $ESCSQ)')#{else}'$s.label.replace($SQ, $ESCSQ)'#end, description: #if($s.description)'$s.description.replace($SQ, $ESCSQ)'#{else}''#end }#if($foreach.hasNext), #end#end]" :key="step.label">
             <div x-h-step-indicator-item="i + 1">
               <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
@@ -228,13 +228,13 @@
             </div>
           </template>
         </nav>
-        <hr class="col-span-12 mb-4" style="border: none; border-top: 1px solid var(--border);" />
+        <hr class="sm:col-span-2 mb-4" style="border: none; border-top: 1px solid var(--border);" />
 #end
 #foreach($element in $form)
 #if($element.controlId == "container-hbox")
 ## action row: rendered as the bottom-pinned footer below (outside the detail grid)
 #elseif($element.controlId == "container-vbox")
-        <div class="vbox gap-3 col-span-12">
+        <div class="vbox gap-3 sm:col-span-2">
 #foreach($child in $element.children)
 #leaf($child)
 #end
@@ -259,13 +259,13 @@
       <div x-h-field-group>
 #foreach($element in $form)
 #if($element.controlId == "container-hbox")
-        <div class="hbox gap-3 items-end col-span-12 mt-2">
+        <div class="hbox gap-3 items-end sm:col-span-2 mt-2">
 #foreach($child in $element.children)
 #leaf($child)
 #end
         </div>
 #elseif($element.controlId == "container-vbox")
-        <div class="vbox gap-3 col-span-12">
+        <div class="vbox gap-3 sm:col-span-2">
 #foreach($child in $element.children)
 #leaf($child)
 #end

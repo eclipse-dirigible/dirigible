@@ -101,8 +101,10 @@
       </div>
     </div>
 
-    <!-- Detail: the selected task, its claim action, and the form inline -->
-    <div x-h-split-panel data-size="80%">
+    <!-- Detail: the selected task, its claim action, and the form inline. The task form lays out one
+         column below 640px and two above; under 360px even one column stops reading, so the splitter
+         stops there. -->
+    <div x-h-split-panel data-size="80%" data-min="360">
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>

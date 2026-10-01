@@ -73,7 +73,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
-      <div x-h-field class="#if($property.widgetType =="MULTISELECT")col-span-12#elseif($property.widgetSize && $property.widgetSize != "")sm:col-span-${property.widgetSize}#{else}sm:col-span-6#end"#visibleGate($property) :data-invalid="fieldError === '${property.name}'">
+      <div x-h-field class="#if($property.widgetType =="MULTISELECT")sm:col-span-12#elseif($property.widgetSize && $property.widgetSize != "")sm:col-span-${property.widgetSize}#{else}sm:col-span-6#end"#visibleGate($property) :data-invalid="fieldError === '${property.name}'">
 ## A CHECKBOX carries its label BESIDE it, inside the branch below - not above, as every
 ## other control does.
 #if($property.widgetType != "CHECKBOX")
