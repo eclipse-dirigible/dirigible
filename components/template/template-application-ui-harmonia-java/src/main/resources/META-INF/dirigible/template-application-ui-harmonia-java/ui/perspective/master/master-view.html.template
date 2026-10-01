@@ -266,7 +266,7 @@
                       <div x-h-info-page-header>
                         <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="paperclip"></svg></div>
                         <div x-h-info-page-title x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopies', 'No copies yet') : T('$projectName:${tprefix}.messages.noFiles', 'No attachments')"></div>
-                        <div x-h-info-page-description x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopiesHint', 'A copy is stored automatically when the document is issued.') : T('$projectName:${tprefix}.messages.noFilesHint', 'Files are managed from the record’s Edit form.')"></div>
+                        <div x-h-info-page-description x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopiesHint', 'A copy is stored automatically when the document is issued.') : T('$projectName:${tprefix}.messages.noFilesHintManaged', 'Files are managed from the record’s Edit form.')"></div>
                       </div>
                     </div>
                   </template>

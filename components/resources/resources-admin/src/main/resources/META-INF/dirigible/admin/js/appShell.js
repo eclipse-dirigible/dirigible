@@ -213,6 +213,13 @@ document.addEventListener('alpine:init', () => {
           // perspective is a setting when its kind is SETTING (from the generator); the legacy 'settings'
           // group id is a fallback for apps generated before the kind tag existed.
           const all = Array.isArray(data.perspectives) ? data.perspectives : [];
+          // A navigation group translates its label the way a custom action does: it declares
+          // `translation: { key: '<project>:<path>' }` and the sidebar binds that key (#7610). Only a
+          // fully-qualified key is adopted - its project is the catalog namespace loaded below.
+          all.forEach(g => {
+            const key = g.translation && g.translation.key;
+            if (!g.tkey && typeof key === 'string' && key.indexOf(':') > 0) g.tkey = key;
+          });
           const settings = [];
           const appGroups = [];
           // App entities declared without a navigation group come back as standalone PRIMARY
@@ -259,7 +266,7 @@ document.addEventListener('alpine:init', () => {
           // Settings entries translate. Each perspective's tkey is '<project>:<path>' - the project
           // is the catalog namespace, which the shell (having no project of its own) must add.
           if (window.AppI18nAddNamespaces) {
-            const namespaces = [...new Set(all.flatMap(g => Array.isArray(g.items) ? g.items : [g])
+            const namespaces = [...new Set(all.flatMap(g => Array.isArray(g.items) ? [g, ...g.items] : [g])
               .map(it => (it.tkey || '').split(':')[0])
               .filter(ns => ns && ns !== 'application-core'))];
             AppI18nAddNamespaces(namespaces);

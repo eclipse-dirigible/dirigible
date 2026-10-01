@@ -1025,6 +1025,23 @@ shells. The project's own standalone shell is unaffected. The group ids are defi
 dedicated navigation-groups project that exports `getPerspectiveGroup()` for each id) - the entity
 only references the id (e.g. `group: master-data`).
 
+A group's `label` is its English text. To show it in the user's language, the group names a
+translation key the same way a custom action does, `translation: { key: '<project>:<path>' }`, and
+the navigation-groups project ships that key in its own `i18n/<locale>/*.json` catalogs. The key
+must be fully qualified: its project part is the catalog namespace the shell loads.
+
+```javascript
+// base-nav-hr/configs/hr-group.js
+exports.getPerspectiveGroup = () => ({
+    id: 'hr', label: 'People', order: 45, items: [],
+    translation: { key: 'base-nav-hr:groups.hr' },
+});
+// base-nav-hr/i18n/bg-BG/groups.json   { "groups": { "hr": "Хора" } }
+// base-nav-hr/i18n/en-US/groups.json   { "groups": { "hr": "People" } }
+```
+
+A group that names no key, or a key the active language's catalog lacks, shows its `label`.
+
 ### Cross-model references (uses) - reuse entities owned by another intent model
 
 **Use when:** an entity should reference master/reference data owned by a *different* project's

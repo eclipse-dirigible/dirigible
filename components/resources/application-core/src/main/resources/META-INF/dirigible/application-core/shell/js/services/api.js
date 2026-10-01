@@ -215,9 +215,11 @@ App.services.api = {
  * @returns {Promise<boolean>}
  */
 App.services.confirmWarnings = function (warnings) {
-  const t = (key, fallback) => (typeof window.T === 'function' ? window.T(key, fallback) : fallback);
-  const title = t('warnings.title', 'Please confirm');
-  const question = t('warnings.question', 'Do you want to save anyway?');
+  // The shell catalog's keys are namespaced: a bare 'warnings.title' resolved against no catalog and
+  // the dialog stayed English in every language (#7610).
+  const t = (key, fallback) => (typeof window.T === 'function' ? window.T('application-core:' + key, fallback) : fallback);
+  const title = t('shell.warnings.title', 'Please confirm');
+  const question = t('shell.warnings.question', 'Do you want to save anyway?');
   const messages = warnings.map(w => w.message);
   if (!window.Alpine || typeof document === 'undefined') {
     return Promise.resolve(window.confirm(title + '\n\n' + messages.join('\n') + '\n\n' + question));
@@ -256,8 +258,8 @@ App.services.confirmWarnings = function (warnings) {
     host.querySelector('.warnings-question').textContent = question;
     const no = host.querySelector('[data-answer="no"]');
     const yes = host.querySelector('[data-answer="yes"]');
-    no.textContent = t('warnings.cancel', 'Cancel');
-    yes.textContent = t('warnings.confirm', 'Save anyway');
+    no.textContent = t('shell.warnings.cancel', 'Cancel');
+    yes.textContent = t('shell.warnings.confirm', 'Save anyway');
     const answer = (confirmed) => {
       document.removeEventListener('keydown', onKey, true);
       host.remove();

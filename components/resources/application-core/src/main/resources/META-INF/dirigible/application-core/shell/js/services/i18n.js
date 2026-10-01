@@ -52,6 +52,18 @@
       options[name] !== undefined && options[name] !== null ? options[name] : match);
   };
 
+  // The generated pages' chrome labels (the template catalog's aria / state / messages / defaults
+  // sections) are minted into every module's own catalog as '<project>:<prefix>.<section>.<path>'.
+  // The platform ships the same sections, in every language it supports, as
+  // 'application-core:generated.<section>.<path>' (i18n/<locale>/generated.json), so a module whose
+  // catalog predates a template key - or was translated before that key existed - still shows it
+  // in the user's language instead of in English. The module's own entry always wins.
+  const GENERATED_KEY = /^([^:]+):[^.:]+\.((?:aria|state|messages|defaults)\..+)$/;
+  const generatedKey = (key) => {
+    const match = GENERATED_KEY.exec(key);
+    return match && match[1] !== 'application-core' ? 'application-core:generated.' + match[2] : null;
+  };
+
   const markReady = () => {
     catalogsReady = true;
     if (window.Alpine && Alpine.store('i18n')) Alpine.store('i18n').ready = true;
@@ -72,9 +84,13 @@
         if (!key) return fallback !== undefined ? interpolate(fallback, options) : '';
         const local = countryLabel(key);
         if (local !== undefined) return interpolate(local, options);
-        if (this.ready && window.i18next
-            && i18next.exists(key, Object.assign({ fallbackLng: false }, options))) {
-          return i18next.t(key, options);
+        if (this.ready && window.i18next) {
+          const strict = Object.assign({ fallbackLng: false }, options);
+          if (i18next.exists(key, strict)) return i18next.t(key, options);
+          // A generated page's chrome key the module's own catalog lacks (an older or partial
+          // translation, #7610) resolves against the platform's copy of the template catalog.
+          const shared = generatedKey(key);
+          if (shared && i18next.exists(shared, strict)) return i18next.t(shared, options);
         }
         return interpolate(fallback !== undefined ? fallback : key, options);
       },

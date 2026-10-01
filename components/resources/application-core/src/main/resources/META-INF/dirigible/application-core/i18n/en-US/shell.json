@@ -13,7 +13,11 @@
       "other": "Other",
       "create": "Create",
       "edit": "Edit",
-      "home": "Home"
+      "home": "Home",
+      "my": "My",
+      "administration": "Administration",
+      "partner": "Partner",
+      "partnerPortal": "Partner Portal"
     },
     "user": {
       "user": "User",
@@ -316,6 +320,15 @@
     },
     "list": {
       "resizeColumn": "Resize column"
+    },
+    "warnings": {
+      "title": "Please confirm",
+      "question": "Do you want to save anyway?",
+      "cancel": "Cancel",
+      "confirm": "Save anyway"
+    },
+    "defaults": {
+      "cancel": "Cancel"
     }
   }
 }
