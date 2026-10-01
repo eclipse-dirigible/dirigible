@@ -631,8 +631,8 @@ public final class CheckSupport {
      * The status seed ids a SYSTEM writer moves each entity's {@code function: EntityStatus} FK to,
      * keyed by entity name: a {@code transitions:} button's {@code setStatus} and a {@code processes:}
      * step's {@code setRelationField} on that FK (#7595). Neither comes through a REST controller - the
-     * button and the step both write through the repository's targeted {@code updateProperties} - so
-     * a check that only the controllers run never fires when either of them moves the record.
+     * button and the step both write through the repository's targeted {@code updateProperties} - so a
+     * check that only the controllers run never fires when either of them moves the record.
      *
      * @param model the whole intent
      * @param setters the model's validated field setters ({@link SetFieldSupport#setters})
@@ -671,9 +671,9 @@ public final class CheckSupport {
      * step approves is a rule about the approval; left ungated it is emitted into the controllers'
      * {@code validate()}, which the step never reaches (base-sales-invoices verified it live: an Issue
      * with no reason went through until the author added the gate by hand). Gated, the repository
-     * enforces it on every writer, and the BPMN generator keeps the step that writes the status in
-     * the completing transaction, so the refusal reaches the person who acted instead of
-     * dead-lettering. Both generators read the gate HERE, so they cannot disagree about it.
+     * enforces it on every writer, and the BPMN generator keeps the step that writes the status in the
+     * completing transaction, so the refusal reaches the person who acted instead of dead-lettering.
+     * Both generators read the gate HERE, so they cannot disagree about it.
      *
      * @param entity the entity the check sits on
      * @param check the check

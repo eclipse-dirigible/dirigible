@@ -926,9 +926,9 @@ class EdmIntentGeneratorTest {
     }
 
     /**
-     * The same derivation for a status a workflow step writes (#7595): the step's setRelationField
-     * goes through the repository too, so a controller-only rule would never run at approval - the
-     * hole base-sales-invoices closed by hand with an explicit gate.
+     * The same derivation for a status a workflow step writes (#7595): the step's setRelationField goes
+     * through the repository too, so a controller-only rule would never run at approval - the hole
+     * base-sales-invoices closed by hand with an explicit gate.
      */
     @SuppressWarnings("unchecked")
     @Test
