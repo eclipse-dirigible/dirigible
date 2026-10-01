@@ -3036,7 +3036,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // ...and the guard it writes is PER PROCESS (#6862): a record can be the subject of several
         // flows, so "has a process run for this record" is the wrong question - a create-triggered flow
         // that stamped the record silently skipped every follow-up flow bound to its transition.
-        assertTrue(claimTrigger.contains("ProcessStamps.has(entity.ProcessIds, \"ClaimConfirm\")"),
+        assertTrue(claimTrigger.contains("ProcessStamps.idFor(entity.ProcessIds, \"ClaimConfirm\")"),
                 "the at-most-once guard must ask about THIS process, not about any stamped ProcessId");
         assertTrue(claimTrigger.contains("stamped.put(\"ProcessIds\", ProcessStamps.with(")
                 && claimTrigger.contains("\"ClaimConfirm\", processId))") && claimTrigger.contains("stamped.put(\"ProcessId\", processId)"),
@@ -3217,7 +3217,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // two flows indistinguishable: ApprovalFlow stamps every Approval on create, so the guard was
         // always already tripped by the time a transition arrived.
         String followUp = contentOf("gen/events/emission/VoidedFollowUpTrigger.java");
-        assertTrue(followUp.contains("-transitioned") && followUp.contains("ProcessStamps.has(entity.ProcessIds, \"VoidedFollowUp\")"),
+        assertTrue(followUp.contains("-transitioned") && followUp.contains("ProcessStamps.idFor(entity.ProcessIds, \"VoidedFollowUp\")"),
                 "the transition-triggered flow must guard on its own stamp, not on any ProcessId the record carries");
         assertFalse(followUp.contains("if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank()))"),
                 "the record-wide guard is what skipped this flow - it must be gone");
