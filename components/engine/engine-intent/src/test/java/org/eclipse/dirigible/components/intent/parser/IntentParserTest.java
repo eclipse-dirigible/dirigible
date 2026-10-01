@@ -1114,6 +1114,62 @@ class IntentParserTest {
                 "requires the entity to own a composition child");
     }
 
+    /**
+     * #7611: a check's {@code message} is a text or a map of language codes to texts, keyed by the
+     * {@code languages:} contract, and an optional {@code id} names it in the translation catalogs.
+     */
+    @Test
+    void checkMessagesMayBeAuthoredPerLanguage() {
+        String yaml = """
+                name: billing
+                languages: [en, bg]
+                entities:
+                  - name: Customer
+                    checks:
+                      - id: discountCap
+                        kind: compare
+                        field: discount
+                        op: le
+                        value: 50
+                        message: { en: "The discount is at most 50%", bg: "Отстъпката е най-много 50%" }
+                      - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: discount, type: decimal }
+                      - { name: credit, type: decimal }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent cap = model.getEntities()
+                               .get(0)
+                               .getChecks()
+                               .get(0);
+        assertEquals("The discount is at most 50%", cap.getMessage());
+        assertEquals(java.util.Map.of("en", "The discount is at most 50%", "bg", "Отстъпката е най-много 50%"),
+                cap.getMessageTranslations());
+        assertEquals("discountCap", cap.getId());
+        CheckIntent plain = model.getEntities()
+                                 .get(0)
+                                 .getChecks()
+                                 .get(1);
+        assertEquals("The credit is never negative", plain.getMessage());
+        assertTrue(plain.getMessageTranslations()
+                        .isEmpty());
+
+        // The default-language text of a map without `en` is its first entry.
+        IntentParser.parse(yaml.replace("languages: [en, bg]", "languages: [bg, de]")
+                               .replace("en: \"The discount", "de: \"The discount"));
+
+        assertCompareIssue(yaml.replace("en: \"The discount", "EN: \"The discount"), "is not a short lowercase language code");
+        assertCompareIssue(yaml.replace("bg: \"Отстъпката", "de: \"Отстъпката"), "language [de] which is not among the module's languages");
+        assertCompareIssue(yaml.replace("bg: \"Отстъпката е най-много 50%\"", "bg: 5"), "message [bg] must be a non-blank text");
+        assertCompareIssue(
+                yaml.replace("message: { en: \"The discount is at most 50%\", bg: \"Отстъпката е най-много 50%\" }", "message: {}"),
+                "must not be an empty map");
+        assertCompareIssue(yaml.replace("id: discountCap", "id: 1cap"), "must be an identifier");
+        assertCompareIssue(yaml.replace("- { kind: compare, field: credit", "- { id: discountCap, kind: compare, field: credit"),
+                "is declared by another check of the same entity");
+    }
+
     @Test
     void severityWarnIsRefusedOnTheKindsNobodyIsAskedAbout() {
         String yaml = """

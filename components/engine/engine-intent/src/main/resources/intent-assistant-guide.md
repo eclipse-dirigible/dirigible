@@ -659,6 +659,24 @@ field may declare:
     when the document is saved for all the lines that break it - not once per line. `{count}` in the
     message is replaced with the number of lines. Always a warning; a hard per-line rule is a
     `compare` on the items entity.
+  **Translating check messages (#7611).** A check message is translated like a label - write it in the
+  module's default language and it reaches every reader in their own. Two ways, which combine:
+  - **Inline**, per language: `message: { en: "{count} line(s) at price zero", bg: "{count} ред(а) с нулева цена" }`.
+    The keys are `languages:` codes (and must be among the module's `languages:` when it declares
+    them); `en` - else the first entry - is the default-language text. A plain string keeps working
+    unchanged: it IS the default-language text.
+  - **A language catalog**, like every label: the generator writes each message into the module's
+    en-US catalog (`i18n/en-US/<model>.model.json`) under `<model prefix>.checks.<key>`, and a
+    translator's `i18n/bg-BG/<model>.model.json` translates it under the same key.
+  The key is `<Entity>_<kind>_<position>` (`Invoice_itemsCompare_0`), or `<Entity>_<id>` when the
+  check declares an `id:` - **give a check an `id:` once its message is translated in a catalog**, so
+  reordering the entity's checks does not orphan the translation: `- { id: zeroLines, kind:
+  itemsCompare, ... }`. A picker rule's message is `<Entity>_<relation>_pickable` (and takes the same
+  inline map: `pickable: { when: ..., message: { en: ..., bg: ... } }`), a `unique:` key's
+  `<Entity>_unique_<constraint>`. The generated code resolves the request language's catalog first,
+  then the inline text for that language, then the default text; placeholders (`{count}`, `{match}`)
+  are filled in AFTER translation, so a translation may move them. A refusal's 400 body and each
+  warning of a 428 carry `messageKey` and `messageParams` next to the resolved `message`.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a

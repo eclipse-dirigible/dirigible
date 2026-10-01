@@ -110,6 +110,20 @@ public final class PickableSupport {
      * @return the JSON text
      */
     public static String rule(PickableIntent pickable) {
+        return rule(pickable, null);
+    }
+
+    /**
+     * The rule as JSON, naming its message's translation key (issue #7611): {@code messageKey} is the
+     * catalog entry ({@code checks.<key>}) the generated en-US catalog writes the message under, and
+     * {@code messages} carries the per-language texts authored inline - the picker resolves the key for
+     * the UI language and falls back to them, then to {@code message}.
+     *
+     * @param pickable a declaration the parser accepted
+     * @param messageKey the message's catalog key, or {@code null} for none
+     * @return the JSON text
+     */
+    public static String rule(PickableIntent pickable, String messageKey) {
         List<String> authored = CheckSupport.terms(pickable.getWhen());
         List<Map<String, Object>> terms = new ArrayList<>();
         for (String text : authored) {
@@ -126,6 +140,13 @@ public final class PickableSupport {
         rule.put("when", terms);
         rule.put("hide", hides(pickable));
         rule.put("message", message(pickable, authored));
+        if (messageKey != null) {
+            rule.put("messageKey", messageKey);
+        }
+        Map<String, String> translations = pickable.getMessageTranslations();
+        if (!translations.isEmpty()) {
+            rule.put("messages", new LinkedHashMap<>(translations));
+        }
         return GSON.toJson(rule);
     }
 

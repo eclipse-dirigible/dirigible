@@ -4314,6 +4314,10 @@ public final class IntentParser {
                 }
                 if (relation.getPickable() != null) {
                     validatePickable(entity, relation, byName, issues);
+                    validateLocalizedMessage("entity [" + entity.getName() + "] relation [" + relation.getName() + "] pickable",
+                            relation.getPickable()
+                                    .getAuthoredMessage(),
+                            model.getLanguages(), issues);
                 }
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
@@ -4370,8 +4374,13 @@ public final class IntentParser {
                 validateImmutableInPeriod(entity, byName, issues);
             }
             if (entity.getChecks() != null) {
+                Set<String> checkIds = new java.util.HashSet<>();
                 for (CheckIntent check : entity.getChecks()) {
                     validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
+                    String checkSubject =
+                            "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
+                    validateLocalizedMessage(checkSubject, check.getAuthoredMessage(), model.getLanguages(), issues);
+                    validateCheckId(checkSubject, check, checkIds, issues);
                 }
             }
             if (!entity.getUnique()
@@ -11271,6 +11280,66 @@ public final class IntentParser {
                             + UnknownKeyValidator.suggestion(key, allowed));
                 }
             }
+        }
+    }
+
+    /** The shape of a check's {@code id:} - it becomes part of a translation catalog key (#7611). */
+    private static final java.util.regex.Pattern CHECK_ID = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+
+    /**
+     * An authored user-facing message that may be written per language (issue #7611): a plain string,
+     * or a map of {@code languages:} codes to the text in that language. The keys follow the
+     * {@code languages:} contract - a short lowercase code - and, when the module declares
+     * {@code languages:}, must be among them: a translation for a language the module says it does not
+     * provide would never be offered by the Region &amp; Language picker the declaration feeds.
+     *
+     * @param subject the message prefix
+     * @param authored the authored value
+     * @param languages the module's declared languages
+     * @param issues the issues collected so far
+     */
+    private static void validateLocalizedMessage(String subject, Object authored, List<String> languages, List<String> issues) {
+        if (authored == null || authored instanceof String) {
+            return;
+        }
+        if (!(authored instanceof java.util.Map<?, ?> map)) {
+            issues.add(subject + " message must be a text or a map of language codes to texts, e.g."
+                    + " `message: { en: \"...\", bg: \"...\" }`");
+            return;
+        }
+        if (map.isEmpty()) {
+            issues.add(subject + " message must not be an empty map - write at least the default-language text");
+            return;
+        }
+        for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {
+            String language = String.valueOf(entry.getKey());
+            if (!language.matches("[a-z]{2,3}")) {
+                issues.add(subject + " message declares [" + language + "] which is not a short lowercase language code (e.g. en, bg)");
+            } else if (languages != null && !languages.isEmpty() && !languages.contains(language)) {
+                issues.add(
+                        subject + " message declares language [" + language + "] which is not among the module's languages: " + languages);
+            }
+            if (!(entry.getValue() instanceof String text) || text.isBlank()) {
+                issues.add(subject + " message [" + language + "] must be a non-blank text");
+            }
+        }
+    }
+
+    /**
+     * A check's optional {@code id:} (issue #7611): an identifier, unique within its entity, since it
+     * names the check's message in the translation catalogs.
+     */
+    private static void validateCheckId(String subject, CheckIntent check, Set<String> seen, List<String> issues) {
+        if (check.getId() == null) {
+            return;
+        }
+        String id = check.getId()
+                         .trim();
+        if (!CHECK_ID.matcher(id)
+                     .matches()) {
+            issues.add(subject + " id [" + check.getId() + "] must be an identifier (letters, digits, underscore; a letter first)");
+        } else if (!seen.add(id)) {
+            issues.add(subject + " id [" + id + "] is declared by another check of the same entity - a check id names one message");
         }
     }
 

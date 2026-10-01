@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.sdk.db;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Thrown by client-side domain logic — a generated repository's declarative {@code checks:} gate, a
  * capacity guard, or a hand-written validation — to signal that a well-formed request violates a
@@ -26,13 +30,36 @@ public class ValidationException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
+    /** The translation key the message was resolved from, or {@code null} for a literal message. */
+    private final String messageKey;
+
+    /** The values interpolated into the message's placeholders, by placeholder name. */
+    private final transient Map<String, Object> messageParams;
+
     /**
      * Creates a validation exception.
      *
      * @param message the user-facing reason the request was rejected
      */
     public ValidationException(String message) {
+        this(message, null, null);
+    }
+
+    /**
+     * Creates a validation exception whose message was resolved from a translation catalog (issue
+     * #7611) - a generated {@code checks:} refusal. The REST error body carries the key and the
+     * parameters next to the resolved text, so a client can render the message again in another
+     * language.
+     *
+     * @param message the user-facing reason, already resolved for the request's language
+     * @param messageKey the fully qualified translation key ({@code <project>:<catalog>.checks.<key>})
+     * @param messageParams the placeholder values interpolated into the message, or {@code null}
+     */
+    public ValidationException(String message, String messageKey, Map<String, Object> messageParams) {
         super(message);
+        this.messageKey = messageKey;
+        this.messageParams = messageParams == null || messageParams.isEmpty() ? Collections.emptyMap()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(messageParams));
     }
 
     /**
@@ -43,6 +70,26 @@ public class ValidationException extends RuntimeException {
      */
     public ValidationException(String message, Throwable cause) {
         super(message, cause);
+        this.messageKey = cause instanceof ValidationException validation ? validation.getMessageKey() : null;
+        this.messageParams = cause instanceof ValidationException validation ? validation.getMessageParams() : Collections.emptyMap();
+    }
+
+    /**
+     * The translation key the message was resolved from.
+     *
+     * @return the fully qualified key, or {@code null} for a literal message
+     */
+    public String getMessageKey() {
+        return messageKey;
+    }
+
+    /**
+     * The values interpolated into the message's placeholders.
+     *
+     * @return placeholder name to value; empty when there are none
+     */
+    public Map<String, Object> getMessageParams() {
+        return messageParams == null ? Collections.emptyMap() : messageParams;
     }
 
 }

@@ -66,6 +66,65 @@ final class ModelTranslations {
     }
 
     /**
+     * The entity-model catalog's sub-object the check and picker-rule messages live under (issue
+     * #7611): {@code <prefix>.checks.<key>}.
+     */
+    static final String CHECKS_CATALOG = "checks";
+
+    /**
+     * The fully qualified i18next key of an entry of this model's catalog -
+     * {@code <project>:<catalog prefix>.<path>}, the form the generated views pass to {@code T()} and
+     * the generated server code resolves a check message by.
+     *
+     * @param parameters the generation parameters (project name and model file path)
+     * @param path the entry's path inside the catalog
+     * @return the key; without a project or a file path (a bare render), the path alone
+     */
+    static String catalogKey(Map<String, Object> parameters, String path) {
+        String project = str(parameters, "projectName");
+        String filePath = str(parameters, "filePath");
+        if (project == null || filePath == null) {
+            return path;
+        }
+        return project + ":" + catalogPrefix(filePath) + "." + path;
+    }
+
+    /**
+     * The catalog key of a check's message (issue #7611): the one the generator recorded, or - for a
+     * model written before it did - the same derivation it uses, the check's kind and position in its
+     * entity's list.
+     *
+     * @param entity the entity
+     * @param check the check
+     * @param index the check's position in the entity's {@code checks}
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String checkMessageKey(Map<String, Object> entity, Map<String, Object> check, int index) {
+        String key = str(check, "messageKey");
+        if (key != null && !key.isBlank()) {
+            return key;
+        }
+        return str(entity, "name") + "_" + str(check, "kind") + "_" + index;
+    }
+
+    /**
+     * The catalog key of a business key's ({@code unique:}) message (issue #7611).
+     *
+     * @param entity the entity
+     * @param constraint the unique constraint
+     * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} without a
+     *         message or a name
+     */
+    static String uniqueMessageKey(Map<String, Object> entity, Map<String, Object> constraint) {
+        String name = str(constraint, "name");
+        String message = str(constraint, "message");
+        if (name == null || name.isBlank() || message == null || message.isBlank()) {
+            return null;
+        }
+        return str(entity, "name") + "_unique_" + name.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    /**
      * Derives the path a catalog is written to.
      *
      * @param filePath the model file path
@@ -189,6 +248,10 @@ final class ModelTranslations {
                 texts.put(str(widget, "tId"), strOr(widget, "label", str(widget, "name")));
             }
         }
+        Map<String, Object> checkMessages = checkMessages(model);
+        if (!checkMessages.isEmpty()) {
+            catalog.put(CHECKS_CATALOG, checkMessages);
+        }
         // Per-record custom action labels and BPM user-task labels live under their own sub-objects,
         // because the views resolve them through those namespaces.
         Map<String, Object> customActionLabels = asMap(model.get("customActionLabels"));
@@ -199,6 +262,45 @@ final class ModelTranslations {
         if (processTaskLabels != null) {
             catalog.put("processes", new LinkedHashMap<>(processTaskLabels));
         }
+    }
+
+    /**
+     * Collects the user-facing messages of the entities' checks, business keys and picker rules (issue
+     * #7611), in the default language, keyed as the generated code resolves them - so a language
+     * catalog translates a refusal, a warning or a picker hint exactly as it translates a label.
+     *
+     * @param model the entity model
+     * @return key to default-language message, in model order
+     */
+    static Map<String, Object> checkMessages(Map<String, Object> model) {
+        Map<String, Object> messages = new LinkedHashMap<>();
+        for (Map<String, Object> entity : asMaps(model.get("entities"))) {
+            int index = -1;
+            for (Map<String, Object> check : asMaps(entity.get("checks"))) {
+                index++;
+                String message = str(check, "message");
+                if (message != null && !message.isBlank()) {
+                    messages.put(checkMessageKey(entity, check, index), message);
+                }
+            }
+            for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
+                String key = uniqueMessageKey(entity, constraint);
+                if (key != null) {
+                    messages.put(key, constraint.get("message"));
+                }
+            }
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                String pickable = str(property, "widgetPickable");
+                if (pickable == null || !pickable.contains("\"messageKey\"")) {
+                    continue;
+                }
+                Map<String, Object> rule = ModelJson.parseObject(pickable);
+                if (rule.get("messageKey") instanceof String key && rule.get("message") instanceof String message && !message.isBlank()) {
+                    messages.put(key, message);
+                }
+            }
+        }
+        return messages;
     }
 
     /**

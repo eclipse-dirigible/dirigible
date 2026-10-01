@@ -230,6 +230,31 @@ shared API service: one confirm dialog listing all the warnings, then the repeat
 caller (a process step, a job) is never stopped, and each confirmation is logged with the user who
 gave it.
 
+### Translating check messages (#7611)
+
+A check's `message:` (and a picker rule's) is a plain string - the default-language text - or a map of
+`languages:` codes to texts. Every message is also written into the model's en-US catalog
+(`i18n/en-US/<model>.model.json`) under `<model prefix>.checks.<key>`, so a language catalog
+(`i18n/bg-BG/<model>.model.json`) translates it like a label:
+
+```yaml
+languages: [en, bg]
+entities:
+  - name: Invoice
+    checks:
+      - id: zeroLines        # the catalog key becomes Invoice_zeroLines (else Invoice_itemsCompare_0)
+        kind: itemsCompare
+        field: price
+        op: gt
+        value: 0
+        message: { en: "{count} line(s) at price zero", bg: "{count} ред(а) с нулева цена" }
+```
+
+The generated code (`org.eclipse.dirigible.sdk.db.CheckMessages`) resolves a message for the
+request's `Accept-Language`: that language's catalog, then the inline text for it, then the default
+text - with `{count}` / `{match}` filled in after translation. The 400 body of a refusal and every
+warning of a 428 carry `messageKey` and `messageParams` next to the resolved `message`.
+
 ## immutableWhen / immutable - user-write immutability
 
 ```yaml

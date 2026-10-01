@@ -127,7 +127,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
-        resolveUniqueConstraintLiterals(entity);
+        resolveUniqueConstraintLiterals(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
 
@@ -250,9 +250,12 @@ final class ModelParameterProcessor {
         List<Object> forbidWhenGuards = new ArrayList<>();
         List<Object> deleteChecks = new ArrayList<>();
         List<Object> warningChecks = new ArrayList<>();
+        int index = -1;
         for (Map<String, Object> check : checks) {
+            index++;
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
+            resolveMessageCatalog(check, ModelTranslations.checkMessageKey(entity, check, index), parameters);
             resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
             if ("warn".equals(str(check, "severity"))) {
@@ -339,6 +342,51 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Derives the arguments a generated refusal or warning hands {@code CheckMessages} (issue #7611):
+     * the message's fully qualified catalog key ({@code <project>:<catalog prefix>.checks.<key>} - the
+     * same key the generated en-US catalog writes the message under and a language catalog translates),
+     * the default-language text, and the per-language texts authored inline as a {@code Map} literal.
+     * The generated code resolves them for the request's language when the check fires, so one
+     * declaration reaches every reader in their own language.
+     *
+     * <p>
+     * {@code messageArgsJava} is the three arguments joined, ready to be written into the call; a
+     * template appends the placeholder values (`{count}`, `{match}`) after it.
+     *
+     * @param check the check
+     * @param messageKey the check's catalog key
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveMessageCatalog(Map<String, Object> check, String messageKey, Map<String, Object> parameters) {
+        String message = str(check, "message");
+        if (message == null) {
+            return;
+        }
+        String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+        check.put("messageCatalogKey", catalogKey);
+        check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
+        StringBuilder translations = new StringBuilder("java.util.Map.<String, String>ofEntries(");
+        boolean first = true;
+        Map<?, ?> authored = check.get("messageTranslations") instanceof Map<?, ?> map ? map : Map.of();
+        for (Map.Entry<?, ?> entry : authored.entrySet()) {
+            if (entry.getKey() == null || entry.getValue() == null) {
+                continue;
+            }
+            translations.append(first ? "" : ", ")
+                        .append("java.util.Map.entry(\"")
+                        .append(JavaLiterals.escape(String.valueOf(entry.getKey())))
+                        .append("\", \"")
+                        .append(JavaLiterals.escape(String.valueOf(entry.getValue())))
+                        .append("\")");
+            first = false;
+        }
+        translations.append(")");
+        check.put("messageTranslationsJavaExpression", translations.toString());
+        check.put("messageArgsJava",
+                "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\", " + translations);
+    }
+
+    /**
      * Derives the Java twins of a check's NEUTRAL halves - the literal a {@code compare} tests against
      * and the condition a {@code requiredWhen} / {@code forbidWhen} is gated by (issue #7405).
      *
@@ -390,10 +438,17 @@ final class ModelParameterProcessor {
      * controllers write into Java string literals when they translate a constraint violation.
      *
      * @param entity the entity
+     * @param parameters the generation parameters
      */
-    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity) {
+    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity, Map<String, Object> parameters) {
         for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
             resolveMessageLiteral(constraint);
+            // The message's translation key (#7611), so a collision is answered in the reader's language.
+            String uniqueKey = ModelTranslations.uniqueMessageKey(entity, constraint);
+            if (uniqueKey != null) {
+                constraint.put("messageCatalogKeyJavaLiteral",
+                        JavaLiterals.escape(ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + uniqueKey)));
+            }
             String name = str(constraint, "name");
             if (name != null) {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
@@ -539,6 +594,18 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // A picker rule naming its message's catalog key (#7611) gets the fully qualified key the
+        // shared runtime's T() resolves - the namespace is this project and the catalog prefix this
+        // model file's, neither of which the model itself may embed.
+        String pickable = str(property, "widgetPickable");
+        if (pickable != null && pickable.contains("\"messageKey\"")) {
+            Map<String, Object> rule = ModelJson.parseObject(pickable);
+            if (rule.get("messageKey") instanceof String messageKey) {
+                rule.put("messageCatalogKey",
+                        ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey));
+                property.put("widgetPickable", JavaScriptJson.compact(rule));
+            }
+        }
         // The authored description is the property's @Documentation argument in the generated entity -
         // a Java string literal, so a quote in it ({@code Customer's "trade" name}) would end that
         // literal and fail the compile of the whole generated module (#7295). The raw value stays for

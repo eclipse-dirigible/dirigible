@@ -2801,8 +2801,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
                 "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
-        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient \\\"balance\\\"\")"),
-                "outcome block must fail the write with the authored message");
+        // The refusal resolves the authored message for the request's language (#7611): its catalog key,
+        // the default text and the (here empty) inline translations.
+        assertTrue(
+                ledgerRepository.contains("throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(\"")
+                        && ledgerRepository.contains(".checks.")
+                        && ledgerRepository.contains("\", \"Insufficient \\\"balance\\\"\", java.util.Map.<String, String>ofEntries());"),
+                "outcome block must fail the write with the authored message: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
                 "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
 
@@ -2810,9 +2815,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(bookingRepository.contains("entity.WithinAllowance = guardWithin"),
                 "outcome task must stamp the boolean marker the process decision branches on");
         assertTrue(bookingRepository.contains("entity.Status = 3"), "outcome reject must force the authored EntityStatus seed id");
-        assertFalse(
-                bookingRepository.contains("throw new ValidationException(\"Over the allowance\")")
-                        || bookingRepository.contains("throw new ValidationException(\"No allowance left\")"),
+        assertFalse(bookingRepository.contains("\", \"Over the allowance\", ") || bookingRepository.contains("\", \"No allowance left\", "),
                 "a non-blocking outcome must NOT fail the write - that is the whole point of task/reject");
 
         // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list

@@ -26,6 +26,48 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ModelParameterProcessorTest {
 
+    /**
+     * #7611: a check's message reaches the Java templates as the arguments of the per-language
+     * resolution - the fully qualified catalog key, the default text and the inline translations - and
+     * the en-US catalog collects every message under the same key, a model written before the key was
+     * recorded deriving it the same way.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void checkMessagesBecomeCatalogKeysAndResolutionArguments() {
+        Map<String, Object> translated = new LinkedHashMap<>();
+        translated.put("kind", "compare");
+        translated.put("message", "The \"discount\" is at most 50%");
+        translated.put("messageKey", "Customer_discountCap");
+        Map<String, Object> texts = new LinkedHashMap<>();
+        texts.put("en", "The \"discount\" is at most 50%");
+        texts.put("bg", "Отстъпката е най-много 50%");
+        translated.put("messageTranslations", texts);
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("kind", "exactlyOne");
+        legacy.put("message", "Exactly one");
+        legacy.put("fields", List.of("A", "B"));
+        Map<String, Object> customer = entity("Customer", "Customers", property("Id", "INTEGER"));
+        customer.put("checks", List.of(translated, legacy));
+        Map<String, Object> model = model(customer);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("bookstore:billing-model.checks.Customer_discountCap", translated.get("messageCatalogKey"));
+        assertEquals("\"bookstore:billing-model.checks.Customer_discountCap\", \"The \\\"discount\\\" is at most 50%\", "
+                + "java.util.Map.<String, String>ofEntries(java.util.Map.entry(\"en\", \"The \\\"discount\\\" is at most 50%\"), "
+                + "java.util.Map.entry(\"bg\", \"Отстъпката е най-много 50%\"))", translated.get("messageArgsJava"));
+        assertEquals("bookstore:billing-model.checks.Customer_exactlyOne_1", legacy.get("messageCatalogKey"));
+        assertTrue(String.valueOf(legacy.get("messageArgsJava"))
+                         .endsWith("java.util.Map.<String, String>ofEntries()"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("The \"discount\" is at most 50%", catalog.get("Customer_discountCap"));
+        assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");

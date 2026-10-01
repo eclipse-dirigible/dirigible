@@ -42,9 +42,10 @@ public class PickableIntent {
 
     /**
      * The text a marked row carries - why it cannot be picked. Optional: absent, the rule itself is
-     * shown.
+     * shown. A plain string or a map of {@code languages:} codes to the text in that language (issue
+     * #7611).
      */
-    private String message;
+    private Object message;
 
     public Object getWhen() {
         return when;
@@ -62,11 +63,34 @@ public class PickableIntent {
         this.otherwise = otherwise;
     }
 
+    /**
+     * The text in the module's default language.
+     *
+     * @return the default-language text, or {@code null} when none is authored
+     */
     public String getMessage() {
+        return LocalizedText.defaultText(message);
+    }
+
+    /**
+     * The authored per-language texts - empty for a plain string.
+     *
+     * @return language code to text
+     */
+    public java.util.Map<String, String> getMessageTranslations() {
+        return LocalizedText.translations(message);
+    }
+
+    /**
+     * The text exactly as authored - a string or a language map.
+     *
+     * @return the authored value
+     */
+    public Object getAuthoredMessage() {
         return message;
     }
 
-    public void setMessage(String message) {
+    public void setMessage(Object message) {
         this.message = message;
     }
 }

@@ -120,8 +120,20 @@ public class CheckIntent {
      * item-by-item stays unconstrained.
      */
     private Integer status;
-    /** The user-facing message when the check fails. */
-    private String message;
+    /**
+     * The user-facing message when the check fails: a plain string (the message in the module's default
+     * language) or a map of {@code languages:} codes to the message in that language ({@code { en:
+     * "...", bg: "..." }}) - issue #7611. Read through {@link #getMessage()} (the default-language
+     * value) and {@link #getMessageTranslations()}.
+     */
+    private Object message;
+    /**
+     * An optional stable name for the check's message in the module's translation catalogs (issue
+     * #7611): the catalog key is {@code checks.<Entity>_<id>} instead of the positional
+     * {@code checks.<Entity>_<kind>_<index>}, so reordering the entity's checks does not orphan the
+     * translations already written for it.
+     */
+    private String id;
     /**
      * What a failing check does to the write (issue #7466). {@code error} (the default) refuses it -
      * every kind above. {@code warn} is the soft tier: the write stays legitimate and possible, but the
@@ -346,11 +358,43 @@ public class CheckIntent {
         this.status = status;
     }
 
+    /**
+     * The message in the module's default language - the authored string, or the {@code en} (else the
+     * first) entry of an authored language map.
+     *
+     * @return the default-language message, or {@code null} when none is authored
+     */
     public String getMessage() {
+        return LocalizedText.defaultText(message);
+    }
+
+    /**
+     * The authored per-language messages - empty for a plain string.
+     *
+     * @return language code to message
+     */
+    public java.util.Map<String, String> getMessageTranslations() {
+        return LocalizedText.translations(message);
+    }
+
+    /**
+     * The message exactly as authored - a string or a language map.
+     *
+     * @return the authored value
+     */
+    public Object getAuthoredMessage() {
         return message;
     }
 
-    public void setMessage(String message) {
+    public void setMessage(Object message) {
         this.message = message;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 }

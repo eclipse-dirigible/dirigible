@@ -1810,6 +1810,66 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * #7611: every check names its message's translation key - the authored {@code id}, else its kind
+     * and position - and carries the texts authored per language, the default-language one staying the
+     * {@code message}. A picker rule names its own.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void checkMessagesCarryTheirTranslationKeyAndTexts() {
+        String yaml = """
+                name: billing
+                languages: [en, bg]
+                entities:
+                  - name: Customer
+                    checks:
+                      - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
+                      - id: discountCap
+                        kind: compare
+                        field: discount
+                        op: le
+                        value: 50
+                        message: { bg: "Отстъпката е най-много 50%", en: "The discount is at most 50%" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: active, type: boolean }
+                      - { name: discount, type: decimal }
+                      - { name: credit, type: decimal }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - name: customer
+                        kind: manyToOne
+                        to: Customer
+                        pickable: { when: "active == true", message: { en: "Inactive", bg: "Неактивен" } }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Customer").get("checks");
+        assertEquals("Customer_compare_0", checks.get(0)
+                                                 .get("messageKey"));
+        assertFalse(checks.get(0)
+                          .containsKey("messageTranslations"));
+        assertEquals("Customer_discountCap", checks.get(1)
+                                                   .get("messageKey"));
+        assertEquals("The discount is at most 50%", checks.get(1)
+                                                          .get("message"));
+        assertEquals(Map.of("bg", "Отстъпката е най-много 50%", "en", "The discount is at most 50%"), checks.get(1)
+                                                                                                            .get("messageTranslations"));
+
+        Map<String, Object> picker = ((List<Map<String, Object>>) entityByName(entities(model), "Invoice").get("properties")).stream()
+                                                                                                                             .filter(p -> p.containsKey(
+                                                                                                                                     "widgetPickable"))
+                                                                                                                             .findFirst()
+                                                                                                                             .orElseThrow();
+        String rule = String.valueOf(picker.get("widgetPickable"));
+        assertTrue(rule.contains("\"messageKey\":\"Invoice_customer_pickable\""), rule);
+        assertTrue(rule.contains("\"message\":\"Inactive\""), rule);
+        assertTrue(rule.contains("\"bg\":\"Неактивен\""), rule);
+    }
+
+    /**
      * #7524: only a {@code duplicate}'s text members are compared normalised - a to-one is its FK and a
      * number has no case - and on an entity with no label {@code {match}} names the record by its id.
      */

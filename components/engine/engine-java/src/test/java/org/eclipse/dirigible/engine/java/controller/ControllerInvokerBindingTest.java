@@ -226,6 +226,29 @@ class ControllerInvokerBindingTest {
     }
 
     @Test
+    void a_translated_refusal_and_warning_carry_their_key_and_params() throws Exception {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        for (String name : List.of("rejectKeyed", "warnKeyed")) {
+            Route route = entry.routes()
+                               .stream()
+                               .filter(r -> r.method()
+                                             .getName()
+                                             .equals(name))
+                               .findFirst()
+                               .orElseThrow();
+            FakeResponse response = new FakeResponse();
+            invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+            Map<?, ?> body = new ObjectMapper().readValue(response.body(), Map.class);
+            // #7611: the key and the parameters ride next to the resolved text, so a client can
+            // render the message again in another language.
+            Map<?, ?> carrier = "rejectKeyed".equals(name) ? body : (Map<?, ?>) ((List<?>) body.get("warnings")).get(0);
+            assertEquals("billing:billing-model.checks.Invoice_zeroLines", carrier.get("messageKey"), response.body());
+            assertEquals(Map.of("count", 2), carrier.get("messageParams"), response.body());
+            assertEquals("2 line(s) at price zero", carrier.get("message"), response.body());
+        }
+    }
+
+    @Test
     void unconfirmed_warnings_yield_428_listing_them() throws Exception {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
         Route route = entry.routes()
@@ -300,6 +323,19 @@ class ControllerInvokerBindingTest {
             throw new org.eclipse.dirigible.sdk.db.ConfirmationRequiredException(
                     List.of(new org.eclipse.dirigible.sdk.db.Warning("Customer.duplicate.0", "A customer with this name exists"),
                             new org.eclipse.dirigible.sdk.db.Warning("Product.compare.1", "The price is zero")));
+        }
+
+        @Get("/reject-keyed")
+        public String rejectKeyed() {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException("2 line(s) at price zero",
+                    "billing:billing-model.checks.Invoice_zeroLines", Map.of("count", 2));
+        }
+
+        @Get("/warn-keyed")
+        public String warnKeyed() {
+            throw new org.eclipse.dirigible.sdk.db.ConfirmationRequiredException(
+                    List.of(new org.eclipse.dirigible.sdk.db.Warning("Invoice.itemsCompare.0", "2 line(s) at price zero",
+                            "billing:billing-model.checks.Invoice_zeroLines", Map.of("count", 2))));
         }
 
         @Get("/reject")

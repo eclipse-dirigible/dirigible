@@ -598,7 +598,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
-                    putPickable(fkProperty, relation, info.propertyNames());
+                    putPickable(fkProperty, name, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -619,7 +619,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
-                putPickable(fkProperty, relation, null);
+                putPickable(fkProperty, name, relation, null);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -1960,7 +1960,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * same-model target's properties; a resolved cross-model target is checked here against the owner's
      * {@code .model}, an unresolved one (the unit-test convention fallback) is not.
      */
-    private static void putPickable(Map<String, Object> p, RelationIntent relation, Set<String> targetPropertyNames) {
+    private static void putPickable(Map<String, Object> p, String entityName, RelationIntent relation, Set<String> targetPropertyNames) {
         if (relation.getPickable() == null) {
             return;
         }
@@ -1974,7 +1974,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         + ", which the cross-model target [" + relation.getTo() + "] does not declare"));
             }
         }
-        p.put("widgetPickable", PickableSupport.rule(relation.getPickable()));
+        // The message's catalog key (#7611): the relation is unique within its entity, so it names the
+        // rule's message as stably as a check id names a check's.
+        p.put("widgetPickable", PickableSupport.rule(relation.getPickable(), entityName + "_" + relation.getName() + "_pickable"));
     }
 
     /**
@@ -2221,6 +2223,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> checkMap = new LinkedHashMap<>();
             checkMap.put("kind", check.getKind());
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            // The message's translation key (#7611): the catalog entry the generated en-US catalog writes
+            // it under and the language catalogs translate it under - the authored `id:`, or the check's
+            // kind and position in its entity's list. The per-language texts authored inline ride along,
+            // the fallback the generated code resolves when the language's catalog does not translate it.
+            checkMap.put("messageKey", entity.getName() + "_" + (check.getId() != null && !check.getId()
+                                                                                                .isBlank() ? check.getId()
+                                                                                                                  .trim()
+                                                                                                        : check.getKind() + "_" + index));
+            Map<String, String> messageTranslations = check.getMessageTranslations();
+            if (!messageTranslations.isEmpty()) {
+                checkMap.put("messageTranslations", new LinkedHashMap<>(messageTranslations));
+            }
             if (check.isWarning()) {
                 // The soft tier (#7466): the check is asked of the person writing instead of refusing
                 // the write. The code is what a caller echoes back to confirm it - stable across saves

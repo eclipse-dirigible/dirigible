@@ -235,7 +235,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
             }
 #else
             if (!guardWithin) {
-                throw new ValidationException("${guard.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${guard.messageArgsJava});
             }
 #end
         }
@@ -1138,7 +1138,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #elseif($check.kind == "forbidWhen")
             // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at
@@ -1151,7 +1151,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field
@@ -1165,7 +1165,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                     && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #else
             if (entity.${check.field} != null && entity.${check.than} != null
@@ -1174,7 +1174,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                     && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #end
 #elseif($check.kind == "itemsSumEqual")
@@ -1190,12 +1190,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (sum${check.overA}.compareTo(sum${check.overB}) != 0) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #else
             if (new ${check.itemsEntity}Repository().findAll(
                     Criteria.create().eq("${check.itemsFk}", entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end)).size() < ${check.count}) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #end
         }
@@ -1240,10 +1240,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                                                                                                                          .eq("${field}", entity.${field})#end#end)) {
                 if (!java.util.Objects.equals(other.${pkPropertyName}, entity.${pkPropertyName})) {
 #if($check.matchProperty)
-                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
-                            "${check.messageJavaLiteral}".replace("{match}", String.valueOf(other.${check.matchProperty}))));
+                    warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}, "match",
+                            other.${check.matchProperty}));
 #else
-                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                    warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
 #end
                     break;
                 }
@@ -1266,8 +1266,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (breaking > 0) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
-                        "${check.messageJavaLiteral}".replace("{count}", String.valueOf(breaking))));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}, "count", breaking));
             }
         }
 #elseif($check.kind == "requiredWhen")
@@ -1281,7 +1280,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "forbidWhen")
@@ -1294,7 +1293,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "agree")
@@ -1313,7 +1312,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
             if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
 #end
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "compare")
@@ -1326,7 +1325,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                 && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
         }
 #else
         if (entity.${check.field} != null && entity.${check.than} != null
@@ -1335,7 +1334,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                 && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
         }
 #end
 #elseif($check.kind == "exactlyOne")
@@ -1348,7 +1347,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             }
 #end
             if (assigned != 1) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #end

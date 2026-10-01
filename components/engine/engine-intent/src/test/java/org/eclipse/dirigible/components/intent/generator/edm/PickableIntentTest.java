@@ -65,7 +65,8 @@ class PickableIntentTest {
         assertEquals("{\"when\":[{\"property\":\"RegistrationNumber\",\"op\":\"present\"},"
                 + "{\"property\":\"Address\",\"op\":\"present\"},{\"property\":\"Country\",\"op\":\"present\"},"
                 + "{\"property\":\"Active\",\"op\":\"eq\",\"value\":\"true\"},{\"property\":\"Kind\",\"op\":\"ne\",\"value\":\"2\"}],"
-                + "\"hide\":false,\"message\":\"The customer's registration data is incomplete\"}", customer.get("widgetPickable"));
+                + "\"hide\":false,\"message\":\"The customer's registration data is incomplete\",\"messageKey\":\"Invoice_Customer_pickable\"}",
+                customer.get("widgetPickable"));
     }
 
     /** The reviewer's point: a marked row must say why - absent a message, the rule itself is shown. */
@@ -74,8 +75,10 @@ class PickableIntentTest {
         Map<String, Object> customer = customerProperty("""
                   - { name: Customer, kind: manyToOne, to: Customer, pickable: { when: "registrationNumber != null", else: hide } }
                 """);
-        assertEquals("{\"when\":[{\"property\":\"RegistrationNumber\",\"op\":\"present\"}],\"hide\":true,"
-                + "\"message\":\"registrationNumber != null\"}", customer.get("widgetPickable"));
+        assertEquals(
+                "{\"when\":[{\"property\":\"RegistrationNumber\",\"op\":\"present\"}],\"hide\":true,"
+                        + "\"message\":\"registrationNumber != null\",\"messageKey\":\"Invoice_Customer_pickable\"}",
+                customer.get("widgetPickable"));
     }
 
     @Test
@@ -111,7 +114,8 @@ class PickableIntentTest {
                 """;
         Map<String, Object> customer =
                 propertyByName(entity(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "invoices")), "Customer");
-        assertEquals("{\"when\":[{\"property\":\"VatNumber\",\"op\":\"present\"}],\"hide\":false,\"message\":\"vatNumber != null\"}",
+        assertEquals(
+                "{\"when\":[{\"property\":\"VatNumber\",\"op\":\"present\"}],\"hide\":false,\"message\":\"vatNumber != null\",\"messageKey\":\"Invoice_Customer_pickable\"}",
                 customer.get("widgetPickable"));
     }
 
