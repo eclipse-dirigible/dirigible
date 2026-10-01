@@ -56,6 +56,9 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
   backend vs UI failures), asserting the manifest's field names bind and delete yields 404 — or,
   for an entity a `whenDeleted: refuse` process guards, that the refused record is still served.
 - **multilingual** — switch the shared language key, reload, a seeded row shows its translated name.
+  The assertion waits for the list's own data GET and allows 15 s; a failure names the
+  `Accept-Language` that GET sent, whether its body carried the expected word, and the table's first
+  row, so a slow render reads differently from a missing translation.
 - **my** — the personal (my) surface WIRE contract, when the manifest marks an entity `personal`:
   create through the scoped `<Entity>MyController` (owner FK forced server-side), every `sensitive`
   field null on the personal wire, the own row in the personal list, foreign rows 404 (when the
@@ -67,7 +70,9 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 
 Test records carry an `APPTEST-` prefix and are removed in teardown; seed data is never mutated.
 A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
-is never written or flipped by a flow (the manifest marks it `readOnly`), and a field declaring a
+is never written or flipped by a flow (the manifest marks it `readOnly`). A relation the form renders
+read-only — a `calculatedActionOnUpdate`, a platform-owned FK — carries the same flag and is never
+picked in the UI. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
 marker, so the controller's 400 names the field.

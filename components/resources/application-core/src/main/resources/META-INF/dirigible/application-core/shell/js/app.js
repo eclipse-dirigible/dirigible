@@ -380,7 +380,7 @@ App.listColumns = {
   },
 
   attach(table) {
-    const container = table.closest('[data-slot="table"]:not(table)') || table.parentElement;
+    const container = table.closest('[data-slot="table-container"]') || table.parentElement;
     const state = { table, userSized: false, scheduled: false };
     table.setAttribute('data-list-columns', '');
     const layout = () => {

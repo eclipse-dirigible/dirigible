@@ -146,6 +146,32 @@ class ChildLockControllerTemplateIT {
         }
     }
 
+    /**
+     * A lock reaches down the whole composition chain (#7550): a payslip line of a posted payroll run
+     * is refused although the payslip between them declares no lock of its own. Every surface walks
+     * from the line's payslip up to the run, and an ancestor that locks by both status and period emits
+     * both halves - under names of their own, so two levels never collide.
+     */
+    @Test
+    void everyControllerWalksUpToALockingAncestor() throws Exception {
+        for (String template : List.of("EntityController.java.template", "EntityMyController.java.template",
+                "EntityPartnerController.java.template")) {
+            String rendered = render(template, context(grandchildLock()));
+
+            assertTrue(
+                    rendered.contains(
+                            "gen.payroll.data.payroll.PayrollRunEntity ancestor1 = new gen.payroll.data.payroll.PayrollRunRepository()"
+                                    + ".findOne(master.PayrollRun)"),
+                    template + " must load the run through the payslip's FK: " + rendered);
+            assertTrue(rendered.contains("isAncestor1Mutable(ancestor1)") && rendered.contains("\"3\".split(\",\")"),
+                    template + " must refuse by the run's immutable status ids");
+            assertTrue(rendered.contains("isAncestor1PeriodOpen(ancestor1.RunDate)"), template + " must check the run's period too");
+            assertTrue(rendered.contains("The PayrollRun of this InvoiceItem is immutable"), template + " must name the locking ancestor");
+            assertFalse(rendered.contains("isMasterMutable"), template + " must emit no status guard for the unlocked payslip");
+            assertNoUnresolvedReferences(rendered);
+        }
+    }
+
     private String render(String templateName, Map<String, Object> parameters) throws Exception {
         String location = BASE + templateName;
         String template;
@@ -161,7 +187,8 @@ class ChildLockControllerTemplateIT {
     private static void assertNoUnresolvedReferences(String rendered) {
         for (String line : rendered.split("\n")) {
             if (line.contains("MasterMutable") || line.contains("masterRepository") || line.contains("parentRepository.findOne")
-                    || line.contains("PeriodOpen") || line.contains("PeriodRepository")) {
+                    || line.contains("PeriodOpen") || line.contains("PeriodRepository") || line.contains("ancestor")
+                    || line.contains("Ancestor")) {
                 assertFalse(line.contains("${"), "an unresolved template reference survived into the guard: " + line);
             }
         }
@@ -218,6 +245,34 @@ class ChildLockControllerTemplateIT {
         period.put("statusProperty", "Status");
         period.put("closedValues", "2");
         return period;
+    }
+
+    /**
+     * A line whose direct master (a payslip) does not lock, under a payroll run that locks by status
+     * and by period - {@code masterLock} as {@code ModelParameterProcessor} resolves it.
+     */
+    private static Map<String, Object> grandchildLock() {
+        Map<String, Object> masterLock = new LinkedHashMap<>();
+        masterLock.put("fkProperty", "Payslip");
+        masterLock.put("fkJavaClass", "Integer");
+        masterLock.put("entity", "Payslip");
+        masterLock.put("entityClass", "gen.payroll.data.payroll.PayslipEntity");
+        masterLock.put("repositoryClass", "gen.payroll.data.payroll.PayslipRepository");
+        masterLock.put("always", Boolean.FALSE);
+        Map<String, Object> run = new LinkedHashMap<>();
+        run.put("fkProperty", "PayrollRun");
+        run.put("fkJavaClass", "Integer");
+        run.put("entity", "PayrollRun");
+        run.put("entityClass", "gen.payroll.data.payroll.PayrollRunEntity");
+        run.put("repositoryClass", "gen.payroll.data.payroll.PayrollRunRepository");
+        run.put("always", Boolean.FALSE);
+        run.put("statusProperty", "Status");
+        run.put("statusValues", "3");
+        Map<String, Object> period = period();
+        period.put("dateProperty", "RunDate");
+        run.put("period", period);
+        masterLock.put("ancestors", List.of(run));
+        return masterLock;
     }
 
     private static Map<String, Object> appendOnlyLock() {

@@ -224,7 +224,7 @@ public class ${name}Controller {
 #if($isEntityPropertySecurityEnabled)
         applyOnCreate(entity);
 #end
-#if($workflowStatusProperty)
+#if($workflowStatusProperty && !$workflowStatusPreserveOnly)
         requireWorkflowStatusOnCreate(entity);
 #end
         validate(entity);
@@ -749,6 +749,7 @@ public class ${name}Controller {
     // updateProperty / updateProperties primitives, never through this controller, so refusing the
     // column here takes nothing away from them: it closes the plain create/update that would otherwise
     // jump a record to any status it likes, with every check, task and side effect of the flow skipped.
+#if(!$workflowStatusPreserveOnly)
     private void requireWorkflowStatusOnCreate(${name}Entity entity) {
         if (entity.${workflowStatusProperty} == null) {
             // Nothing said: the record starts where the model says it starts (the relation's `init:`,
@@ -763,6 +764,7 @@ public class ${name}Controller {
         throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
     }
 
+#end
     // An absent value is not a change - a caller PUTs the fields its form edits - so it is taken from
     // the stored row rather than refused, which is also what stops a partial payload from erasing the
     // status. A value that DIFFERS is a direct edit of the flow's column and is refused.
@@ -775,13 +777,17 @@ public class ${name}Controller {
             entity.${workflowStatusProperty} = stored.${workflowStatusProperty};
             return;
         }
+#if(!$workflowStatusPreserveOnly)
         if (!java.util.Objects.equals(entity.${workflowStatusProperty}, stored.${workflowStatusProperty})) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, WORKFLOW_STATUS_REFUSAL);
         }
+#end
     }
 
+#if(!$workflowStatusPreserveOnly)
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#end
 
 #end
 #if($processDeleteGuards)
@@ -894,6 +900,42 @@ public class ${name}Controller {
                     "The ${masterLock.period.entity} covering this ${masterLock.entity} is closed - book the correction in an open period");
         }
 #end
+#foreach($ancestor in $masterLock.ancestors)
+#set($ancestorIndex = $foreach.count)
+#if($ancestorIndex == 1)
+#set($belowRow = "master")
+#else
+#set($belowIndex = $ancestorIndex - 1)
+#set($belowRow = "ancestor${belowIndex}")
+#end
+        // A lock reaches down the whole composition chain (#7550): the ${ancestor.entity} above
+        // freezes this ${name} as surely as its direct ${masterLock.entity} would.
+        if (${belowRow}.${ancestor.fkProperty} == null) {
+            return;
+        }
+        ${ancestor.entityClass} ancestor${ancestorIndex} = new ${ancestor.repositoryClass}().findOne(${belowRow}.${ancestor.fkProperty})
+                                                                        .orElse(null);
+        if (ancestor${ancestorIndex} == null) {
+            return;
+        }
+#if($ancestor.always || $ancestor.statusProperty)
+        if (!isAncestor${ancestorIndex}Mutable(ancestor${ancestorIndex})) {
+#if($ancestor.always)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "This ${name} belongs to an append-only ${ancestor.entity} and can no longer be changed");
+#else
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${ancestor.entity} of this ${name} is immutable in its current status - corrections go through the workflow");
+#end
+        }
+#end
+#if($ancestor.period)
+        if (!isAncestor${ancestorIndex}PeriodOpen(ancestor${ancestorIndex}.${ancestor.period.dateProperty})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "The ${ancestor.period.entity} covering this ${ancestor.entity} is closed - book the correction in an open period");
+        }
+#end
+#end
     }
 #if($masterLock.always || $masterLock.statusProperty)
 
@@ -937,9 +979,53 @@ public class ${name}Controller {
         return true;
     }
 #end
+#foreach($ancestor in $masterLock.ancestors)
+#set($ancestorIndex = $foreach.count)
+#if($ancestor.always || $ancestor.statusProperty)
+
+    private static boolean isAncestor${ancestorIndex}Mutable(${ancestor.entityClass} ancestor) {
+#if($ancestor.always)
+        return false;
+#else
+        if (ancestor.${ancestor.statusProperty} == null) {
+            return true;
+        }
+        for (String immutable : "${ancestor.statusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(ancestor.${ancestor.statusProperty}))) {
+                return false;
+            }
+        }
+        return true;
+#end
+    }
+#end
+#if($ancestor.period)
+
+    private boolean isAncestor${ancestorIndex}PeriodOpen(${ancestor.period.dateJavaClass} date) {
+        if (date == null) {
+            return true;
+        }
+        for (${ancestor.period.entityClass} period : new ${ancestor.period.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${ancestor.period.startProperty}", date)
+                                                                                   .ge("${ancestor.period.endProperty}", date))) {
+            if (period.${ancestor.period.statusProperty} != null) {
+                for (String closed : "${ancestor.period.closedValues}".split(",")) {
+                    if (closed.equals(String.valueOf(period.${ancestor.period.statusProperty}))) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
+#end
+#end
 
 #end
-    private static void validate(${name}Entity entity) {
+    // Public so a process task's write-back (the generated <Process><Step>Write delegate) holds the
+    // reviewer's edits to exactly these rules and messages before it writes them (#7552).
+    public static void validate(${name}Entity entity) {
 #set($checksLoadHops = false)
 #foreach($check in $rowChecks)
 #if($check.pathLoads && $check.pathLoads.size() > 0)

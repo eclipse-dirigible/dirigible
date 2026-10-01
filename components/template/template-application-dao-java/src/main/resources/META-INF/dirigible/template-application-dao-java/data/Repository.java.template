@@ -367,6 +367,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($preservedOnUpdate.size() > 0)
+        // System-owned fields survive a create payload just as they survive an update one (#7549):
+        // readOnly, roll-up/aggregate targets, ProcessId(s) and the like are computed by the platform
+        // or a system writer, never by the caller's own POST. Dropped BEFORE applyDefaults and the
+        // create-time calculations, so only a default, a calculatedOnCreate or a system writer fills
+        // them. There is no stored row to restore from at create time (unlike update()), so a dropped
+        // value is simply cleared rather than replaced - the create-time fill logic below (a default,
+        // a uuid/number stamp, a calculated action) then runs exactly as it would for an omitted value.
+        // A number/uuid stamp is excluded here: it discards a client value itself, immediately below,
+        // because a plain `type: uuid` field is deliberately still seedable/importable (#7548).
+#if($reportedOnUpdate.size() > 0)
+        java.util.List<String> discardedOnCreate = new java.util.ArrayList<>();
+#end
+#foreach($property in $preservedOnUpdate)
+#if(!$property.generatedUuid && !$property.numberStampOnCreate)
+#if(!$property.isDateType)
+        if (isDiscardedByPreservation(entity.${property.name}, null)) {
+            discardedOnCreate.add("${property.name}=" + entity.${property.name});
+        }
+#end
+        entity.${property.name} = null;
+#end
+#end
+#if($reportedOnUpdate.size() > 0)
+        if (!discardedOnCreate.isEmpty()) {
+            LOG.warn("A create of ${name} carried system-owned {} - discarded. save() never accepts"
+                    + " these columns from the payload; a writer that computes them must use the"
+                    + " targeted updateProperty / updateProperties / updateDerived after create.",
+                    discardedOnCreate);
+        }
+#end
+#end
 #applyDefaults()
 #normalizeSubsets()
 #if($lifecycleInitialStatus)
@@ -391,6 +423,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 ## a UUID (the real number is stamped at the issue step); stampOn:create fields are handled just below.
 #foreach ($property in $properties)
 #if($property.generatedUuid)
+#if($property.numberStampOnIssue)
+## A numbering placeholder is platform-owned like the number itself (#7548): a client-supplied value
+## here would survive until the issue step overwrites it, so it is discarded rather than kept - unlike
+## a plain `type: uuid` field (no numberStampOnIssue flag), which may legitimately be seeded/imported.
+        if (entity.${property.name} != null && !entity.${property.name}.isBlank()) {
+            LOG.warn("A create of ${name} carried a client-supplied ${property.name} [{}] for a"
+                    + " platform-numbered column - discarded; the real number is stamped at the issue"
+                    + " step, not on create.", entity.${property.name});
+            entity.${property.name} = null;
+        }
+#end
         if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
             entity.${property.name} = java.util.UUID.randomUUID().toString();
         }
@@ -423,6 +466,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 ## base row, as before.
 #foreach ($property in $properties)
 #if($property.numberStampOnCreate)
+## The stamped number is platform-owned (#7548): a client-supplied value would either squat an
+## arbitrary series (letting the caller name any document number it likes) or collide with the
+## series' own next value (a REST caller supplying the series' next number blocks the following
+## ordinary create with a 409 unique-key violation on a gap-free legal series). Discarded and
+## reported, then filled exactly as an empty value always was.
+        if (entity.${property.name} != null && !entity.${property.name}.isBlank()) {
+            LOG.warn("A create of ${name} carried a client-supplied ${property.name} [{}] for a"
+                    + " platform-numbered column - discarded; the value is allocated from the series.",
+                    entity.${property.name});
+            entity.${property.name} = null;
+        }
         if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
 #if($property.numberPer && $property.numberPer != "")
             entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeriesJavaLiteral}", entity.${property.numberPer} == null ? null : String.valueOf(entity.${property.numberPer}));
@@ -811,7 +865,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * back silently reverted whatever the user changed in that window (the lost-update family of #6226 /
      * #6306). The {@code "-updated"} event still fires so downstream reactions - notably a transitive
      * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
-     * persisted the full row. Routed through {@link #updateProperties} so an entity that declares
+     * persisted the full row, carrying the written column names under {@code DerivedWrite.MARKER} so an
+     * authored-change listener can skip a recompute that moved nothing it watches. Routed through
+     * {@link #updateProperties} so an entity that declares
      * {@code checks:} still runs its gate, a labelled entity still refreshes its stored display Name,
      * and a document line still resums the master it belongs to.
      */
@@ -820,8 +876,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             return 0;
         }
         // The event travels with the write: the resulting row is read back on the write's own
-        // connection, before its commit, and recorded in the event outbox alongside it.
-        return updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated");
+        // connection, before its commit, and recorded in the event outbox alongside it. It is MARKED
+        // with the columns written, so a listener that reacts to authored changes only - a settlement
+        // re-allocating a corrected payment - can tell this recompute from an edit (#7557).
+        return org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.run(values.keySet(),
+                () -> updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated"));
     }
 #if($phases && $phases != "")
 #foreach($phase in $phases.split(","))

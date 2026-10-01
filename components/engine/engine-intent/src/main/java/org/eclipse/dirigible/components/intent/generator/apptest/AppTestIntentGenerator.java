@@ -352,6 +352,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 usesByAlias.put(uses.getModel(), uses);
             }
         }
+        Map<String, Map<String, Object>> properties = propertiesByName(edmEntities.getOrDefault(entity.getName(), Map.of()));
         List<Map<String, Object>> relations = new ArrayList<>();
         for (RelationIntent relation : entity.getRelations()) {
             boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
@@ -368,6 +369,13 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             out.put("widget", "dropdown");
             if (relation.isEntityStatus()) {
                 out.put("entityStatus", true);
+            }
+            // The form renders a relation read-only (a disabled combobox, or no input at all) by the
+            // same rule as a field, so the runner must not try to pick it (dirigible #7554): an
+            // update-time recompute (calculatedActionOnUpdate, #6696) or a platform-owned FK. A
+            // create-only action is a server-side DEFAULT and stays editable.
+            if (notBlank(relation.getCalculatedActionOnUpdate()) || rendersReadOnly(properties.get(String.valueOf(out.get("name"))))) {
+                out.put("readOnly", true);
             }
             // dependsOn cascade: the option list narrows to target rows whose filterBy equals the
             // trigger sibling's value - the runner must pick MATCHING samples (the dependent row
@@ -679,6 +687,28 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             }
         }
         return byName;
+    }
+
+    /**
+     * Whether the generated form renders this {@code .model} property without an editable input - the
+     * exact condition of the Harmonia form templates: {@code isReadOnlyProperty}, or a calculated
+     * property that is DERIVED (a create/update expression or an update-time action).
+     */
+    private static boolean rendersReadOnly(Map<String, Object> property) {
+        if (property == null) {
+            return false;
+        }
+        if ("true".equals(string(property.get("isReadOnlyProperty")))) {
+            return true;
+        }
+        return "true".equals(string(property.get("isCalculatedProperty")))
+                && (notBlank(string(property.get("calculatedPropertyExpressionCreate")))
+                        || notBlank(string(property.get("calculatedPropertyExpressionUpdate")))
+                        || notBlank(string(property.get("calculatedActionOnUpdate"))));
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static String string(Object value) {

@@ -312,6 +312,62 @@ class AppTestIntentGeneratorTest {
         assertEquals(List.of("Sales Invoice Posting"), invoice.get("deleteGuardedByProcess"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksTheRelationsTheFormRendersReadOnly() {
+        // dirigible #7554: a relation recomputed on update renders as a disabled combobox - without a
+        // readOnly flag the UI flow tried to pick it and timed out on a correct app
+        String intent =
+                """
+                        name: expenses
+                        entities:
+                          - name: Company
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 200 }
+                          - name: Employee
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 200 }
+                          - name: ExpenseClaim
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: note, type: string, length: 200 }
+                            relations:
+                              - { name: Employee, kind: manyToOne, to: Employee, required: true }
+                              - { name: Company, kind: manyToOne, to: Company, required: true, calculatedActionOnCreate: org.example.CompanyOf, calculatedActionOnUpdate: org.example.CompanyOf }
+                              - { name: Approver, kind: manyToOne, to: Employee, calculatedActionOnCreate: org.example.DefaultApprover }
+                              - { name: Owner, kind: manyToOne, to: Employee }
+                        """;
+        Map<String, Object> claimEdm = edmEntity("ExpenseClaim", "Expense Claim", "Expense Claims", "MANAGE_LIST", "Expenses", "hr",
+                "KF_MOD_EXPENSES_EXPENSECLAIM", false);
+        // a platform-owned FK: the EDM marks it read-only, the form renders no input for it
+        claimEdm.put("properties",
+                List.of(property("Id", Map.of("dataPrimaryKey", "true")), property("Owner", Map.of("isReadOnlyProperty", "true"))));
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Company", edmEntity("Company", "Company", "Companies", "MANAGE_LIST", "Settings", "hr", "KF_MOD_EXPENSES_COMPANY", false));
+        edm.put("Employee",
+                edmEntity("Employee", "Employee", "Employees", "MANAGE_LIST", "Employees", "hr", "KF_MOD_EXPENSES_EMPLOYEE", false));
+        edm.put("ExpenseClaim", claimEdm);
+
+        Map<String, Object> claim =
+                entity(AppTestIntentGenerator.buildManifest("expenses", "expenses", IntentParser.parse(intent), edm), "ExpenseClaim");
+        Map<String, Map<String, Object>> relations = new LinkedHashMap<>();
+        for (Map<String, Object> relation : (List<Map<String, Object>>) claim.get("relations")) {
+            relations.put(String.valueOf(relation.get("name")), relation);
+        }
+
+        assertNull(relations.get("Employee")
+                            .get("readOnly"));
+        assertEquals(Boolean.TRUE, relations.get("Company")
+                                            .get("readOnly"));
+        // a create-only action is a server-side DEFAULT - the form keeps it editable (#6696)
+        assertNull(relations.get("Approver")
+                            .get("readOnly"));
+        assertEquals(Boolean.TRUE, relations.get("Owner")
+                                            .get("readOnly"));
+    }
+
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
 
     private static Map<String, Map<String, Object>> edm() {

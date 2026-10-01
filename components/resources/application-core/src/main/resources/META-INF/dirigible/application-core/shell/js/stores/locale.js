@@ -15,14 +15,22 @@
  * (services/api.js) sends the value as Accept-Language on every call, so the same flag drives
  * BOTH the frontend and the backend: generated multilingual repositories overlay <TABLE>_LANG
  * values for it, and the document Print flow prefers it. The offered codes are the platform's
- * supported language set (DIRIGIBLE_APPLICATION_LANGUAGES, default en,bg) — individual modules
+ * supported language set (DIRIGIBLE_APPLICATION_LANGUAGES, default en) — individual modules
  * never define what the stack supports; they only provide translations, and anything a module
  * does not translate falls back to the base (first/default) language naturally.
+ *
+ * A saved value is only a candidate until that set is known: a code the instance does not offer
+ * falls back to the first entry once the set arrives, so a request sent before then would carry a
+ * language the requests after it do not (#7558). settled() is the moment the value is final; the
+ * fetch client waits for it before it stamps Accept-Language.
  */
 document.addEventListener('alpine:init', () => {
   const STORAGE_KEY = 'codbex.harmonia.language';
 
   const LANGUAGES_URL = '/services/js/platform-core/services/application-languages.js';
+
+  // Kept outside the store: Alpine makes every store property reactive, and a promise is not state.
+  let valueFinal = Promise.resolve();
 
   Alpine.store('locale', {
     value: 'en',
@@ -37,9 +45,9 @@ document.addEventListener('alpine:init', () => {
       // x-h-date-format resolve their display locale as explicit -> <html lang> -> navigator.language,
       // so without the stamp every date renders in the BROWSER's locale whatever this store says.
       this.stamp();
-      // Fire-and-forget: refresh the platform set (DIRIGIBLE_APPLICATION_LANGUAGES); on failure the
-      // built-in default stands. A persisted value outside the set falls back to the first entry.
-      fetch(LANGUAGES_URL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      // Refresh the platform set (DIRIGIBLE_APPLICATION_LANGUAGES); on failure the built-in default
+      // stands. A persisted value outside the set falls back to the first entry.
+      valueFinal = fetch(LANGUAGES_URL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then((r) => r.ok ? r.json() : null)
         .then((codes) => {
           if (Array.isArray(codes) && codes.length) this.supported = codes;
@@ -47,6 +55,11 @@ document.addEventListener('alpine:init', () => {
           this.stamp();
         })
         .catch(() => { /* platform default stands */ });
+    },
+
+    // Resolves once value is final - the supported set arrived (or could not be fetched). Never rejects.
+    settled() {
+      return valueFinal;
     },
 
     // Keep the document language in sync with the effective value (guarded for non-browser runs).
