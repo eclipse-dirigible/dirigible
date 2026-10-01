@@ -14,14 +14,17 @@
 <!--
   Settings > Users - the ONE copy of the section, mounted through x-html on the shared tenantUsers
   store (shell/js/stores/tenantUsers.js) by the application shell's Settings and by every generated
-  application shell. Every binding goes through $store.tenantUsers. Stable ids for the browser tests:
-  tenant-users-page, tenant-users-invite, tenant-users-email, tenant-users-table.
+  application shell. Every binding goes through $store.tenantUsers. Stable ids and attributes for the
+  browser tests: tenant-users-page, tenant-users-invite, tenant-users-email, tenant-users-roles,
+  tenant-users-invite-button, tenant-users-table (rows tr[data-user], badges [data-role][data-state],
+  [data-pending], [data-failure]), tenant-users-edit-dialog, tenant-users-edit-save,
+  tenant-users-remove-dialog, tenant-users-remove-confirm.
 -->
 <div id="tenant-users-page" class="vbox gap-4 p-4">
   <div class="hbox items-center gap-2">
     <div class="vbox gap-1 flex-1 min-w-0">
       <span class="text-lg font-medium" x-text="$store.tenantUsers.t('shell.tenantUsers.title', 'Users')"></span>
-      <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.description', 'The people of this tenant and where each one stands. Invite another person with a role - they receive an invitation to sign in.')"></span>
+      <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.description', 'The people of this tenant and where each one stands. Invite a person with one or more roles, change a member\'s roles, or remove a member.')"></span>
     </div>
     <button x-h-button data-variant="outline" data-size="icon-sm" type="button" @click="$store.tenantUsers.load()"
             :aria-label="$store.tenantUsers.t('shell.tenantUsers.refresh', 'Refresh')">
@@ -29,16 +32,17 @@
     </button>
   </div>
 
-  <form id="tenant-users-invite" class="hbox items-end gap-2 flex-wrap" @submit.prevent="$store.tenantUsers.invite()">
+  <form id="tenant-users-invite" class="hbox items-end gap-2 flex-wrap" @submit.prevent="$store.tenantUsers.inviteUser()">
     <div class="vbox gap-1 flex-1 min-w-0">
       <label x-h-label for="tenant-users-email" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></label>
-      <input x-h-input id="tenant-users-email" type="email" required autocomplete="off" x-model="$store.tenantUsers.form.email"
+      <input x-h-input id="tenant-users-email" type="email" autocomplete="off" x-model="$store.tenantUsers.invite.email"
              :placeholder="$store.tenantUsers.t('shell.tenantUsers.emailPlaceholder', 'name@example.com')" />
     </div>
     <div class="vbox gap-1">
-      <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.role', 'Role')"></span>
-      <div x-h-select>
-        <input x-h-select-input x-model="$store.tenantUsers.form.role" :placeholder="$store.tenantUsers.t('shell.tenantUsers.role', 'Role')" />
+      <label x-h-label for="tenant-users-roles" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></label>
+      <div x-h-select id="tenant-users-roles">
+        <input x-h-select-input data-id="tenant-users-roles-trigger" x-model="$store.tenantUsers.invite.roles"
+               :placeholder="$store.tenantUsers.t('shell.tenantUsers.rolesPlaceholder', 'Choose roles')" />
         <div x-h-select-content>
           <div x-h-select-list>
             <template x-for="role in $store.tenantUsers.roles" :key="role">
@@ -48,7 +52,8 @@
         </div>
       </div>
     </div>
-    <button x-h-button data-variant="primary" type="submit" id="tenant-users-invite-button" :disabled="$store.tenantUsers.busy"
+    <button x-h-button data-variant="primary" type="submit" id="tenant-users-invite-button"
+            :disabled="$store.tenantUsers.busy || $store.tenantUsers.invite.roles.length === 0 || !$store.tenantUsers.invite.email.trim()"
             x-text="$store.tenantUsers.t('shell.tenantUsers.invite', 'Invite')"></button>
   </form>
 
@@ -56,7 +61,7 @@
     <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
   </div>
 
-  <div x-show="$store.tenantUsers.loaded && $store.tenantUsers.items.length === 0" x-cloak x-h-info-page>
+  <div x-show="$store.tenantUsers.loaded && $store.tenantUsers.items.length === 0 && $store.tenantUsers.sendingInvites.length === 0" x-cloak x-h-info-page>
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="users"></svg></div>
       <div x-h-info-page-title x-text="$store.tenantUsers.t('shell.tenantUsers.empty', 'Nobody has been invited yet')"></div>
@@ -64,7 +69,7 @@
     </div>
   </div>
 
-  <div x-show="$store.tenantUsers.items.length > 0" x-h-table-container.scroll>
+  <div x-show="$store.tenantUsers.items.length > 0 || $store.tenantUsers.sendingInvites.length > 0" x-h-table-container.scroll>
     <table id="tenant-users-table" x-h-table data-borders="rows">
       <thead x-h-table-header>
         <tr x-h-table-row>
@@ -72,36 +77,49 @@
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.statusColumn', 'Status')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.invitedColumn', 'Invited')"></th>
-          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.updatedColumn', 'Updated')"></th>
+          <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.changedColumn', 'Last change')"></th>
           <th x-h-table-head scope="col" x-text="$store.tenantUsers.t('shell.tenantUsers.signInColumn', 'Last sign-in')"></th>
+          <th x-h-table-head scope="col" :aria-label="$store.tenantUsers.t('shell.tenantUsers.actions', 'Actions')"></th>
         </tr>
       </thead>
       <tbody x-h-table-body>
         <template x-for="user in $store.tenantUsers.items" :key="user.id">
           <tr x-h-table-row :data-user="user.email">
-            <td x-h-table-cell class="whitespace-nowrap" x-text="user.email"></td>
+            <td x-h-table-cell class="whitespace-nowrap">
+              <div class="hbox items-center gap-2">
+                <span x-text="user.email"></span>
+                <span x-show="$store.tenantUsers.isSelf(user)" x-h-badge data-variant="primary"
+                      x-text="$store.tenantUsers.t('shell.tenantUsers.you', 'you')"></span>
+              </div>
+            </td>
             <td x-h-table-cell>
-              <div class="vbox gap-1">
+              <div class="hbox items-center gap-1 flex-wrap">
                 <template x-for="role in user.roles" :key="role.role">
-                  <div class="vbox gap-1" :data-role="role.role" :data-state="role.state">
-                    <div class="hbox items-center gap-2 flex-wrap">
-                      <span x-h-badge :data-variant="$store.tenantUsers.roleVariant(role)" :title="$store.tenantUsers.roleTitle(role)"
-                            x-text="$store.tenantUsers.roleLabel(role)"></span>
-                      <template x-if="$store.tenantUsers.isStale(role)">
-                        <div class="hbox items-center gap-2">
-                          <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.t('shell.tenantUsers.stale', 'No answer yet')"></span>
-                          <button x-h-button data-variant="outline" data-size="sm" type="button" :disabled="$store.tenantUsers.busy"
-                                  @click="$store.tenantUsers.resend(user, role)" x-text="$store.tenantUsers.t('shell.tenantUsers.resend', 'Send again')"></button>
-                        </div>
-                      </template>
-                    </div>
-                    <span x-show="role.state === 'FAILED' && role.errorMessage" x-h-text.muted class="text-xs" x-text="role.errorMessage"></span>
-                  </div>
+                  <span x-h-badge :data-variant="$store.tenantUsers.roleVariant(role)" :data-role="role.role" :data-state="role.state"
+                        :class="role.state === 'REMOVING' ? 'line-through' : ''" :title="$store.tenantUsers.roleTitle(role)"
+                        x-text="$store.tenantUsers.roleLabel(role)"></span>
                 </template>
               </div>
             </td>
             <td x-h-table-cell>
-              <span x-h-badge :data-variant="$store.tenantUsers.statusVariant(user.status)" x-text="$store.tenantUsers.statusLabel(user.status)"></span>
+              <div class="vbox gap-1">
+                <template x-if="$store.tenantUsers.isPending(user)">
+                  <div class="hbox items-center gap-2" data-pending>
+                    <span x-h-spinner></span>
+                    <span x-h-text.muted class="text-sm"
+                          x-text="$store.tenantUsers.inProgress(user) ? $store.tenantUsers.t('shell.tenantUsers.inProgress', 'Change in progress') : $store.tenantUsers.t('shell.tenantUsers.sending', 'Sending…')"></span>
+                  </div>
+                </template>
+                <template x-if="!$store.tenantUsers.isPending(user)">
+                  <span x-h-badge :data-variant="$store.tenantUsers.statusVariant(user)" x-text="$store.tenantUsers.statusLabel(user)"></span>
+                </template>
+                <template x-if="$store.tenantUsers.outcome(user)">
+                  <span x-h-text.muted class="text-xs" data-failure>
+                    <span x-text="$store.tenantUsers.outcome(user).text"></span>
+                    <span x-text="$store.tenantUsers.outcome(user).detail"></span>
+                  </span>
+                </template>
+              </div>
             </td>
             <td x-h-table-cell>
               <div class="vbox gap-1">
@@ -111,14 +129,123 @@
             </td>
             <td x-h-table-cell>
               <div class="vbox gap-1">
-                <span class="text-sm" x-text="user.updatedBy || ''"></span>
-                <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.time(user.updatedAt)"></span>
+                <span class="text-sm" x-text="user.lastChangedBy || ''"></span>
+                <span x-h-text.muted class="text-xs" x-text="$store.tenantUsers.time(user.lastChangedAt)"></span>
               </div>
             </td>
             <td x-h-table-cell class="text-sm" x-text="$store.tenantUsers.time(user.lastSignInAt)"></td>
+            <td x-h-table-cell>
+              <button x-h-button data-variant="transparent" data-size="icon-sm" type="button" x-h-menu-trigger.dropdown
+                      :aria-label="$store.tenantUsers.t('shell.tenantUsers.actionsFor', 'Actions for {{email}}', { email: user.email })">
+                <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+              </button>
+              <ul x-h-menu data-align="bottom-end">
+                <li x-h-menu-item x-show="!$store.tenantUsers.isFailed(user)" data-action="edit" :aria-disabled="$store.tenantUsers.isPending(user) ? 'true' : 'false'"
+                      @click="$store.tenantUsers.isPending(user) || $store.tenantUsers.openEdit(user)"
+                      x-text="$store.tenantUsers.t('shell.tenantUsers.editRoles', 'Edit roles')"></li>
+                <li x-h-menu-item x-show="!$store.tenantUsers.isFailed(user)" data-variant="negative" data-action="remove" :aria-disabled="$store.tenantUsers.isPending(user) ? 'true' : 'false'"
+                      @click="$store.tenantUsers.isPending(user) || $store.tenantUsers.openRemove(user)"
+                      x-text="$store.tenantUsers.t('shell.tenantUsers.remove', 'Remove')"></li>
+                <li x-h-menu-item x-show="$store.tenantUsers.isFailed(user)" data-action="invite-again" :aria-disabled="$store.tenantUsers.isPending(user) ? 'true' : 'false'"
+                      @click="$store.tenantUsers.isPending(user) || $store.tenantUsers.inviteAgain(user)"
+                      x-text="$store.tenantUsers.t('shell.tenantUsers.inviteAgain', 'Invite again')"></li>
+                <li x-h-menu-item x-show="$store.tenantUsers.isFailed(user)" data-variant="negative" data-action="dismiss" :aria-disabled="$store.tenantUsers.isPending(user) ? 'true' : 'false'"
+                      @click="$store.tenantUsers.isPending(user) || $store.tenantUsers.removeUser(user)"
+                      x-text="$store.tenantUsers.t('shell.tenantUsers.dismiss', 'Dismiss')"></li>
+              </ul>
+            </td>
+          </tr>
+        </template>
+        <template x-for="invited in $store.tenantUsers.sendingInvites" :key="'sending:' + invited.email">
+          <tr x-h-table-row :data-user="invited.email">
+            <td x-h-table-cell class="whitespace-nowrap" x-text="invited.email"></td>
+            <td x-h-table-cell>
+              <div class="hbox items-center gap-1 flex-wrap">
+                <template x-for="role in invited.roles" :key="role">
+                  <span x-h-badge data-variant="positive" :data-role="role" data-state="ADDING" x-text="'+ ' + role"></span>
+                </template>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <div class="hbox items-center gap-2" data-pending>
+                <span x-h-spinner></span>
+                <span x-h-text.muted class="text-sm" x-text="$store.tenantUsers.t('shell.tenantUsers.sending', 'Sending…')"></span>
+              </div>
+            </td>
+            <td x-h-table-cell></td>
+            <td x-h-table-cell></td>
+            <td x-h-table-cell></td>
+            <td x-h-table-cell></td>
           </tr>
         </template>
       </tbody>
     </table>
+  </div>
+
+  <div x-h-dialog-overlay :data-open="!!$store.tenantUsers.edit" @click.self="$store.tenantUsers.closeEdit()"
+       @keydown.escape.window="$store.tenantUsers.edit && $store.tenantUsers.closeEdit()">
+    <div x-h-dialog id="tenant-users-edit-dialog">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.tenantUsers.t('shell.tenantUsers.editTitle', 'Edit roles')"></h2>
+        <p x-h-dialog-description x-text="$store.tenantUsers.edit?.email || ''"></p>
+      </div>
+      <div x-h-dialog-content class="vbox gap-3">
+        <template x-for="role in $store.tenantUsers.roles" :key="role">
+          <div x-h-field data-orientation="horizontal">
+            <span x-h-checkbox>
+              <input type="checkbox" :id="'tenant-users-edit-role-' + role" :value="role" x-model="$store.tenantUsers.editRoles" />
+            </span>
+            <label x-h-label :for="'tenant-users-edit-role-' + role" x-text="role"></label>
+          </div>
+        </template>
+        <div class="hbox items-center gap-1 flex-wrap" data-diff>
+          <template x-for="role in $store.tenantUsers.rolesAdded" :key="'added:' + role">
+            <span x-h-badge data-variant="positive" x-text="'+ ' + role"></span>
+          </template>
+          <template x-for="role in $store.tenantUsers.rolesRemoved" :key="'removed:' + role">
+            <span x-h-badge data-variant="negative" class="line-through" x-text="'− ' + role"></span>
+          </template>
+          <span x-show="$store.tenantUsers.rolesAdded.length === 0 && $store.tenantUsers.rolesRemoved.length === 0" x-h-text.muted class="text-sm"
+                x-text="$store.tenantUsers.t('shell.tenantUsers.noChange', 'No change yet')"></span>
+        </div>
+        <div x-show="$store.tenantUsers.editLeavesNoOwner" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>
+        </div>
+        <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.edit) && $store.tenantUsers.rolesRemoved.length > 0" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfDemotion', 'These are your own roles. Removing one takes effect at your next sign-in or token refresh.')"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.tenantUsers.closeEdit()"
+                x-text="$store.tenantUsers.t('shell.tenantUsers.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" type="button" id="tenant-users-edit-save" :disabled="!$store.tenantUsers.canSave"
+                @click="$store.tenantUsers.saveRoles()" x-text="$store.tenantUsers.t('shell.tenantUsers.save', 'Save')"></button>
+      </div>
+    </div>
+  </div>
+
+  <div x-h-dialog-overlay :data-open="!!$store.tenantUsers.removeTarget" @click.self="$store.tenantUsers.closeRemove()"
+       @keydown.escape.window="$store.tenantUsers.removeTarget && $store.tenantUsers.closeRemove()">
+    <div x-h-dialog id="tenant-users-remove-dialog">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.tenantUsers.t('shell.tenantUsers.removeTitle', 'Remove user')"></h2>
+        <p x-h-dialog-description
+           x-text="$store.tenantUsers.t('shell.tenantUsers.removeQuestion', 'Remove {{email}} from {{tenant}}? They lose access at their next sign-in or token refresh.', { email: $store.tenantUsers.removeTarget?.email || '', tenant: $store.tenantUsers.context?.tenantId || '' })"></p>
+      </div>
+      <div x-h-dialog-content class="vbox gap-3">
+        <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.removeTarget)" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfRemoval', 'This is you. You lose access to this tenant at your next sign-in or token refresh.')"></div>
+        </div>
+        <div x-show="$store.tenantUsers.removeLeavesNoOwner" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.tenantUsers.closeRemove()"
+                x-text="$store.tenantUsers.t('shell.tenantUsers.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" type="button" id="tenant-users-remove-confirm" :disabled="$store.tenantUsers.busy"
+                @click="$store.tenantUsers.removeUser()" x-text="$store.tenantUsers.t('shell.tenantUsers.remove', 'Remove')"></button>
+      </div>
+    </div>
   </div>
 </div>
