@@ -83,6 +83,21 @@ public final class Process {
         return BpmFacade.isProcessRunning(processInstanceId);
     }
 
+    /**
+     * Whether the engine knows the instance at all - still running, or finished and recorded in the
+     * history. The read a stamp guard asks before trusting a record's {@code ProcessIds}: an instance
+     * that is neither is gone (cancelled with its deployment, lost with the database), and a record
+     * stamped with it would otherwise never get its process again. A blank or unknown id is
+     * {@code false}. With the history level configured to {@code none} a finished instance cannot be
+     * told from a lost one, so an instance that is not running counts as finished.
+     *
+     * @param processInstanceId the instance to look up
+     * @return true while the instance is running or recorded in the history
+     */
+    public static boolean exists(String processInstanceId) {
+        return BpmFacade.isProcessKnown(processInstanceId);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.getVariable(processInstanceId, variableName);
     }

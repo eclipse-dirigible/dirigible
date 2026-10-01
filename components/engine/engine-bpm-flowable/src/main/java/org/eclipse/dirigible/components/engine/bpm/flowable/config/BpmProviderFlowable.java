@@ -37,6 +37,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
 import org.flowable.bpmn.model.UserTask;
+import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
@@ -158,15 +159,97 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
-     * Undeploy process.
+     * Undeploys a process explicitly - the SDK's {@code Deployer.undeployProcess}. The deployment is
+     * removed only when none of its definitions has a running instance: a running instance is work in
+     * flight (an approval someone is in the middle of), and an undeploy that destroyed it would do so
+     * silently. The history of the finished instances is kept.
      *
      * @param deploymentId the deployment id
+     * @throws IllegalStateException when a definition of the deployment still has running instances
      */
     public void undeployProcess(String deploymentId) {
         flowableArtefactsValidator.validateDeployment(deploymentId);
 
+        List<ProcessInstance> running = runningInstancesOf(deploymentId);
+        if (!running.isEmpty()) {
+            throw new IllegalStateException("Deployment [" + deploymentId + "] still has " + running.size()
+                    + " running process instance(s) " + idsOf(running) + " - complete or cancel them before undeploying");
+        }
+        deleteDeploymentKeepingHistory(deploymentId, "undeployed");
+    }
+
+    /**
+     * Takes a deployment out of service without destroying the work in flight (#7597). A deployment
+     * none of whose definitions has a running instance is deleted, its history kept. One that still has
+     * running instances stays - its definitions are suspended, so no NEW instance starts from it while
+     * the running ones complete, and the next retire of the same key removes it once they have. Never a
+     * cascade: a {@code .bpmn} that disappears for a synchronization cycle (a container replacement, a
+     * module upgrade) must not take a month of approvals with it.
+     *
+     * @param deploymentId the deployment id
+     * @return true when the deployment was deleted, false when it was kept suspended
+     */
+    public boolean retireDeployment(String deploymentId) {
+        List<ProcessInstance> running = runningInstancesOf(deploymentId);
+        if (running.isEmpty()) {
+            deleteDeploymentKeepingHistory(deploymentId, "retired");
+            return true;
+        }
         RepositoryService repositoryService = processEngine.getRepositoryService();
-        repositoryService.deleteDeployment(deploymentId, true);
+        List<ProcessDefinition> definitions = repositoryService.createProcessDefinitionQuery()
+                                                               .deploymentId(deploymentId)
+                                                               .list();
+        for (ProcessDefinition definition : definitions) {
+            if (!definition.isSuspended()) {
+                repositoryService.suspendProcessDefinitionById(definition.getId());
+            }
+            LOGGER.warn(
+                    "Process definition [{}] version [{}] of deployment [{}] in tenant [{}] still has [{}] running instance(s) {} - kept and suspended instead of deleted; no new instance starts from it and it is removed once they complete",
+                    definition.getKey(), definition.getVersion(), deploymentId, definition.getTenantId(), running.size(), idsOf(running));
+        }
+        return false;
+    }
+
+    /**
+     * Whether a retire left this deployment behind suspended for its running instances - what the
+     * synchronizer sweeps when the artefact comes back and once those instances have ended.
+     *
+     * @param deploymentId the deployment id
+     * @return true when a definition of the deployment is suspended
+     */
+    public boolean isDeploymentRetired(String deploymentId) {
+        return processEngine.getRepositoryService()
+                            .createProcessDefinitionQuery()
+                            .deploymentId(deploymentId)
+                            .suspended()
+                            .count() > 0;
+    }
+
+    private List<ProcessInstance> runningInstancesOf(String deploymentId) {
+        return processEngine.getRuntimeService()
+                            .createProcessInstanceQuery()
+                            .deploymentId(deploymentId)
+                            .list();
+    }
+
+    /** Non-cascading: the runtime has nothing left under it, and the history stays for the audit. */
+    private void deleteDeploymentKeepingHistory(String deploymentId, String reason) {
+        RepositoryService repositoryService = processEngine.getRepositoryService();
+        List<ProcessDefinition> definitions = repositoryService.createProcessDefinitionQuery()
+                                                               .deploymentId(deploymentId)
+                                                               .list();
+        repositoryService.deleteDeployment(deploymentId, false);
+        for (ProcessDefinition definition : definitions) {
+            LOGGER.info(
+                    "Deleted process definition [{}] version [{}] of deployment [{}] in tenant [{}] ({}) - no running instances, history kept",
+                    definition.getKey(), definition.getVersion(), deploymentId, definition.getTenantId(), reason);
+        }
+    }
+
+    private static List<String> idsOf(List<ProcessInstance> instances) {
+        return instances.stream()
+                        .map(ProcessInstance::getId)
+                        .toList();
     }
 
     /**
@@ -244,11 +327,15 @@ public class BpmProviderFlowable implements BpmProvider {
     public void deleteProcess(String processInstanceId, String reason) {
         flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
 
-        LOGGER.debug("Deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
+        ProcessInstance instance = getProcessInstance(processInstanceId);
+        // Said before the delete, independent of the history level: with history off this line is
+        // the only trace the instance ever leaves (#7598).
+        LOGGER.info("Deleting process instance [{}] of definition [{}] in tenant [{}], reason [{}]", processInstanceId,
+                instance == null ? null : instance.getProcessDefinitionKey(), instance == null ? null : instance.getTenantId(), reason);
         try {
             processEngine.getRuntimeService()
                          .deleteProcessInstance(processInstanceId, reason);
-            LOGGER.info("Done deleting a BPMN process instance by processInstanceId: [{}]", processInstanceId);
+            LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
         } catch (Exception e) {
             LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
         }
@@ -603,11 +690,37 @@ public class BpmProviderFlowable implements BpmProvider {
                             .list();
     }
 
-    public void deleteDeployment(String deploymentId) {
-        flowableArtefactsValidator.validateDeployment(deploymentId);
+    /**
+     * Whether the engine knows the instance at all - running, or finished and still in the history. The
+     * read behind a stamp guard: a record stamped with an instance the engine does not have is stuck
+     * until the stamp is distrusted (#7599). With the history level at {@code none} a finished instance
+     * cannot be told from a lost one, so the stamp is trusted, as it always was.
+     *
+     * @param processInstanceId the instance id
+     * @return true when the instance is running or recorded in the history
+     */
+    public boolean isProcessInstanceKnown(String processInstanceId) {
+        if (getProcessInstance(processInstanceId) != null) {
+            return true;
+        }
+        if (getHistoryLevel() == HistoryLevel.NONE) {
+            return true;
+        }
+        return processEngine.getHistoryService()
+                            .createHistoricProcessInstanceQuery()
+                            .processInstanceId(processInstanceId)
+                            .processInstanceTenantId(getTenantId())
+                            .count() > 0;
+    }
 
-        processEngine.getRepositoryService()
-                     .deleteDeployment(deploymentId, true);
+    /**
+     * The history level the engine runs with.
+     *
+     * @return the level
+     */
+    public HistoryLevel getHistoryLevel() {
+        return processEngine.getProcessEngineConfiguration()
+                            .getHistoryLevel();
     }
 
     public long processDefinitionsCount() {

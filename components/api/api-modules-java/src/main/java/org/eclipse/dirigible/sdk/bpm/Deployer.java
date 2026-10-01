@@ -39,8 +39,9 @@ public final class Deployer {
 
     /**
      * Removes a deployment previously registered via {@link #deployProcess(String)}. Running instances
-     * of processes from that deployment are <em>not</em> terminated — use
-     * {@link #deleteProcess(String, String)} for instance-level cleanup.
+     * of processes from that deployment are <em>not</em> terminated: while one exists the undeploy is
+     * refused with an {@link IllegalStateException} naming it - complete it, or cancel it with
+     * {@link #deleteProcess(String, String)}, first. The history of the finished instances is kept.
      */
     public static void undeployProcess(String deploymentId) {
         BpmFacade.undeployProcess(deploymentId);

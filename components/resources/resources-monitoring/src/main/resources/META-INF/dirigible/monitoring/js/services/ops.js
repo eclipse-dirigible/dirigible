@@ -55,6 +55,9 @@ window.MonitoringOps = (() => {
     /** Completed process instances. */
     historicProcessInstances: () => get('/services/bpm/bpm-processes/historic-instances'),
 
+    /** What the engine records: { historyLevel } - 'none' means completed instances leave no trace. */
+    processEngine: () => get('/services/bpm/bpm-processes/engine'),
+
     /** The dead-letter jobs of one process instance - a non-empty list is an incident. */
     deadLetterJobs: (instanceId) =>
       get('/services/bpm/bpm-processes/instance/' + encodeURIComponent(instanceId) + '/jobs'),

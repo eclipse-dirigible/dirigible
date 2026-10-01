@@ -14,6 +14,8 @@ document.addEventListener('alpine:init', () => {
     loading: false,
     instances: [],
     error: null,
+    /** The engine's history level; '' until read. 'none' is said on the page: a silent empty Completed list is not an answer. */
+    historyLevel: '',
 
     selectedId: '',
     selected: null,
@@ -32,6 +34,10 @@ document.addEventListener('alpine:init', () => {
       this.loading = true;
       this.error = null;
       const ops = window.MonitoringOps;
+      if (!this.historyLevel) {
+        // Read once: a running engine never changes its level.
+        this.historyLevel = await ops.soft('engine', [], () => ops.processEngine(), {}).then((engine) => engine.historyLevel || '');
+      }
       try {
         this.instances = await (this.mode === 'active' ? ops.processInstances() : ops.historicProcessInstances());
         if (this.selectedId && !this.instances.some((instance) => instance.id === this.selectedId)) {

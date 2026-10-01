@@ -234,6 +234,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             trigger.put("entity", entity);
             trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             trigger.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            // The key's intent type: the restart path receives the record id as text and converts it
+            // to what the repository expects (#7599).
+            trigger.put("keyType", keyType(byName.get(entity)));
             // The BPM business key: the flagged trigger field's property, or the primary key when none
             // is flagged (preserving the historical default). keyProperty stays the PK - the listener
             // still loads the entity by id via findById; only the business key may differ.
@@ -394,6 +397,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * the FK property plus the identity target coordinates (same shapes as relationLinks; the template
      * engine assembles the import).
      */
+    /** The intent type of the entity's primary key, {@code integer} when none is declared. */
+    private static String keyType(EntityIntent entity) {
+        FieldIntent key = entity == null ? null : IntentEntities.primaryKeyOf(entity);
+        return key == null || key.getType() == null ? "integer" : key.getType();
+    }
+
     private static void putPersonalAssignee(Map<String, Object> trigger, EntityIntent owner, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {
         if (owner == null || owner.getRelations() == null) {

@@ -107,6 +107,7 @@
     "diagramFailed": "The diagram could not be rendered.",
     "empty": "No process instances.",
     "historic": "Completed",
+    "historyOff": "History is off (DIRIGIBLE_FLOWABLE_HISTORY_LEVEL=none): completed instances are not recorded.",
     "loadFailed": "The process engine could not be reached.",
     "noTasks": "No open user tasks.",
     "noVariables": "This instance carries no variables.",

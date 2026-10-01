@@ -171,6 +171,23 @@ public class BpmFacade implements InitializingBean {
      * @param variableName the variable name
      * @return the value
      */
+    /**
+     * Whether the engine knows the instance at all - running, or finished and in the history. A blank
+     * id is unknown. With the history level at {@code none} a finished instance cannot be told from a
+     * lost one, so an instance that is not running is assumed finished.
+     *
+     * @param processInstanceId the instance id
+     * @return true when the instance is running or recorded in the history
+     */
+    public static boolean isProcessKnown(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return false;
+        }
+        return BpmFacade.get()
+                        .getBpmProviderFlowable()
+                        .isProcessInstanceKnown(processInstanceId);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()

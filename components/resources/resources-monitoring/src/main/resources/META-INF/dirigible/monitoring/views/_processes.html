@@ -14,6 +14,8 @@
             @click="state.setMode('active')" x-text="T('monitoring:processes.active', 'Running')"></button>
     <button x-h-button data-size="sm" :data-variant="state.mode === 'historic' ? 'primary' : 'transparent'"
             @click="state.setMode('historic')" x-text="T('monitoring:processes.historic', 'Completed')"></button>
+    <span x-show="state.historyLevel === 'none'" x-cloak x-h-text.muted class="text-sm shrink-0"
+          x-text="T('monitoring:processes.historyOff', 'History is off (DIRIGIBLE_FLOWABLE_HISTORY_LEVEL=none): completed instances are not recorded.')"></span>
     <div x-h-toolbar-spacer></div>
     <div class="w-3xs shrink-0">
       <input x-h-input type="search" x-model="state.filter"

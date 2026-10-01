@@ -49,6 +49,13 @@ public enum DirigibleConfig {
     FLOWABLE_DATABASE_PASSWORD("DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", null), //
     FLOWABLE_DATABASE_DATASOURCE_NAME("DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME", null), //
     FLOWABLE_DATABASE_SCHEMA_UPDATE("DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", Boolean.TRUE.toString()), //
+    /**
+     * The Flowable history level: what the engine records about finished and deleted process instances.
+     * {@code audit} (Flowable's own default) keeps every instance, task and variable, so an instance
+     * that is gone from the runtime can still be accounted for; {@code none} is an explicit opt-out
+     * that leaves no trace at all.
+     */
+    FLOWABLE_HISTORY_LEVEL("DIRIGIBLE_FLOWABLE_HISTORY_LEVEL", "audit"), //
 
     FLOWABLE_MAIL_SERVER_HOST("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST", null), //
     FLOWABLE_MAIL_SERVER_PORT("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PORT", "587"), //

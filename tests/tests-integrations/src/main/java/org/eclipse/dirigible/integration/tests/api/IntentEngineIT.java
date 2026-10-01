@@ -785,7 +785,15 @@ class IntentEngineIT extends IntegrationTest {
         String handler = codeOf("gen/events/orders/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
                 "the glue template should generate a handler class named after the process");
-        assertTrue(handler.contains("implements MessageHandler"), "the trigger should be a self-describing MessageHandler");
+        assertTrue(handler.contains("implements MessageHandler, ProcessTrigger"),
+                "the trigger should be a self-describing MessageHandler and the restart surface of its process (#7599)");
+        // One start path for the event and the restart, a stamp that is distrusted when the engine
+        // does not know the instance it names, and the restart's id converted to the key's type.
+        assertTrue(handler.contains("private String startFor(OrderEntity entity)"), "the event path and the restart share startFor");
+        assertTrue(handler.contains("if (Process.exists(stamped)) {"), "a stamp is trusted only while the engine knows its instance");
+        assertTrue(handler.contains("public String restart(String id)"), "the trigger is restartable for one record");
+        assertTrue(handler.contains("repository.findById(Integer.valueOf(id))"),
+                "the restart converts the id it receives as text to the entity's integer key");
         assertTrue(handler.contains("return \"intent-test-Order-Order\""),
                 "the handler should bind to the entity's event topic <project>-<perspective>-<entity> via destination()");
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
@@ -3189,7 +3197,7 @@ class IntentEngineIT extends IntegrationTest {
         // The write-back is a TARGETED single-column write, so it keeps the entity's bookkeeping (the
         // change trail, the stored label) while touching nothing else on the row. It is the generated
         // repository that must not be able to REFUSE it - asserted where those gates are emitted.
-        assertTrue(trigger.contains("ProcessStamps.has(entity.ProcessIds, \"Approve\")"),
+        assertTrue(trigger.contains("ProcessStamps.idFor(entity.ProcessIds, \"Approve\")"),
                 "the at-most-once guard must ask whether THIS process ran for the record, not whether any did");
         // Both columns in ONE targeted write: the per-process stamp is the guard, ProcessId is what the
         // UI correlates tasks on, and a record carrying one without the other is either invisible to the

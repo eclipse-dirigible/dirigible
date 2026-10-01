@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
+import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.bpmn.converter.BpmnXMLConverter;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.common.engine.impl.util.io.InputStreamSource;
@@ -220,6 +221,7 @@ public class BpmService {
         processDefinitionData.setResourceName(processDefinition.getResourceName());
         processDefinitionData.setTennantId(processDefinition.getTenantId());
         processDefinitionData.setVersion(processDefinition.getVersion());
+        processDefinitionData.setSuspended(processDefinition.isSuspended());
 
         return processDefinitionData;
 
@@ -457,8 +459,20 @@ public class BpmService {
         return bpmProviderFlowable.getDeploymentsByKey(deploymentKey);
     }
 
-    public void deleteDeployment(String deploymentId) {
-        bpmProviderFlowable.deleteDeployment(deploymentId);
+    public boolean retireDeployment(String deploymentId) {
+        return bpmProviderFlowable.retireDeployment(deploymentId);
+    }
+
+    public boolean isDeploymentRetired(String deploymentId) {
+        return bpmProviderFlowable.isDeploymentRetired(deploymentId);
+    }
+
+    public boolean isProcessInstanceKnown(String processInstanceId) {
+        return bpmProviderFlowable.isProcessInstanceKnown(processInstanceId);
+    }
+
+    public HistoryLevel getHistoryLevel() {
+        return bpmProviderFlowable.getHistoryLevel();
     }
 
     public List<Task> findTasks(String processInstanceId, PrincipalType type) {

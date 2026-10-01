@@ -249,6 +249,18 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      *
      * @return the process instances
      */
+    /**
+     * What the engine records about finished and deleted instances - surfaced so that "history: off" is
+     * visible rather than silent (#7598).
+     *
+     * @return the history level key
+     */
+    @GetMapping(value = "/bpm-processes/engine")
+    public ResponseEntity<Map<String, String>> getEngine() {
+        return ResponseEntity.ok(Map.of("historyLevel", bpmService.getHistoryLevel()
+                                                                  .getKey()));
+    }
+
     @GetMapping(value = "/bpm-processes/historic-instances")
     public ResponseEntity<List<HistoricProcessInstance>> getHistoricProcessesInstances(
             @Nullable @RequestParam("definitionKey") Optional<String> definitionKey,

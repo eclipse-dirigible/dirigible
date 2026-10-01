@@ -20,6 +20,8 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigiblePro
 import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
+import org.flowable.common.engine.api.FlowableIllegalArgumentException;
+import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.engine.impl.bpmn.parser.factory.DefaultListenerFactory;
 import org.flowable.spring.SpringProcessEngineConfiguration;
 import org.flowable.spring.boot.actuate.endpoint.ProcessEngineEndpoint;
@@ -98,6 +100,7 @@ public class BpmFlowableConfig {
         boolean updateSchema = DirigibleConfig.FLOWABLE_DATABASE_SCHEMA_UPDATE.getBooleanValue();
         config.setDatabaseSchemaUpdate(
                 updateSchema ? ProcessEngineConfiguration.DB_SCHEMA_UPDATE_TRUE : ProcessEngineConfiguration.DB_SCHEMA_UPDATE_FALSE);
+        config.setHistory(historyLevel().getKey());
 
         config.setAsyncExecutorActivate(true);
         config.setApplicationContext(applicationContext);
@@ -139,6 +142,33 @@ public class BpmFlowableConfig {
         config.setListenerFactory(new DefaultListenerFactory(classDelegateFactory));
 
         return config;
+    }
+
+    /**
+     * The history level the engine runs with - set explicitly, never left to the engine's default, so
+     * an operator reading the configuration can tell what the instance records. {@code none} is
+     * accepted as the opt-out it is, but said out loud: with it a finished or deleted instance leaves
+     * nothing behind to establish what happened to it (#7598).
+     *
+     * @return the validated level
+     * @throws IllegalArgumentException when the configured value is not a Flowable history level
+     */
+    static HistoryLevel historyLevel() {
+        String configured = DirigibleConfig.FLOWABLE_HISTORY_LEVEL.getStringValue();
+        HistoryLevel level;
+        try {
+            level = HistoryLevel.getHistoryLevelForKey(configured);
+        } catch (FlowableIllegalArgumentException ex) {
+            throw new IllegalArgumentException(DirigibleConfig.FLOWABLE_HISTORY_LEVEL.getKey() + " is [" + configured
+                    + "] but must be one of none, instance, task, activity, audit or full", ex);
+        }
+        if (level == HistoryLevel.NONE) {
+            LOGGER.warn("Flowable history level is [{}] ({}): finished and deleted process instances leave no trace", level.getKey(),
+                    DirigibleConfig.FLOWABLE_HISTORY_LEVEL.getKey());
+        } else {
+            LOGGER.info("Flowable history level is [{}]", level.getKey());
+        }
+        return level;
     }
 
     private void setDatabaseConfig(SpringProcessEngineConfiguration config, DataSource datasource,

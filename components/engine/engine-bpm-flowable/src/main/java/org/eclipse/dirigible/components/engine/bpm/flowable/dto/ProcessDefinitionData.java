@@ -41,6 +41,9 @@ public class ProcessDefinitionData {
     /** The version. */
     private int version;
 
+    /** Whether the definition is suspended - kept for its running instances, starting none (#7597). */
+    private boolean suspended;
+
     /**
      * Gets the category.
      *
@@ -204,5 +207,23 @@ public class ProcessDefinitionData {
     }
 
 
+
+    /**
+     * Whether the definition is suspended.
+     *
+     * @return true when suspended
+     */
+    public boolean isSuspended() {
+        return suspended;
+    }
+
+    /**
+     * Sets whether the definition is suspended.
+     *
+     * @param suspended the suspended flag to set
+     */
+    public void setSuspended(boolean suspended) {
+        this.suspended = suspended;
+    }
 
 }

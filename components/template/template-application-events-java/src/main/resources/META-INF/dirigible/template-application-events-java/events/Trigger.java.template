@@ -2,6 +2,7 @@ package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.bpm.ProcessStamps;
+import org.eclipse.dirigible.sdk.bpm.ProcessTrigger;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
@@ -33,11 +34,19 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * payload), the write-back is the only post-start step and no document gate can refuse it, and if it
  * still does not land the instance is cancelled instead of left running untracked.
  *
+ * The stamp is distrusted when the engine does not know the instance it names - neither running nor
+ * in the history (cancelled together with its deployment, lost with an ephemeral database): such a
+ * record has no task, and a guard that believed the stamp would leave it stuck for good. The event
+ * path then starts a new instance and overwrites the stamp; and because the create event does not
+ * fire twice, the platform's restart endpoint reaches the same path through ProcessTrigger.restart
+ * for the records nobody will touch again. Both go through startFor, so the variables and the
+ * stamping cannot drift between them.
+ *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean with constructor injection.
  */
 @Component("${javaGenFolderName}_${process}Trigger")
-public class ${process}Trigger implements MessageHandler {
+public class ${process}Trigger implements MessageHandler, ProcessTrigger {
 
     /** Application logger - nested under the platform's `app.` root, like every other app logger. */
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${process}Trigger");
@@ -59,6 +68,16 @@ public class ${process}Trigger implements MessageHandler {
     }
 
     @Override
+    public String process() {
+        return "${process}";
+    }
+
+    @Override
+    public String entity() {
+        return "${entity}";
+    }
+
+    @Override
     public void onMessage(String message) {
         ${entity}Entity created = Json.parse(message, ${entity}Entity.class);
         if (created == null) {
@@ -72,15 +91,23 @@ public class ${process}Trigger implements MessageHandler {
         // business. A blank id inside the stamp counts as "not started yet": some clients send an
         // empty string for an untouched system field rather than null, and "" != null would otherwise
         // trip the guard and the process would never start.
-        if (ProcessStamps.has(entity.ProcessIds, "${process}")) {
-            return;
-        }
-        // Records stamped before ProcessIds existed carry only the single ProcessId, which cannot say
-        // WHICH process wrote it. Treat any such record as already handled: that is exactly today's
-        // behaviour, so an upgrade cannot start a second instance of a flow that is already running or
-        // done. Records created from here on carry the per-process stamp and compose freely.
-        if ((entity.ProcessIds == null || entity.ProcessIds.isBlank()) && entity.ProcessId != null
+        String stamped = ProcessStamps.idFor(entity.ProcessIds, "${process}");
+        if (stamped != null) {
+            if (Process.exists(stamped)) {
+                return;
+            }
+            // The stamp names an instance the engine does not have - neither running nor in the
+            // history. Trusting it would leave the record without a process forever (#7599), so the
+            // record counts as unstarted and the stamp is overwritten below.
+            LOG.warn("{} [{}] is stamped with {} instance [{}] which the engine does not have - starting a new instance", "${entity}",
+                    entity.${keyProperty}, "${process}", stamped);
+        } else if ((entity.ProcessIds == null || entity.ProcessIds.isBlank()) && entity.ProcessId != null
                 && !entity.ProcessId.isBlank()) {
+            // Records stamped before ProcessIds existed carry only the single ProcessId, which cannot
+            // say WHICH process wrote it. Treat any such record as already handled: that is exactly the
+            // earlier behaviour, so an upgrade cannot start a second instance of a flow that is already
+            // running or done. Records created from here on carry the per-process stamp and compose
+            // freely.
             LOG.debug("{} [{}] carries a legacy ProcessId with no per-process stamp - not starting {}", "${entity}",
                     entity.${keyProperty}, "${process}");
             return;
@@ -90,6 +117,39 @@ public class ${process}Trigger implements MessageHandler {
             return;
         }
 #end
+        startFor(entity);
+    }
+
+    @Override
+    public String restart(String id) {
+        ${entity}Entity entity = repository.findById(${keyParse});
+        if (entity == null) {
+            throw new IllegalArgumentException("No ${entity} [" + id + "]");
+        }
+        String stamped = ProcessStamps.idFor(entity.ProcessIds, "${process}");
+        if (stamped != null && Process.isRunning(stamped)) {
+            throw new IllegalStateException("${entity} [" + id + "] still has its ${process} instance [" + stamped
+                    + "] running - complete or cancel it before restarting");
+        }
+#if(${guardExpression} != "true")
+        if (!(${guardExpression})) {
+            throw new IllegalStateException("${entity} [" + id + "] does not meet the condition the ${process} trigger starts on");
+        }
+#end
+        String processId = startFor(entity);
+        if (processId == null) {
+            throw new IllegalStateException("Starting the ${process} process for ${entity} [" + id + "] failed - see the log");
+        }
+        return processId;
+    }
+
+    /**
+     * Starts the process for the record and stamps the instance on it - the one path the record event
+     * and an operator's restart share, so neither can carry a variable the other lacks. Returns the
+     * started instance id, or null when the start failed (the platform logged why; nothing is stamped,
+     * so the next qualifying event retries instead of the record silently never having a process).
+     */
+    private String startFor(${entity}Entity entity) {
 #if(${generateBusinessKey} == "true")
         if (entity.${businessKeyProperty} == null || entity.${businessKeyProperty}.isBlank()) {
             // Mint the correlation key and persist it BEFORE starting: the instance is started WITH this
@@ -141,11 +201,9 @@ public class ${process}Trigger implements MessageHandler {
 #end
         String processId = Process.start("${process}", businessKey, Json.stringify(variables));
         if (processId == null) {
-            // The platform already logged why the start failed. Nothing is stamped, so the next
-            // qualifying event retries instead of the record silently never having a process.
             LOG.error("Starting the {} process for {} [{}] failed - the record carries no process", "${process}", "${entity}",
                     entity.${keyProperty});
-            return;
+            return null;
         }
         // Persist ONLY the two columns this trigger owns - a targeted write, never a full-row update:
         // the entity snapshot loaded above is stale the moment line items or workflow steps write the
@@ -177,6 +235,7 @@ public class ${process}Trigger implements MessageHandler {
                 LOG.warn("{} [{}] disappeared while the {} process was starting - cancelling instance [{}]", "${entity}",
                         entity.${keyProperty}, "${process}", processId);
                 cancelStarted(processId);
+                return null;
             }
         } catch (RuntimeException e) {
             // The instance is running and nothing points at it: cancel it, so the next qualifying event
@@ -187,6 +246,7 @@ public class ${process}Trigger implements MessageHandler {
             cancelStarted(processId);
             throw e;
         }
+        return processId;
     }
 
     /**

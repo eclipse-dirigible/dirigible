@@ -184,6 +184,10 @@ class GlueGenerator {
                 "subjectFields", "personalFkProperty", "personalIdentityProperty");
         bindEventGuard(context, item);
         context.put("javaPerspective", sanitize(item, "perspective"));
+        // How the restart path turns the record id it receives as text into the repository's key type.
+        // A descriptor written before the key type was recorded is an intent-generated one, whose keys
+        // are integers.
+        context.put("keyParse", keyParse(str(item, "keyType")));
         // The identity repository the listener resolves a personal task assignee through. A
         // cross-model target resolves against the owner model's generation folder.
         if (truthy(item, "personalFkProperty")) {
@@ -1403,6 +1407,17 @@ class GlueGenerator {
      * @param source the descriptor
      * @param keys the keys to copy
      */
+    /**
+     * The Java expression converting {@code id} (a String) to a primary key of the given intent type.
+     */
+    private static String keyParse(String keyType) {
+        return switch (keyType == null ? "integer" : keyType) {
+            case "long" -> "Long.valueOf(id)";
+            case "string", "text", "uuid" -> "id";
+            default -> "Integer.valueOf(id)";
+        };
+    }
+
     private static void copy(Map<String, Object> target, Map<String, Object> source, String... keys) {
         for (String key : keys) {
             if (source.containsKey(key)) {

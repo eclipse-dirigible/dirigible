@@ -180,6 +180,14 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
 
     private void deployProcess(Bpmn bpmn) {
         try {
+            // A deployment of this key that a retire left suspended for its running instances (see
+            // removeFromProcessEngine) is swept here: deleted once they have ended, kept otherwise. The
+            // version deployed below is the one new instances start from either way.
+            for (Deployment earlier : bpmService.getDeploymentsByKey(bpmn.getLocation())) {
+                if (bpmService.isDeploymentRetired(earlier.getId())) {
+                    bpmService.retireDeployment(earlier.getId());
+                }
+            }
             Deployment deployment = bpmService.deployProcess(bpmn.getLocation(), bpmn.getLocation(), bpmn.getContent());
             ProcessDefinition processDefinition = bpmService.getProcessDefinitionByDeploymentId(deployment.getId());
 
@@ -200,18 +208,23 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
     }
 
     /**
-     * Removes the from process engine.
+     * Retires every deployment of the artefact - never a cascade (#7597). A deployment whose
+     * definitions have no running instance is deleted (its history kept); one that still has running
+     * instances is kept with its definitions suspended, so the work in flight completes and no new
+     * instance starts from it. The artefact is still DELETED from the platform's point of view: should
+     * it come back, the next deploy is simply the next version of the same key, and the suspended one
+     * is removed by the retire after its last instance ends.
      *
      * @param bpmn the bpmn
      */
     private void removeFromProcessEngine(Bpmn bpmn) {
         List<Deployment> deployments = bpmService.getDeploymentsByKey(bpmn.getLocation());
         for (Deployment deployment : deployments) {
-            bpmService.deleteDeployment(deployment.getId());
-            logger.info("Deleted deployment: [{}] with key: [{}] for tenant [{}] on the Flowable BPMN Engine.", deployment.getId(),
-                    deployment.getKey(), deployment.getTenantId());
+            boolean deleted = bpmService.retireDeployment(deployment.getId());
+            logger.info("{} deployment: [{}] with key: [{}] for tenant [{}] on the Flowable BPMN Engine.",
+                    deleted ? "Deleted" : "Suspended (running instances kept)", deployment.getId(), deployment.getKey(),
+                    deployment.getTenantId());
         }
-
     }
 
     /**
