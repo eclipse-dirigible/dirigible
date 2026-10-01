@@ -57,7 +57,7 @@
         <table x-h-table x-list-columns data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
               <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end#visibleGate($property)>${property.name}</th>
 #end
@@ -69,7 +69,7 @@
             <tr x-show="filteredMasters.length === 0" x-h-table-row><td x-h-table-cell data-col-free x-text="T('$projectName:${tprefix}.messages.noData', 'No ${name}.')"></td></tr>
             <template x-for="row in pagedMasters" :key="row.${primaryKeysString}">
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
 #if($property.widgetType == "DOCUMENT_STATUS")
                 <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->

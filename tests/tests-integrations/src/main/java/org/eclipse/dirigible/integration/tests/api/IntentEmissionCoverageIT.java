@@ -137,6 +137,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Unit
                 kind: setting
                 multilingual: true
+                # list: the list's own columns and order (#7614) - UnitPrice first, PackPrice off the
+                # list - while the form keeps the declaration order.
+                list: [unitPrice, name]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
@@ -2845,6 +2848,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the manage list must export its filtered+sorted rows as CSV");
         assertTrue(unitManageList.contains("printRows(this.sortedItems"), "the manage list must print its filtered+sorted rows");
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
+        // list: [unitPrice, name] (#7614) is the list's exact column set and order - the header, the
+        // filter and the export columns all follow it - while the form keeps its own order.
+        assertTrue(
+                unitManageView.indexOf("cycleSort('UnitPrice')") >= 0
+                        && unitManageView.indexOf("cycleSort('UnitPrice')") < unitManageView.indexOf("cycleSort('Name')"),
+                "list: must put UnitPrice before Name in the list header");
+        assertFalse(unitManageView.contains("cycleSort('PackPrice')"), "a property list: leaves out must not be a list column");
+        assertTrue(
+                unitManageList.indexOf("{ name: 'UnitPrice'") >= 0
+                        && unitManageList.indexOf("{ name: 'UnitPrice'") < unitManageList.indexOf("{ name: 'Name'"),
+                "the filter / export columns must follow list: too");
+        assertFalse(unitManageList.contains("{ name: 'PackPrice'"), "the filter / export columns must leave out what list: leaves out");
+        String unitForm = contentOf("gen/emission/views/Settings/Unit-form.html");
+        assertTrue(
+                unitForm.indexOf("id=\"f_PackPrice\"") >= 0
+                        && unitForm.indexOf("id=\"f_PackPrice\"") < unitForm.indexOf("id=\"f_UnitPrice\""),
+                "list: must not reorder or trim the form");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
         // The per-column filters live in the Filter menu (#7491), not in a row inside the table: the

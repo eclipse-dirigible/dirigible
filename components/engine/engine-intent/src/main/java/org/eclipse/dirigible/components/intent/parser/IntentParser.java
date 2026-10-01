@@ -396,6 +396,7 @@ public final class IntentParser {
         validateDocumentItemsLayout(model, issues);
         validateDuplicable(model, issues);
         validateOrders(model, issues);
+        validateLists(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
@@ -920,6 +921,56 @@ public final class IntentParser {
                                                   .trim()
                                                   .toLowerCase())) {
                 issues.add("entity [" + name + "] calendar.scope [" + cal.getScope() + "] is not a declared to-one relation");
+            }
+        }
+    }
+
+    /**
+     * Each entity's optional {@code list} is the exact column set and order of its generated list
+     * tables (issue #7614). Validated like {@code order}: no blank entry, no name twice, and every name
+     * a property the list can show - a field, a to-one ({@code manyToOne} / {@code oneToOne}) or
+     * {@code subset} relation, or the {@code Name} a {@code label:} synthesizes. A {@code oneToMany} /
+     * {@code manyToMany} relation has no column on the entity, so it cannot be one of the list's.
+     */
+    private static void validateLists(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<String> list = entity.getList();
+            if (list == null || list.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            Set<String> known = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    known.add(field.getName()
+                                   .toLowerCase(Locale.ROOT));
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind())
+                        || "subset".equals(relation.getKind()))) {
+                    known.add(relation.getName()
+                                      .toLowerCase(Locale.ROOT));
+                }
+            }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                known.add("name");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String token : list) {
+                if (token == null || token.isBlank()) {
+                    issues.add("entity [" + entity.getName() + "] list has a blank entry");
+                    continue;
+                }
+                String key = token.trim()
+                                  .toLowerCase(Locale.ROOT);
+                if (!seen.add(key)) {
+                    issues.add("entity [" + entity.getName() + "] list names [" + token + "] more than once");
+                }
+                if (!known.contains(key)) {
+                    issues.add("entity [" + entity.getName() + "] list references [" + token
+                            + "] which is not a field or to-one relation of the entity");
+                }
             }
         }
     }

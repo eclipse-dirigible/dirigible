@@ -210,7 +210,7 @@ document.addEventListener('alpine:init', () => {
     // ----- Export / print: the FULL filtered+sorted set (not the current page), cells resolved
     // exactly like the table (FK labels, formatted dates) via the shared basePage helpers.
     exportColumns: [
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
       { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end

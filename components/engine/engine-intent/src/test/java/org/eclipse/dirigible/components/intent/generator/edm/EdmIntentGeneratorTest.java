@@ -2450,6 +2450,69 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code list:} (#7614) is the list's exact column set and order: the named properties turn major
+     * and every other one stops being major, their sequence rides the entity as {@code listOrder}, and
+     * the property sequence - the form's - still follows {@code order:}.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void listSetsTheListColumnsWithoutReorderingTheForm() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Invoice
+                    order: [Id, Number, Date, Due, Customer, Notes]
+                    list: [Number, date, Customer, Total, Due]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: date, type: date }
+                      - { name: due, type: date }
+                      - { name: notes, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> invoice = entityByName(entities(model), "Invoice");
+        List<Map<String, Object>> properties = (List<Map<String, Object>>) invoice.get("properties");
+
+        assertEquals(List.of("Id", "Number", "Date", "Due", "Customer", "Notes", "Total"), properties.stream()
+                                                                                                     .map(p -> String.valueOf(
+                                                                                                             p.get("name")))
+                                                                                                     .toList(),
+                "the form keeps the order: sequence");
+        assertEquals("Number,Date,Customer,Total,Due", invoice.get("listOrder"), "the list order, in the properties' own names");
+        assertEquals("true", propertyByName(invoice, "Customer").get("widgetIsMajor"));
+        assertEquals("true", propertyByName(invoice, "Total").get("widgetIsMajor"));
+        assertEquals("false", propertyByName(invoice, "Notes").get("widgetIsMajor"), "an unlisted field leaves the list");
+        assertEquals("false", propertyByName(invoice, "Id").get("widgetIsMajor"));
+    }
+
+    /** Without {@code list:} nothing changes: no {@code listOrder}, and {@code major} decides alone. */
+    @Test
+    void noListLeavesMajorAndEmitsNoListOrder() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: notes, type: string, major: false }
+                """;
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales")), "Invoice");
+
+        assertNull(invoice.get("listOrder"));
+        assertEquals("true", propertyByName(invoice, "Number").get("widgetIsMajor"));
+        assertEquals("false", propertyByName(invoice, "Notes").get("widgetIsMajor"));
+    }
+
+    /**
      * {@code whenMasterDeleted: refuse} rides the composition FK property; the default (cascade) emits
      * no attribute at all, so a model that says nothing about it stays byte-identical.
      */

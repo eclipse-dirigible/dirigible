@@ -91,7 +91,7 @@ App.registerDetail('${masterEntity}', {
   visibleWhen: ${visibleWhenTermsJs},
 #end
   columns: [
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)
 #if($property.widgetLabel)#set($clabel = $property.widgetLabelJs)#else#set($clabel = $property.name)#end
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")

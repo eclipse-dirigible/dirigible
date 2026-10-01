@@ -13,8 +13,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -637,6 +639,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // instead of the default fields-then-relations layout. Unlisted properties keep their
             // relative position, appended after the listed ones.
             properties = applyOrder(properties, entity.getOrder());
+            // List-only columns (intent `list:`, #7614): the named properties are the exact list column
+            // set - major on, every other property's major off - and their sequence rides the entity as
+            // `listOrder`, which the templates read so the list order no longer follows `order:`.
+            applyListColumns(entityMap, properties, entity.getList());
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -1182,6 +1188,61 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("roleRead", authoredRead != null ? authoredRead : conventionRead);
         entity.put("roleWrite", authoredWrite != null ? authoredWrite : conventionWrite);
         return entity;
+    }
+
+    /**
+     * Apply an entity's list-only column set (intent {@code list:}, issue #7614). Each named property
+     * (matched case-insensitively against its model name) becomes a list column and every other one
+     * stops being one, whatever its {@code major}; the resolved names, in the authored sequence, are
+     * put on the entity as the comma-separated {@code listOrder} the list templates iterate by. The
+     * property list itself keeps the control order, so the form and the detail rows are unaffected. A
+     * blank/empty list leaves everything as it was.
+     *
+     * @param entityMap the entity being emitted
+     * @param properties the entity's properties, in control order
+     * @param list the authored list column names (may be empty)
+     */
+    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, List<String> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        List<String> listOrder = new ArrayList<>();
+        Set<Map<String, Object>> listed = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (String wanted : list) {
+            if (wanted == null) {
+                continue;
+            }
+            for (Map<String, Object> property : properties) {
+                if (!listed.contains(property) && wanted.trim()
+                                                        .equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                    listed.add(property);
+                    listOrder.add(String.valueOf(property.get("name")));
+                    break;
+                }
+            }
+        }
+        for (Map<String, Object> property : properties) {
+            property.put("widgetIsMajor", listed.contains(property) ? "true" : "false");
+        }
+        entityMap.put("listOrder", String.join(",", listOrder));
+    }
+
+    /**
+     * An entity's properties in its list column order: the ones its {@code listOrder} names first, in
+     * that sequence, then the rest in control order. Without a {@code listOrder} the list is returned
+     * as it is. Used where another entity's list columns are reproduced (a related register).
+     *
+     * @param properties the entity's properties, in control order
+     * @param listOrder the entity's comma-separated {@code listOrder}, or {@code null}
+     * @return the properties in list order
+     */
+    static List<Map<String, Object>> listOrdered(List<Map<String, Object>> properties, Object listOrder) {
+        if (listOrder == null || String.valueOf(listOrder)
+                                       .isBlank()) {
+            return properties;
+        }
+        return applyOrder(properties, List.of(String.valueOf(listOrder)
+                                                    .split(",")));
     }
 
     /**
@@ -3191,7 +3252,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     LoggedValue.of(entity.getName()));
             return null;
         }
-        List<Map<String, Object>> properties = propertiesOf(source);
+        List<Map<String, Object>> properties = listOrdered(propertiesOf(source), source.get("listOrder"));
         String fkProperty = relatedForeignKey(properties, entity.getName(), related);
         if (fkProperty == null) {
             return null; // reported by the parser

@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -52,6 +53,46 @@ class ModelParameterProcessorTest {
 
         assertEquals(Boolean.FALSE, property.get("dataPrimaryKey"));
         assertEquals(Boolean.FALSE, property.get("widgetIsMajor"));
+    }
+
+    /**
+     * The list templates iterate {@code listProperties}: the {@code listOrder} names first, in that
+     * order (dirigible #7614), the rest after; the property maps are the same ones the form iterates.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void listPropertiesFollowTheListOrder() {
+        Map<String, Object> number = property("Number", "VARCHAR");
+        Map<String, Object> due = property("Due", "DATE");
+        Map<String, Object> customer = property("Customer", "INTEGER");
+        Map<String, Object> total = property("Total", "DECIMAL");
+        Map<String, Object> entity = entity("Invoice", "Invoices", number, due, customer, total);
+        entity.put("listOrder", "Number,customer,Total");
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> listed = (List<Map<String, Object>>) entity.get("listProperties");
+        assertEquals(4, listed.size());
+        assertSame(number, listed.get(0));
+        assertSame(customer, listed.get(1));
+        assertSame(total, listed.get(2));
+        assertSame(due, listed.get(3));
+    }
+
+    /** Without a {@code listOrder} the list follows the control order, as before #7614. */
+    @Test
+    @SuppressWarnings("unchecked")
+    void listPropertiesDefaultToTheControlOrder() {
+        Map<String, Object> number = property("Number", "VARCHAR");
+        Map<String, Object> due = property("Due", "DATE");
+        Map<String, Object> entity = entity("Invoice", "Invoices", number, due);
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> listed = (List<Map<String, Object>>) entity.get("listProperties");
+        assertEquals(2, listed.size());
+        assertSame(number, listed.get(0));
+        assertSame(due, listed.get(1));
     }
 
     /**

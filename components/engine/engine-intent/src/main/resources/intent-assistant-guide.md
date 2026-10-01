@@ -330,7 +330,8 @@ field may declare:
   ```
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
-  of wide/secondary fields (e.g. `uuid`, long notes).
+  of wide/secondary fields (e.g. `uuid`, long notes). To choose the list's columns AND their order in one
+  place, give the entity a `list:` instead (see "List columns" below) - it overrides `major`.
 - `aggregate: true` - include this numeric field in a document's **totals footer** (the sum across the
   line items is shown under the items table). Use it on money / quantity columns of a `DocumentItem`.
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
@@ -906,6 +907,23 @@ Names match the field / relation names (case-insensitive). A **partial** order i
 not listed keeps its default position and is appended after the listed ones. System properties
 (`ProcessId`, `ProcessIds`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
+
+**List columns (`list:`):** `order:` sequences the form, the list and the detail rows together, but a
+document wants its form in data-entry order and its list in scanning order. Give the entity a `list:`
+to set the list tables apart - it is the **exact** column set and order of every generated list (the
+power list, the master list, the my / partner lists, a composition child's register, a `related:`
+register without `show:`, and the export), and it overrides each property's `major` for the list:
+
+```yaml
+- name: SalesInvoice
+  order: [Id, Number, Date, Due, Customer, Company, Currency, PaymentMethod, BankAccount]   # the form
+  list:  [Number, Date, Customer, Total, Balance, Due, Status]                             # the list
+```
+
+Names match like `order:` (case-insensitive, no name twice) and must be a field, a `manyToOne` /
+`oneToOne` / `subset` relation, or the `Name` a `label:` generates - a `oneToMany` / `manyToMany` has no
+column. Without `list:` the list shows the `major` properties (every one unless `major: false`) in
+control order, as before.
 
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns

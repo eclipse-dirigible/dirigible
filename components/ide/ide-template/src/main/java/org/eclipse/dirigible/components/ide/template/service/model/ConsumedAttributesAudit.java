@@ -91,7 +91,7 @@ public class ConsumedAttributesAudit {
     private static final Set<String> PIPELINE_CLAIMED = Set.of("dataCount", "dataNullable", "dataNotNull", "dataScale", "dataPrecision",
             "dataOrderBy", "dataOrderBySort", "dataUnique", "generateBusinessKey", "generateDefaultRoles", "generateEvents",
             "generateReopens", "generateReport", "identityProperty", "immutableStatusProperty", "immutableStatusValues",
-            "lifecycleStatusNameList", "lifecycleStatusNames", "locksWithMaster", "periodClosedValues", "periodEndProperty",
+            "lifecycleStatusNameList", "lifecycleStatusNames", "listOrder", "locksWithMaster", "periodClosedValues", "periodEndProperty",
             "periodLockDateProperty", "periodLockEntity", "periodStartProperty", "periodStatusProperty", "perspectiveIcon",
             "perspectiveLabel", "projectionReferencedModel", "extensionReferencedEntity", "extensionReferencedModel",
             "relationshipCardinality", "relationshipIdentityLabel", "relationshipIdentityProperty", "relationshipMasterDeleteRefused",

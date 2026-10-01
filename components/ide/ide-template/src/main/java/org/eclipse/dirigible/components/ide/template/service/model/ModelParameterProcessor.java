@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -135,6 +137,43 @@ final class ModelParameterProcessor {
             processProperty(property, entity, entities, parameters);
         }
         resolveVisibleWhen(entity);
+        resolveListProperties(entity);
+    }
+
+    /**
+     * Derives {@code listProperties}, the sequence the list templates iterate their columns in. An
+     * entity with a {@code listOrder} (intent {@code list:}, dirigible #7614) lists the named
+     * properties first, in that order, then the rest in control order - the rest are not major, so no
+     * list shows them. Without one it is the properties themselves, so the list follows the control
+     * order as before. Either way the elements are the same property maps the form iterates.
+     *
+     * @param entity the entity
+     */
+    private static void resolveListProperties(Map<String, Object> entity) {
+        List<Map<String, Object>> properties = asMaps(entity.get("properties"));
+        String listOrder = str(entity, "listOrder");
+        if (listOrder == null || listOrder.isBlank()) {
+            entity.put("listProperties", properties);
+            return;
+        }
+        List<Map<String, Object>> ordered = new ArrayList<>(properties.size());
+        Set<Map<String, Object>> placed = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (String wanted : listOrder.split(",")) {
+            for (Map<String, Object> property : properties) {
+                if (!placed.contains(property) && wanted.trim()
+                                                        .equalsIgnoreCase(str(property, "name"))) {
+                    ordered.add(property);
+                    placed.add(property);
+                    break;
+                }
+            }
+        }
+        for (Map<String, Object> property : properties) {
+            if (!placed.contains(property)) {
+                ordered.add(property);
+            }
+        }
+        entity.put("listProperties", ordered);
     }
 
     /**

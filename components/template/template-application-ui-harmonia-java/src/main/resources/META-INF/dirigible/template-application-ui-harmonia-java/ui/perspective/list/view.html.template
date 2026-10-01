@@ -90,7 +90,7 @@
           <table x-h-table x-list-columns data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
@@ -110,7 +110,7 @@
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
 #if($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
