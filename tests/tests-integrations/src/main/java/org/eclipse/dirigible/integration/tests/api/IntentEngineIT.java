@@ -2969,6 +2969,14 @@ class IntentEngineIT extends IntegrationTest {
                 "a payment corrected below what it already covers should release the excess allocation");
         assertTrue(onPaymentUpdated.contains(".orderByDesc(\"Id\")") && onPaymentUpdated.contains("rows.delete(row)"),
                 "the release should give back the newest allocations first, through the junction repository");
+        // A derived write of the payment - its allocated roll-up moving because an allocation was
+        // deleted by hand - is not a correction, and re-settling on it put the allocation straight back
+        // (#7557). Only the pot and the match columns are a reason to re-allocate.
+        assertTrue(
+                codeOf("gen/events/settle/AutoSettleOnPaymentUpdated.java").contains(
+                        "if (DerivedWrite.touchedNoneOf(message, \"Amount\", \"Customer\")) {"),
+                "the correction listener must skip a derived write that moved neither the pot nor a match column");
+        assertFalse(onPayment.contains("DerivedWrite"), "a create event is never a derived write");
 
         // A corrected MATCH column (the payment re-filed under another Customer) re-targets the whole
         // allocation: the payment's DAO publishes "-rekeyed" for the move (the match columns are
@@ -4912,8 +4920,15 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must publish the entity's -updated topic, got: " + writer);
         assertTrue(writer.contains("Process.executeAfterCommit("), "the publish must be deferred to after the BPMN chain commits");
         int write = writer.indexOf("repository.updateProperties(id, values)");
-        int reload = writer.indexOf("repository.findById(id)");
+        // the LAST load: the first is the pre-write one the edits are validated on (#7552)
+        int reload = writer.lastIndexOf("repository.findById(id)");
         assertTrue(write > 0 && write < reload, "the payload must be re-loaded AFTER the write, not from a pre-write snapshot");
+        // The edits are held to the entity's own rules - its controller's validation - BEFORE anything is
+        // written, and a refusal is the client validation the inbox answers with a 400 (#7552).
+        int validate = writer.indexOf("SalesOrderController.validate(edited);");
+        assertTrue(validate > 0 && validate < write, "the edited row must be validated before the targeted write, got: " + writer);
+        assertTrue(writer.contains("throw new ValidationException(refusal.getReason(), refusal);"),
+                "a refusal must surface as the client validation the inbox reports");
     }
 
     @Test

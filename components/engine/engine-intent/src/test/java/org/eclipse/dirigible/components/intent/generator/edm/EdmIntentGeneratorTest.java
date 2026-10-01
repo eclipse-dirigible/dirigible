@@ -73,6 +73,8 @@ class EdmIntentGeneratorTest {
         // the four audit columns are present.
         assertEquals("true", propertyByName(customer, "Uuid").get("dataUnique"));
         assertEquals("true", propertyByName(customer, "Uuid").get("generatedUuid"));
+        // A plain `type: uuid` field carries no numbering marker - it may be seeded/imported (#7548).
+        assertNull(propertyByName(customer, "Uuid").get("numberStampOnIssue"));
         assertEquals("CREATED_AT", propertyByName(customer, "CreatedAt").get("auditType"));
         assertEquals("UPDATED_BY", propertyByName(customer, "UpdatedBy").get("auditType"));
 
@@ -102,11 +104,16 @@ class EdmIntentGeneratorTest {
         assertEquals("SalesInvoice", siNumber.get("numberSeries"));
         assertEquals("true", siNumber.get("generatedUuid"));
         assertNull(siNumber.get("numberStampOnCreate"));
+        // ...and is marked apart from a plain `type: uuid` field (#7548): the generated repository must
+        // discard a client-supplied placeholder value on create, which a legitimately seeded/imported
+        // uuid field must not.
+        assertEquals("true", siNumber.get("numberStampOnIssue"));
 
         // stampOn: create -> the real number is stamped on insert (numberStampOnCreate), no placeholder.
         Map<String, Object> pfNumber = propertyByName(entityByName(entities, "Proforma"), "Number");
         assertEquals("true", pfNumber.get("numberStampOnCreate"));
         assertNull(pfNumber.get("generatedUuid"));
+        assertNull(pfNumber.get("numberStampOnIssue"));
         // Neither carries a documentary `numberStampOn`: an attribute no template and no generation
         // stage reads is a liability, not documentation (#6543).
         assertNull(siNumber.get("numberStampOn"));
@@ -828,17 +835,23 @@ class EdmIntentGeneratorTest {
         Map<String, Object> request = entityByName(entities(model), "VacationRequest");
         assertEquals("Status", request.get("workflowStatusProperty"));
         assertEquals("1", request.get("workflowStatusInitial"));
+        // A process COMPUTES the column, so #7339's wholesale claim is unchanged: not preserve-only,
+        // so a differing value is still refused.
+        assertNull(request.get("workflowStatusPreserveOnly"));
         // Same status nomenclature, no flow over it - an ordinary writable column.
         assertNull(entityByName(entities(model), "Employee").get("workflowStatusProperty"));
     }
 
     /**
-     * A {@code transitions:} button does NOT claim the column: it is a user action over the status, and
-     * the construct that guards the other hand writes is {@code lifecycle:}, enforced in the repository
-     * - whose refusal would be observable from nowhere if the plain write were closed here.
+     * A {@code transitions:} button claims the column (#7553): the button carries its target seed id
+     * itself, so a plain PUT of that same value is a bypass of the button's own {@code from:}/{@code
+     * when:} guards, not a parallel legitimate write. The button's own write (the generated
+     * {@code Transition} controller) reaches the repository through the targeted {@code updateProperty}
+     * primitive, never through the entity controller this guard sits on, so refusing it here costs the
+     * button nothing.
      */
     @Test
-    void aTransitionAloneLeavesTheStatusWritable() {
+    void aTransitionTargetedStatusIsEmittedAsWorkflowOwned() {
         String yaml = """
                 name: ledger
                 entities:
@@ -856,7 +869,85 @@ class EdmIntentGeneratorTest {
                   - { name: void, forEntity: JournalEntry, from: [1], setStatus: 2, label: Void }
                 """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
-        assertNull(entityByName(entities(model), "JournalEntry").get("workflowStatusProperty"));
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("Status", entry.get("workflowStatusProperty"));
+        assertEquals("1", entry.get("workflowStatusInitial"));
+        // A button writes one declared seed id rather than computing the column, so it earns the
+        // PRESERVE half only - an omitted status is kept instead of nulled, and nothing is refused.
+        assertEquals("true", entry.get("workflowStatusPreserveOnly"));
+    }
+
+    /**
+     * The transition case is preserve-only however many buttons the entity carries: refusing a value a
+     * button happens to write would take away the plain update path a gated {@code checks:} rule is
+     * enforced on, whose gate status is normally exactly that value.
+     */
+    @Test
+    void severalTransitionsStillOnlyPreserveTheColumn() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                transitions:
+                  - { name: void, forEntity: JournalEntry, from: [1], setStatus: 3, label: Void }
+                  - { name: close, forEntity: JournalEntry, from: [1], setStatus: 4, label: Close }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("Status", entry.get("workflowStatusProperty"));
+        assertEquals("true", entry.get("workflowStatusPreserveOnly"));
+    }
+
+    /**
+     * A capacity roll-up's {@code status:} is the roll-up's column, exactly as a {@code processes:}
+     * step's is the flow's (#7553): the roll-up recomputes it via the targeted {@code updateDerived}
+     * primitive as payments arrive, so a plain PUT that jumps the invoice straight to PAID - or omits
+     * the column and nulls it - bypasses that computation entirely.
+     */
+    @Test
+    void aRollupOwnedStatusIsEmittedAsWorkflowOwned() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                      - { name: paid, type: decimal }
+                      - { name: balance, type: decimal }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: invoice, kind: manyToOne, to: Invoice }
+                rollups:
+                  - { name: invoicePaid, entity: Payment, via: invoice, field: paid, op: sum, of: amount,
+                      capacity: total, balance: balance, status: Status, statusWhenFull: 3, statusWhenPartial: 4 }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> invoice = entityByName(entities(model), "Invoice");
+        assertEquals("Status", invoice.get("workflowStatusProperty"));
+        assertEquals("1", invoice.get("workflowStatusInitial"));
+        // A roll-up COMPUTES the column, so it claims the whole of it - not preserve-only, exactly as a
+        // process-owned status behaves since #7339.
+        assertNull(invoice.get("workflowStatusPreserveOnly"));
     }
 
     @Test
@@ -1736,6 +1827,53 @@ class EdmIntentGeneratorTest {
         assertEquals("(entity.Status != null && entity.Status.longValue() == 4L)" + " && !java.util.Objects.equals(entity.SentMethod, 1)",
                 guardJava(check));
         assertNull(check.get("pathLoads"));
+    }
+
+    /**
+     * A condition can ask whether a value is there at all (#7555): {@code Payslip != null} is the only
+     * way to say "this row is linked to something", and a forbidWhen reaches the delete verb, so it is
+     * how a module refuses to delete a payroll entry once a payslip swept it up. A null test is
+     * meaningful for a value of any type - a date one hop away included, which an ordinary comparison
+     * refuses - and an EntityStatus relation's null test is not a status name to look up. A QUOTED
+     * {@code 'null'} stays the four-letter text.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void forbidWhenTestsWhetherAValueIsSet() {
+        String yaml = """
+                name: payroll
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Payslip
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: postedOn, type: date }
+                  - name: PayrollEntry
+                    checks:
+                      - { kind: forbidWhen, when: "Payslip != null", message: "An entry swept into a payslip is part of it" }
+                      - { kind: forbidWhen, when: "Payslip.postedOn != null", message: "The payslip of this entry is posted" }
+                      - { kind: forbidWhen, when: "Status != null", message: "A classified entry is fixed" }
+                      - { kind: forbidWhen, when: "note == 'null'", message: "Not a placeholder" }
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 100 }
+                    relations:
+                      - { name: Payslip, kind: manyToOne, to: Payslip }
+                      - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "payroll");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "PayrollEntry").get("checks");
+
+        assertEquals("(entity.Payslip != null)", guardJava(checks.get(0)));
+        String hop = guardJava(checks.get(1));
+        assertTrue(hop.endsWith(".PostedOn) != null)") && hop.contains(" == null ? null : "),
+                "the hop's date is null-tested through the hop's own null guard, got: " + hop);
+        assertEquals("(entity.Status != null)", guardJava(checks.get(2)));
+        assertEquals("java.util.Objects.equals(entity.Note, \"null\")", guardJava(checks.get(3)));
     }
 
     /**

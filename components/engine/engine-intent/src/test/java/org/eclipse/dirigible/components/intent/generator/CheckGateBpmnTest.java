@@ -241,12 +241,26 @@ class CheckGateBpmnTest {
         String bpmn = bpmn("InvoiceTimeout");
 
         // The gate is reachable only through the task's `timeout:` boundary branch - taken when the
-        // wait expires, with nobody's action to refuse - so neither the branch nor the writer the task
-        // leaves behind loses its boundary. The gated set itself stays synchronous either way (#7014):
-        // it is the write the gate stands in front of.
-        assertAsynchronous(bpmn, "invoiceTimeoutReviewWrite");
+        // wait expires, with nobody's action to refuse - so the branch keeps its boundary. The writer
+        // the task leaves behind runs in the completing transaction regardless of any gate: it holds
+        // the reviewer's edits to the entity's rules, and its refusal must reach them (#7552). The gated
+        // set itself stays synchronous either way (#7014): it is the write the gate stands in front of.
+        assertSynchronous(bpmn, "invoiceTimeoutReviewWrite");
         assertAsynchronous(bpmn, "resolveCustomerRating");
         assertSynchronous(bpmn, "activate");
+    }
+
+    /**
+     * A writer runs in the completing transaction with no gate anywhere (#7552): it validates the
+     * reviewer's edits with the entity's own rules, so a refusal must roll the completion back and
+     * answer the person who submitted - behind a boundary it failed in a background job, with the task
+     * already gone and the record stranded.
+     */
+    @Test
+    void aTaskWriterRunsInTheCompletingTransactionWithoutAGate() {
+        String bpmn = bpmn("InvoiceTimeout");
+
+        assertSynchronous(bpmn, "invoiceTimeoutReviewWrite");
     }
 
     @Test
@@ -291,7 +305,9 @@ class CheckGateBpmnTest {
         // into a dead-letter incident - the generator logs that rather than dropping the declared
         // re-attempts silently.
         assertAsynchronousDelegate(bpmn, "transmit");
-        assertAsynchronous(bpmn, "invoiceRetryingSendWrite");
+        // The writer BEFORE the retrying step is still the completion's own (#7552): the boundary the
+        // retry needs is the retrying step's, not the task's.
+        assertSynchronous(bpmn, "invoiceRetryingSendWrite");
         // The gated set itself is synchronous either way (#7014): it is the write the gate stands
         // in front of.
         assertSynchronous(bpmn, "settle");

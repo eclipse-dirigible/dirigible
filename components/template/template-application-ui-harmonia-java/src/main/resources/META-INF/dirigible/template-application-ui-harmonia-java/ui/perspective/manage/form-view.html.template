@@ -19,89 +19,173 @@
 #end
 <div x-data="${name}FormPage" class="vbox w-full">
 
-  <!-- Hidden ONLY inside the FK "Add" iframe dialog (?dialog=1), which provides its own header. The
-       shell-hosted app also passes ?embedded but is NOT a dialog, so the caption must still show there
-       (matching the list/master/document views, which have no such guard) - gate on isDialog, not
-       isEmbedded. -->
-  <!-- Sticky action bar (issue #7434): the Harmonia `clear` toolbar paints the page background so the
-       form never shows through, pinned to the top on scroll (the page root grows with its content).
-       Caption + status on the left; the action cluster (BPM task, Cancel, Save, Back to list, overflow
-       menu) on the right. Hidden inside the FK "Add" iframe dialog (?dialog=1), which supplies its own
-       chrome - a create dialog carries its Cancel/Save in the slim footer below. -->
-  <div x-h-toolbar data-variant="clear" x-show="!isDialog" class="sticky top-0 z-10 border-b border-border">
-    <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
-         text-2xl normal weight - matches the document header look. This caption is intentionally only
-         on the create/edit form, NOT on the list/master browse views. -->
-    <span class="text-2xl font-semibold tracking-tight shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}')"></span>
+  <!-- Record header + action bar (issue #7491). Two lines on the left - the entity name with its
+       status, and one line of the record's own identity - and the action cluster on the right.
+       Sticky since #7434: the page root grows with its content, so the bar has to pin itself and
+       paint the card's own background or the form scrolls through it. Hidden ONLY inside the FK
+       "Add" iframe dialog (?dialog=1), which supplies its own chrome and carries Cancel/Save in the
+       slim footer below; the shell-hosted app passes ?embedded but is NOT a dialog, so the header
+       must still show there - gate on isDialog, not isEmbedded.
+       Ctrl/Cmd+S saves; Escape leaves a preview, the same as Close. -->
+  <div x-show="!isDialog" class="sticky top-0 z-10 border-b border-border bg-background px-4 py-3"
+       @keydown.window.ctrl.s.prevent="saveShortcut()" @keydown.window.meta.s.prevent="saveShortcut()"
+       @keydown.escape.window="escapeDismiss()">
+    <div class="hbox items-start justify-between gap-4">
+
+      <div class="vbox min-w-0 gap-1">
+        <div class="hbox flex-wrap items-center gap-2">
+          <h1 x-h-text.h3 class="truncate" x-text="headerTitle()"></h1>
 #if($statusProp != "")
-    <!-- EntityStatus badge, next to the caption like the document view's pill; shown once the record's
-         status resolves (edit/preview - a new record has no status until the DB default applies). -->
-    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
+          <!-- EntityStatus badge beside the title; shown once the record's status resolves
+               (edit/preview - a new record has no status until the DB default applies). -->
+          <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) &amp;&amp; statusText()" x-text="statusText()"></span>
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
-    <!-- Immutability pre-check: the record refuses user edits/deletes in its current status, so the
-         page renders read-only and says so (the controller's 409 stays authoritative). -->
-    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+          <!-- Immutability pre-check: the record refuses user edits/deletes in its current status,
+               so the page renders read-only and says so (the controller's 409 stays authoritative). -->
+          <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
+        </div>
+        <!-- Preview says WHICH record this is, from the properties the model marks as major; the
+             editable modes say what the asterisks mean instead. -->
+        <span x-h-text.muted class="truncate text-sm" x-show="isPreview &amp;&amp; summaryLine()" x-text="summaryLine()"></span>
+        <span x-h-text.muted class="text-sm" x-show="!isPreview" x-text="T('$projectName:${tprefix}.messages.requiredLegend', 'Fields marked * are required')"></span>
+      </div>
+
+      <!-- At most one filled button, chosen by the component (primaryAction), never by competing
+           x-shows here. Order: status text, dismiss, overflow, secondary, primary. -->
+      <!-- On a phone this same cluster - not a second copy of it - pins to the bottom of the
+           screen, where a thumb reaches. The content above gets matching bottom padding so the last
+           section is not hidden behind it. The overflow menu needs no bottom-sheet variant: its
+           popover flips upward on its own when there is no room below. -->
+      <div role="toolbar" :aria-label="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}')"
+           class="hbox items-center gap-2"
+           :class="isNarrow ? 'fixed bottom-0 left-0 right-0 z-20 w-full justify-end border-t bg-background px-4 py-3' : 'shrink-0'">
+
+#if($hasPrint == "true")
+        <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
+#end
+        <!-- The dirty marker sits with the actions in the editable modes, where it is about the
+             Save beside it. A dot and a line of text rather than a filled pill: a badge reads as a
+             status the record HAS, and this is a note about the form in front of you. -->
+        <!-- A div, not a span: the label lives in exactly one span, so a page carries one element
+             whose text is "Unsaved changes" and a test can address it. -->
+        <div class="hbox shrink-0 items-center gap-2 text-sm text-warning" x-show="isDirty()">
+          <span class="size-2 shrink-0 rounded-full bg-warning"></span>
+          <span x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
+        </div>
+
+        <!-- Dismiss. Preview keeps Close; the editable modes say what leaving will cost. -->
+        <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
+        <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+
+        <!-- Overflow: everything discretionary, grouped, with the destructive group last. Tasks and
+             record actions are hidden while editing - the only thing to do then is finish. -->
+        <button type="button" x-h-button data-variant="outline" data-size="icon" class="shrink-0" x-h-menu-trigger.dropdown :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')" x-show="isPreview &amp;&amp; hasOverflowMenu">
+          <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+        </button>
+        <ul x-h-menu data-align="bottom-end">
+          <!-- Edit folds in here on a narrow viewport; the primary never folds. -->
+          <template x-if="editInMenu">
+            <li x-h-menu-item @click="goEdit()">
+              <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+            </li>
+          </template>
+#if($hasPrint == "true")
+          <li x-h-menu-item :aria-disabled="printBusy" @click="openPrint()">
+            <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+          </li>
+          <template x-if="menuHasCalendars || menuHasDelete">
+            <li x-h-menu-separator></li>
+          </template>
 #end
 #if($scopedCalendars)
-    <!-- Scoped calendars (intent `calendar.scope`): an entity whose calendar filters its events to
-         THIS record. The filter is a query parameter on the calendar's own route, so without a
-         button here the URL is knowledge the user has to type. Edit/preview only - a record that is
-         not saved yet has no id to filter by. -->
+## Scoped calendars (intent `calendar.scope`): an entity whose calendar filters its events to THIS
+## record. The filter is a query parameter on the calendar's own route, so without an entry here the
+## URL is knowledge the user has to type. Leaving the form is guarded like any other exit.
 #foreach($scopedCalendar in $scopedCalendars)
-    <button type="button" x-h-button data-variant="outline" data-size="sm" class="shrink-0" x-show="isEdit || isPreview" @click="guardExit(() => openScopedCalendar('${scopedCalendar.entity}', '${scopedCalendar.scopeProperty}', id))"><svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg><span x-text="T('$projectName:${tprefix}.t.${scopedCalendar.dataName}_plural', '${scopedCalendar.label}')"></span></button>
+          <li x-h-menu-item @click="guardExit(() => openScopedCalendar('${scopedCalendar.entity}', '${scopedCalendar.scopeProperty}', id))">
+            <svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg><span x-text="T('$projectName:${tprefix}.t.${scopedCalendar.dataName}_plural', '${scopedCalendar.label}')"></span>
+          </li>
 #end
 #end
-    <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
-    <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
-    <div x-h-toolbar-spacer></div>
-    <!-- Dismiss then submit. Preview: Close + Edit; edit/create: Cancel/Discard + Save/Create. -->
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview#if($immutableStatusProperty || $immutableAlways || $periodLock) &amp;&amp; mutable#end" @click="goEdit()">
-      <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
-    </button>
-    <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
-      <span x-show="state === 'saving'" x-h-spinner></span>
-      <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
-    </button>
-    <!-- Back to list: navigation away, to the right of the form actions. -->
-    <button type="button" x-h-button data-variant="transparent" class="shrink-0" @click="guardExit(() => navigateBack('/${name}'))" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
-#if($hasPrint == "true")
-    <!-- Discretionary actions collapse into one overflow menu (issue #7434). For this shared form the
-         only one is Print (a document master rendered through a calendar/slots view); the trigger is
-         hidden until the record is saved, so it never shows an empty menu. Rightmost. -->
-    <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
-    <button type="button" x-h-button data-variant="outline" data-size="icon" class="shrink-0" x-h-menu-trigger.dropdown aria-label="More actions" x-show="(isEdit || isPreview) &amp;&amp; id">
-      <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
-    </button>
-    <ul x-h-menu data-align="bottom-end">
-      <li x-h-menu-item :aria-disabled="printBusy" @click="openPrint()">
-        <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
-      </li>
-    </ul>
+          <!-- Destructive, alone in the last group - which needs no rule above it when it is the
+               only group there is. -->
+          <template x-if="menuHasAboveDelete &amp;&amp; menuHasDelete">
+            <li x-h-menu-separator></li>
+          </template>
+          <template x-if="menuHasDelete">
+            <li x-h-menu-item data-variant="negative" @click="askDelete()">
+              <svg role="presentation" x-h-lucide data-lucide="trash-2"></svg><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span>
+            </li>
+          </template>
+        </ul>
+
+        <!-- Secondary: Edit steps down to outlined when a task holds the filled slot. -->
+        <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="isPreview &amp;&amp; showsSecondaryEdit" @click="goEdit()">
+          <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+        </button>
+
+#if($hasProcess)
+        <!-- Primary, case 1: the workflow task. One task is a plain button; several make it a split
+             button whose main part runs the oldest and whose arrow lists them all.
+             x-show, never x-if: an x-if here produced a NEW copy of its content on every
+             re-evaluation without removing the old one, so the bar grew another Review button on
+             every processTasks poll (measured: three button-groups in the toolbar after ~15s, ten in
+             the reported screenshot). x-show only toggles display, so the element is created once and
+             Harmonia initialises it once. The two cases are separate elements rather than one group
+             with a conditional arrow, because a lone child of x-h-button-group still gets the group's
+             squared-off edges. -->
+        <button type="button" x-h-button data-variant="primary" class="shrink-0"
+                x-show="isPreview &amp;&amp; primaryAction === 'task' &amp;&amp; recordTasks.length === 1" @click="openPrimaryTask()">
+          <svg role="presentation" x-h-lucide data-lucide="square-check-big"></svg><span x-text="taskButtonLabel()"></span>
+        </button>
+        <div x-h-button-group class="shrink-0" x-show="isPreview &amp;&amp; primaryAction === 'task' &amp;&amp; recordTasks.length > 1">
+          <button type="button" x-h-button data-variant="primary" @click="openPrimaryTask()">
+            <svg role="presentation" x-h-lucide data-lucide="square-check-big"></svg>
+            <span x-text="taskButtonLabel()"></span>
+            <span x-h-badge data-variant="outline" x-text="recordTasks.length"></span>
+          </button>
+          <button type="button" x-h-button data-variant="primary" data-size="icon" x-h-menu-trigger.dropdown :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')">
+            <svg role="presentation" x-h-lucide data-lucide="chevron-down"></svg>
+          </button>
+          <ul x-h-menu data-align="bottom-end">
+            <template x-for="task in recordTasks" :key="task.id">
+              <li x-h-menu-item @click="Alpine.store('processTasks').openTask(task)" x-text="Alpine.store('processTasks').taskName(task)"></li>
+            </template>
+          </ul>
+        </div>
 #end
+        <!-- Primary, case 2: Edit, when nothing else claims the slot. A record the user cannot
+             change leaves the slot empty rather than offering a button that would 403. -->
+        <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview &amp;&amp; primaryAction === 'edit'" @click="goEdit()">
+          <svg role="presentation" x-h-lucide data-lucide="pencil"></svg><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+        </button>
+
+        <!-- Primary, editable modes: Save. Nothing to save on an unchanged record; a create is
+             always offerable. -->
+        <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
+          <span x-show="state === 'saving'" x-h-spinner></span>
+          <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+        </button>
+      </div>
+    </div>
   </div>
 #if($hasProcess)
-  <!-- Action banner (issue #7434, option A): a highlighted "your step" strip directly under the sticky
-       bar, shown only when this record has an actionable BPM user task. It names the process and carries
-       one button per task, so the workflow action never competes with the form's Save/Cancel and the bar
-       stays pure form controls. Same visibility as before - edit AND preview whenever a task is
-       actionable; a record with no pending step renders no strip. -->
-  <template x-if="$store.processTasks.getTasks(form).length">
-    <div class="hbox items-center gap-3 py-3 px-8 w-full" x-show="(isEdit || isPreview) &amp;&amp; !isDialog"
-         style="background: color-mix(in srgb, var(--primary) 8%, transparent); border-left: 4px solid var(--primary);">
-      <svg role="presentation" x-h-lucide data-lucide="flag" class="text-primary shrink-0"></svg>
-      <div class="text-sm">
-        <span class="font-semibold text-foreground" x-text="$store.processTasks.processName($store.processTasks.getTasks(form)[0])"></span>
-        <span class="text-muted-foreground" x-text="' — ' + T('$projectName:${tprefix}.messages.workflowStep', 'your step')"></span>
+  <!-- Task strip (issue #7434, reworked by #7491): a "your step" band under the header while this
+       record has an actionable BPM user task. It is INFORMATION ONLY - the task itself is the
+       primary button in the action bar above, so a strip with its own button would be a second way
+       to do the same thing. In the editable modes it goes neutral and says why: the task is waiting
+       on the form being finished. A record with no pending step renders no strip. -->
+  <template x-if="recordTasks.length">
+    <div class="hbox w-full items-center gap-2 border-t px-4 py-2 text-sm" x-show="(isEdit || isPreview) &amp;&amp; !isDialog"
+         :style="isPreview ? 'background: color-mix(in srgb, var(--primary) 8%, transparent)' : 'background: var(--muted)'">
+      <svg role="presentation" x-h-lucide data-lucide="flag" class="size-4 shrink-0" :class="isPreview ? 'text-primary' : 'text-muted-foreground'"></svg>
+      <div>
+        <span class="font-semibold text-foreground" x-text="taskButtonLabel()"></span>
+        <span class="text-muted-foreground" x-show="isPreview" x-text="' ' + T('$projectName:${tprefix}.messages.workflowWaiting', 'is waiting for you') + taskAssignedLine()"></span>
+        <span class="text-muted-foreground" x-show="!isPreview" x-text="' — ' + T('$projectName:${tprefix}.messages.workflowEditing', 'save or cancel your changes to continue')"></span>
       </div>
-      <div class="flex-1"></div>
-      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-        <button type="button" x-h-button data-variant="primary" class="shrink-0" @click="$store.processTasks.openTask(task)">
-          <svg role="presentation" x-h-lucide data-lucide="chevron-right"></svg><span x-text="$store.processTasks.taskName(task)"></span>
-        </button>
-      </template>
     </div>
   </template>
 #end
@@ -127,9 +211,18 @@
        (in that order, so the Save/Cancel bar is the LAST thing on the page - below the panels, like
        the document view); the read-only/audit sidebar is the second column of this hbox. -->
   <div x-show="state !== 'loading' && state !== 'load-failure'"
-        class="hbox gap-6 py-6 px-8 w-full items-start">
+        class="vbox lg:hbox w-full items-start gap-6 px-4 py-6"
+        :style="isNarrow ? 'padding-bottom: 5rem' : ''">
     <!-- Main content column -->
-    <div class="vbox gap-4 flex-1 min-w-0" style="max-width: 42rem;">
+    <div class="vbox gap-4 flex-1 min-w-0">
+
+    <!-- The record's groups, separated by headings and rules and nothing else (issue #7491). The
+         page's own white card is the only frame: the fields used to sit bare on the background while
+         every collection around them carried its own, so an entity with two details read as a stack
+         of boxes. Each group - the fields first, then every detail and related register - is a
+         heading and a rule above it. Nothing nests. -->
+    <div class="vbox gap-4 w-full">
+      <h3 x-h-text.h4 x-text="T('$projectName:${tprefix}.defaults.general', 'General')"></h3>
 
     <!-- The header form holds the editable fields only. The Save button lives in the footer below
          (outside this form, beneath the detail panels) so the footer can sit at the very bottom; it
@@ -152,7 +245,7 @@
          The fieldset (display: contents keeps the grid layout intact) disables EVERY control at once
          in preview mode - the one switch that guarantees the whole form is read-only. -->
     <fieldset :disabled="isPreview" style="display: contents;">
-    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 #foreach($property in $properties)
 ## Read-only / system fields (ProcessId, audit columns, uuid, any field marked read-only) are not
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
@@ -176,7 +269,18 @@
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end
 #if($lookup)#set($span = "12")#end
       <!-- ${property.name} (${property.widgetType}) -->
-      <div x-h-field#if($span == "12") class="col-span-12"#else class="sm:col-span-${span}"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
+      <div x-h-field#if($span == "12") class="md:col-span-12"#else class="md:col-span-${span}"#end#visibleGate($property) :data-invalid="!!errors.${property.name}">
+        <!-- Preview shows the VALUE, not a disabled input (issue #7491): a greyed-out control reads
+             as "you may not change this", where the record is simply being read. The label goes
+             muted above it and an empty value reads as an em dash rather than an empty box. -->
+        <template x-if="isPreview">
+          <div class="vbox gap-1">
+            <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>
+            <div class="text-sm wrap-anywhere" x-text="#if($property.widgetType == "DROPDOWN")fieldText(form.${property.name}, false, false, options${property.name})#elseif($property.widgetType == "MULTISELECT")multiText(form.${property.name}, options${property.name})#elseif($property.widgetType == "CHECKBOX")checkboxText(form.${property.name})#elseif($property.isDateType)fieldText(form.${property.name}, true, false, null)#elseif($property.isNumberType)fieldText(form.${property.name}, false, true, null)#{else}fieldText(form.${property.name}, false, false, null)#end"></div>
+          </div>
+        </template>
+        <template x-if="!isPreview">
+          <div class="vbox gap-2">
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox>
@@ -321,6 +425,8 @@
 #if($property.description)
         <p x-h-field-description data-hide-on-error="true">${property.description}</p>
 #end
+          </div>
+        </template>
       </div>
 #end
 #end
@@ -337,14 +443,18 @@
     <div class="vbox gap-4 w-full"
          x-show="(isEdit || isPreview) && detailDefs.length && state !== 'loading' && state !== 'load-failure'">
       <template x-for="d in detailDefs" :key="d.entity + ':' + id">
-        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-h-card>
-          <div x-h-card-header>
-            <h3 x-h-card-title x-text="d.label"></h3>
-            <div x-h-card-action x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
+        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" class="vbox gap-4 w-full">
+          <!-- Each group is separated from the one above by a rule, not by its own frame, so the
+               record reads as one card (issue #7491). -->
+          <div x-h-separator data-orientation="horizontal"></div>
+          <div class="hbox items-center gap-2">
+            <h3 x-h-text.h4 x-text="d.label"></h3>
+            <span x-h-badge data-variant="outline" x-show="rows.length" x-text="rows.length"></span>
+            <div class="ml-auto" x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
               <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
-          <div x-h-card-content>
+          <div class="vbox gap-4">
             <div x-show="state === 'loading'"><div x-h-spinner></div></div>
             <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
             <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
@@ -385,7 +495,7 @@
                 <template x-if="rows.length > 0">
                   <div class="vbox gap-2">
                     <template x-for="row in rows" :key="row[def.primaryKey]">
-                      <div x-h-card class="hbox items-center gap-3 p-3">
+                      <div class="hbox items-center gap-3 rounded-lg border p-3">
                         <svg role="presentation" x-h-lucide data-lucide="file-text" class="shrink-0"></svg>
                         <div class="vbox flex-1 min-w-0">
                           <span class="text-sm truncate" x-text="row.FileName"></span>
@@ -467,11 +577,15 @@
            window onto them and never an editor: a row opens the source's own record page in the
            shared dialog (the source may live in another application entirely). ===== -->
       <template x-for="r in relatedDefs" :key="r.entity + ':' + id">
-        <div x-data="relatedPanel(r, id)" x-h-card class="w-full">
-          <div x-h-card-header>
-            <h3 x-h-card-title x-text="title"></h3>
+        <div x-data="relatedPanel(r, id)" class="vbox gap-4 w-full">
+          <!-- Each group is separated from the one above by a rule, not by its own frame, so the
+               record reads as one card (issue #7491). -->
+          <div x-h-separator data-orientation="horizontal"></div>
+          <div class="hbox items-center gap-2">
+            <h3 x-h-text.h4 x-text="title"></h3>
+            <span x-h-badge data-variant="outline" x-show="rows.length" x-text="rows.length"></span>
           </div>
-          <div x-h-card-content>
+          <div class="vbox gap-4">
             <div x-show="state === 'loading'"><div x-h-spinner></div></div>
             <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
             <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
@@ -509,6 +623,8 @@
       </template>
     </div>
 
+    </div>
+
     <!-- Dialog-only footer (issue #7434): the FK "Add" iframe (?dialog=1) hides the sticky header bar
          above, so a create dialog carries its Cancel + Save here. A full-page form (not a dialog) has
          its actions in the header bar and hides this. Save is type=button @click=save() because it
@@ -532,11 +648,16 @@
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($hasReadOnly = true)#end
 #end
 #if($hasReadOnly || $history == "true")
-    <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
+    <!-- Beside the record on a wide screen, the last section of it on a narrow one: same content,
+         a rule on the left or above it. Bound rather than a responsive class - border, padding and
+         container widths ship no md:/lg: variants. -->
+    <div class="vbox gap-6" x-show="(isEdit || isPreview) &amp;&amp; hasRailContent"
+         :class="isWide ? 'w-2xs shrink-0 border-l pl-6' : 'w-full border-t pt-6'"
+         :style="isPreview ? '' : 'opacity: .7'">
 #if($hasReadOnly)
-      <div x-h-card>
-        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
-        <div x-h-card-content>
+      <div class="vbox gap-3" x-show="hasDetailValues">
+        <h3 x-h-text.h4 x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3>
+        <div>
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
 #if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
@@ -548,7 +669,10 @@
 #elseif($property.widgetType == "MULTISELECT")
               <span class="text-sm wrap-anywhere" x-text="(Array.isArray(form.${property.name}) ? form.${property.name} : String(form.${property.name} || '').split(',')).filter(v => v !== '').map(v => (options${property.name}.find(o => String(o.value) === String(v).trim()) || {}).text || v).join(', ')"></span>
 #else
-              <span class="text-sm wrap-anywhere" x-text="form.${property.name}"></span>
+              <!-- Through the same formatter every other surface uses: these are the audit columns, so
+                   most of them ARE dates, and printed raw they read as the backend's serialization
+                   (2026-09-30T10:29) rather than the instance's date format. -->
+              <span class="text-sm wrap-anywhere" x-text="fieldText(form.${property.name}, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType)true#{else}false#end, null)"></span>
 #end
             </div>
 #end
@@ -560,9 +684,11 @@
 #if($history == "true")
       <!-- Change history (intent `history: true`): the record's field-level trail, newest first.
            Read-only everywhere - the shadow table has no write verb on any surface. -->
-      <div x-h-card x-show="history.length">
-        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.history', 'History')"></h3></div>
-        <div x-h-card-content>
+      <div class="vbox gap-3" x-show="history.length">
+        <!-- Only a rule BETWEEN two sections: with Details hidden, History is the rail's first. -->
+        <div x-h-separator data-orientation="horizontal" x-show="hasDetailValues"></div>
+        <h3 x-h-text.h4 x-text="T('$projectName:${tprefix}.defaults.history', 'History')"></h3>
+        <div>
           <div class="vbox gap-3">
             <template x-for="entry in history" :key="entry.GUID">
               <div class="vbox">
@@ -609,10 +735,34 @@
   </div>
 #end
 
+  <!-- Delete the record from its own page (issue #7491). The list has carried this since it
+       existed; on the record page it used to be one navigation away. -->
+  <div x-h-dialog-overlay :data-open="deleteOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
+        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
+      </div>
+      <div x-h-dialog-content>
+        <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this record?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p>
+        <div x-show="deleteError" x-h-alert data-variant="negative" role="alert" class="mt-2">
+          <div x-h-alert-description x-text="deleteError"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button type="button" x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+        <button type="button" x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy">
+          <span x-show="deleteBusy" x-h-spinner></span>
+          <span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Unsaved-changes guard (issue #7359): the one dialog every exit from a dirty form goes
-       through - Back to list, Cancel/Discard, a sidebar entry, the browser Back button, and the
-       actions that would otherwise save something behind an unsaved header (a line item, a line
-       delete). "Save and continue" is the same first button when the user is staying on the page. -->
+       through - Cancel/Discard, Escape, a sidebar entry, the browser Back button, and the actions
+       that would otherwise save something behind an unsaved header (a line item, a line delete).
+       "Save and continue" is the same first button when the user is staying on the page. -->
   <div x-h-dialog-overlay :data-open="leaveOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>

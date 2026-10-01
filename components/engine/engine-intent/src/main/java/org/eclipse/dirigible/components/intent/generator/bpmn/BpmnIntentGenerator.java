@@ -49,6 +49,7 @@ import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -197,6 +198,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // task, so an administrator can always claim a task in addition to the task's own role.
         String candidateGroupsExtra = String.join(",", context.getSettings()
                                                               .candidateGroupsExtra());
+        Map<String, List<String>> completingActionsByForm = completingActionsByForm(model);
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -253,7 +255,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                             candidateGroupsExtra, writerByTask, setterByTask,
                             IntentNaming.processTaskCatalog(context.getProjectName(), context),
                             synchronousByProcess.getOrDefault(process.getName(), Set.of()),
-                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of())));
+                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of()), completingActionsByForm));
         }
     }
 
@@ -303,6 +305,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             } else {
                 nodes.add(setter.step());
             }
+        }
+        // Every writer runs in the completing transaction too (#7552): it validates the reviewer's edits
+        // with the entity's own rules before writing them, and a refusal has to roll the completion back
+        // and reach the person who submitted the form - behind an async boundary it failed in a
+        // background job instead, after the task had already gone, stranding the record.
+        for (Map.Entry<String, String> writer : writerByProcessTask.entrySet()) {
+            String process = writer.getKey()
+                                   .substring(0, writer.getKey()
+                                                       .indexOf('/'));
+            byProcess.computeIfAbsent(process, name -> new HashSet<>())
+                     .add(IntentNaming.camelCase(writer.getValue()));
         }
         return byProcess;
     }
@@ -675,7 +688,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps) {
+            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps,
+            Map<String, List<String>> completingActionsByForm) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -820,7 +834,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep,
-                    synchronousNodes);
+                    synchronousNodes, completingActionsByForm);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -1257,12 +1271,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
             String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep,
-            Set<String> synchronousNodes) {
+            Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm);
                 break;
             case "serviceTask":
             case "script":
@@ -1283,7 +1297,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
                         LoggedValue.of(step.getName()));
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm);
                 break;
         }
     }
@@ -1308,7 +1322,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra, List<String> clears) {
+            String candidateGroupsExtra, List<String> clears, Map<String, List<String>> completingActionsByForm) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -1351,13 +1365,45 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append(escapeXmlAttribute(formPageUrl(projectName, form)))
               .append("\"");
         }
-        if (clears.isEmpty()) {
+        List<String> actions = form == null ? List.of() : completingActionsByForm.getOrDefault(form, List.of());
+        if (clears.isEmpty() && actions.isEmpty()) {
             sb.append("></userTask>\n");
         } else {
             sb.append(">\n      <extensionElements>\n");
+            if (!actions.isEmpty()) {
+                // The actions the form completes this task with. The inbox refuses a completion whose
+                // `action` is not one of them before the task completes - a decision after it branches
+                // on that value, and one the form does not offer took whatever branch was left (#7551).
+                sb.append("        <flowable:property name=\"taskActions\" value=\"")
+                  .append(escapeXmlAttribute(String.join(",", actions)))
+                  .append("\"></flowable:property>\n");
+            }
             appendClearVariableListeners(sb, clears);
             sb.append("      </extensionElements>\n    </userTask>\n");
         }
+    }
+
+    /**
+     * The actions each form's buttons complete a task with, by form name: its declared {@code actions:}
+     * minus {@code close}, which only closes the form and leaves the task open. The first form of a
+     * name wins, as it does for the generated {@code .form}. A form declaring none maps to nothing, so
+     * its task declares no actions and the inbox leaves its completion unchecked.
+     */
+    private static Map<String, List<String>> completingActionsByForm(IntentModel model) {
+        Map<String, List<String>> byForm = new HashMap<>();
+        for (FormIntent form : model.getForms()) {
+            if (form.getName() == null || byForm.containsKey(form.getName())) {
+                continue;
+            }
+            List<String> actions = form.getActions()
+                                       .stream()
+                                       .filter(action -> action != null && !action.isBlank() && !"close".equalsIgnoreCase(action))
+                                       .toList();
+            if (!actions.isEmpty()) {
+                byForm.put(form.getName(), actions);
+            }
+        }
+        return byForm;
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage,

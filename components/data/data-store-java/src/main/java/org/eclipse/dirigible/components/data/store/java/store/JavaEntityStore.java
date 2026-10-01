@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManage
 import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity;
 import org.eclipse.dirigible.components.data.store.java.outbox.EventOutbox;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.hibernate.Session;
@@ -640,7 +641,7 @@ public class JavaEntityStore {
         }
         List<DomainEvent> events = new ArrayList<>(additional.size() + 1);
         if (topic != null && entity != null) {
-            events.add(new DomainEvent(topic, Json.stringify(entity)));
+            events.add(new DomainEvent(topic, DerivedWrite.mark(Json.stringify(entity))));
         }
         events.addAll(additional);
         return events;

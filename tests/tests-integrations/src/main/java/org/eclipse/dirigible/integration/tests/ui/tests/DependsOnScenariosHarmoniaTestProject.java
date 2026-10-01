@@ -142,11 +142,14 @@ class DependsOnScenariosHarmoniaTestProject extends BaseTestProject {
      * each scenario ends on the guard dialog's Discard, which is also what keeps the scenarios
      * independent: the next one starts from a form the guard is not holding.
      * <p>
-     * The dialog's Discard is addressed by its variant: while the form is dirty the footer Cancel is
-     * relabelled "Discard" too, and only the dialog's is the negative one.
+     * The dialog's Discard is addressed by its variant: while the form is dirty the form's own dismiss
+     * is relabelled "Discard" too, and only the dialog's is the negative one. That dismiss is what
+     * opens the guard here - the header's separate "Back to list" was the same guardExit(() =>
+     * navigateBack('/<Entity>')) under a different label and dirigible #7491 removed it. The dialog is
+     * closed at the moment of the first click, so the only visible Discard is the form's.
      */
     private void discardChanges() {
-        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Back to list");
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Discard");
         browser.clickOnElementByAttributePatternAndText("button", "data-variant", "negative", "Discard");
     }
 

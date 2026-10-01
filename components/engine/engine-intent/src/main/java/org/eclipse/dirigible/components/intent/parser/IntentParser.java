@@ -235,6 +235,9 @@ public final class IntentParser {
      */
     private static final String RECORD_SCOPE = NotifySupport.RECORD_SCOPE;
     /** The {@code {record.<path>}} placeholders of a subject / body. */
+    /** One {@code action == '<value>'} term of a decision condition, optionally parenthesized. */
+    private static final java.util.regex.Pattern ACTION_TERM =
+            java.util.regex.Pattern.compile("^\\(?\\s*action\\s*==\\s*(['\"])([^'\"]+)\\1\\s*\\)?$");
     private static final java.util.regex.Pattern RECORD_PLACEHOLDER =
             java.util.regex.Pattern.compile("\\{(" + RECORD_SCOPE + "\\.[A-Za-z0-9_.]*)\\}");
     /** The {@code {escalation.<field>}} placeholders of a subject / body (issue #7276). */
@@ -3685,14 +3688,30 @@ public final class IntentParser {
                     + " - only a child collection can outlive its master's lock");
             return;
         }
-        EntityIntent parent = entityByName(model, master);
-        boolean masterLocks = parent == null || Boolean.TRUE.equals(parent.getImmutable())
-                || (parent.getImmutableWhen() != null && !parent.getImmutableWhen()
-                                                                .isBlank());
+        // A lock reaches down the whole composition chain (#7550), so the declaration is meaningful when
+        // ANY ancestor locks - up to one that itself outlives its own master's lock, where the chain stops.
+        boolean masterLocks = false;
+        Set<String> visited = new HashSet<>();
+        for (String ancestor = master; ancestor != null && visited.add(ancestor); ancestor = compositionParent.get(ancestor)) {
+            EntityIntent candidate = entityByName(model, ancestor);
+            if (candidate == null || locksItself(candidate)) {
+                masterLocks = true;
+                break;
+            }
+            if (!candidate.locksWithMaster()) {
+                break;
+            }
+        }
         if (!masterLocks) {
             issues.add("entity [" + name + "] declares locksWithMaster: false but its master [" + master
-                    + "] never locks (no immutableWhen / immutable) - the declaration would have no effect");
+                    + "] never locks (no immutableWhen / immutable on it or on its composition ancestors)"
+                    + " - the declaration would have no effect");
         }
+    }
+
+    private static boolean locksItself(EntityIntent entity) {
+        return Boolean.TRUE.equals(entity.getImmutable()) || (entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                                                          .isBlank());
     }
 
     private static void validateSnapshotLanguage(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
@@ -5397,7 +5416,7 @@ public final class IntentParser {
         CheckSupport.Comparison comparison = CheckSupport.parse(term);
         if (comparison == null) {
             issues.add(subject + " when [" + term + "] must be `<Property> ==|!= <literal>` or `<Relation>.<field> ==|!= <literal>`"
-                    + " - a number, a status name, a quoted string or a bare word");
+                    + " - a number, a status name, a quoted string, a bare word or null");
             return;
         }
         ResolvePathSupport.Path path = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null)
@@ -5405,6 +5424,9 @@ public final class IntentParser {
         if (!path.resolved()) {
             issues.add(subject + " when " + path.failure());
             return;
+        }
+        if (CheckSupport.isNullTest(comparison)) {
+            return; // `<property> ==|!= null` - whether it is set at all, meaningful for any type (#7555)
         }
         String terminal = path.terminalType();
         if (terminal == null) {
@@ -7211,8 +7233,96 @@ public final class IntentParser {
                         + "] with multiple actions " + completing + " but is not immediately followed by a decision - a multi-option"
                         + " task must branch on the chosen action via a decision (e.g. `kind: decision, args: { if: \"action == '"
                         + completing.get(0) + "'\", then: ..., else: ... }`), or reduce the form to a single action");
+            } else {
+                validateActionDecisions(process, step, form, completing, successor, issues);
             }
         }
+    }
+
+    /**
+     * The decisions a form task branches through must account for every action its form completes it
+     * with (issue #7551). A decision is an if/then/else, so an action none of them tests lands in the
+     * last {@code else} - which is that action's branch only while it is the ONE action left. Two or
+     * more there make the {@code else} a catch-all that silently takes an action the process never
+     * decided about (a "hold" cancelling a ticket, because only "confirm" was tested), and a decision
+     * testing an action the form does not offer is a branch no completion can reach. Walks the chain of
+     * action decisions from the task's successor through each {@code else}; a decision whose condition
+     * is anything but {@code action == '...'} terms joined by {@code ||} ends the chain (and, as the
+     * first one, leaves the task unchecked - its routing is not about the chosen action).
+     */
+    private static void validateActionDecisions(ProcessIntent process, StepIntent task, FormIntent form, List<String> completing,
+            StepIntent first, List<String> issues) {
+        List<StepIntent> steps = process.getSteps();
+        Set<String> tested = new LinkedHashSet<>();
+        Set<String> visited = new HashSet<>();
+        String subject = "user task [" + task.getName() + "] in process [" + process.getName() + "] uses form [" + form.getName() + "]";
+        StepIntent decision = first;
+        while (decision != null && "decision".equals(decision.getKind()) && visited.add(decision.getName())) {
+            List<String> values = actionValues(stringArgOf(decision, "if"));
+            if (values == null) {
+                break;
+            }
+            for (String value : values) {
+                if (!completing.contains(value)) {
+                    issues.add(subject + " whose actions are " + completing + ", but decision [" + decision.getName()
+                            + "] tests the action [" + value + "] the form does not offer - no completion can take that branch");
+                }
+                tested.add(value);
+            }
+            String elseTarget = stringArgOf(decision, "else");
+            decision = elseTarget == null ? successorStep(decision, steps, steps.indexOf(decision)) : stepNamed(steps, elseTarget);
+        }
+        if (tested.isEmpty()) {
+            return;
+        }
+        List<String> untested = new ArrayList<>(completing);
+        untested.removeAll(tested);
+        if (untested.size() > 1) {
+            issues.add(subject + " whose actions " + untested + " are tested by none of the decisions after it - they all fall"
+                    + " into one else, a catch-all that takes an action the process never decided about; test each action the form"
+                    + " offers (only one may be left to else, which then means exactly that action)");
+        }
+    }
+
+    /**
+     * The actions a decision condition tests, when it is nothing but {@code action == '...'} terms
+     * joined by {@code ||} (an expression wrapper {@code ${...}} tolerated) - null for any other
+     * condition, which this check cannot reason about.
+     */
+    private static List<String> actionValues(String condition) {
+        if (condition == null) {
+            return null;
+        }
+        String expression = condition.trim();
+        if (expression.startsWith("${") && expression.endsWith("}")) {
+            expression = expression.substring(2, expression.length() - 1);
+        }
+        List<String> values = new ArrayList<>();
+        for (String term : expression.split("\\|\\|")) {
+            java.util.regex.Matcher matcher = ACTION_TERM.matcher(term.trim());
+            if (!matcher.matches()) {
+                return null;
+            }
+            values.add(matcher.group(2));
+        }
+        return values;
+    }
+
+    private static String stringArgOf(StepIntent step, String key) {
+        Object value = step.getArgs() == null ? null
+                : step.getArgs()
+                      .get(key);
+        return value == null || value.toString()
+                                     .isBlank() ? null : value.toString();
+    }
+
+    private static StepIntent stepNamed(List<StepIntent> steps, String name) {
+        for (StepIntent candidate : steps) {
+            if (name.equals(candidate.getName())) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     /**

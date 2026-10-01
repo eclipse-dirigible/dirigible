@@ -216,6 +216,21 @@ class JavaLiteralsTest {
     }
 
     /**
+     * A null test asks whether the value is there at all (#7555) - the one way a condition can say
+     * "this row is linked": no literal of the column's type stands for "unset". A hop that did not
+     * resolve reads as unset, through the same null guard.
+     */
+    @Test
+    void rendersANullTestAsAPresenceCheck() {
+        assertEquals("(entity.Payslip != null)", JavaLiterals.conditionExpression(List.of(nullTerm("entity", "Payslip", false))));
+        assertEquals("(entity.Payslip == null)", JavaLiterals.conditionExpression(List.of(nullTerm("entity", "Payslip", true))));
+        assertEquals("((hop0 == null ? null : hop0.PostedOn) != null)",
+                JavaLiterals.conditionExpression(List.of(nullTerm("hop0", "PostedOn", false))));
+        assertEquals("(entity.Payslip != null) && java.util.Objects.equals(entity.Kind, \"bonus\")", JavaLiterals.conditionExpression(
+                List.of(nullTerm("entity", "Payslip", false), term("entity", "Kind", true, "string", "bonus", false))));
+    }
+
+    /**
      * A term the generator did not type yields NO expression rather than a weaker guard - a condition
      * degraded to something that always holds is the failure the whole check exists to refuse.
      */
@@ -232,6 +247,17 @@ class JavaLiteralsTest {
     void escapesTheValueItRendersIntoALiteral() {
         assertEquals("java.util.Objects.equals(entity.Size, \"6\\\"\")",
                 JavaLiterals.conditionExpression(List.of(term("entity", "Size", true, "string", "6\"", false))));
+    }
+
+    /** A null-test term as the intent generator writes it: typed {@code null}, carrying no value. */
+    private static Map<String, Object> nullTerm(String owner, String property, boolean equal) {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("owner", owner);
+        term.put("property", property);
+        term.put("equal", equal);
+        term.put("type", "null");
+        term.put("numericKey", false);
+        return term;
     }
 
     private static Map<String, Object> term(String owner, String property, boolean equal, String type, String value, boolean numericKey) {

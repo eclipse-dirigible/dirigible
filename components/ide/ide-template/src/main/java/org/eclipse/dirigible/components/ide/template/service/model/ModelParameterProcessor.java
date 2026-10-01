@@ -17,10 +17,12 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
@@ -949,6 +951,19 @@ final class ModelParameterProcessor {
         }
     }
 
+    /**
+     * Resolves the lock a composition child inherits from its masters. A master's lock reaches down the
+     * WHOLE composition chain, not one hop (#7550): a payslip line is as frozen as its payslip while
+     * the payroll run above both is posted, even though the payslip declares no lock of its own. So the
+     * child carries its direct master as {@code masterLock} (with that master's own lock, which may be
+     * none) plus {@code masterLock.ancestors}: every further master up to the farthest one that locks,
+     * each with the FK leading to it from the level below and its own lock. The climb stops at a master
+     * declaring {@code locksWithMaster: false} - it outlives the lock above it, and so does everything
+     * below it.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
     private static void inheritMasterLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
             if ("false".equals(str(entity, "locksWithMaster"))) {
@@ -962,28 +977,69 @@ final class ModelParameterProcessor {
             if (parent == null) {
                 continue;
             }
-            boolean always = truthy(parent, "immutableAlways");
-            String statusProperty = str(parent, "immutableStatusProperty");
-            Object parentPeriod = parent.get("periodLock");
-            if (!always && (statusProperty == null || statusProperty.isEmpty()) && parentPeriod == null) {
+            List<Map<String, Object>> ancestors = lockingAncestors(entities, entity, parent, parameters);
+            if (!locks(parent) && ancestors.isEmpty()) {
                 continue;
             }
-            String parentPerspective = NamingHelper.sanitizeJavaIdentifier(str(parentFk, "relationshipEntityPerspectiveName"));
-            String parentPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + parentPerspective + ".";
-            Map<String, Object> masterLock = new LinkedHashMap<>();
-            masterLock.put("fkProperty", parentFk.get("name"));
-            masterLock.put("fkJavaClass", parentFk.get("dataTypeJavaClass"));
-            masterLock.put("entity", parent.get("name"));
-            masterLock.put("entityClass", parentPackage + str(parent, "name") + "Entity");
-            masterLock.put("repositoryClass", parentPackage + str(parent, "name") + "Repository");
-            masterLock.put("always", always);
-            masterLock.put("statusProperty", statusProperty);
-            masterLock.put("statusValues", str(parent, "immutableStatusValues"));
-            if (parentPeriod != null) {
-                masterLock.put("period", parentPeriod);
-            }
+            Map<String, Object> masterLock = lockLevel(parentFk, parent, parameters);
+            masterLock.put("ancestors", ancestors);
             entity.put("masterLock", masterLock);
         }
+    }
+
+    /**
+     * The masters above {@code parent}, nearest first, up to the farthest one that locks - the
+     * intermediate ones are kept, being the hops a write walks to reach it. Empty when nothing above
+     * {@code parent} locks.
+     */
+    private static List<Map<String, Object>> lockingAncestors(List<Map<String, Object>> entities, Map<String, Object> entity,
+            Map<String, Object> parent, Map<String, Object> parameters) {
+        List<Map<String, Object>> chain = new ArrayList<>();
+        int lockingDepth = 0;
+        Set<String> visited = new HashSet<>(List.of(str(entity, "name"), str(parent, "name")));
+        Map<String, Object> level = parent;
+        while (!"false".equals(str(level, "locksWithMaster"))) {
+            Map<String, Object> fk = findCompositionProperty(level);
+            Map<String, Object> master = fk == null ? null : findEntity(entities, str(fk, "relationshipEntityName"));
+            if (master == null || !visited.add(str(master, "name"))) {
+                break;
+            }
+            chain.add(lockLevel(fk, master, parameters));
+            if (locks(master)) {
+                lockingDepth = chain.size();
+            }
+            level = master;
+        }
+        return new ArrayList<>(chain.subList(0, lockingDepth));
+    }
+
+    /**
+     * One level of an inherited lock: the master reached through {@code fk}, where its generated entity
+     * and repository live, and the master's own lock - append-only, a status scope, a period.
+     */
+    private static Map<String, Object> lockLevel(Map<String, Object> fk, Map<String, Object> master, Map<String, Object> parameters) {
+        String perspective = NamingHelper.sanitizeJavaIdentifier(str(fk, "relationshipEntityPerspectiveName"));
+        String masterPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + perspective + ".";
+        Map<String, Object> level = new LinkedHashMap<>();
+        level.put("fkProperty", fk.get("name"));
+        level.put("fkJavaClass", fk.get("dataTypeJavaClass"));
+        level.put("entity", master.get("name"));
+        level.put("entityClass", masterPackage + str(master, "name") + "Entity");
+        level.put("repositoryClass", masterPackage + str(master, "name") + "Repository");
+        level.put("always", truthy(master, "immutableAlways"));
+        level.put("statusProperty", str(master, "immutableStatusProperty"));
+        level.put("statusValues", str(master, "immutableStatusValues"));
+        if (master.get("periodLock") != null) {
+            level.put("period", master.get("periodLock"));
+        }
+        return level;
+    }
+
+    /** Whether the entity declares a lock of its own: append-only, a status scope or a period. */
+    private static boolean locks(Map<String, Object> entity) {
+        String statusProperty = str(entity, "immutableStatusProperty");
+        return truthy(entity, "immutableAlways") || (statusProperty != null && !statusProperty.isEmpty())
+                || entity.get("periodLock") != null;
     }
 
     /**

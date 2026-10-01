@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.regex.Pattern;
 
 
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
@@ -52,6 +53,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -114,6 +116,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String STATEMENT_API = "/services/java/" + PROJECT + "/gen/entrysheet/api/reports";
     /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
     private static final int TEXT_COLUMN_LENGTH = 4000;
+    /** An HTML comment in a generated view - its prose may name a flag the markup does not use. */
+    private static final Pattern HTML_COMMENT = Pattern.compile("(?s)<!--.*?-->");
+    /** A live reference to the page's {@code mutable} flag (not the word inside "immutable"). */
+    private static final Pattern MUTABLE_REFERENCE = Pattern.compile("\\bmutable\\b");
 
     private static final String INTENT_YAML_ENTITIES = """
             name: emission
@@ -473,6 +479,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: title, type: string, length: 200 }
                 relations:
                   - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
+
+              # The lock reaches down the whole composition chain (#7550): a stage declares no lock of
+              # its own, yet its steps freeze with the campaign above both - the payroll run / payslip /
+              # payslip line shape, where the lines stayed writable after the run was posted.
+              - name: CampaignStage
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 100 }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
+              - name: CampaignStageStep
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 100 }
+                relations:
+                  - { name: CampaignStage, kind: manyToOne, to: CampaignStage, composition: true, required: true }
 
               # A calendar SCOPED by a MASTER (#6546). The scope target's record surfaces must link
               # into the filtered calendar - for a master that surface is the detail PANE of the
@@ -2570,6 +2592,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
         assertTrue(billDocumentPage.contains("case 'DueOn': return this.displayDate(v);"),
                 "headerDisplay() must format the DATE field through the instance date format: " + billDocumentPage);
+        // ...and a DROPDOWN field resolves its option label through the component's own options (#7576):
+        // a bare options<Prop> is valid JavaScript until it runs, then throws a ReferenceError in the
+        // method body and the card drops every relation - so run it rather than match its text.
+        assertEquals("Ann", frozenHeaderDisplay(billDocumentPage, "BillDocumentPage", "Person", "optionsPerson"),
+                "the frozen header card must show a DROPDOWN relation's option label");
+        assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
+                "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
+        // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
+        // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
+        // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
+        // Ticket is a Document master with none of the three, on both the power and the my surface.
+        for (String view : List.of("gen/emission/views/Ticket/Ticket-document.html", "gen/emission/views/my/Ticket-document.html")) {
+            String markup = HTML_COMMENT.matcher(contentOf(view))
+                                        .replaceAll("");
+            assertFalse(MUTABLE_REFERENCE.matcher(markup)
+                                         .find(),
+                    "a document page without immutability must not reference the undefined mutable flag: " + view);
+        }
         // A full-row update() PRESERVES the system-owned columns over the payload - and reports the
         // discard when the payload carried a value of its own that is not the stored one (#6937).
         // Silence there made a system writer on the wrong path indistinguishable from a working one:
@@ -5107,6 +5147,66 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("Title", equalTo("book the venue")));
 
+        // ...and a lock reaches the grandchildren too (#7550): the step of a stage is refused once the
+        // campaign above both is closed, although the stage declares no lock of its own - the walk goes
+        // from the step through its stage to the campaign. While the campaign was open all three wrote.
+        AtomicInteger stagedCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stagedCampaign.set(given().contentType("application/json")
+                                                                    .body("{\"Name\":\"Winter\"}")
+                                                                    .when()
+                                                                    .post(API + "/campaign/CampaignController")
+                                                                    .then()
+                                                                    .statusCode(200)
+                                                                    .extract()
+                                                                    .path("Id")));
+        AtomicInteger stage = new AtomicInteger();
+        restAssuredExecutor.execute(() -> stage.set(given().contentType("application/json")
+                                                           .body("{\"Campaign\":" + stagedCampaign.get() + ",\"Title\":\"launch\"}")
+                                                           .when()
+                                                           .post(API + "/campaign/CampaignStageController")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .extract()
+                                                           .path("Id")));
+        AtomicInteger step = new AtomicInteger();
+        restAssuredExecutor.execute(() -> step.set(given().contentType("application/json")
+                                                          .body("{\"CampaignStage\":" + stage.get() + ",\"Title\":\"print flyers\"}")
+                                                          .when()
+                                                          .post(API + "/campaign/CampaignStageStepController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + stagedCampaign.get() + ",\"Name\":\"Winter\",\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + stagedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"CampaignStage\":" + stage.get() + ",\"Title\":\"late step\"}")
+                                                 .when()
+                                                 .post(API + "/campaign/CampaignStageStepController")
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body(containsString("The Campaign of this CampaignStageStep is immutable")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + step.get() + ",\"CampaignStage\":" + stage.get()
+                                                         + ",\"Title\":\"renamed\"}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignStageStepController/" + step.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Title", equalTo("print flyers")));
+
         // history: the whole life of the record is readable from one endpoint - the create, and the
         // status hop the user made with both sides of it recorded, so "who changed this from what"
         // has an answer. The audit columns and the key stay out: they restate what the entry carries.
@@ -7038,6 +7138,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
     private static int countOf(String haystack, String needle) {
         return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
+    }
+
+    /**
+     * Run a generated document page's headerDisplay() for a frozen record whose DROPDOWN field holds 7
+     * and whose options list 7 as "Ann". The page registers itself through Alpine.data inside an
+     * alpine:init listener; both are stubbed, and baseFormPage contributes nothing headerDisplay reads.
+     */
+    private static String frozenHeaderDisplay(String pageScript, String componentName, String property, String optionsMember) {
+        try (Context context = Context.create("js")) {
+            context.eval("js", "var pages = {};" + "var document = { addEventListener: (event, callback) => callback() };"
+                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } };" + "var baseFormPage = () => ({});");
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.form." + property + " = 7; page." + optionsMember
+                            + " = [{ value: 7, text: 'Ann' }]; return page.headerDisplay('" + property + "'); })()")
+                          .asString();
+        }
     }
 
     private String contentOf(String fileName) {
