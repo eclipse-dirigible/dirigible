@@ -45,6 +45,16 @@ class TenantUserSnapshotApiDisabledIT extends IntegrationTest {
     }
 
     @Test
+    void aSnapshotIsNotAccepted() {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"complete\": false, \"revision\": 1, \"users\": []}")
+                                                 .when()
+                                                 .put("/services/tenant-provisioning/tenants/anything/users")
+                                                 .then()
+                                                 .statusCode(404));
+    }
+
+    @Test
     void theUsersSnapshotEndpointIsNotABean() {
         boolean present = Arrays.stream(applicationContext.getBeanDefinitionNames())
                                 .map(applicationContext::getType)
