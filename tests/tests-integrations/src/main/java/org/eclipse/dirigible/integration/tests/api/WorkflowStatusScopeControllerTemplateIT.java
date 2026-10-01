@@ -31,12 +31,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>
  * A status a process step or a capacity roll-up COMPUTES is owned wholesale - an omitted value is
- * preserved AND any differing one refused. A status only {@code transitions:} buttons write is owned
- * per VALUE (#7595): a move to a value a button sets is refused (it would bypass the button's
- * {@code from:}/{@code when:} guards), any other move stays an ordinary edit, so an entity whose one
- * button is Cancel can still be posted by hand. The {@code checks:} rules conditioned on a button's
- * status are routed to the repository the button writes through, so refusing the value takes none of
- * them away ({@code IntentEmissionCoverageIT} drives them through {@code PostDocTransition}).
+ * preserved AND any differing one refused. A status only {@code transitions:} buttons write is
+ * owned per VALUE (#7595): a move to a value a button sets is refused (it would bypass the button's
+ * {@code from:}/{@code when:} guards), any other move stays an ordinary edit, so an entity whose
+ * one button is Cancel can still be posted by hand. The {@code checks:} rules conditioned on a
+ * button's status are routed to the repository the button writes through, so refusing the value
+ * takes none of them away ({@code IntentEmissionCoverageIT} drives them through
+ * {@code PostDocTransition}).
  *
  * <p>
  * Rendering needs nothing from a running instance, so this boots no application context and uses
