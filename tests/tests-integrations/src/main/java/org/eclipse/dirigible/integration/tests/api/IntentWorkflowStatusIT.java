@@ -59,6 +59,7 @@ class IntentWorkflowStatusIT extends IntegrationTest {
     private static final String INVOICES = API + "/invoice/InvoiceController";
     private static final String TASKS = "/services/inbox/tasks";
     private static final String REFUSAL = "'Status' changes through the workflow, not a direct edit";
+    private static final String APPROVER_REQUIRED = "An approved invoice names its approver";
     private static final long TIMEOUT_SECONDS = 90;
     /** The task appears once the create event has started the instance. */
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
@@ -76,10 +77,16 @@ class IntentWorkflowStatusIT extends IntegrationTest {
 
               - name: Invoice
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 200 }
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: note,     type: string, length: 200 }
+                  - { name: approver, type: string, length: 100 }
                 relations:
                   - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                checks:
+                  # UNGATED on purpose (#7595): the condition names the status the approve step writes,
+                  # so the rule is gated on it and enforced where the step writes - the repository -
+                  # and the step runs in the completing transaction so the refusal reaches the approver.
+                  - { kind: requiredWhen, field: approver, when: "Status == Approved", message: "An approved invoice names its approver" }
 
             processes:
               - name: InvoiceApproval
@@ -90,7 +97,7 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                   - { name: end,     kind: end }
 
             forms:
-              - { name: DecideInvoice, forEntity: Invoice, fields: [note], editable: [note], actions: [approve] }
+              - { name: DecideInvoice, forEntity: Invoice, fields: [note, approver], editable: [note, approver], actions: [approve] }
 
             seeds:
               - name: invoice-statuses
@@ -139,10 +146,18 @@ class IntentWorkflowStatusIT extends IntegrationTest {
         completeRefused(task, "{\"action\":\"reject\"}", "The action is not one this task offers - use one of: approve");
         read(invoice).body("Status", equalTo(1));
 
+        // A requiredWhen on the status the flow writes runs where the flow writes it (#7595): approving
+        // without an approver is refused AT task completion - a 400 the approver sees, the task still
+        // in the inbox and the record still a draft - instead of a controller-only rule the step skips.
+        completeRefused(task, "{\"action\":\"approve\"}", APPROVER_REQUIRED);
+        read(invoice).body("Status", equalTo(1));
+
         // The flow's own writer is untouched: it reaches the repository through the targeted
-        // updateProperties primitive, never through the controller this guard sits in.
-        complete(task);
+        // updateProperties primitive, never through the controller this guard sits in. The approver
+        // the reviewer types is written in the same transaction, so the gate is satisfied.
+        complete(task, "{\"action\":\"approve\",\"Approver\":\"Ann\"}");
         awaitStatus(invoice, 2);
+        read(invoice).body("Approver", equalTo("Ann"));
     }
 
     private void put(int invoice, String body, int expectedStatus, String expectedMessage) {
@@ -187,9 +202,9 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                 PROCESS_TIMEOUT_SECONDS);
     }
 
-    private void complete(String task) {
+    private void complete(String task, String data) {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"approve\"}}")
+                                                 .body("{\"action\":\"COMPLETE\",\"data\":" + data + "}")
                                                  .when()
                                                  .post(TASKS + "/" + task)
                                                  .then()

@@ -926,6 +926,46 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * The same derivation for a status a workflow step writes (#7595): the step's setRelationField
+     * goes through the repository too, so a controller-only rule would never run at approval - the
+     * hole base-sales-invoices closed by hand with an explicit gate.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void anUngatedRequiredWhenOnAStepWrittenStatusIsGatedOnThatStatus() {
+        String yaml = """
+                name: leave
+                entities:
+                  - name: RequestStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Request
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: approver, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: RequestStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - { kind: requiredWhen, field: approver, when: "Status == 3", message: "approved needs an approver" }
+                      - { kind: requiredWhen, field: approver, when: "Status == 5", message: "nobody writes 5" }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: Request }
+                    steps:
+                      - { name: approve, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: end, kind: end }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "leave");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Request").get("checks");
+        assertEquals("3", checks.get(0)
+                                .get("status"));
+        assertNull(checks.get(1)
+                         .get("status"));
+    }
+
+    /**
      * A process or roll-up that owns the whole column wins over a button's narrower claim: no
      * {@code workflowStatusValues}, so every direct status change is refused.
      */
