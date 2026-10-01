@@ -43,6 +43,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
+import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
@@ -620,6 +621,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
                 putPickable(fkProperty, relation, null);
+                putStatusSteps(fkProperty, model, entity, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -1950,6 +1952,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String literal = value instanceof Number ? stripTrailingZero((Number) value) : String.valueOf(value);
         p.put("widgetOptionsFilterBy", by);
         p.put("widgetOptionsFilterValue", literal);
+    }
+
+    /**
+     * Emit the document page's status stepper as the {@code widgetStatusSteps} attribute of the
+     * {@code DOCUMENT_STATUS} property: the seed ids of the steps, comma-joined in seed order
+     * ({@link StatusStepsSupport#lifecycleStepIds} - the statuses the entity's flows walk, terminals
+     * dropped). The page builds its stepper from these ids, so neither the order nor the choice of
+     * steps depends on the label a status renders with: read from the status picker's options, which
+     * are sorted by their translated label, the stepper listed the statuses alphabetically in whichever
+     * language the user had chosen, with a DRAFT document showing APPROVED and CONFIRMED as done (issue
+     * #7592). Same-model status entities only - a cross-model one's seeds are not on this model, and
+     * its page falls back to the nomenclature's id order.
+     */
+    private static void putStatusSteps(Map<String, Object> p, IntentModel model, EntityIntent entity, RelationIntent relation) {
+        if (!relation.isEntityStatus()) {
+            return;
+        }
+        List<Integer> steps = StatusStepsSupport.lifecycleStepIds(model, entity, relation);
+        if (!steps.isEmpty()) {
+            p.put("widgetStatusSteps", steps.stream()
+                                            .map(String::valueOf)
+                                            .collect(Collectors.joining(",")));
+        }
     }
 
     /**

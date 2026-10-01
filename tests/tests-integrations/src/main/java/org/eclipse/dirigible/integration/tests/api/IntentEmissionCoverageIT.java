@@ -53,6 +53,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -2623,6 +2624,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(billDocumentView.contains("x-text=\"form."), "no read-only card may print a raw form value: " + billDocumentView);
         assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
+        // The page's status stepper is chosen and ordered by status id, never by the label it renders
+        // (#7592): the picker's options arrive sorted by their TRANSLATED label - here Bulgarian, which
+        // the English terminal heuristic cannot read either - and the stepper read off them listed
+        // Анулирана, Публикувана, Чернова with a DRAFT record on step 3. No flow of Bill writes its
+        // status, so the steps are the non-terminal nomenclature, DRAFT then POSTED, in seed order.
+        String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
+        assertEquals("[1,2] active 1",
+                pageStatusSteps(billDocumentPage, "BillDocumentPage", "Status",
+                        "[{ value: 3, text: 'Анулирана' }, { value: 2, text: 'Публикувана' }, { value: 1, text: 'Чернова' }]", 1),
+                "the document page's stepper must follow the lifecycle, not the label order of its options");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
         // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
         // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
@@ -7168,6 +7179,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("ProcessIds", org.hamcrest.Matchers.containsString("ApprovalFlow="))
                                                  .body("ProcessIds", org.hamcrest.Matchers.containsString("VoidedFollowUp=")),
                 90);
+    }
+
+    /**
+     * Run a generated document page's status stepper: the step values {@code statusSteps()} returns and
+     * the {@code activeStep()} it marks, for a record standing at {@code current} whose status options
+     * are {@code options}. The page registers itself through Alpine.data inside an alpine:init
+     * listener; both are stubbed, and baseFormPage contributes nothing the stepper reads.
+     */
+    private static String pageStatusSteps(String pageScript, String componentName, String statusProperty, String options, int current) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var pages = {}; var window = {}; var document = { addEventListener: (event, callback) => callback() };"
+                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } }; var baseFormPage = () => ({});");
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.options" + statusProperty + " = " + options + ";"
+                            + " page.form = { " + statusProperty + ": " + current + " };"
+                            + " return '[' + page.statusSteps().map(o => o.value).join(',') + '] active ' + page.activeStep(); })()")
+                          .asString();
+        }
     }
 
     private static void sleep(long millis) {
