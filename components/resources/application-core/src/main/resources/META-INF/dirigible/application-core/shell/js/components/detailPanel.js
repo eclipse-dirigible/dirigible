@@ -37,6 +37,10 @@
  * generated server-side, e.g. on issue).
  * Like a calendar, a files panel always renders (its empty state is meaningful), never the shared
  * "no records" line.
+ *
+ * Every panel carries a Refresh action and re-reads itself when a custom action finished or a BPM
+ * task of its master completed (#7612) - the rows a server-side chain writes behind the panel's back
+ * (the Snapshot copy minted after Issue, an allocation a settlement recorded) appear without a reload.
  */
 function detailPanel(def, masterId, master) {
   return {
@@ -54,6 +58,7 @@ function detailPanel(def, masterId, master) {
     deleteBusy: false,
     uploading: false, // files defs only
     fileError: null,
+    refreshing: false, // a re-read while the rows stay on screen (refresh)
     // Reactive config for the embedded x-h-calendar (calendar defs only); rebuilt on every load.
     calCfg: { view: (def.calendar && def.calendar.view) || "month", events: [] },
 
@@ -74,10 +79,25 @@ function detailPanel(def, masterId, master) {
       // PaymentReminder against the open invoice), and it does so behind the panel's back - through
       // its own endpoint, not this panel's editing path. Re-read on every action so the panel stops
       // saying "No records" about a record that exists (issue #7073).
-      this.onActionDone(async () => {
-        await this.load();
-        this.loadLookups();
-      });
+      this.onActionDone(() => this.refresh());
+      // A completed BPM task of the master changes this panel's rows the same way - and the chain behind
+      // the task keeps writing after the completion returned, which is why the processTasks store
+      // announces the master's process again on a bounded schedule after the task form closed (#7612).
+      this.onTasksChanged(() => this.master && this.master.ProcessId, () => this.refresh());
+    },
+
+    // Re-read the rows and the labels they resolve through: the panel's Refresh action, and every re-read
+    // something else triggers (a custom action, a task completed on the master). Quiet - the rows stay on
+    // screen while the fresh ones are fetched - so a background re-read does not replace the panel with
+    // its spinner each time.
+    async refresh() {
+      this.refreshing = true;
+      try {
+        await this.load(true);
+        await this.loadLookups();
+      } finally {
+        this.refreshing = false;
+      }
     },
 
     // Fetch the referenced rows for each relationship column once, keyed by FK -> the whole row (so both
@@ -148,14 +168,16 @@ function detailPanel(def, masterId, master) {
       return window.HarmoniaFormat.value(v, isDate);
     },
 
-    async load() {
+    // `quiet` keeps the current rows (and state) on screen until the fresh ones arrive, for a re-read of
+    // a panel that is already showing something; the first load shows the spinner.
+    async load(quiet) {
       // No master selected yet — don't fetch (avoids a ?<fk>=null call).
       if (this.masterId == null) {
         this.rows = [];
         this.state = "empty";
         return;
       }
-      this.state = "loading";
+      if (!quiet) this.state = "loading";
       this.error = null;
       try {
         // The detail controller filters by the master FK query param (apiPath is relative to restBase).

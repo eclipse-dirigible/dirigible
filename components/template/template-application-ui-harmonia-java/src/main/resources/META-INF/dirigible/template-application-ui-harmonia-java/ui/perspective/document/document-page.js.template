@@ -382,15 +382,7 @@ document.addEventListener('alpine:init', () => {
         try {
           await this.loadHeader();
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
-          try {
-            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
-            this.mutable = !m || m.mutable !== false;
-          } catch (e) {
-            console.error('[${name}DocumentPage] mutable pre-check failed', e);
-          }
-          // An immutable document opened on the /edit route renders as preview - header, items and
-          // panels all read-only, exactly as if Preview had been chosen (or the URL said /preview).
-          if (!this.mutable && this.isEdit) this.mode = 'preview';
+          await this.loadMutable();
 #end
 #if($history == "true")
           await this.loadHistory();
@@ -430,21 +422,55 @@ document.addEventListener('alpine:init', () => {
       // so the status pill, the stepper and the transition buttons - which are filtered by the
       // CURRENT status - all speak about the record as it now is (issue #7073). The detail panels
       // re-read themselves (detailPanel does the same on this event).
-      this.onActionDone(async () => {
-        if (!this.isEdit && !this.isPreview) return;
-        try {
-          await this.loadHeader();
-#if($history == "true")
-          await this.loadHistory();
+      this.onActionDone(() => this.refreshDocument(false));
+#if($hasProcess)
+      // So does a completed BPM task - and the chain behind it (the number, the status, the totals,
+      // the snapshot copy) keeps writing after the completion returned, behind async boundaries, which
+      // is why the processTasks store announces this document's process again on a bounded schedule
+      // after the task form closed (#7612). An unsaved edit in the header is kept: a background
+      // re-read must not overwrite typing, so then only the history, the items and the panels move.
+      this.onTasksChanged(() => this.form.ProcessId, () => this.refreshDocument(true));
 #end
-          await this.loadItems();
-        } catch (e) {
-          console.error('[${name}DocumentPage] could not refresh after a custom action', e);
-        }
-      });
 
       this.refreshIcons();
     },
+
+    // Re-read what the server may have changed behind the page's back - the header (the status pill,
+    // the stepper, the number, the totals, the transition buttons), its immutability, the history and
+    // the items; the detail panels re-read themselves. Quiet: the items stay on screen while the fresh
+    // ones are fetched. With `keepEdits` a header the user has edited and not saved is left alone.
+    async refreshDocument(keepEdits) {
+      if (!this.isEdit && !this.isPreview) return;
+      try {
+        if (!keepEdits || !this.isDirty()) {
+          await this.loadHeader();
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
+          await this.loadMutable();
+#end
+        }
+#if($history == "true")
+        await this.loadHistory();
+#end
+        await this.loadItems(true);
+      } catch (e) {
+        console.error('[${name}DocumentPage] could not refresh the document', e);
+      }
+    },
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
+
+    // GET /{id}/mutable: whether the document may still be written. An immutable document opened on
+    // the /edit route renders as preview - header, items and panels all read-only, exactly as if
+    // Preview had been chosen (or the URL said /preview). Fails OPEN - the server still refuses.
+    async loadMutable() {
+      try {
+        const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+        this.mutable = !m || m.mutable !== false;
+      } catch (e) {
+        console.error('[${name}DocumentPage] mutable pre-check failed', e);
+      }
+      if (!this.mutable && this.isEdit) this.mode = 'preview';
+    },
+#end
 
     // GET the master record into both the header form and `record` (the footer reads calculated totals
     // from `record`). Called on load and after every item change so server-side totals stay fresh.
@@ -818,9 +844,10 @@ document.addEventListener('alpine:init', () => {
       return this.editColumns.filter(c => visible.has(c.name));
     },
 
-    async loadItems() {
+    // `quiet` keeps the current items on screen until the fresh ones arrive (a background re-read).
+    async loadItems(quiet) {
       if (!this.itemsDef || this.id == null) { this.items = []; this.itemsState = 'empty'; return; }
-      this.itemsState = 'loading';
+      if (!quiet) this.itemsState = 'loading';
       this.itemsError = null;
       try {
         await this.loadItemOptions();

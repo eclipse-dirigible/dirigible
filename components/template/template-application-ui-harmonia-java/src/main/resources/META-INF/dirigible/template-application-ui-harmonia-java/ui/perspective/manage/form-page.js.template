@@ -285,14 +285,26 @@ document.addEventListener('alpine:init', () => {
       // Create mode: the blank form plus the query-param prefills and the depends-on/calculated
       // values is where the user started; anything typed after this is an unsaved change (#7359).
       if (!this.isEdit && !this.isPreview) this.markPristine();
+#if($hasProcess)
+      // A completed BPM task changes this record behind the page's back, and the chain behind the
+      // task (the number, the status, the totals) keeps writing after the completion returned, which
+      // is why the processTasks store announces this record's process again on a bounded schedule
+      // after the task form closed (#7612). Re-read the record - unless the user has unsaved edits,
+      // which a background re-read must not overwrite; the detail panels re-read themselves.
+      this.onTasksChanged(() => this.form.ProcessId, async () => {
+        if ((!this.isEdit && !this.isPreview) || this.isDirty()) return;
+        await this.loadRecord(true);
+      });
+#end
       this.refreshIcons();
     },
 
     // Load the record behind the edit/preview route into the form. Also re-run after a create that
     // lands on the record page, so server-assigned values (document numbers, defaults, calculated
-    // fields, the initial status) are the ones the user sees.
-    async loadRecord() {
-      this.state = 'loading';
+    // fields, the initial status) are the ones the user sees. `quiet` keeps the form on screen while
+    // the fresh record is fetched (a background re-read) instead of showing the loading state.
+    async loadRecord(quiet) {
+      if (!quiet) this.state = 'loading';
       try {
         const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
         // Copy only known form fields so server-only props don't leak into the body.

@@ -459,8 +459,11 @@
           <div class="hbox items-center gap-2">
             <h3 x-h-text.h4 x-text="d.label"></h3>
             <span x-h-badge data-variant="outline" x-show="rows.length" x-text="rows.length"></span>
-            <div class="ml-auto" x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
-              <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+            <div class="ml-auto hbox items-center gap-2">
+              <!-- Refresh (#7612): the rows a server-side chain writes behind the panel's back - the Snapshot
+                   copy minted after Issue, an allocation a settlement recorded - without reloading the page. -->
+              <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" :disabled="refreshing" @click="refresh()" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" :title="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" :class="refreshing ? 'animate-spin' : ''"></svg></button>
+              <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
           <div class="vbox gap-4">

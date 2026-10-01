@@ -239,11 +239,17 @@
 
         <div x-show="detailDefs.length === 0" x-h-text.muted>This ${name} has no detail collections.</div>
 
-        <!-- One detail panel per registered detail; re-keyed on selection so it reloads. -->
+        <!-- One detail panel per registered detail; re-keyed on selection so it reloads. The selected
+             record rides along so the panel re-reads when a BPM task of ITS process completes (#7612). -->
         <template x-for="d in detailDefs" :key="d.entity + ':' + selectedId">
-          <div x-data="detailPanel(d, selectedId)" x-show="visibleWhenHolds(d.visibleWhen, selected)" x-h-card>
+          <div x-data="detailPanel(d, selectedId, selected)" x-show="visibleWhenHolds(d.visibleWhen, selected)" x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title x-text="d.label"></h3>
+              <div x-h-card-action>
+                <!-- Refresh (#7612): the rows a server-side chain writes behind the panel's back - the Snapshot
+                     copy minted after Issue, an allocation a settlement recorded - without reloading the page. -->
+                <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" :disabled="refreshing" @click="refresh()" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" :title="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" :class="refreshing ? 'animate-spin' : ''"></svg></button>
+              </div>
             </div>
             <div x-h-card-content>
               <div x-show="state === 'loading'"><div x-h-spinner></div></div>

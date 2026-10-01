@@ -113,26 +113,56 @@ function basePage() {
      * in destroy() below - a page navigated away from must not keep reloading in the background.
      */
     onActionDone(handler) {
-      this._actionDoneHandlers = this._actionDoneHandlers || [];
-      const listener = () => {
-        try {
-          const done = handler.call(this);
-          if (done && typeof done.catch === 'function') done.catch((e) => console.error('[action-done] reload failed', e));
-        } catch (e) {
-          console.error('[action-done] reload failed', e);
-        }
-      };
-      this._actionDoneHandlers.push(listener);
-      window.addEventListener('harmonia:action-done', listener);
+      this.listenOnWindow('harmonia:action-done', () => this.runReload(handler, 'action-done'));
+    },
+
+    /**
+     * Re-read this component's data when the BPM tasks of the record it shows changed (issue #7612).
+     *
+     * The processTasks store raises `harmonia:tasks-changed` naming the process instances whose task
+     * set differs from its previous reading: after a task form closed, on the bounded follow-up
+     * re-reads it runs while the chain behind the completed task is still writing the record, and on
+     * every poll. Until then a document whose Issue task had just been completed kept showing the
+     * pre-Issue number, status and an empty Copies panel until the browser was reloaded.
+     *
+     * `processIdOf` answers the ProcessId of the record on screen (nothing while no record is loaded);
+     * `handler` is the component's own reload, run only when that process is among the changed ones,
+     * so a change in another user's documents never re-reads this page. Removed in destroy().
+     */
+    onTasksChanged(processIdOf, handler) {
+      this.listenOnWindow('harmonia:tasks-changed', (event) => {
+        const processId = processIdOf.call(this);
+        if (processId === null || processId === undefined || processId === '') return;
+        const changed = (event && event.detail && event.detail.processInstanceIds) || [];
+        if (changed.indexOf(String(processId)) < 0) return;
+        this.runReload(handler, 'tasks-changed');
+      });
+    },
+
+    // A window listener this component owns, dropped in destroy() with the others.
+    listenOnWindow(type, listener) {
+      this._windowListeners = this._windowListeners || [];
+      this._windowListeners.push({ type, listener });
+      window.addEventListener(type, listener);
+    },
+
+    // Run a component's reload for the event `source`, so a failing one is logged rather than lost.
+    runReload(handler, source) {
+      try {
+        const done = handler.call(this);
+        if (done && typeof done.catch === 'function') done.catch((e) => console.error('[' + source + '] reload failed', e));
+      } catch (e) {
+        console.error('[' + source + '] reload failed', e);
+      }
     },
 
     /**
      * Alpine calls this when the component's element goes away. A component that overrides destroy()
-     * must call basePage's (or drop its own action-done listeners itself).
+     * must call basePage's (or drop its own window listeners itself).
      */
     destroy() {
-      (this._actionDoneHandlers || []).forEach((listener) => window.removeEventListener('harmonia:action-done', listener));
-      this._actionDoneHandlers = [];
+      (this._windowListeners || []).forEach((entry) => window.removeEventListener(entry.type, entry.listener));
+      this._windowListeners = [];
       // The two files are cached by the browser independently, so a page may be running this one
       // against a previous app.js - which must not turn every destroy into an exception.
       if (App.leaveGuard) App.leaveGuard.release(this);
