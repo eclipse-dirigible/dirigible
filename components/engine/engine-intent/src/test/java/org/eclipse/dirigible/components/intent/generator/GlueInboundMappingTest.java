@@ -77,6 +77,57 @@ class GlueInboundMappingTest {
               - { name: leadHook, path: /webhooks/lead, create: Lead }
             """;
 
+    /** An order with its lines (objects, one element lookup each) and its tags (bare values). */
+    private static final String ORDERS = """
+            name: shop
+            entities:
+              - name: Product
+                fields:
+                  - { name: id,  type: integer, primaryKey: true, generated: true }
+                  - { name: sku, type: string, unique: true }
+              - name: PurchaseOrder
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: orderNumber, type: string, unique: true }
+                relations:
+                  - { name: lines, kind: oneToMany, to: OrderLine }
+                  - { name: tags,  kind: oneToMany, to: OrderTag }
+              - name: OrderLine
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: integer }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+                  - { name: product,       kind: manyToOne, to: Product }
+              - name: OrderTag
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+            inbound:
+              - name: orderHook
+                path: /orders
+                create: PurchaseOrder
+                map: &order
+                  orderNumber: orderNumber
+                  lines:
+                    from: lines
+                    max: 50
+                    map:
+                      quantity: qty
+                      product: { lookup: Product, by: sku, from: sku }
+                  tags: { from: tags, map: { label: "." } }
+              - name: orderQueue
+                source: { queue: orders }
+                create: PurchaseOrder
+                map: *order
+              - name: orderDrop
+                source: { folder: target/orders, cron: "0/5 * * * * ?" }
+                create: PurchaseOrder
+                map: *order
+            """;
+
     @Test
     void everyArrivalKindCarriesTheSameGateAndProjection() {
         IntentModel model = IntentParser.parse(YAML);
@@ -132,5 +183,71 @@ class GlueInboundMappingTest {
         assertTrue(((List<?>) webhook.get("mapFields")).isEmpty());
         assertTrue(((List<?>) webhook.get("lookups")).isEmpty());
         assertEquals("", webhook.get("acceptExpression"));
+    }
+
+    @Test
+    void everyArrivalKindCarriesTheSameCollections() {
+        IntentModel model = IntentParser.parse(ORDERS);
+        Map<String, Object> webhook = GlueIntentGenerator.buildInboundForTest(model)
+                                                         .get(0);
+        Map<String, Object> consumer = GlueIntentGenerator.buildInboundMessagesForTest(model)
+                                                          .get(0);
+        Map<String, Object> job = GlueIntentGenerator.buildInboundFilesForTest(model)
+                                                     .get(0);
+
+        for (Map<String, Object> entry : List.of(webhook, consumer, job)) {
+            assertEquals(Boolean.TRUE, entry.get("hasMap"));
+            assertEquals(Boolean.TRUE, entry.get("hasCollections"));
+            assertEquals(List.of("OrderNumber"), propertiesOf(entry), "a collection is not a top-level field");
+            assertTrue(((List<?>) entry.get("lookups")).isEmpty(), "an element lookup is the collection's, not the record's");
+
+            List<?> collections = (List<?>) entry.get("collections");
+            assertEquals(2, collections.size());
+            Map<?, ?> lines = (Map<?, ?>) collections.get(0);
+            assertEquals("collectionLines", lines.get("local"));
+            assertEquals("\"lines\"", lines.get("fromLiteral"));
+            assertEquals(Boolean.TRUE, lines.get("hasMax"));
+            assertEquals("50", lines.get("max"));
+            assertEquals("OrderLine", lines.get("childEntity"));
+            assertEquals("PurchaseOrder", lines.get("childPerspective"));
+            assertEquals("PurchaseOrder", lines.get("backRef"));
+            assertEquals("Id", lines.get("masterKey"));
+            assertEquals(Boolean.FALSE, lines.get("scalarElements"));
+            assertEquals(List.of("Quantity"), elementPropertiesOf(lines));
+            Map<?, ?> product = (Map<?, ?>) ((List<?>) lines.get("lookups")).get(0);
+            assertEquals("lookupLinesProduct", product.get("local"));
+            assertEquals("Product", product.get("targetEntity"));
+            assertEquals("Sku", product.get("byProperty"));
+            assertEquals("String.valueOf(lookupLinesProductKey)", product.get("byValueExpression"));
+
+            Map<?, ?> tags = (Map<?, ?>) collections.get(1);
+            assertEquals(Boolean.TRUE, tags.get("scalarElements"));
+            assertEquals(Boolean.FALSE, tags.get("hasMax"));
+            assertEquals(List.of("Label"), elementPropertiesOf(tags));
+            assertTrue(((List<?>) tags.get("lookups")).isEmpty());
+        }
+    }
+
+    @Test
+    void anArrivalWithoutCollectionsCarriesThemEmpty() {
+        IntentModel model = IntentParser.parse(YAML);
+        List<Map<String, Object>> entries = List.of(GlueIntentGenerator.buildInboundForTest(model)
+                                                                       .get(0),
+                GlueIntentGenerator.buildInboundMessagesForTest(model)
+                                   .get(0),
+                GlueIntentGenerator.buildInboundFilesForTest(model)
+                                   .get(0),
+                GlueIntentGenerator.buildInboundForTest(IntentParser.parse(PLAIN))
+                                   .get(0));
+        for (Map<String, Object> entry : entries) {
+            assertEquals(Boolean.FALSE, entry.get("hasCollections"));
+            assertTrue(((List<?>) entry.get("collections")).isEmpty());
+        }
+    }
+
+    private static List<String> elementPropertiesOf(Map<?, ?> collection) {
+        return ((List<?>) collection.get("mapFields")).stream()
+                                                      .map(field -> String.valueOf(((Map<?, ?>) field).get("property")))
+                                                      .toList();
     }
 }

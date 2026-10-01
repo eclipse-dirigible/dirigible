@@ -18,6 +18,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.TestContexts;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
@@ -310,6 +312,136 @@ class AppTestIntentGeneratorTest {
                          .get("pattern"));
         // the process guard: the delete of a record whose instance still runs is refused with 409
         assertEquals(List.of("Sales Invoice Posting"), invoice.get("deleteGuardedByProcess"));
+    }
+
+    /** dirigible #7534: the translated seed rows leave the untranslated ISO code out. */
+    private static final String LANGUAGES = """
+            name: languages
+            languages: [en, bg]
+            entities:
+              - name: Language
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, required: true, unique: true, length: 3 }
+                  - { name: name, type: string, required: true, length: 100 }
+            seeds:
+              - name: languages
+                entity: Language
+                rows:
+                  - { id: 1, code: en, name: English }
+              - name: languages-bg
+                entity: Language
+                language: bg
+                rows:
+                  - %s
+            """;
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void takesTheSampleFromAFieldTheTranslatedRowCarries() {
+        IntentModel languages = IntentParser.parse(LANGUAGES.formatted("{ id: 1, name: \"Английски\" }"));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        // `code` comes first and has a language column, but the bg row does not set it - the sample
+        // must come from `name`, the first field BOTH rows carry
+        assertEquals(Map.of("language", "bg", "base", "English", "translated", "Английски"), language.get("multilingualSample"));
+        assertTrue(context.getIssues()
+                          .isEmpty(),
+                String.valueOf(context.getIssues()));
+    }
+
+    @Test
+    void reportsATranslationSampleThatCannotBeDerived() {
+        IntentModel languages = IntentParser.parse(LANGUAGES.formatted("{ id: 2, name: \"Английски\" }"));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        assertEquals(Boolean.TRUE, language.get("multilingual"));
+        assertNull(language.get("multilingualSample"));
+        // the dropped assertion is named, never silent
+        assertEquals(1, context.getIssues()
+                               .size());
+        String issue = context.getIssues()
+                              .get(0);
+        assertTrue(issue.contains("[Language]") && issue.contains("[bg]") && issue.contains("languages-bg"), issue);
+    }
+
+    @Test
+    void staysQuietWithoutInlineTranslatedRows() {
+        // only a base seed: nothing to assert, nothing to report
+        IntentModel languages = IntentParser.parse(LANGUAGES.substring(0, LANGUAGES.indexOf("  - name: languages-bg")));
+        IntentGenerationContext context = TestContexts.context(languages);
+
+        Map<String, Object> language =
+                entity(AppTestIntentGenerator.buildManifest("languages", "languages", languages, languagesEdm(), context), "Language");
+
+        assertNull(language.get("multilingualSample"));
+        assertTrue(context.getIssues()
+                          .isEmpty(),
+                String.valueOf(context.getIssues()));
+    }
+
+    private static Map<String, Map<String, Object>> languagesEdm() {
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Language", edmEntity("Language", "Language", "Languages", "MANAGE_LIST", "Settings", "master-data",
+                "KF_MOD_LANGUAGES_LANGUAGE", true));
+        return edm;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void omitsTheRouteOfAChildAndCarriesAgreeAndCompositeKeys() {
+        String intent = """
+                name: stock
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: Store
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                    relations:
+                      - { name: company, kind: manyToOne, to: Company, required: true }
+                  - name: Transfer
+                    unique:
+                      - fields: [fromStore, toStore]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200 }
+                    relations:
+                      - { name: fromStore, kind: manyToOne, to: Store, required: true }
+                      - { name: toStore, kind: manyToOne, to: Store, required: true }
+                    checks:
+                      - { kind: agree, relations: [fromStore, toStore], onProperty: company, message: "same company" }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Company", edmEntity("Company", "Company", "Companies", "MANAGE", "Stock", "stock", "KF_MOD_STOCK_COMPANY", false));
+        // a composition child owning line items: a document layout, yet no power page of its own
+        Map<String, Object> store = edmEntity("Store", "Store", "Stores", "MANAGE_DOCUMENT", "Stock", "", "KF_MOD_STOCK_STORE", false);
+        store.put("type", "DEPENDENT");
+        edm.put("Store", store);
+        edm.put("Transfer", edmEntity("Transfer", "Transfer", "Transfers", "MANAGE", "Stock", "stock", "KF_MOD_STOCK_TRANSFER", false));
+
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("stock", "stock", IntentParser.parse(intent), edm);
+
+        assertNull(entity(manifest, "Store").get("route"), "a DEPENDENT entity has no power page to route to");
+        assertEquals("#/Company", entity(manifest, "Company").get("route"));
+        Map<String, Object> transfer = entity(manifest, "Transfer");
+        assertEquals(List.of(List.of("FromStore", "ToStore")), transfer.get("uniqueKeys"));
+        List<Map<String, Object>> agree = (List<Map<String, Object>>) transfer.get("agree");
+        assertEquals(List.of("FromStore", "ToStore"), agree.get(0)
+                                                           .get("relations"));
+        assertEquals("Company", agree.get(0)
+                                     .get("onProperty"));
+        assertNull(entity(manifest, "Company").get("uniqueKeys"));
     }
 
     @SuppressWarnings("unchecked")

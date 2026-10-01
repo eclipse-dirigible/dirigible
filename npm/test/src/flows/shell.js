@@ -4,6 +4,7 @@ import { expect, test } from '../fixtures.js';
 // under its nav group and opens the module SPA in the embedded iframe. Requires the
 // navigation module that defines the groups, so it is opt-in: APPTEST_SHELL=1.
 export function shellFlow(manifest, entity) {
+  if (!entity.route) return; // no power page, no menu item
   test(`${entity.name}: shared shell menu item opens the module`, async ({ page }) => {
     test.skip(!process.env.APPTEST_SHELL, 'APPTEST_SHELL=1 enables the shared shell flow');
     await page.goto('/services/web/application/');

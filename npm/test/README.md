@@ -50,8 +50,10 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 
 - **list** — the shell breadcrumb naming the list by its plural label, a column header per major field,
   and (when `expectSeedData`) a row.
-- **crud** — UI create → filter → row appears; edit via the row menu → save; delete via the row menu →
-  confirm → gone. A walk that fails halfway still removes its test row over REST.
+- **crud** — UI create → filter → row appears; edit via the row menu → save (a `document` saves in
+  place, so the walk leaves through Back to list); delete via the row menu → confirm → gone. A walk
+  that fails halfway still removes its test row over REST. An entity without a `route` (a composition
+  child with no page of its own) has no list, crud, multilingual or shell flow.
 - **rest** — the same CRUD over the generated Java controllers via `APIRequestContext` (isolates
   backend vs UI failures), asserting the manifest's field names bind and delete yields 404 — or,
   for an entity a `whenDeleted: refuse` process guards, that the refused record is still served.
@@ -75,7 +77,9 @@ read-only — a `calculatedActionOnUpdate`, a platform-owned FK — carries the 
 picked in the UI. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
-marker, so the controller's 400 names the field.
+marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
+their targets agree; a composite `uniqueKeys` entry is given a relation combination no live row
+carries, and the rest and crud flows skip with the key named when every combination tried is taken.
 
 ## Custom UI hooks
 

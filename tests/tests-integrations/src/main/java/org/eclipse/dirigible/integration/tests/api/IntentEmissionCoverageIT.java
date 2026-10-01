@@ -53,7 +53,6 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -575,6 +574,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # generated pages. Deliberately on the entity that also carries `sensitive:` and
                   # `history:`, where the three could collide.
                   - { name: bonus, type: decimal, visibleTo: [Payroll] }
+                  # #7522: read-only fields render in the Details card as VALUES - a date through the
+                  # instance format, a checkbox as its translated state - and a role-scoped one only
+                  # for a caller the server serves it to, on the power and the personal form alike.
+                  - { name: reviewedOn, type: date, readOnly: true, visibleTo: [Payroll] }
+                  - { name: approved, type: boolean, readOnly: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -2602,21 +2606,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // Frozen header card (#7501): Bill is the fixture's only MANAGE_DOCUMENT master carrying
         // immutableWhen (function: Document + Status == 2), power-only (its Person relation carries
         // no personal: true, so it has no my-surface). The card must render (not merely disable the
-        // edit form) and format each value through headerDisplay() rather than the raw form value -
-        // a DATE field (dueOn) is the one the review's "raw model values" finding named.
+        // edit form) and format each value through the shared fieldDisplay() rather than the raw form
+        // value - a DATE field (dueOn) is the one the review's "raw model values" finding named.
         String billDocumentView = contentOf("gen/emission/views/Bill/Bill-document.html");
         assertTrue(billDocumentView.contains("x-show=\"!mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must render the frozen header card, not only disable the edit form");
-        assertTrue(billDocumentView.contains("headerDisplay('DueOn')"),
-                "the frozen header card must read a DATE field through headerDisplay(), not print the raw form value");
-        String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
-        assertTrue(billDocumentPage.contains("case 'DueOn': return this.displayDate(v);"),
-                "headerDisplay() must format the DATE field through the instance date format: " + billDocumentPage);
-        // ...and a DROPDOWN field resolves its option label through the component's own options (#7576):
-        // a bare options<Prop> is valid JavaScript until it runs, then throws a ReferenceError in the
-        // method body and the card drops every relation - so run it rather than match its text.
-        assertEquals("Ann", frozenHeaderDisplay(billDocumentPage, "BillDocumentPage", "Person", "optionsPerson"),
-                "the frozen header card must show a DROPDOWN relation's option label");
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.DueOn, 'DATE', '', null)\""),
+                "the frozen header card must read a DATE field through fieldDisplay(), not print the raw form value: " + billDocumentView);
+        // ...and a DROPDOWN relation through its option label (#7576): the options travel as the Alpine
+        // scope's options<Prop>, which an x-text expression resolves, so the card cannot drop the relation.
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.Person, 'DROPDOWN', '', optionsPerson)\""),
+                "the frozen header card must show a DROPDOWN relation's option label through fieldDisplay(): " + billDocumentView);
+        // ...and so must the Details card beside it, the one the read-only fields live in (#7522):
+        // both cards share the helper, neither prints a raw form value.
+        assertTrue(billDocumentView.contains("fieldDisplay(form.SendOutcome, "),
+                "the Details card must read a read-only field through fieldDisplay(): " + billDocumentView);
+        assertFalse(billDocumentView.contains("x-text=\"form."), "no read-only card may print a raw form value: " + billDocumentView);
         assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
@@ -2939,6 +2944,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal list must drop the columns its own controller withholds");
         assertFalse(contentOf("gen/emission/views/Person/Person-form.html").contains("canSee("),
                 "an entity with no role-scoped field must carry no visibility gate at all");
+        // The read-only Details card (#7522): a role-scoped read-only field is gated like its input
+        // would be, with the row hidden on the shared fieldDisplay() output. The personal form prints
+        // every value through fieldDisplay(); the record page (#7491) prints through its own preview
+        // helpers - a checkbox as its translated state, an audit timestamp in the instance format.
+        String claimMyFormView = contentOf("gen/emission/views/my/Claim-form.html");
+        for (String form : List.of(claimForm, claimMyFormView)) {
+            assertTrue(form.contains("x-show=\"canSee('ReviewedOn') && fieldDisplay(form.ReviewedOn, 'DATE', '', null) !== ''\""),
+                    "a role-scoped read-only field must be gated on canSee and its formatted value: " + form);
+            assertFalse(form.contains("x-text=\"form."), "a read-only card must not print a raw form value: " + form);
+        }
+        assertTrue(
+                claimMyFormView.contains("x-text=\"fieldDisplay(form.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
+                        && claimMyFormView.contains(".defaults.yes', 'Yes') }, { value: false, text: T('"),
+                "a read-only checkbox must render its translated state, not the literal true/false: " + claimMyFormView);
+        assertTrue(claimForm.contains("x-text=\"checkboxText(form.Approved)\""),
+                "a read-only checkbox on the record page must render its translated state, not the literal true/false: " + claimForm);
+        assertTrue(claimForm.contains("x-text=\"fieldText(form.CreatedAt, true, false, null)\""),
+                "an audit timestamp must render through the instance format, not as a raw ISO string: " + claimForm);
 
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
@@ -3166,6 +3189,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the lookup resolves the target's unique field and stores its primary key");
         assertTrue(mapped.contains("no unique Person matches") && mapped.contains("NOT ingested"),
                 "an unresolvable lookup rejects the arrival rather than storing a null relation");
+        // Arrival collections (#7593) change nothing for an arrival that declares none: the record is
+        // still saved alone, outside any unit of work of the handler's own.
+        assertFalse(mapped.contains("UnitOfWork") || mapped.contains("collection"),
+                "an arrival without collections must keep saving the record alone, exactly as before");
 
         // The glue event axis, outbound half (#6767): the publisher subscribes to the record's own
         // event topic, guards, builds the DECLARED envelope and sends it on the named channel. A
@@ -3699,6 +3726,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // fails the generated app test just as surely, so the runner needs the literal to steer by.
         assertTrue(testManifest.contains("\"field\": \"Paid\"") && testManifest.contains("\"value\": 0"),
                 "the manifest must carry a compare check's literal right-hand side too");
+        // ...and the two constraints a sample record meets only by choosing its relation rows (#7545):
+        // a composite unique key, whose first-row combination a seed most likely holds already, and
+        // the agree checks, whose two targets must point at the same third record.
+        String compactManifest = testManifest.replaceAll("\\s", "");
+        assertTrue(compactManifest.contains("\"uniqueKeys\":[[\"Party\",\"Code\"]]"),
+                "the manifest must carry PartyCode's composite unique key so the runner picks a free combination");
+        assertTrue(
+                compactManifest.contains("\"agree\":[{\"relations\":[\"Doc\",\"Entry\"],\"onProperty\":\"Status\"},"
+                        + "{\"relations\":[\"Entry\",\"Storno\"],\"onProperty\":\"Status\"}]"),
+                "the manifest must carry EntryLink's agree checks so the runner picks agreeing rows");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
@@ -7158,23 +7195,6 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
     private static int countOf(String haystack, String needle) {
         return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
-    }
-
-    /**
-     * Run a generated document page's headerDisplay() for a frozen record whose DROPDOWN field holds 7
-     * and whose options list 7 as "Ann". The page registers itself through Alpine.data inside an
-     * alpine:init listener; both are stubbed, and baseFormPage contributes nothing headerDisplay reads.
-     */
-    private static String frozenHeaderDisplay(String pageScript, String componentName, String property, String optionsMember) {
-        try (Context context = Context.create("js")) {
-            context.eval("js", "var pages = {};" + "var document = { addEventListener: (event, callback) => callback() };"
-                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } };" + "var baseFormPage = () => ({});");
-            context.eval("js", pageScript);
-            return context.eval("js",
-                    "(() => { const page = pages['" + componentName + "'](); page.form." + property + " = 7; page." + optionsMember
-                            + " = [{ value: 7, text: 'Ann' }]; return page.headerDisplay('" + property + "'); })()")
-                          .asString();
-        }
     }
 
     private String contentOf(String fileName) {

@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,14 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * and the generated handler logs the value it could not resolve.
  * <li><b>A non-matching {@code accept:} is acknowledged and ignored</b>, with a warning. A sender
  * rolling out a new version must not fill this receiver's error queue.
+ * <li><b>A collection maps a JSON array onto child rows.</b> A {@code map:} key naming a
+ * {@code oneToMany} relation of the created entity takes {@code { from, map, max? }}. Each element
+ * of the envelope array {@code from} becomes one row of that relation's target, which must be a
+ * composition child of the created entity. The element map fills the child's fields and to-one
+ * relations from the element's keys, or from the element itself ({@code "."}) when the array holds
+ * scalars, and may use lookups. The parent and its children are written together, so a process
+ * started by the parent's create event sees every child, and one bad element rejects the whole
+ * arrival.
  * </ul>
  *
  * <p>
@@ -78,6 +87,15 @@ public final class ArrivalSupport {
 
     /** The closed key vocabulary of a {@code map:} lookup value. */
     private static final Set<String> LOOKUP_KEYS = Set.of("lookup", "by", "from");
+
+    /** The closed key vocabulary of a {@code map:} collection value. */
+    private static final Set<String> COLLECTION_KEYS = Set.of("from", "map", "max");
+
+    /** The element reference of a collection's element map: the array element itself. */
+    private static final String ELEMENT = ".";
+
+    /** The largest {@code max:} a collection may declare - one arrival is one transaction. */
+    private static final int MAX_ELEMENTS = 10000;
 
     private ArrivalSupport() {}
 
@@ -111,16 +129,41 @@ public final class ArrivalSupport {
     }
 
     /**
-     * A resolved arrival mapping: the gate, the mapped scalars and the business-key lookups, each in
-     * declaration order.
+     * One collection: a JSON array of the envelope mapped onto the rows of a composition child.
+     *
+     * @param property the created entity's PascalCase one-to-many relation the rows belong to
+     * @param local the prefix of the locals the generated block declares
+     * @param from the envelope key holding the array, as authored
+     * @param fromLiteral the envelope key as a Java string literal
+     * @param max the most elements an arrival may carry, or {@code null} when unbounded
+     * @param childEntity the composition child each element becomes
+     * @param childPerspective the child's resolved perspective (its Java package segment)
+     * @param backRef the child's PascalCase composition property pointing at the parent
+     * @param masterKey the parent's PascalCase primary-key property - the value the back-reference
+     *        stores
+     * @param scalarElements {@code true} when an element is a value ({@code "."}), {@code false} when
+     *        it is an object whose keys the element map names
+     * @param fields the child's mapped scalars, each converting the {@code raw} local
+     * @param lookups the child's business-key lookups, each with a local unique to this collection
+     */
+    public record Collection(String property, String local, String from, String fromLiteral, Integer max, String childEntity,
+            String childPerspective, String backRef, String masterKey, boolean scalarElements, List<MapField> fields,
+            List<Lookup> lookups) {
+    }
+
+    /**
+     * A resolved arrival mapping: the gate, the mapped scalars, the business-key lookups and the
+     * collections, each in declaration order.
      *
      * @param acceptExpression the whole gate as one Java boolean expression, or {@code null} when the
      *        entry declares no {@code accept:}
      * @param acceptSummary the gate in words, for the ignored-message warning
      * @param fields the mapped scalars
      * @param lookups the business-key lookups
+     * @param collections the arrays mapped onto composition child rows
      */
-    public record Plan(String acceptExpression, String acceptSummary, List<MapField> fields, List<Lookup> lookups) {
+    public record Plan(String acceptExpression, String acceptSummary, List<MapField> fields, List<Lookup> lookups,
+            List<Collection> collections) {
     }
 
     /**
@@ -139,9 +182,10 @@ public final class ArrivalSupport {
         if (entity == null) {
             return; // the unknown-entity issue is already reported; nothing to check the map against
         }
+        Set<String> filledChildren = new HashSet<>();
         for (Map.Entry<String, Object> declared : inbound.getMap()
                                                          .entrySet()) {
-            validateMapEntry(declared.getKey(), declared.getValue(), entity, byName, subject, issues);
+            validateMapEntry(declared.getKey(), declared.getValue(), entity, byName, subject, filledChildren, issues);
         }
     }
 
@@ -167,17 +211,20 @@ public final class ArrivalSupport {
         }
         List<MapField> fields = new ArrayList<>();
         List<Lookup> lookups = new ArrayList<>();
+        List<Collection> collections = new ArrayList<>();
         for (Map.Entry<String, Object> declared : map.entrySet()) {
             String name = declared.getKey();
             Object value = declared.getValue();
-            if (value instanceof Map<?, ?> lookup) {
-                lookups.add(lookup(name, lookup, entity, byName, compositionParents, model));
+            if (value instanceof Map<?, ?> nested && nested.containsKey("map")) {
+                collections.add(collection(name, nested, entity, byName, compositionParents, model));
+            } else if (value instanceof Map<?, ?> lookup) {
+                lookups.add(lookup(name, "lookup" + IntentNaming.pascalCase(name), lookup, entity, byName, compositionParents, model));
             } else {
                 fields.add(field(name, value, entity, byName));
             }
         }
         return new Plan(accept.isEmpty() ? null : acceptExpression(accept), accept.isEmpty() ? null : acceptSummary(accept), fields,
-                lookups);
+                lookups, collections);
     }
 
     /**
@@ -186,14 +233,18 @@ public final class ArrivalSupport {
      * on a key being absent.
      *
      * @param plan the resolved mapping, or {@code null} when the entry declares none
-     * @return the {@code hasEnvelope} / {@code hasAccept} / {@code hasMap} keys and their payloads
+     * @return the {@code hasEnvelope} / {@code hasAccept} / {@code hasMap} / {@code hasCollections}
+     *         keys and their payloads
      */
     public static Map<String, Object> arrivalFields(Plan plan) {
         boolean hasAccept = plan != null && plan.acceptExpression() != null;
+        boolean hasCollections = plan != null && !plan.collections()
+                                                      .isEmpty();
         boolean hasMap = plan != null && !(plan.fields()
                                                .isEmpty()
                 && plan.lookups()
-                       .isEmpty());
+                       .isEmpty()
+                && !hasCollections);
         Map<String, Object> fields = new LinkedHashMap<>();
         // The envelope is parsed for either half, so one flag gates the parse and the imports.
         fields.put("hasEnvelope", hasAccept || hasMap);
@@ -204,32 +255,66 @@ public final class ArrivalSupport {
         fields.put("hasMap", hasMap);
         List<Map<String, Object>> mapped = new ArrayList<>();
         List<Map<String, Object>> looked = new ArrayList<>();
+        List<Map<String, Object>> collected = new ArrayList<>();
         if (plan != null) {
-            for (MapField field : plan.fields()) {
+            mapped.addAll(renderedFields(plan.fields()));
+            looked.addAll(renderedLookups(plan.lookups()));
+            for (Collection collection : plan.collections()) {
                 Map<String, Object> rendered = new LinkedHashMap<>();
-                rendered.put("property", field.property());
-                rendered.put("from", field.from());
-                rendered.put("fromLiteral", field.fromLiteral());
-                rendered.put("expression", field.expression());
-                mapped.add(rendered);
-            }
-            for (Lookup lookup : plan.lookups()) {
-                Map<String, Object> rendered = new LinkedHashMap<>();
-                rendered.put("property", lookup.property());
-                rendered.put("local", lookup.local());
-                rendered.put("from", lookup.from());
-                rendered.put("fromLiteral", lookup.fromLiteral());
-                rendered.put("targetEntity", lookup.targetEntity());
-                rendered.put("targetPerspective", lookup.targetPerspective());
-                rendered.put("byProperty", lookup.byProperty());
-                rendered.put("byValueExpression", lookup.byValueExpression());
-                rendered.put("targetKeyProperty", lookup.targetKeyProperty());
-                looked.add(rendered);
+                rendered.put("property", collection.property());
+                rendered.put("local", collection.local());
+                rendered.put("from", collection.from());
+                rendered.put("fromLiteral", collection.fromLiteral());
+                rendered.put("hasMax", collection.max() != null);
+                // Pre-rendered like every other number in a descriptor: the .glue is read back by a
+                // plain Gson, which would turn 50 into the 50.0 a template then prints.
+                rendered.put("max", String.valueOf(collection.max() == null ? 0 : collection.max()));
+                rendered.put("childEntity", collection.childEntity());
+                rendered.put("childPerspective", collection.childPerspective());
+                rendered.put("backRef", collection.backRef());
+                rendered.put("masterKey", collection.masterKey());
+                rendered.put("scalarElements", collection.scalarElements());
+                rendered.put("mapFields", renderedFields(collection.fields()));
+                rendered.put("lookups", renderedLookups(collection.lookups()));
+                collected.add(rendered);
             }
         }
         fields.put("mapFields", mapped);
         fields.put("lookups", looked);
+        fields.put("hasCollections", hasCollections);
+        fields.put("collections", collected);
         return fields;
+    }
+
+    private static List<Map<String, Object>> renderedFields(List<MapField> fields) {
+        List<Map<String, Object>> rendered = new ArrayList<>();
+        for (MapField field : fields) {
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("property", field.property());
+            one.put("from", field.from());
+            one.put("fromLiteral", field.fromLiteral());
+            one.put("expression", field.expression());
+            rendered.add(one);
+        }
+        return rendered;
+    }
+
+    private static List<Map<String, Object>> renderedLookups(List<Lookup> lookups) {
+        List<Map<String, Object>> rendered = new ArrayList<>();
+        for (Lookup lookup : lookups) {
+            Map<String, Object> one = new LinkedHashMap<>();
+            one.put("property", lookup.property());
+            one.put("local", lookup.local());
+            one.put("from", lookup.from());
+            one.put("fromLiteral", lookup.fromLiteral());
+            one.put("targetEntity", lookup.targetEntity());
+            one.put("targetPerspective", lookup.targetPerspective());
+            one.put("byProperty", lookup.byProperty());
+            one.put("byValueExpression", lookup.byValueExpression());
+            one.put("targetKeyProperty", lookup.targetKeyProperty());
+            rendered.add(one);
+        }
+        return rendered;
     }
 
     private static void validateAccept(Map<String, Object> accept, String subject, List<String> issues) {
@@ -247,11 +332,34 @@ public final class ArrivalSupport {
     }
 
     private static void validateMapEntry(String name, Object value, EntityIntent entity, Map<String, EntityIntent> byName, String subject,
-            List<String> issues) {
+            Set<String> filledChildren, List<String> issues) {
         FieldIntent field = fieldOf(entity, name);
         RelationIntent relation = toOneRelation(entity, name);
-        if (field == null && relation == null) {
-            issues.add(subject + " map [" + name + "] is not a field or a to-one relation of [" + entity.getName() + "]");
+        RelationIntent children = oneToManyRelation(entity, name);
+        if (field == null && relation == null && children == null) {
+            // The one-to-many alternative is named only where a collection could apply, so the message
+            // an entity without one-to-many relations gets is unchanged.
+            String kinds = hasOneToMany(entity) ? "a field, a to-one or a one-to-many relation" : "a field or a to-one relation";
+            issues.add(subject + " map [" + name + "] is not " + kinds + " of [" + entity.getName() + "]");
+            return;
+        }
+        if (value instanceof Map<?, ?> nested && nested.containsKey("lookup") && nested.containsKey("map")) {
+            issues.add(subject + " map [" + name + "] declares both lookup and map - a value is either a lookup or a collection");
+            return;
+        }
+        boolean collection = value instanceof Map<?, ?> nested && nested.containsKey("map");
+        if (children != null) {
+            if (!collection) {
+                issues.add(subject + " map [" + name + "] is a one-to-many relation of [" + entity.getName()
+                        + "] - it is filled by a collection { from, map }, not by an envelope key or a lookup");
+                return;
+            }
+            validateCollection(name, (Map<?, ?>) value, children, entity, byName, subject, filledChildren, issues);
+            return;
+        }
+        if (collection) {
+            issues.add(subject + " map [" + name + "] is not a one-to-many relation of [" + entity.getName()
+                    + "] - a collection { from, map } fills the rows of a one-to-many relation");
             return;
         }
         if (field != null && field.isPrimaryKey()) {
@@ -265,7 +373,8 @@ public final class ArrivalSupport {
             return;
         }
         if (value instanceof Iterable) {
-            issues.add(subject + " map [" + name + "] must be an envelope key or a lookup { lookup, by, from }, not a list");
+            issues.add(subject + " map [" + name + "] must be an envelope key or a lookup { lookup, by, from }, not a list"
+                    + " - an envelope array is mapped by a collection { from, map } on a one-to-many relation");
             return;
         }
         if (!(value instanceof String text)) {
@@ -274,6 +383,113 @@ public final class ArrivalSupport {
         }
         if (text.isBlank()) {
             issues.add(subject + " map [" + name + "] names no envelope key");
+        }
+    }
+
+    /**
+     * A collection names a one-to-many relation of the created entity whose target is a composition
+     * child of it, reads a JSON array from {@code from}, and maps each element through its own element
+     * map onto the child. Every rule here is one the generated handler relies on: the child is written
+     * with the parent in one unit of work, so it must be a row the arrival owns.
+     */
+    private static void validateCollection(String name, Map<?, ?> collection, RelationIntent children, EntityIntent entity,
+            Map<String, EntityIntent> byName, String subject, Set<String> filledChildren, List<String> issues) {
+        String where = subject + " map [" + name + "]";
+        for (Object key : collection.keySet()) {
+            if (!COLLECTION_KEYS.contains(String.valueOf(key))) {
+                issues.add(where + " declares unknown key [" + key + "] - a collection names from, map and max");
+            }
+        }
+        String from = text(collection.get("from"));
+        if (from == null) {
+            issues.add(where + " has no from - the envelope key holding the array");
+        } else if (ELEMENT.equals(from)) {
+            issues.add(where + " reads its array from [.] - a collection's from names an envelope key");
+        }
+        if (collection.containsKey("max")) {
+            validateMax(collection.get("max"), where, issues);
+        }
+        if (children.isCrossModel()) {
+            issues.add(where + " fills [" + children.getTo()
+                    + "], which must be an entity declared in this model (cross-model collections are not supported)");
+            return;
+        }
+        EntityIntent child = byName.get(children.getTo());
+        if (child == null) {
+            issues.add(where + " fills unknown entity [" + children.getTo() + "]");
+            return;
+        }
+        if (!entity.getName()
+                   .equals(IntentEntities.compositionParentOf(child))) {
+            issues.add(where + " fills [" + child.getName() + "], which is not a composition child of [" + entity.getName()
+                    + "]; an arrival creates only rows it owns");
+            return;
+        }
+        if (!filledChildren.add(child.getName())) {
+            issues.add(where + " fills [" + child.getName() + "] a second time - one collection per child relation");
+        }
+        if (!(collection.get("map") instanceof Map<?, ?> elementMap) || elementMap.isEmpty()) {
+            issues.add(where + " has no map - the element map filling each [" + child.getName() + "] row");
+            return;
+        }
+        RelationIntent backRef = compositionRelation(child, entity.getName());
+        boolean scalar = false;
+        boolean named = false;
+        for (Map.Entry<?, ?> declared : elementMap.entrySet()) {
+            String key = String.valueOf(declared.getKey());
+            Object value = declared.getValue();
+            String elementWhere = where + " element [" + key + "]";
+            FieldIntent field = fieldOf(child, key);
+            RelationIntent relation = toOneRelation(child, key);
+            if (field == null && relation == null) {
+                issues.add(elementWhere + " is not a field or a to-one relation of [" + child.getName() + "]");
+                continue;
+            }
+            if (field != null && field.isPrimaryKey()) {
+                issues.add(elementWhere + " fills the primary key of [" + child.getName() + "], which is generated on insert");
+                continue;
+            }
+            if (relation != null && relation == backRef) {
+                issues.add(
+                        elementWhere + " fills the composition back-reference, which is filled from the saved [" + entity.getName() + "]");
+                continue;
+            }
+            if (value instanceof Map<?, ?> nested && nested.containsKey("map")) {
+                issues.add(elementWhere + " is a nested collection - nested collections are not supported in this revision");
+                continue;
+            }
+            if (value instanceof Map<?, ?> lookup) {
+                validateLookup(name + "." + key, lookup, relation, byName, subject, issues);
+                if (ELEMENT.equals(text(lookup.get("from")))) {
+                    scalar = true;
+                } else {
+                    named = true;
+                }
+                continue;
+            }
+            if (!(value instanceof String text) || text.isBlank()) {
+                issues.add(elementWhere + " must be an element key, [.] or a lookup { lookup, by, from }");
+                continue;
+            }
+            if (ELEMENT.equals(text.trim())) {
+                scalar = true;
+            } else {
+                named = true;
+            }
+        }
+        if (scalar && named) {
+            issues.add(where + " mixes [.] with named element keys - an element is either a value or an object");
+        }
+    }
+
+    /**
+     * A declared {@code max:} bounds the elements one arrival may carry. The typed model hands it over
+     * as a {@code Double} (Gson reads every YAML number so), so integrality is checked on the value.
+     */
+    private static void validateMax(Object max, String where, List<String> issues) {
+        if (!(max instanceof Number number) || number.doubleValue() != Math.rint(number.doubleValue()) || number.doubleValue() < 1
+                || number.doubleValue() > MAX_ELEMENTS) {
+            issues.add(where + " max [" + max + "] must be a whole number from 1 to " + MAX_ELEMENTS);
         }
     }
 
@@ -372,7 +588,7 @@ public final class ArrivalSupport {
         return new MapField(IntentNaming.pascalCase(name), from, NotificationSupport.quote(from), conversion(type, "raw"));
     }
 
-    private static Lookup lookup(String name, Map<?, ?> declared, EntityIntent entity, Map<String, EntityIntent> byName,
+    private static Lookup lookup(String name, String local, Map<?, ?> declared, EntityIntent entity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentModel model) {
         RelationIntent relation = toOneRelation(entity, name);
         if (relation == null) {
@@ -391,10 +607,45 @@ public final class ArrivalSupport {
                     "map [" + name + "] lookup matches on [" + by + "], which is not a field of [" + looked.getName() + "]");
         }
         String property = IntentNaming.pascalCase(name);
-        String local = "lookup" + property;
         return new Lookup(property, local, from, NotificationSupport.quote(from), looked.getName(),
                 IntentEntities.resolvePerspective(looked.getName(), compositionParents, model), IntentNaming.pascalCase(by),
                 conversion(normalized(byField.getType()), local + "Key"), IntentEntities.keyFieldName(looked));
+    }
+
+    private static Collection collection(String name, Map<?, ?> declared, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentModel model) {
+        RelationIntent children = oneToManyRelation(entity, name);
+        EntityIntent child = children == null ? null : byName.get(children.getTo());
+        String from = text(declared.get("from"));
+        if (child == null || from == null || !(declared.get("map") instanceof Map<?, ?> elementMap)) {
+            throw new IllegalArgumentException(
+                    "map [" + name + "] collection is incomplete - it names a one-to-many relation, from and map");
+        }
+        String backRef = IntentEntities.itemsBackReference(child, entity.getName());
+        if (backRef == null) {
+            throw new IllegalArgumentException(
+                    "map [" + name + "] fills [" + child.getName() + "], which is not a composition child of [" + entity.getName() + "]");
+        }
+        String property = IntentNaming.pascalCase(name);
+        List<MapField> fields = new ArrayList<>();
+        List<Lookup> lookups = new ArrayList<>();
+        boolean scalar = false;
+        for (Map.Entry<?, ?> element : elementMap.entrySet()) {
+            String key = String.valueOf(element.getKey());
+            Object value = element.getValue();
+            if (value instanceof Map<?, ?> lookup) {
+                lookups.add(
+                        lookup(key, "lookup" + property + IntentNaming.pascalCase(key), lookup, child, byName, compositionParents, model));
+                scalar |= ELEMENT.equals(text(lookup.get("from")));
+            } else {
+                fields.add(field(key, value, child, byName));
+                scalar |= ELEMENT.equals(text(value));
+            }
+        }
+        Integer max = declared.get("max") instanceof Number number ? Integer.valueOf(number.intValue()) : null;
+        return new Collection(property, "collection" + property, from, NotificationSupport.quote(from), max, child.getName(),
+                IntentEntities.resolvePerspective(child.getName(), compositionParents, model), backRef, IntentEntities.keyFieldName(entity),
+                scalar, fields, lookups);
     }
 
     /**
@@ -487,6 +738,31 @@ public final class ArrivalSupport {
         for (RelationIntent relation : entity.getRelations()) {
             boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
             if (toOne && name != null && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    private static boolean hasOneToMany(EntityIntent entity) {
+        return entity.getRelations()
+                     .stream()
+                     .anyMatch(relation -> "oneToMany".equals(relation.getKind()));
+    }
+
+    private static RelationIntent oneToManyRelation(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && name != null && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /** The child's {@code composition: true} to-one pointing at {@code master} - the back-reference. */
+    private static RelationIntent compositionRelation(EntityIntent child, String master) {
+        for (RelationIntent relation : child.getRelations()) {
+            if (relation.isComposition() && master.equals(relation.getTo())) {
                 return relation;
             }
         }

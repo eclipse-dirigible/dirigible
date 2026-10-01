@@ -180,6 +180,128 @@ class ArrivalSupportTest {
         assertEquals("\"\"", plain.get("acceptSummaryLiteral"));
     }
 
+    /** An order with its lines and tags, both composition children of the order. */
+    private static final String ORDERS = """
+            name: shop
+            entities:
+              - name: Product
+                fields:
+                  - { name: id,  type: integer, primaryKey: true, generated: true }
+                  - { name: sku, type: string, unique: true }
+              - name: PurchaseOrder
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: orderNumber, type: string, unique: true }
+                relations:
+                  - { name: lines, kind: oneToMany, to: OrderLine }
+                  - { name: tags,  kind: oneToMany, to: OrderTag }
+              - name: OrderLine
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: integer }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+                  - { name: product,       kind: manyToOne, to: Product }
+              - name: OrderTag
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+            inbound:
+              - name: orders
+                source: { queue: orders }
+                create: PurchaseOrder
+                map:
+                  orderNumber: orderNumber
+                  lines:
+                    from: lines
+                    max: 5
+                    map:
+                      quantity: qty
+                      product:  { lookup: Product, by: sku, from: sku }
+                  tags:
+                    from: tags
+                    map: { label: "." }
+              - name: tagsOnly
+                path: /tags
+                create: PurchaseOrder
+                map:
+                  tags: { from: tags, map: { label: "." } }
+            """;
+
+    @Test
+    void aCollectionPlansTheChildRowsTheArrayBecomes() {
+        List<ArrivalSupport.Collection> collections = orderPlan("orders").collections();
+
+        assertEquals(2, collections.size());
+        ArrivalSupport.Collection lines = collections.get(0);
+        assertEquals("Lines", lines.property());
+        assertEquals("collectionLines", lines.local());
+        assertEquals("\"lines\"", lines.fromLiteral());
+        assertEquals(5, lines.max());
+        assertEquals("OrderLine", lines.childEntity());
+        assertEquals("PurchaseOrder", lines.childPerspective(), "a composition child lives in its root parent's perspective");
+        assertEquals("PurchaseOrder", lines.backRef(), "the child's composition property, filled from the saved parent");
+        assertEquals("Id", lines.masterKey());
+        assertEquals(false, lines.scalarElements());
+        assertEquals("Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())",
+                field(lines.fields(), "Quantity").expression(), "an element field converts the same raw local a top-level field does");
+        ArrivalSupport.Lookup product = lines.lookups()
+                                             .get(0);
+        assertEquals("lookupLinesProduct", product.local(), "an element lookup's locals cannot shadow a top-level lookup's");
+        assertEquals("String.valueOf(lookupLinesProductKey)", product.byValueExpression());
+        assertEquals("Product", product.targetEntity());
+
+        ArrivalSupport.Collection tags = collections.get(1);
+        assertTrue(tags.scalarElements(), "[.] maps the element itself");
+        assertNull(tags.max(), "no max is no bound");
+        assertEquals(".", field(tags.fields(), "Label").from());
+        assertEquals(List.of("OrderNumber"), orderPlan("orders").fields()
+                                                                .stream()
+                                                                .map(ArrivalSupport.MapField::property)
+                                                                .toList(),
+                "a collection is not a top-level field");
+    }
+
+    @Test
+    void theCollectionKeysAreAlwaysPresentSoATemplateCanBranchOnThem() {
+        Map<String, Object> mapped = ArrivalSupport.arrivalFields(orderPlan("orders"));
+        assertEquals(Boolean.TRUE, mapped.get("hasCollections"));
+        List<?> collections = (List<?>) mapped.get("collections");
+        assertEquals(2, collections.size());
+        Map<?, ?> lines = (Map<?, ?>) collections.get(0);
+        assertEquals(Boolean.TRUE, lines.get("hasMax"));
+        assertEquals("5", lines.get("max"));
+        Map<?, ?> tags = (Map<?, ?>) collections.get(1);
+        assertEquals(Boolean.FALSE, tags.get("hasMax"));
+        assertEquals("0", tags.get("max"), "a number even without a bound, so the template never renders a bare variable name");
+
+        Map<String, Object> tagsOnly = ArrivalSupport.arrivalFields(orderPlan("tagsOnly"));
+        assertEquals(Boolean.TRUE, tagsOnly.get("hasMap"), "a map holding only a collection is still a map");
+        assertEquals(Boolean.TRUE, tagsOnly.get("hasEnvelope"));
+
+        // An arrival without collections keeps every key it had, and carries the new two as empty.
+        Map<String, Object> plain = ArrivalSupport.arrivalFields(plan("userAssignments"));
+        assertEquals(Boolean.FALSE, plain.get("hasCollections"));
+        assertTrue(((List<?>) plain.get("collections")).isEmpty());
+        Map<String, Object> none = ArrivalSupport.arrivalFields(null);
+        assertEquals(Boolean.FALSE, none.get("hasCollections"));
+        assertTrue(((List<?>) none.get("collections")).isEmpty());
+    }
+
+    private static ArrivalSupport.Plan orderPlan(String name) {
+        IntentModel model = IntentParser.parse(ORDERS);
+        InboundIntent inbound = model.getInbound()
+                                     .stream()
+                                     .filter(entry -> name.equals(entry.getName()))
+                                     .findFirst()
+                                     .orElseThrow();
+        return ArrivalSupport.plan(inbound, IntentEntities.byName(model)
+                                                          .get(inbound.getCreate()),
+                IntentEntities.byName(model), IntentEntities.compositionParents(model), model);
+    }
+
     private static ArrivalSupport.MapField field(List<ArrivalSupport.MapField> fields, String property) {
         return fields.stream()
                      .filter(field -> property.equals(field.property()))

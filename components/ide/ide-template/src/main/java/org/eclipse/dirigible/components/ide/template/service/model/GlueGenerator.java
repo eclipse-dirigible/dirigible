@@ -565,13 +565,34 @@ class GlueGenerator {
      */
     private static void bindArrival(Map<String, Object> item, Map<String, Object> context) {
         copy(context, item, "hasEnvelope", "hasAccept", "acceptExpression", "acceptSummary", "acceptSummaryLiteral", "hasMap", "mapFields");
+        List<Object> lookups = resolvedLookups(item.get("lookups"));
+        context.put("lookups", lookups);
+        // A collection writes composition child rows, so its child entity and every element lookup
+        // import a repository whose package segment resolves like any other cross-entity import.
+        List<Object> collections = new ArrayList<>();
+        boolean elementLookups = false;
+        for (Map<String, Object> collection : asMaps(item.get("collections"))) {
+            Map<String, Object> resolved = ModelValues.copy(collection);
+            resolved.put("javaChildPerspective", sanitize(collection, "childPerspective"));
+            List<Object> resolvedLookups = resolvedLookups(collection.get("lookups"));
+            resolved.put("lookups", resolvedLookups);
+            elementLookups |= !resolvedLookups.isEmpty();
+            collections.add(resolved);
+        }
+        // Always bound, so a descriptor without collections renders exactly as it did before them.
+        context.put("hasCollections", !collections.isEmpty());
+        context.put("collections", collections);
+        context.put("hasLookups", !lookups.isEmpty() || elementLookups);
+    }
+
+    private static List<Object> resolvedLookups(Object declared) {
         List<Object> lookups = new ArrayList<>();
-        for (Map<String, Object> lookup : asMaps(item.get("lookups"))) {
+        for (Map<String, Object> lookup : asMaps(declared)) {
             Map<String, Object> resolved = ModelValues.copy(lookup);
             resolved.put("javaTargetPerspective", sanitize(lookup, "targetPerspective"));
             lookups.add(resolved);
         }
-        context.put("lookups", lookups);
+        return lookups;
     }
 
     /**

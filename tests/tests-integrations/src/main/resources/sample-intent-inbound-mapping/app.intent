@@ -1,5 +1,5 @@
 name: assignments
-description: Mapping on arrival - business keys become relations, and a type/version gate ignores what this app does not understand (dirigible #6769)
+description: Mapping on arrival - business keys become relations, a type/version gate ignores what this app does not understand (dirigible #6769), and an array becomes composition child rows (dirigible #7593)
 
 entities:
   # The two registers the arriving envelope references BY NAME. Each carries a unique business key,
@@ -29,6 +29,41 @@ entities:
       - { name: tenant, kind: manyToOne, to: Tenant, required: true }
       - { name: role,   kind: manyToOne, to: AssignmentRole, required: true }
 
+  # Arrival collections: an envelope carrying ARRAYS. An order arrives with its lines (objects, each
+  # naming a product by its business key) and its tags (bare strings), and becomes one PurchaseOrder
+  # plus one child row per element - written in one transaction, so the process its create event
+  # starts already sees every line.
+  - name: Product
+    fields:
+      - { name: id,  type: integer, primaryKey: true, generated: true }
+      - { name: sku, type: string, required: true, unique: true, length: 40 }
+
+  - name: PurchaseOrder
+    fields:
+      - { name: id,          type: integer, primaryKey: true, generated: true }
+      - { name: orderNumber, type: string, required: true, unique: true, length: 64 }
+      # Written by the CountLines process's first step: the number of lines it found. 2 for a
+      # two-line order is what proves the lines were committed BEFORE the create event started it.
+      - { name: linesSeen,   type: integer }
+    relations:
+      - { name: lines, kind: oneToMany, to: PurchaseOrderLine }
+      - { name: tags,  kind: oneToMany, to: PurchaseOrderTag }
+
+  - name: PurchaseOrderLine
+    fields:
+      - { name: id,       type: integer, primaryKey: true, generated: true }
+      - { name: quantity, type: integer, required: true }
+    relations:
+      - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, required: true, composition: true }
+      - { name: product,       kind: manyToOne, to: Product,       required: true }
+
+  - name: PurchaseOrderTag
+    fields:
+      - { name: id,    type: integer, primaryKey: true, generated: true }
+      - { name: label, type: string, required: true, length: 40 }
+    relations:
+      - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, required: true, composition: true }
+
 inbound:
   # The real arrival contract: an envelope with a type and a version, two business keys, and only
   # then some record fields. Without `map:` this could only be ingested by a hand-written consumer.
@@ -56,6 +91,49 @@ inbound:
       tenant:    { lookup: Tenant,         by: tenantId, from: tenantId }
       role:      { lookup: AssignmentRole, by: name,     from: role }
 
+  # An order with its lines and tags. A collection names a one-to-many relation whose target is a
+  # composition child: `from:` is the envelope key holding the array, `map:` fills each child from
+  # one element - a lookup included - and "." is the element itself, for an array of bare values.
+  # Every element is resolved before anything is written, so one bad element (an unknown sku, a
+  # null tag, a sixth line past `max:`) rejects the WHOLE order and stores nothing.
+  - name: orders
+    source: { queue: sample.orders }
+    create: PurchaseOrder
+    map:
+      orderNumber: orderNumber
+      lines:
+        from: lines
+        max: 5
+        map:
+          quantity: qty
+          product:  { lookup: Product, by: sku, from: sku }
+      tags: { from: tags, map: { label: "." } }
+
+  # The same order, posted: a rejected element is answered 400.
+  - name: orderHook
+    path: /orders
+    create: PurchaseOrder
+    map:
+      orderNumber: orderNumber
+      lines:
+        from: lines
+        max: 5
+        map:
+          quantity: qty
+          product:  { lookup: Product, by: sku, from: sku }
+      tags: { from: tags, map: { label: "." } }
+
+processes:
+  # Started by the order's create event, which is dispatched after the transaction that wrote the
+  # order AND its lines commits - so its only step counts every line.
+  - name: CountLines
+    trigger: { onCreate: PurchaseOrder }
+    steps:
+      - name: countLines
+        kind: serviceTask
+        args: { delegate: custom.CountLinesTask, next: end }
+      - { name: end, kind: end }
+
 seeds:
   - name: assignment-tenants
     entity: Tenant
@@ -68,3 +146,9 @@ seeds:
     rows:
       - { id: 1, name: User }
       - { id: 2, name: Administrator }
+
+  - name: order-products
+    entity: Product
+    rows:
+      - { id: 1, sku: A }
+      - { id: 2, sku: B }

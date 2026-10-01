@@ -1,7 +1,7 @@
 import { makeApi } from '../api.js';
 import { expect, test } from '../fixtures.js';
 import { resolveRelationSamples } from '../form.js';
-import { freshUniques, handleField, sampleRecord } from '../sample-values.js';
+import { freshUniqueKeys, freshUniques, handleField, sampleRecord } from '../sample-values.js';
 
 // The same contract over the generated REST controllers, no browser: isolates backend
 // failures from UI failures and verifies the manifest's field names bind.
@@ -16,7 +16,10 @@ export function restFlow(manifest, entity, opts = {}) {
     const handle = handleField(entity);
     // same resolution the UI flow uses: cross-model targets via apiAbsolute, entityStatus
     // relations left to their init: DB default
-    for (const sample of await resolveRelationSamples(api, manifest, entity)) {
+    const samples = await resolveRelationSamples(api, manifest, entity);
+    const taken = await freshUniqueKeys(client, entity, payload, samples);
+    test.skip(!!taken, `every ${entity.name} combination of the unique key [${taken}] tried already has a row`);
+    for (const sample of samples) {
       payload[sample.relation.name] = sample.id;
     }
     await freshUniques(client, entity, payload);

@@ -1,4 +1,5 @@
 import { makeApi } from './api.js';
+import { expect } from './fixtures.js';
 import { editableFields, handleField } from './sample-values.js';
 
 // Generated form controls: every field input has id="f_<Name>"; a to-one relation is a
@@ -34,15 +35,25 @@ async function relationTrigger(page, relation) {
 
 export async function pickDropdown(page, relation, optionText) {
   const trigger = await relationTrigger(page, relation);
-  await trigger.click();
-  const option = page.getByRole('option', { name: optionText }).first();
-  try {
-    await option.click({ timeout: 10_000 });
-  } catch {
-    // the option list re-rendered mid-click (async option load reflow) - reopen and retry
+  const input = page.locator('#f_' + relation.name);
+  // visible only: an option list that is closing, or another select's, must not be the one clicked
+  const option = page.getByRole('option', { name: optionText }).filter({ visible: true }).first();
+  for (let attempt = 0; ; attempt++) {
     await trigger.click();
-    await option.click({ force: true });
+    try {
+      await option.click({ timeout: 10_000 });
+    } catch {
+      // the option list re-rendered mid-click (async option load reflow) - reopen and retry
+      await trigger.click();
+      await option.click({ force: true });
+    }
+    // The list must be closed before the next relation's trigger is clicked: a click landing while
+    // it is still open only dismisses it, and that select stays empty - the second of two relations
+    // to the same entity was left at its placeholder that way (dirigible #7545).
+    await expect(option).toBeHidden();
+    if (!(await input.count()) || (await input.inputValue()) !== '' || attempt > 0) break;
   }
+  if (await input.count()) await expect(input, `${relation.name} must hold the picked "${optionText}"`).not.toHaveValue('');
 }
 
 // Resolve a live option for each to-one relation: take the first suitable row of the
@@ -54,7 +65,9 @@ export async function pickDropdown(page, relation, optionText) {
 // - a where: option filter narrows the candidate rows to matching ones;
 // - a dependsOn cascade forces CONSISTENT samples: the dependent row is chosen first and
 //   its filterBy FK becomes the trigger sibling's sample (independent first rows would
-//   pick e.g. Country=Afghanistan + City=Sofia, and the cascade then offers no options).
+//   pick e.g. Country=Afghanistan + City=Sofia, and the cascade then offers no options);
+// - a relation an agree check or a composite unique key names keeps a page of candidate rows, so
+//   agreeing rows can be chosen here and a free key combination by freshUniqueKeys.
 export async function resolveRelationSamples(request, manifest, entity) {
   const api = makeApi(request, manifest);
   const idProperty = manifest.idProperty ?? 'Id';
@@ -67,11 +80,13 @@ export async function resolveRelationSamples(request, manifest, entity) {
     return { rows: await api.list(target, limit), labelFrom: relation.labelFrom ?? handleField(target)?.name ?? 'Name' };
   }
 
+  const constrained = new Set([...(entity.agree ?? []).flatMap((check) => check.relations), ...(entity.uniqueKeys ?? []).flat()]);
   const samples = [];
   for (const relation of entity.relations ?? []) {
     if (relation.entityStatus) continue;
-    // a filtered picker needs a matching candidate, so fetch a page and filter client-side
-    const wide = relation.where || relation.leafOnly;
+    // a filtered picker needs a matching candidate, so fetch a page and filter client-side; a
+    // constrained relation needs alternatives to choose from
+    const wide = relation.where || relation.leafOnly || constrained.has(relation.name);
     const { rows: fetched, labelFrom } = await fetchRows(relation, wide ? 200 : 1);
     let rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
     if (relation.leafOnly && rows?.length) {
@@ -91,12 +106,18 @@ export async function resolveRelationSamples(request, manifest, entity) {
       // relation unset rather than clicking blind
       continue;
     }
-    samples.push({
+    const sample = {
       relation,
-      row: rows[0],
-      id: rows[0][idProperty],
-      label: label ?? String(rows[0][idProperty]),
-    });
+      rows,
+      // re-point the sample at another of its candidate rows
+      use(row) {
+        this.row = row;
+        this.id = row[idProperty];
+        this.label = row[labelFrom] ?? String(row[idProperty]);
+      },
+    };
+    sample.use(rows[0]);
+    samples.push(sample);
   }
 
   // cascade consistency: re-point each dependsOn trigger at the row the dependent's choice implies
@@ -104,6 +125,9 @@ export async function resolveRelationSamples(request, manifest, entity) {
     const dependsOn = sample.relation.dependsOn;
     if (!dependsOn?.filterBy) continue;
     const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
+    // a cascade pair is chosen together - neither side may be swapped for a candidate later
+    sample.rows = [sample.row];
+    if (trigger) trigger.rows = [trigger.row];
     const impliedId = sample.row[dependsOn.filterBy];
     if (!trigger || impliedId == null || trigger.id === impliedId) continue;
     const path = trigger.relation.apiAbsolute ?? (trigger.relation.api ? manifest.restBase + trigger.relation.api : null);
@@ -111,10 +135,32 @@ export async function resolveRelationSamples(request, manifest, entity) {
     const row = await api.getPath(`${path}/${impliedId}`);
     if (!row) continue;
     trigger.row = row;
+    trigger.rows = [row];
     trigger.id = impliedId;
     trigger.label = row[trigger.relation.labelFrom ?? 'Name'];
   }
+  alignAgreeing(entity, samples);
   return samples;
+}
+
+// An agree check refuses a record whose two relations point at targets that differ on onProperty
+// (a transfer between stores of two companies), and the first row of each target is an arbitrary
+// pair. Choose the first lead row for which every other side has a candidate carrying the same value.
+function alignAgreeing(entity, samples) {
+  for (const check of entity.agree ?? []) {
+    const sides = check.relations.map((name) => samples.find((s) => s.relation.name === name));
+    if (sides.some((side) => !side)) continue; // an unset side has nothing to disagree about
+    const [lead, ...others] = sides;
+    for (const row of lead.rows) {
+      const value = row[check.onProperty];
+      if (value == null) continue;
+      const matches = others.map((side) => side.rows.find((candidate) => String(candidate[check.onProperty]) === String(value)));
+      if (matches.some((match) => !match)) continue;
+      lead.use(row);
+      others.forEach((side, i) => side.use(matches[i]));
+      break;
+    }
+  }
 }
 
 export async function fillForm(page, manifest, entity, record, relationSamples, opts = {}) {

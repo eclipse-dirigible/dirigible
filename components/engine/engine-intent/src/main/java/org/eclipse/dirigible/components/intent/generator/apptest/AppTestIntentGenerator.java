@@ -163,7 +163,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         out.put("labelPlural", stringOr(edm.get("menuLabel"), IntentNaming.pluralize(IntentNaming.humanize(name))));
         out.put("layout", layout(string(edm.get("layoutType")), "true".equals(string(edm.get("calendarView"))),
                 "true".equals(string(edm.get("slotsView")))));
-        out.put("route", "#/" + name);
+        // A composition child gets no power page of its own - the UI generator gives list and form
+        // pages to PRIMARY (and SETTING) entities only - even when it carries a layout that is not
+        // MANAGE_DETAILS (a child owning line items is a MANAGE_DOCUMENT, a Payslip under its
+        // PayrollRun). It is still described, for its REST and personal flows, but with no route the
+        // runner would open onto "Page not found" (dirigible #7545).
+        if (!"DEPENDENT".equals(string(edm.get("type")))) {
+            out.put("route", "#/" + name);
+        }
         out.put("navGroup", string(edm.get("perspectiveNavId")));
         out.put("api", "/" + sanitizeJavaIdentifier(string(edm.get("perspectiveName"))) + "/" + name + "Controller");
         out.put("table", string(edm.get("dataName")));
@@ -177,7 +184,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         boolean multilingual = "true".equals(string(edm.get("multilingual")));
         if (multilingual) {
             out.put("multilingual", true);
-            Map<String, Object> sample = multilingualSample(entity, model);
+            Map<String, Object> sample = multilingualSample(entity, model, context);
             if (sample != null) {
                 out.put("multilingualSample", sample);
             }
@@ -246,6 +253,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         // and a sample quantity of 1 fails `gt 10` just as surely. The runner derives the left operand
         // from whichever right-hand side the check names.
         List<Map<String, Object>> compare = new ArrayList<>();
+        // agree checks: two to-one relations whose targets must point at the same onProperty - the
+        // first row of each target is an arbitrary pair, so the runner picks rows that agree
+        List<Map<String, Object>> agree = new ArrayList<>();
         for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
             if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
                                                                                            .isEmpty()) {
@@ -268,12 +278,41 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 }
                 compare.add(entry);
             }
+            if ("agree".equals(check.getKind()) && check.getRelations() != null && check.getRelations()
+                                                                                        .size() > 1
+                    && check.getOnProperty() != null) {
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("relations", check.getRelations()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .toList());
+                entry.put("onProperty", IntentNaming.pascalCase(check.getOnProperty()));
+                agree.add(entry);
+            }
         }
         if (!exactlyOne.isEmpty()) {
             out.put("exactlyOne", exactlyOne);
         }
         if (!compare.isEmpty()) {
             out.put("compare", compare);
+        }
+        if (!agree.isEmpty()) {
+            out.put("agree", agree);
+        }
+        // composite business keys: a second row carrying the same combination is refused with 409, and
+        // the first seeded row of each relation is the combination a seed most likely already holds -
+        // the runner chooses a combination no live row carries (dirigible #7545)
+        List<List<String>> uniqueKeys = entity.getUnique()
+                                              .stream()
+                                              .filter(unique -> !unique.getFields()
+                                                                       .isEmpty())
+                                              .map(unique -> unique.getFields()
+                                                                   .stream()
+                                                                   .map(IntentNaming::pascalCase)
+                                                                   .toList())
+                                              .toList();
+        if (!uniqueKeys.isEmpty()) {
+            out.put("uniqueKeys", uniqueKeys);
         }
         out.put("fields", fields(entity, edm));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
@@ -476,10 +515,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
 
     /**
      * A concrete {@code {language, base, translated}} sample for the multilingual read overlay, derived
-     * from the entity's inline base + {@code language:} seeds — or null when it cannot be derived
-     * (file-backed seeds), in which case the runner simply skips the translation assertion.
+     * from the entity's inline base + {@code language:} seeds — or null when it cannot be derived, in
+     * which case the runner skips the translation assertion. File-backed seeds carry no inline rows and
+     * are skipped quietly; inline base and translated seeds that yield no sample are reported as a
+     * generation issue (dirigible #7534), since the dropped assertion is otherwise invisible.
      */
-    private static Map<String, Object> multilingualSample(EntityIntent entity, IntentModel model) {
+    private static Map<String, Object> multilingualSample(EntityIntent entity, IntentModel model, IntentGenerationContext context) {
         SeedIntent base = null;
         SeedIntent translated = null;
         for (SeedIntent seed : model.getSeeds()) {
@@ -500,43 +541,56 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (base == null || translated == null) {
             return null;
         }
-        String key = firstTranslatableKey(entity, base.getRows()
-                                                      .get(0));
-        if (key == null) {
-            return null;
-        }
-        Object baseId = base.getRows()
-                            .get(0)
-                            .get("id");
-        Object baseValue = base.getRows()
-                               .get(0)
-                               .get(key);
-        Object translatedValue = null;
+        Map<String, Object> baseRow = base.getRows()
+                                          .get(0);
+        Object baseId = baseRow.get("id");
+        Map<String, Object> translatedRow = null;
         for (Map<String, Object> row : translated.getRows()) {
             if (baseId != null && baseId.equals(row.get("id"))) {
-                translatedValue = row.get(key);
+                translatedRow = row;
                 break;
             }
         }
-        if (baseValue == null || translatedValue == null) {
+        if (translatedRow == null) {
+            warnNoSample(context, entity, translated, "no row of seed [" + translated.getName() + "] has the id [" + baseId
+                    + "] of the first row of seed [" + base.getName() + "]");
+            return null;
+        }
+        String key = firstTranslatableKey(entity, baseRow, translatedRow);
+        if (key == null) {
+            warnNoSample(context, entity, translated,
+                    "no string field with a language column is set in both the first row of seed [" + base.getName()
+                            + "] and its translated row in seed [" + translated.getName() + "] (id [" + baseId
+                            + "]) - mark a key field `translatable: false` or translate a label field");
             return null;
         }
         Map<String, Object> sample = new LinkedHashMap<>();
         sample.put("language", translated.getLanguage());
-        sample.put("base", baseValue);
-        sample.put("translated", translatedValue);
+        sample.put("base", baseRow.get(key));
+        sample.put("translated", translatedRow.get(key));
         return sample;
     }
 
+    private static void warnNoSample(IntentGenerationContext context, EntityIntent entity, SeedIntent translated, String reason) {
+        String issue = "multilingual entity [" + entity.getName() + "] gets no translation sample in the app-test manifest, so its ["
+                + translated.getLanguage() + "] translation is not asserted: " + reason;
+        if (context != null) {
+            context.addIssue(issue);
+        }
+    }
+
     /**
-     * The seeded property the translation sample is taken from: the first string field the base row
-     * carries that actually HAS a language column - a field marked {@code translatable: false} is a key
-     * rather than a label and no translation seed may set it, so choosing it would silently drop the
-     * whole translation assertion from the generated runner.
+     * The seeded property the translation sample is taken from: the first string field that actually
+     * HAS a language column and is set in BOTH the base row and its translated row. A field marked
+     * {@code translatable: false} is a key rather than a label and no translation seed may set it; a
+     * translatable field the translated row leaves out (an ISO code not yet marked
+     * {@code translatable: false}) has no translated value to assert. Choosing either would drop the
+     * whole translation assertion from the generated runner (dirigible #7534).
      */
-    private static String firstTranslatableKey(EntityIntent entity, Map<String, Object> row) {
+    private static String firstTranslatableKey(EntityIntent entity, Map<String, Object> baseRow, Map<String, Object> translatedRow) {
         for (FieldIntent field : entity.getFields()) {
-            if (field.hasLanguageColumn() && isStringType(field.getType()) && row.containsKey(field.getName())) {
+            if (field.hasLanguageColumn() && isStringType(field.getType()) && baseRow.get(field.getName()) != null
+                    && translatedRow.get(field.getName()) != null) {
                 return field.getName();
             }
         }

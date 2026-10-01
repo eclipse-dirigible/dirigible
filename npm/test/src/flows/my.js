@@ -2,6 +2,7 @@ import { makeApi } from '../api.js';
 import { expect, test } from '../fixtures.js';
 import { resolveRelationSamples } from '../form.js';
 import { freshUniques, sampleRecord } from '../sample-values.js';
+import { CALENDAR_OR_SLOTS } from './list.js';
 
 // Wave 2 (UI parity): the personal PAGE renders what the wire serves. Driven by the same
 // own-row lifecycle as the wire test (created through the scoped controller, removed in the
@@ -28,7 +29,7 @@ function myUiTest(manifest, entity, mine, buildContext, idProperty) {
       const layout = entity.personal.layout ?? 'list';
       if (layout === 'calendar' || layout === 'slots') {
         await page.goto(manifest.standaloneShell + entity.personal.route);
-        await expect(page.locator('[x-h-calendar], [x-h-slot-picker]').first()).toBeVisible();
+        await expect(page.locator(CALENDAR_OR_SLOTS).first()).toBeVisible();
         return;
       }
       if (layout === 'document-chat' || layout === 'document') {
@@ -40,7 +41,9 @@ function myUiTest(manifest, entity, mine, buildContext, idProperty) {
           await page.getByRole('button', { name: /send/i }).first().click();
           await expect(page.getByText(message).first(), 'the sent message must render as a bubble').toBeVisible();
         } else {
-          await expect(page.locator('[x-h-toolbar-title]').first()).toBeVisible();
+          // visible only: the document carries a second toolbar title (its items table's), which can
+          // be the first in DOM order while hidden (dirigible #7545)
+          await expect(page.locator('[x-h-toolbar-title]').filter({ visible: true }).first()).toBeVisible();
         }
         return;
       }

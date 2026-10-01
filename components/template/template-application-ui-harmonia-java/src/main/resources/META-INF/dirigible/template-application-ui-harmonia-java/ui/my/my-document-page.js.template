@@ -387,43 +387,6 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
-    // Frozen header card display value (issue #7501 review): the same formatting displayItem gives a
-    // line cell, for a header field - a DROPDOWN/MULTISELECT resolves its option label(s), a date/
-    // number goes through the instance format, a checkbox becomes Yes/No. Empty (including an empty
-    // MULTISELECT, which is an array and so passes a plain !== '' test) is '', so the card gates a
-    // row's visibility on THIS output rather than the raw form value.
-    headerDisplay(name) {
-      const v = this.form[name];
-      if (v === null || v === undefined || v === '') return '';
-      switch (name) {
-#foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{personalProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
-#if($property.widgetType == "DROPDOWN")
-        case '${property.name}': {
-          const opt = (options['${property.name}'] || []).find(o => String(o.value) === String(v));
-          return opt ? opt.text : String(v);
-        }
-#elseif($property.widgetType == "MULTISELECT")
-        case '${property.name}': {
-          if (!Array.isArray(v) || v.length === 0) return '';
-          const opts = options['${property.name}'] || [];
-          return v.map(k => { const opt = opts.find(o => String(o.value) === String(k)); return opt ? opt.text : String(k); }).join(', ');
-        }
-#elseif($property.widgetType == "DATE" || $property.widgetType == "DATETIME-LOCAL")
-        case '${property.name}': return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
-#elseif($property.widgetType == "NUMBER")
-        case '${property.name}': return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
-#elseif($property.widgetType == "CHECKBOX")
-        case '${property.name}': return window.T ? (v ? window.T('$projectName:${tprefix}.defaults.yes', 'Yes') : window.T('$projectName:${tprefix}.defaults.no', 'No')) : String(!!v);
-#else
-        case '${property.name}': return String(v);
-#end
-#end
-#end
-        default: return String(v);
-      }
-    },
-
     // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
     // calendar).
     async openItem(row, preset) {

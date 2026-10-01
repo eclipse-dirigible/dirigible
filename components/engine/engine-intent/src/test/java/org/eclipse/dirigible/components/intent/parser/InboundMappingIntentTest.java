@@ -267,6 +267,210 @@ class InboundMappingIntentTest {
                 """, "unknown key [accepts]");
     }
 
+    /**
+     * An order with its lines and tags - the neutral model the collection cases use. The lines and tags
+     * are composition children of the order; the notes are related to it, but not owned by it.
+     */
+    private static final String ORDERS = """
+            name: shop
+            entities:
+              - name: Product
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: sku,  type: string, unique: true }
+                  - { name: name, type: string }
+              - name: PurchaseOrder
+                fields:
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: orderNumber, type: string, unique: true }
+                relations:
+                  - { name: lines, kind: oneToMany, to: OrderLine }
+                  - { name: tags,  kind: oneToMany, to: OrderTag }
+                  - { name: notes, kind: oneToMany, to: OrderNote }
+              - name: OrderLine
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: quantity, type: integer }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+                  - { name: product,       kind: manyToOne, to: Product }
+              - name: OrderTag
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder, composition: true }
+              - name: OrderNote
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: text, type: string }
+                relations:
+                  - { name: purchaseOrder, kind: manyToOne, to: PurchaseOrder }
+            """;
+
+    private static final String ORDER_ARRIVAL = """
+            inbound:
+              - name: orders
+                source: { queue: orders }
+                create: PurchaseOrder
+                map:
+                  orderNumber: orderNumber
+            """;
+
+    /** Both element forms, a bound and a per-element lookup parse into the typed map untouched. */
+    @Test
+    void aCollectionMapsAnArrayOntoCompositionChildRows() {
+        IntentModel model = IntentParser.parse(ORDERS + ORDER_ARRIVAL + """
+                      lines:
+                        from: lines
+                        max: 5
+                        map:
+                          quantity: qty
+                          product:  { lookup: Product, by: sku, from: sku }
+                      tags:
+                        from: tags
+                        map: { label: "." }
+                """);
+
+        InboundIntent arrival = model.getInbound()
+                                     .get(0);
+        assertTrue(arrival.getMap()
+                          .get("lines") instanceof java.util.Map,
+                "a collection value stays a map the generator reads");
+        assertEquals(3, arrival.getMap()
+                               .size());
+    }
+
+    @Test
+    void aValueThatIsBothALookupAndACollectionFailsTheParse() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { lookup: Product, from: lines, map: { quantity: qty } }
+                """, "map [lines] declares both lookup and map - a value is either a lookup or a collection");
+    }
+
+    @Test
+    void aOneToManyFilledByAnEnvelopeKeyFailsTheParse() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: lines
+                """, "map [lines] is a one-to-many relation of [PurchaseOrder] - it is filled by a collection { from, map }");
+    }
+
+    @Test
+    void aCollectionOnAFieldFailsTheParse() {
+        assertFailsOn(ORDERS, """
+                inbound:
+                  - name: orders
+                    source: { queue: orders }
+                    create: PurchaseOrder
+                    map:
+                      orderNumber: { from: numbers, map: { quantity: qty } }
+                """, "map [orderNumber] is not a one-to-many relation of [PurchaseOrder]");
+    }
+
+    @Test
+    void anUnknownMapKeyNamesTheOneToManyAlternativeWhereItApplies() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      colour: colour
+                """, "map [colour] is not a field, a to-one or a one-to-many relation of [PurchaseOrder]");
+    }
+
+    @Test
+    void aCollectionOfRowsTheArrivalDoesNotOwnFailsTheParse() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      notes: { from: notes, map: { text: "." } }
+                """,
+                "map [notes] fills [OrderNote], which is not a composition child of [PurchaseOrder]; an arrival creates only rows it owns");
+    }
+
+    @Test
+    void aCollectionOfAnotherModelsRowsFailsTheParse() {
+        String remote = ORDERS.replace("      - { name: notes, kind: oneToMany, to: OrderNote }",
+                "      - { name: notes, kind: oneToMany, to: OrderNote }\n      - { name: remoteLines, kind: oneToMany, to: RemoteLine, model: warehouse }");
+        assertFailsOn(remote, ORDER_ARRIVAL + """
+                      remoteLines: { from: lines, map: { quantity: qty } }
+                """, "map [remoteLines] fills [RemoteLine], which must be an entity declared in this model");
+    }
+
+    @Test
+    void aCollectionsKeysAreAClosedSet() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, maximum: 5, map: { quantity: qty } }
+                """, "map [lines] declares unknown key [maximum] - a collection names from, map and max");
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { map: { quantity: qty } }
+                """, "map [lines] has no from - the envelope key holding the array");
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: ".", map: { quantity: qty } }
+                """, "map [lines] reads its array from [.]");
+    }
+
+    @Test
+    void aCollectionsMaxIsAWholeNumberInRange() {
+        for (String max : new String[] {"0", "2.5", "20000", "many"}) {
+            assertFailsOn(ORDERS, ORDER_ARRIVAL + "      lines: { from: lines, max: " + max + ", map: { quantity: qty } }\n",
+                    "must be a whole number from 1 to 10000");
+        }
+    }
+
+    @Test
+    void anElementMapFillsOnlyTheChildsOwnPropertiesTheArrivalMayWrite() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { colour: colour } }
+                """, "map [lines] element [colour] is not a field or a to-one relation of [OrderLine]");
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { id: lineId } }
+                """, "map [lines] element [id] fills the primary key of [OrderLine], which is generated on insert");
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { purchaseOrder: orderId } }
+                """,
+                "map [lines] element [purchaseOrder] fills the composition back-reference, which is filled from the saved [PurchaseOrder]");
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { product: { from: products, map: { sku: sku } } } }
+                """, "map [lines] element [product] is a nested collection - nested collections are not supported in this revision");
+    }
+
+    @Test
+    void anElementIsEitherAValueOrAnObject() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { quantity: ".", product: { lookup: Product, by: sku, from: sku } } }
+                """, "map [lines] mixes [.] with named element keys - an element is either a value or an object");
+    }
+
+    @Test
+    void anElementLookupFollowsEveryLookupRule() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines: { from: lines, map: { product: { lookup: Product, by: name, from: productName } } }
+                """, "map [lines.product] lookup matches on [name], which is not unique on [Product]");
+    }
+
+    /** One level down, Gson drops a valueless element key exactly as it drops a top-level one. */
+    @Test
+    void aValuelessElementKeyFailsTheParse() {
+        assertFailsOn(ORDERS, ORDER_ARRIVAL + """
+                      lines:
+                        from: lines
+                        map:
+                          quantity:
+                """, "map [lines] element [quantity] has no value");
+    }
+
+    @Test
+    void aChildFilledByTwoCollectionsFailsTheParse() {
+        String twoRoutesToLines = ORDERS.replace("      - { name: tags,  kind: oneToMany, to: OrderTag }",
+                "      - { name: tags,  kind: oneToMany, to: OrderTag }\n      - { name: moreLines, kind: oneToMany, to: OrderLine }");
+        assertFailsOn(twoRoutesToLines, ORDER_ARRIVAL + """
+                      lines:     { from: lines, map: { quantity: qty } }
+                      moreLines: { from: more,  map: { quantity: qty } }
+                """, "map [moreLines] fills [OrderLine] a second time - one collection per child relation");
+    }
+
+    private static void assertFailsOn(String model, String inbound, String expected) {
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> IntentParser.parse(model + inbound));
+        assertTrue(failure.getMessage()
+                          .contains(expected),
+                failure.getMessage());
+    }
+
     private static void assertFails(String inbound, String expected) {
         IntentValidationException failure = assertThrows(IntentValidationException.class, () -> IntentParser.parse(ENTITIES + inbound));
         assertTrue(failure.getMessage()
