@@ -184,17 +184,21 @@ public enum DirigibleConfig {
 
     /**
      * Whether tenant owners may manage the users of their tenant from the application shell's Settings:
-     * list them, see where each one stands, and invite another person. An invitation is a request
-     * published to {@link #TENANT_USERS_REQUEST_QUEUE} for an external provisioning system. Off by
-     * default; it requires {@link #TENANT_RESOLUTION_STRATEGY} {@code TOKEN_GROUPS}.
+     * list them, see where each one stands, invite a person with one or more roles, change a member's
+     * roles and remove a member. Each such action is one change request published to
+     * {@link #TENANT_USERS_CHANGE_QUEUE} for an external provisioning system, which writes back what it
+     * did through the tenant provisioning API. Off by default; it requires
+     * {@link #TENANT_RESOLUTION_STRATEGY} {@code TOKEN_GROUPS} and
+     * {@link #TENANT_PROVISIONING_API_ENABLED}.
      */
     TENANT_USERS_ENABLED("DIRIGIBLE_TENANT_USERS_ENABLED", Boolean.FALSE.toString()),
 
     /**
-     * The queue an invitation is published to, e.g. {@code global:acme.user-assignment-requests}.
-     * Required when {@link #TENANT_USERS_ENABLED} is on.
+     * The queue the tenant owners' change requests are published to, e.g.
+     * {@code global:acme.user-changes}. It must be a {@code global:} destination - one an external
+     * provisioning system consumes. Required when {@link #TENANT_USERS_ENABLED} is on.
      */
-    TENANT_USERS_REQUEST_QUEUE("DIRIGIBLE_TENANT_USERS_REQUEST_QUEUE", null),
+    TENANT_USERS_CHANGE_QUEUE("DIRIGIBLE_TENANT_USERS_CHANGE_QUEUE", null),
 
     SNOWFLAKE_ADMIN_USERNAME("DIRIGIBLE_SNOWFLAKE_ADMIN_USERNAME", null),
 

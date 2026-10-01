@@ -25,14 +25,16 @@ class TenantUsersConfigValidatorTest {
     @BeforeEach
     void setUp() {
         DirigibleConfig.TENANT_RESOLUTION_STRATEGY.setStringValue("TOKEN_GROUPS");
-        DirigibleConfig.TENANT_USERS_REQUEST_QUEUE.setStringValue("global:acme.requests");
+        DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.setStringValue("global:acme.changes");
+        DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.setBooleanValue(true);
     }
 
     @AfterEach
     void tearDown() {
-        for (DirigibleConfig key : new DirigibleConfig[] {DirigibleConfig.TENANT_RESOLUTION_STRATEGY,
-                DirigibleConfig.TENANT_USERS_REQUEST_QUEUE}) {
-            Configuration.remove(key.getKey());
+        for (String key : new String[] {DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey(),
+                DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey(), DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.getKey(),
+                TenantUsersConfigValidator.OLD_QUEUE_KEY}) {
+            Configuration.remove(key);
         }
     }
 
@@ -44,14 +46,48 @@ class TenantUsersConfigValidatorTest {
     @Test
     void theSubdomainStrategyIsRefused() {
         DirigibleConfig.TENANT_RESOLUTION_STRATEGY.setStringValue("SUBDOMAIN");
-        InvalidConfigException refusal = assertThrows(InvalidConfigException.class, TenantUsersConfigValidator::new);
-        assertTrue(refusal.getMessage()
-                          .contains(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey()));
+        assertRefusedNaming(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey());
     }
 
     @Test
     void aMissingQueueIsRefused() {
-        DirigibleConfig.TENANT_USERS_REQUEST_QUEUE.setStringValue("global:");
-        assertThrows(InvalidConfigException.class, TenantUsersConfigValidator::new);
+        Configuration.remove(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey());
+        assertRefusedNaming(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey());
+    }
+
+    @Test
+    void aBareGlobalMarkerIsRefused() {
+        DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.setStringValue("global:");
+        assertRefusedNaming(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey());
+    }
+
+    @Test
+    void aQueueThatIsNotGlobalIsRefused() {
+        DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.setStringValue("acme.changes");
+        assertRefusedNaming(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey());
+    }
+
+    @Test
+    void theProvisioningApiIsRequired() {
+        DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.setBooleanValue(false);
+        assertRefusedNaming(DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.getKey());
+    }
+
+    @Test
+    void theOldKeyAloneIsRefusedNamingIt() {
+        Configuration.remove(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey());
+        Configuration.set(TenantUsersConfigValidator.OLD_QUEUE_KEY, "global:acme.requests");
+        InvalidConfigException refusal = assertRefusedNaming(TenantUsersConfigValidator.OLD_QUEUE_KEY);
+        assertTrue(refusal.getMessage()
+                          .contains(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey()),
+                "the refusal says which key to set instead");
+    }
+
+    private static InvalidConfigException assertRefusedNaming(String key) {
+        InvalidConfigException refusal = assertThrows(InvalidConfigException.class, TenantUsersConfigValidator::new);
+        assertTrue(refusal.getMessage()
+                          .contains("[" + key + "]"),
+                "the refusal names [" + key + "]: " + refusal.getMessage());
+        return refusal;
     }
 }

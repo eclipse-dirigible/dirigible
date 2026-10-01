@@ -11,12 +11,15 @@ package org.eclipse.dirigible.components.tenants.users;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -26,6 +29,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 
 class TenantUsersAccessTest {
 
@@ -93,5 +97,32 @@ class TenantUsersAccessTest {
         assertFalse(access.canManage());
         TenantUsersException refusal = assertThrows(TenantUsersException.class, access::requireTenant);
         assertEquals("DEFAULT_TENANT", refusal.reason());
+    }
+
+    @Test
+    void theRequesterIsTheEmailOfAnOAuth2Person() {
+        DefaultOAuth2User person = new DefaultOAuth2User(List.of(new SimpleGrantedAuthority("ROLE_USER")),
+                Map.of("sub", "f3a1", "email", "Ann@Example.com"), "sub");
+        SecurityContextHolder.getContext()
+                             .setAuthentication(new UsernamePasswordAuthenticationToken(person, "n/a", person.getAuthorities()));
+        assertEquals("ann@example.com", access.requestedBy());
+    }
+
+    @Test
+    void theRequesterIsAnEmailShapedNameOtherwise() {
+        signIn("Owner");
+        assertEquals("someone@example.com", access.requestedBy());
+    }
+
+    @Test
+    void theRequesterIsTheNameAsItIsAsALastResort() {
+        SecurityContextHolder.getContext()
+                             .setAuthentication(new UsernamePasswordAuthenticationToken("svc-account", "n/a", List.of()));
+        assertEquals("svc-account", access.requestedBy());
+    }
+
+    @Test
+    void thereIsNoRequesterWithoutAnAuthentication() {
+        assertNull(access.requestedBy());
     }
 }

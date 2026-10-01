@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.tenants.users;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Component;
 /**
  * Refuses to start tenant users management on a configuration where it could not work. It validates
  * in its constructor on purpose: a half-usable setup must abort the context refresh rather than let
- * an owner publish invitations nobody receives.
+ * an owner publish changes nobody receives, or wait for a list nobody can write.
  */
 @Component
 @Conditional(TenantUsersEnabledCondition.class)
@@ -30,23 +31,43 @@ class TenantUsersConfigValidator {
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantUsersConfigValidator.class);
 
+    /** The key v1 read the queue from - set alone, it means a configuration that was never migrated. */
+    static final String OLD_QUEUE_KEY = "DIRIGIBLE_TENANT_USERS_REQUEST_QUEUE";
+
+    /** The marker of a destination shared across deployments. */
+    private static final String GLOBAL = "global:";
+
     /**
      * Validates the configuration.
      */
     TenantUsersConfigValidator() {
         if (TenantResolutionStrategy.fromConfiguration() != TenantResolutionStrategy.TOKEN_GROUPS) {
-            throw invalid(DirigibleConfig.TENANT_RESOLUTION_STRATEGY,
+            throw invalid(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey(),
                     "tenant roles such as the owner role exist only under " + TenantResolutionStrategy.TOKEN_GROUPS);
         }
-        String queue = TenantUsersSettings.requestQueue();
-        if (queue == null || queue.isBlank() || queue.trim()
-                                                     .equals("global:")) {
-            throw invalid(DirigibleConfig.TENANT_USERS_REQUEST_QUEUE, "it names the queue invitations are published to");
+        String queue = TenantUsersSettings.changeQueue();
+        if (isBlank(queue)) {
+            String old = Configuration.get(OLD_QUEUE_KEY);
+            if (!isBlank(old)) {
+                throw invalid(OLD_QUEUE_KEY, "the change requests changed shape, so the key was renamed - set ["
+                        + DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey() + "] instead, to a queue whose consumer reads them");
+            }
+            throw invalid(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey(),
+                    "it names the queue the owners' change requests are published to");
+        }
+        String trimmed = queue.trim();
+        if (!trimmed.startsWith(GLOBAL) || trimmed.length() == GLOBAL.length()) {
+            throw invalid(DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getKey(), "it must be a [" + GLOBAL
+                    + "] destination - any other queue is tenant-prefixed, and no provisioning system consumes it");
+        }
+        if (!DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.getBooleanValue()) {
+            throw invalid(DirigibleConfig.TENANT_PROVISIONING_API_ENABLED.getKey(),
+                    "the provisioning system writes the users through the tenant provisioning API - without it the list stays empty");
         }
         String broker = DirigibleConfig.MESSAGING_BROKER_URL.getStringValue();
-        if (broker == null || broker.isBlank()) {
+        if (isBlank(broker)) {
             LOGGER.warn(
-                    "Tenant users management publishes invitations to [{}] on the EMBEDDED broker - no external provisioning "
+                    "Tenant users management publishes change requests to [{}] on the EMBEDDED broker - no external provisioning "
                             + "system can receive them. Set [{}] to use an external broker.",
                     LogSanitizer.sanitize(queue), DirigibleConfig.MESSAGING_BROKER_URL.getKey());
         }
@@ -54,20 +75,24 @@ class TenantUsersConfigValidator {
             LOGGER.warn("Trial mode grants no tenant role, so no user can manage tenant users while [{}] is on.",
                     DirigibleConfig.TRIAL_ENABLED.getKey());
         }
-        LOGGER.info("Tenant users management is enabled: request queue [{}].", LogSanitizer.sanitize(queue));
+        LOGGER.info("Tenant users management is enabled: change queue [{}].", LogSanitizer.sanitize(queue));
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     /**
      * An invalid configuration.
      *
-     * @param config the key
+     * @param key the key
      * @param reason why
      * @return the exception
      */
-    private static InvalidConfigException invalid(DirigibleConfig config, String reason) {
-        String message = "Invalid configuration [" + config.getKey() + "] while [" + DirigibleConfig.TENANT_USERS_ENABLED.getKey()
-                + "] is on: " + reason;
+    private static InvalidConfigException invalid(String key, String reason) {
+        String message =
+                "Invalid configuration [" + key + "] while [" + DirigibleConfig.TENANT_USERS_ENABLED.getKey() + "] is on: " + reason;
         LOGGER.error(LogSanitizer.sanitize(message));
-        return new InvalidConfigException(message, config.getKey());
+        return new InvalidConfigException(message, key);
     }
 }

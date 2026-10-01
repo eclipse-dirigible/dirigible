@@ -9,17 +9,23 @@
  */
 package org.eclipse.dirigible.components.tenants.users;
 
+import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,6 +40,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 class TenantUsersAccess {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TenantUsersAccess.class);
+
+    /** The principals already warned about having no email, so each is warned about once. */
+    private static final Set<String> WARNED = ConcurrentHashMap.newKeySet();
 
     /** The authority prefix of a role. */
     private static final String ROLE_PREFIX = "ROLE_";
@@ -98,6 +109,35 @@ class TenantUsersAccess {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();
         return authentication == null ? null : authentication.getName();
+    }
+
+    /**
+     * Who asks, as the change requests record it: the lower-cased email of a signed-in OAuth2/OIDC
+     * person, else the principal name when it is an email address, else - with a warning, once per
+     * principal - the principal name as it is. It is audit data, never an authorization input.
+     *
+     * @return the requester, or null without an authentication
+     */
+    String requestedBy() {
+        Authentication authentication = SecurityContextHolder.getContext()
+                                                             .getAuthentication();
+        if (authentication == null) {
+            return null;
+        }
+        if (authentication.getPrincipal() instanceof OAuth2AuthenticatedPrincipal principal
+                && principal.getAttribute("email") instanceof String email && !email.isBlank()) {
+            return TenantUserRules.normalize(email);
+        }
+        String name = authentication.getName();
+        if (name != null && TenantUserRules.isEmail(name.trim()
+                                                        .toLowerCase(Locale.ROOT))) {
+            return TenantUserRules.normalize(name);
+        }
+        if (name != null && WARNED.add(name)) {
+            LOGGER.warn("The principal [{}] carries no email address - change requests record its name as the requester",
+                    LogSanitizer.sanitize(name));
+        }
+        return name;
     }
 
     /**

@@ -19,12 +19,12 @@ final class TenantUsersSettings {
     private TenantUsersSettings() {}
 
     /**
-     * The queue invitations are published to.
+     * The queue the change requests are published to.
      *
      * @return the queue, or null
      */
-    static String requestQueue() {
-        return DirigibleConfig.TENANT_USERS_REQUEST_QUEUE.getStringValue();
+    static String changeQueue() {
+        return DirigibleConfig.TENANT_USERS_CHANGE_QUEUE.getStringValue();
     }
 
 }

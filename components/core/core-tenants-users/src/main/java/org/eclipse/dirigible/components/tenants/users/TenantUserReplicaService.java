@@ -126,6 +126,30 @@ class TenantUserReplicaService {
     }
 
     /**
+     * One user of a tenant by id, removed or not.
+     *
+     * @param tenantId the tenant id
+     * @param id the id
+     * @return the user
+     */
+    Optional<TenantUserView> find(String tenantId, long id) {
+        return reads.execute(status -> users.findByIdAndTenantId(id, tenantId)
+                                            .map(TenantUserView::of));
+    }
+
+    /**
+     * One user of a tenant by email, removed or not.
+     *
+     * @param tenantId the tenant id
+     * @param email the email
+     * @return the user
+     */
+    Optional<TenantUserView> find(String tenantId, String email) {
+        return reads.execute(status -> users.findByTenantIdAndEmail(tenantId, TenantUserRules.normalize(email))
+                                            .map(TenantUserView::of));
+    }
+
+    /**
      * Applies one user, retrying once when another apply inserted the same user between this one's
      * lookup and its insert - the row exists then, so the retry takes the revision comparison's path.
      */

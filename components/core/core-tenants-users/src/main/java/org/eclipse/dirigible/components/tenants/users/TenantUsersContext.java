@@ -16,10 +16,12 @@ import java.util.List;
  *
  * @param enabled always true - the endpoint exists only when the feature does
  * @param tenantId the current tenant, or null in the default tenant
- * @param canManage whether the caller may invite
+ * @param canManage whether the caller may invite, change roles and remove
  * @param canRead whether the caller may see the users
  * @param ownerRole the owner role
  * @param roles the grantable roles
+ * @param caller who the caller is, as the change requests record them - so a page can mark "you"
  */
-record TenantUsersContext(boolean enabled, String tenantId, boolean canManage, boolean canRead, String ownerRole, List<String> roles) {
+record TenantUsersContext(boolean enabled, String tenantId, boolean canManage, boolean canRead, String ownerRole, List<String> roles,
+        String caller) {
 }

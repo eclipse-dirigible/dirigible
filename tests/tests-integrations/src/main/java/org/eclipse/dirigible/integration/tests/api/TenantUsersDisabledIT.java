@@ -43,7 +43,8 @@ class TenantUsersDisabledIT extends IntegrationTest {
 
     @Test
     void noOwnerFacingBeanExists() {
-        for (String type : new String[] {"TenantUsersEndpoint", "TenantUsersConfigValidator", "TenantUserInvitationService"}) {
+        for (String type : new String[] {"TenantUsersEndpoint", "TenantUsersConfigValidator", "TenantUserCommands",
+                "TenantUserChangePublisher", "TenantUserSignInListener"}) {
             boolean present = Arrays.stream(applicationContext.getBeanDefinitionNames())
                                     .map(applicationContext::getType)
                                     .anyMatch(found -> found != null && found.getName()

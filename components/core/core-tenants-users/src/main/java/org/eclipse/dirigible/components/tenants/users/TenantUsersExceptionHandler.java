@@ -13,7 +13,9 @@ import org.eclipse.dirigible.components.base.http.roles.ApplicationRoles;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
@@ -73,5 +75,31 @@ class TenantUsersExceptionHandler {
                                                             .value(),
                                      name, ex.getReason(), name.toUpperCase()
                                                                .replace(' ', '_')));
+    }
+
+    /**
+     * Refuses a body that is not JSON - a form post above all, which is the CSRF defence.
+     *
+     * @return 415
+     */
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<TenantUsersRefusal> handleMediaType() {
+        HttpStatus status = HttpStatus.UNSUPPORTED_MEDIA_TYPE;
+        return ResponseEntity.status(status)
+                             .body(new TenantUsersRefusal(status.value(), status.getReasonPhrase(), "The request body must be JSON",
+                                     "UNSUPPORTED_MEDIA_TYPE"));
+    }
+
+    /**
+     * Refuses a body that is not readable JSON.
+     *
+     * @return 400
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    ResponseEntity<TenantUsersRefusal> handleUnreadable() {
+        HttpStatus status = HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
+                             .body(new TenantUsersRefusal(status.value(), status.getReasonPhrase(), "The request body is not valid JSON",
+                                     "BAD_REQUEST"));
     }
 }
