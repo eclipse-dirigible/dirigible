@@ -78,12 +78,16 @@ App.services.api = {
   // The app's single language flag (the Region & Language setting, an Alpine store). Sent as
   // Accept-Language on every call so the SAME flag drives the backend: generated multilingual
   // repositories overlay <TABLE>_LANG values for it. Absent store (standalone pages) -> no header
-  // override (the browser's own Accept-Language applies).
-  language() {
-    try {
-      const locale = window.Alpine && Alpine.store('locale');
-      return (locale && locale.value) || null;
-    } catch (e) { return null; }
+  // override (the browser's own Accept-Language applies). Waits for the store to settle its value
+  // against the platform's supported set: a saved code the instance does not offer is replaced by
+  // the default once the set arrives, and a list fetched before that rendered in the other language
+  // (#7558).
+  async language() {
+    let locale;
+    try { locale = window.Alpine && Alpine.store('locale'); } catch (e) { return null; }
+    if (!locale) return null;
+    await locale.settled();
+    return locale.value || null;
   },
 
   // request(method, url, body, opts?) — opts selects the base URL for this call:
@@ -106,7 +110,7 @@ App.services.api = {
     // A caller may pin the request language for THIS call ({ language: 'bg' }) — e.g. Print, where the
     // chosen print language must drive the multilingual data overlay, not the UI locale. Absent the
     // override, the app's single language flag (the Region & Language store) applies as before.
-    const language = opts.language !== undefined ? opts.language : this.language();
+    const language = opts.language !== undefined ? opts.language : await this.language();
     if (language) headers['Accept-Language'] = language;
     // The warning codes the user already confirmed for THIS write (the repeat below, #7466).
     if (opts.confirmWarnings && opts.confirmWarnings.length) headers['X-Confirm-Warnings'] = opts.confirmWarnings.join(',');

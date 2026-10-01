@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
@@ -35,6 +36,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
+import org.flowable.bpmn.model.UserTask;
 import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
@@ -51,6 +53,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.flowable.image.ProcessDiagramGenerator;
 import org.flowable.job.api.Job;
+import org.flowable.task.api.Task;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.flowable.variable.api.runtime.VariableInstanceQuery;
@@ -70,6 +73,8 @@ public class BpmProviderFlowable implements BpmProvider {
     /** The extension element carrying a process' declarations, and the task-label-catalog one. */
     private static final String TASK_LABEL_CATALOG_ELEMENT = "property";
     private static final String TASK_LABEL_CATALOG_PROPERTY = "taskLabelCatalog";
+    /** The user-task property listing the actions its form completes the task with. */
+    private static final String TASK_ACTIONS_PROPERTY = "taskActions";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
@@ -382,6 +387,50 @@ public class BpmProviderFlowable implements BpmProvider {
                       .filter(value -> value != null && !value.isBlank())
                       .findFirst()
                       .map(catalog -> new ProcessLabelKeys(catalog, catalog + "." + process.getId()));
+    }
+
+    /**
+     * The actions a task's form completes it with, as its user task declares them:
+     *
+     * <pre>
+     *   &lt;userTask id="triage" ...&gt;
+     *     &lt;extensionElements&gt;
+     *       &lt;flowable:property name="taskActions" value="confirm,reject"&gt;&lt;/flowable:property&gt;
+     *     &lt;/extensionElements&gt;
+     *   &lt;/userTask&gt;
+     * </pre>
+     *
+     * A decision downstream branches on the {@code action} the completion carries, so a value the form
+     * does not offer takes whatever branch is left over, and a missing one fails the gateway's
+     * expression (issue #7551). Read off the deployment-cached BPMN model, like the task-label catalog.
+     *
+     * @param taskId the task id
+     * @return the declared actions, empty for a task (e.g. a hand-authored one) that declares none
+     */
+    public List<String> getTaskActions(String taskId) {
+        Task task = processEngine.getTaskService()
+                                 .createTaskQuery()
+                                 .taskTenantId(getTenantId())
+                                 .taskId(taskId)
+                                 .singleResult();
+        BpmnModel bpmnModel = task == null ? null
+                : processEngine.getRepositoryService()
+                               .getBpmnModel(task.getProcessDefinitionId());
+        if (bpmnModel == null || !(bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask)) {
+            return List.of();
+        }
+        return userTask.getExtensionElements()
+                       .getOrDefault(TASK_LABEL_CATALOG_ELEMENT, List.of())
+                       .stream()
+                       .filter(element -> TASK_ACTIONS_PROPERTY.equals(element.getAttributeValue(null, "name")))
+                       .map(element -> element.getAttributeValue(null, "value"))
+                       .filter(value -> value != null && !value.isBlank())
+                       .findFirst()
+                       .map(value -> Arrays.stream(value.split(","))
+                                           .map(String::trim)
+                                           .filter(action -> !action.isEmpty())
+                                           .toList())
+                       .orElse(List.of());
     }
 
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {

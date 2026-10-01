@@ -38,6 +38,11 @@ public final class JavaLiterals {
     private static final String TODAY = "java.time.LocalDate.now()";
 
     /**
+     * The term type a null test carries - the intent generator's {@code CheckSupport.NULL_TEST_TYPE}.
+     */
+    private static final String NULL_TEST_TYPE = "null";
+
+    /**
      * Not instantiable.
      */
     private JavaLiterals() {}
@@ -206,21 +211,28 @@ public final class JavaLiterals {
         }
         StringBuilder expression = new StringBuilder();
         for (Map<String, ?> term : terms) {
-            String literal = guardLiteral(text(term, "type"), text(term, "value"));
-            if (literal == null) {
-                return null; // a term the generator did not type - never rendered as a weaker guard
-            }
             String owner = text(term, "owner");
             String property = text(term, "property");
             String access = owner == null || "entity".equals(owner) ? "entity." + property
                     : "(" + owner + " == null ? null : " + owner + "." + property + ")";
             boolean equal = flag(term, "equal");
-            String comparison = flag(term, "numericKey") ? "(" + access + " != null && " + access + ".longValue() == " + literal + ")"
-                    : "java.util.Objects.equals(" + access + ", " + literal + ")";
+            String test;
+            if (NULL_TEST_TYPE.equals(text(term, "type"))) {
+                // whether the value is set at all (#7555) - a hop that did not resolve reads as unset
+                test = "(" + access + (equal ? " == null)" : " != null)");
+            } else {
+                String literal = guardLiteral(text(term, "type"), text(term, "value"));
+                if (literal == null) {
+                    return null; // a term the generator did not type - never rendered as a weaker guard
+                }
+                String comparison = flag(term, "numericKey") ? "(" + access + " != null && " + access + ".longValue() == " + literal + ")"
+                        : "java.util.Objects.equals(" + access + ", " + literal + ")";
+                test = equal ? comparison : "!" + comparison;
+            }
             if (expression.length() > 0) {
                 expression.append(" && ");
             }
-            expression.append(equal ? comparison : "!" + comparison);
+            expression.append(test);
         }
         return expression.toString();
     }

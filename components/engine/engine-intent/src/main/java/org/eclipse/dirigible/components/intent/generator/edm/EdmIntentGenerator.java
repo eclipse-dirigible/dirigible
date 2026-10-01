@@ -649,7 +649,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             putPeriod(entityMap, entity);
             putProcessDeleteGuards(entityMap, entity, model);
-            putWorkflowStatus(entityMap, entity, model);
+            putWorkflowStatus(entityMap, entity, model, displacedStatuses);
             putLifecycle(entityMap, entity, model);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -1291,6 +1291,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // generation stage - exactly the unconsumed attribute the audit now reports (#6543).
             if ("issue".equalsIgnoreCase(number.getStampOn())) {
                 p.put("generatedUuid", "true"); // UUID placeholder on create; stamped at the issue step
+                // Distinguishes this placeholder from a plain `type: uuid` field, which shares the same
+                // generatedUuid fill-when-blank mechanism but - unlike a numbering placeholder - may
+                // legitimately be seeded/imported with an explicit value (dirigible #7548).
+                p.put("numberStampOnIssue", "true");
             } else {
                 p.put("numberStampOnCreate", "true"); // real number allocated + formatted on insert
             }
@@ -2646,7 +2650,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> terms = new ArrayList<>();
         for (String term : CheckSupport.terms(when)) {
             CheckSupport.Comparison comparison = CheckSupport.parse(term);
-            if (comparison == null || !ResolvePathSupport.isPath(comparison.property())) {
+            // A null test (#7555) stays server-side: the panel compares the master's values with the
+            // authored literal as text, which would read `null` as the four-letter word.
+            if (comparison == null || CheckSupport.isNullTest(comparison) || !ResolvePathSupport.isPath(comparison.property())) {
                 return null;
             }
             String[] segments = comparison.property()
@@ -2743,32 +2749,48 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The status column a FLOW owns (dirigible #7339): {@code workflowStatusProperty} = the
-     * {@code function: EntityStatus} FK, emitted when a {@code processes:} step is what moves it, and
-     * {@code workflowStatusInitial} = the status a record may still be CREATED in ({@code init:}).
+     * The status column a SYSTEM WRITER owns (dirigible #7339, widened by #7553):
+     * {@code workflowStatusProperty} = the {@code function: EntityStatus} FK, emitted when a
+     * {@code processes:} step, a capacity roll-up's {@code status:}, or a {@code transitions:} button
+     * is what moves it, and {@code workflowStatusInitial} = the status a record may still be CREATED in
+     * ({@code init:}).
      *
      * <p>
      * Without it the generated controllers treat that FK as an ordinary writable column, so a plain
      * {@code PUT} carrying {@code "Status": 3} moves a document straight into APPROVED with the whole
      * flow bypassed - no check ran, no task was ever raised, nothing the flow charges was charged, and
-     * the document reads approved. The column is derived state owned by the flow, exactly as a roll-up
-     * target is derived state owned by the roll-up; the flow's own writers never come through a
-     * controller (a {@code setRelationField} step and a {@code transitions[]} endpoint reach the
-     * repository through the targeted {@code updateProperty}/{@code updateProperties} primitives), so
-     * refusing it here costs them nothing.
+     * the document reads approved. A roll-up-owned status has the same hole from the other direction: a
+     * PUT can move an untouched account straight to PAID, and a PUT that simply omits the column NULLS
+     * it (the ordinary "absent = preserve" rule this guard already gives every other system-owned
+     * status). And a {@code transitions:} button's target was, until #7553, left OUT on the reasoning
+     * that the button is a user action over the status rather than a flow computing it - which is true
+     * of the DECISION to transition, but not of the WRITE: nobody types the target seed id, the button
+     * carries it, so a plain PUT of that same value is not a parallel, equally legitimate way to reach
+     * it, only a bypass of the button's own {@code from:}/{@code when:} guards. All three writers reach
+     * the repository through the targeted {@code updateProperty}/{@code updateProperties} primitives,
+     * never through this controller, so refusing the column here costs none of them anything.
      *
      * <p>
-     * Derived rather than declared: a model that states a flow over the status has already said who
-     * owns it. Scalars, so both reach the {@code .edm} twin as attributes like
+     * Derived rather than declared: a model that states which mechanism moves the status has already
+     * said who owns it. Scalars, so both reach the {@code .edm} twin as attributes like
      * {@code immutableStatusValues}.
      *
      * @param entityMap the entity's model map
      * @param entity the authored entity
-     * @param model the whole intent - the processes are declared beside the entities, not on them
+     * @param model the whole intent - the processes/rollups/transitions are declared beside the
+     *        entities, not on them
+     * @param rollupOwnedStatuses the roll-up-displaced status properties per LOCAL parent entity name
+     *        ({@link #displacedStatusProperties(IntentModel, Map)})
      */
-    private static void putWorkflowStatus(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
+    private static void putWorkflowStatus(Map<String, Object> entityMap, EntityIntent entity, IntentModel model,
+            Map<String, List<String>> rollupOwnedStatuses) {
         RelationIntent status = entityStatusRelation(entity);
-        if (status == null || entity.getName() == null || !writesStatus(entity, status, model)) {
+        if (status == null || entity.getName() == null) {
+            return;
+        }
+        boolean computed = writesStatus(entity, status, model, rollupOwnedStatuses);
+        List<String> transitionTargets = transitionTargets(entity, model);
+        if (!computed && transitionTargets.isEmpty()) {
             return;
         }
         entityMap.put("workflowStatusProperty", IntentNaming.pascalCase(status.getName()));
@@ -2779,27 +2801,70 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // declared at all.
             entityMap.put("workflowStatusInitial", status.getInit());
         }
+        if (!computed) {
+            // Transitions alone PRESERVE the column without claiming it (#7553). The half of the issue
+            // that is unambiguously a defect is the data loss - a PUT that simply omits the status
+            // NULLED it - and that is fixed for every owner alike. The refusal is deliberately NOT
+            // extended here, twice over: claiming the whole column would strand every status no button
+            // targets (an entity whose one button is Cancel would lose its ordinary DRAFT -> POSTED
+            // edit), and refusing just the targeted VALUES collides with the `checks:` design, where a
+            // gated check is enforced on the plain save/update path and its gate status is normally
+            // exactly what a button writes - so both readings remove a working feature to deliver this
+            // one. Which hand moves are legal is `lifecycle:`'s question, enforced in the repository
+            // precisely because writers other than the button exist. A process or a roll-up COMPUTES
+            // the column, so there the whole column stays claimed and this attribute is absent.
+            entityMap.put("workflowStatusPreserveOnly", "true");
+        }
     }
 
     /**
-     * Whether a declared flow is what writes this entity's status: a {@code setRelationField} step of a
-     * process THIS entity triggers.
+     * The status seed ids the {@code transitions:} buttons targeting this entity write - the values a
+     * plain create/update may not hand in, because the button carries them itself.
+     *
+     * @param entity the authored entity
+     * @param model the whole intent
+     * @return the distinct targeted seed ids, in declaration order; empty when no button targets it
+     */
+    private static List<String> transitionTargets(EntityIntent entity, IntentModel model) {
+        List<String> targets = new ArrayList<>();
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (!entity.getName()
+                       .equals(transition.getForEntity())) {
+                continue;
+            }
+            if (transition.getSetStatus() == null) {
+                continue; // refused by the parser; nothing to own
+            }
+            String setStatus = String.valueOf(transition.getSetStatus());
+            if (!targets.contains(setStatus)) {
+                targets.add(setStatus);
+            }
+        }
+        return targets;
+    }
+
+    /**
+     * Whether a declared system writer COMPUTES this entity's status - a {@code setRelationField} step
+     * of a process THIS entity triggers, or a capacity roll-up's {@code status:} (the entity being the
+     * roll-up's LOCAL parent). Either one owns the WHOLE column: the value is derived state, not
+     * something anybody hands in.
      *
      * <p>
-     * A {@code transitions:} button deliberately does NOT claim the column. It is a user action over
-     * the status - the declared way a person moves it by hand - and the construct that guards every
-     * OTHER hand write is the state machine, {@code lifecycle:}, enforced in the repository precisely
-     * because writers other than the button exist. Claiming the column here would leave an unmodeled
-     * move reachable from nowhere and the state machine's refusal observable from nowhere: a different
-     * feature removed rather than this one delivered. A process is the other statement - a status a
-     * flow computes is not a value anybody hands in.
+     * A {@code transitions:} button is deliberately NOT here: it writes one declared seed id rather
+     * than computing the column, so it earns the PRESERVE half of the guard (an omitted status is no
+     * longer nulled - #7553's data loss) and not the refusal. See
+     * {@link #putWorkflowStatus(Map, EntityIntent, IntentModel, Map)} for why both stronger readings
+     * take a working feature away, and {@code lifecycle:} for the construct that does guard hand moves.
      *
      * @param entity the authored entity
      * @param status its {@code function: EntityStatus} relation
      * @param model the whole intent
-     * @return true when the status is the flow's to write
+     * @param rollupOwnedStatuses the roll-up-displaced status properties per LOCAL parent entity name
+     *        ({@link #displacedStatusProperties(IntentModel, Map)})
+     * @return true when the status is a system writer's to write
      */
-    private static boolean writesStatus(EntityIntent entity, RelationIntent status, IntentModel model) {
+    private static boolean writesStatus(EntityIntent entity, RelationIntent status, IntentModel model,
+            Map<String, List<String>> rollupOwnedStatuses) {
         String statusProperty = IntentNaming.pascalCase(status.getName());
         for (ProcessIntent process : model.getProcesses()) {
             if (!entity.getName()
@@ -2815,7 +2880,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
-        return false;
+        return rollupOwnedStatuses.getOrDefault(entity.getName(), List.of())
+                                  .contains(statusProperty);
     }
 
     /**

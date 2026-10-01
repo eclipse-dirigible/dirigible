@@ -848,6 +848,78 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A lock reaches down the whole composition chain (#7550): a posted payroll run freezes the lines
+     * of its payslips too, although the payslip between them declares no lock of its own - the
+     * grandchild walks to the run through its payslip.
+     */
+    @Test
+    void aGrandchildInheritsTheLockOfAnAncestorThroughAnUnlockedMaster() {
+        Map<String, Object> run = entity("PayrollRun", "Payroll", property("Id", "INTEGER"));
+        run.put("immutableStatusProperty", "Status");
+        run.put("immutableStatusValues", "3");
+        Map<String, Object> payslip = entity("Payslip", "Payroll", compositionTo("PayrollRun", "Payroll"));
+        Map<String, Object> line = entity("PayslipLine", "Payroll", compositionTo("Payslip", "Payroll"));
+
+        ModelParameterProcessor.process(model(run, payslip, line), javaParameters());
+
+        Map<String, Object> lock = masterLock(line);
+        assertEquals("Payslip", lock.get("fkProperty"));
+        assertEquals("gen.sales_order.data.payroll.PayslipRepository", lock.get("repositoryClass"));
+        assertEquals(Boolean.FALSE, lock.get("always"), "the payslip itself does not lock");
+        assertNull(lock.get("statusProperty"), "the payslip itself does not lock");
+        List<Map<String, Object>> ancestors = (List<Map<String, Object>>) lock.get("ancestors");
+        assertEquals(1, ancestors.size());
+        Map<String, Object> ancestor = ancestors.get(0);
+        assertEquals("PayrollRun", ancestor.get("fkProperty"), "the FK on the payslip leading to the run");
+        assertEquals("PayrollRun", ancestor.get("entity"));
+        assertEquals("gen.sales_order.data.payroll.PayrollRunRepository", ancestor.get("repositoryClass"));
+        assertEquals("Status", ancestor.get("statusProperty"));
+        assertEquals("3", ancestor.get("statusValues"));
+        // the direct child keeps its one-hop lock, with nothing above the run to walk to
+        assertEquals("PayrollRun", masterLock(payslip).get("entity"));
+        assertEquals(List.of(), masterLock(payslip).get("ancestors"));
+    }
+
+    /**
+     * A master that outlives its own master's lock ({@code locksWithMaster: false}) stops the climb:
+     * its children are as writable as it is.
+     */
+    @Test
+    void theChainStopsAtAMasterOptedOutOfTheLockAboveIt() {
+        Map<String, Object> run = entity("PayrollRun", "Payroll", property("Id", "INTEGER"));
+        run.put("immutableStatusProperty", "Status");
+        run.put("immutableStatusValues", "3");
+        Map<String, Object> payslip = entity("Payslip", "Payroll", compositionTo("PayrollRun", "Payroll"));
+        payslip.put("locksWithMaster", "false");
+        Map<String, Object> line = entity("PayslipLine", "Payroll", compositionTo("Payslip", "Payroll"));
+
+        ModelParameterProcessor.process(model(run, payslip, line), javaParameters());
+
+        assertNull(payslip.get("masterLock"));
+        assertNull(line.get("masterLock"));
+    }
+
+    /** Every locking level counts: the direct master's own lock and the one above it are both kept. */
+    @Test
+    void aGrandchildKeepsItsMastersOwnLockAndTheOneAboveIt() {
+        Map<String, Object> run = entity("PayrollRun", "Payroll", property("Id", "INTEGER"));
+        run.put("immutableAlways", "true");
+        Map<String, Object> payslip = entity("Payslip", "Payroll", compositionTo("PayrollRun", "Payroll"));
+        payslip.put("immutableStatusProperty", "Status");
+        payslip.put("immutableStatusValues", "2");
+        Map<String, Object> line = entity("PayslipLine", "Payroll", compositionTo("Payslip", "Payroll"));
+
+        ModelParameterProcessor.process(model(run, payslip, line), javaParameters());
+
+        Map<String, Object> lock = masterLock(line);
+        assertEquals("Status", lock.get("statusProperty"));
+        List<Map<String, Object>> ancestors = (List<Map<String, Object>>) lock.get("ancestors");
+        assertEquals(1, ancestors.size());
+        assertEquals(Boolean.TRUE, ancestors.get(0)
+                                            .get("always"));
+    }
+
+    /**
      * A multi-select (intent {@code kind: subset}) carries its option source as the dedicated
      * {@code widgetOptionsEntityName}, never as relationship metadata - so the lookup URLs are built
      * from that entity's own perspective.

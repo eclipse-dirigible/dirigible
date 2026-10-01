@@ -182,6 +182,11 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             bpmService.unclaimTask(taskId);
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
+            String unoffered = unofferedAction(taskId, actionData.getData());
+            if (unoffered != null) {
+                return ResponseEntity.badRequest()
+                                     .body(unoffered);
+            }
             try {
                 bpmService.completeTask(taskId, actionData.getData());
             } catch (RuntimeException ex) {
@@ -205,6 +210,36 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         }
         return ResponseEntity.ok()
                              .build();
+    }
+
+    /**
+     * Why a completion's {@code action} is not one the task's form offers, or null when it is (or when
+     * the task declares no actions - a hand-authored process decides for itself). A decision after the
+     * task branches on that value, so an action the form does not list took whatever branch was left
+     * over - an unknown "approve" on a confirm/reject triage cancelled the ticket - and a missing one
+     * failed the gateway's expression with a 500 (issue #7551). Refused before anything is completed,
+     * so the task stays in the inbox.
+     *
+     * @param taskId the task being completed
+     * @param data the completion's variables
+     * @return the refusal naming the offered actions, or null
+     */
+    private String unofferedAction(String taskId, Map<String, Object> data) {
+        List<String> offered = bpmService.getTaskActions(taskId);
+        if (offered.isEmpty()) {
+            return null;
+        }
+        Object action = data == null ? null : data.get("action");
+        if (action == null || String.valueOf(action)
+                                    .isBlank()) {
+            return "This task is completed with an action - one of: " + String.join(", ", offered);
+        }
+        if (!offered.contains(String.valueOf(action))) {
+            // The refusal names what the task offers, never the value it was sent: echoing request input
+            // into a response body is a reflected XSS vector.
+            return "The action is not one this task offers - use one of: " + String.join(", ", offered);
+        }
+        return null;
     }
 
     /**

@@ -130,9 +130,18 @@ class IntentWorkflowStatusIT extends IntegrationTest {
         read(invoice).body("Status", equalTo(1))
                      .body("Note", equalTo("edited again"));
 
+        // The review task completes only with an action its form offers (#7551): a decision after it
+        // branches on that value, so a missing one (a 500 from the gateway's expression) and one the
+        // form does not list (whatever branch is left over) are both refused before anything
+        // completes - the task stays in the inbox and the record where it was.
+        String task = taskFor(invoice);
+        completeRefused(task, "{}", "one of: approve");
+        completeRefused(task, "{\"action\":\"reject\"}", "The action is not one this task offers - use one of: approve");
+        read(invoice).body("Status", equalTo(1));
+
         // The flow's own writer is untouched: it reaches the repository through the targeted
         // updateProperties primitive, never through the controller this guard sits in.
-        complete(taskFor(invoice));
+        complete(task);
         awaitStatus(invoice, 2);
     }
 
@@ -185,6 +194,16 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                                                  .post(TASKS + "/" + task)
                                                  .then()
                                                  .statusCode(200));
+    }
+
+    private void completeRefused(String task, String data, String expectedMessage) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"action\":\"COMPLETE\",\"data\":" + data + "}")
+                                                 .when()
+                                                 .post(TASKS + "/" + task)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(expectedMessage)));
     }
 
     /** The review task of this invoice's instance, found by the business key the trigger stamped. */

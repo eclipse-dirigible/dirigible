@@ -69,6 +69,13 @@ public final class CheckSupport {
      */
     public static final Set<String> NUMERIC_GUARD_TYPES = Set.of("integer", "int", "long");
 
+    /**
+     * The type of a term that tests whether a value is there at all ({@code Payslip != null}, #7555) -
+     * the one comparison meaningful for a value of ANY type, and the only way a condition can say "this
+     * row is linked to something": no literal of the property's type stands for "unset".
+     */
+    public static final String NULL_TEST_TYPE = "null";
+
     /** The field types a {@code compare} check orders, by the family they compare inside. */
     private static final Map<String, String> COMPARE_FAMILIES = Map.of("date", "date", "timestamp", "timestamp", "integer", "number", "int",
             "number", "long", "number", "decimal", "number", "double", "number");
@@ -256,6 +263,9 @@ public final class CheckSupport {
         if (field == null && relation == null) {
             return null;
         }
+        if (isNullTest(comparison)) {
+            return nullTerm(RECORD, IntentNaming.pascalCase(comparison.property()), comparison);
+        }
         String type = guardType(field != null ? field.getType() : relationKeyType(relation, byName));
         boolean numericKey = field == null && NUMERIC_GUARD_TYPES.contains(type);
         return term(RECORD, IntentNaming.pascalCase(comparison.property()), comparison, numericKey ? "long" : type, numericKey);
@@ -265,6 +275,9 @@ public final class CheckSupport {
     private static Map<String, Object> pathTerm(ResolvePathSupport.Path path, Comparison comparison) {
         if (!path.resolved()) {
             return null;
+        }
+        if (isNullTest(comparison)) {
+            return nullTerm(path.owner(), path.property(), comparison);
         }
         String terminal = path.terminalType();
         boolean wholeNumber = unquote(comparison.literal()).matches("-?\\d+") && !isQuoted(comparison.literal());
@@ -277,6 +290,29 @@ public final class CheckSupport {
             return null;
         }
         return term(path.owner(), path.property(), comparison, type, false);
+    }
+
+    /**
+     * Whether the comparison tests for an absent value: its literal is the bare word {@code null}. A
+     * QUOTED {@code 'null'} stays the four-letter text, so a string field can still be compared with
+     * it.
+     *
+     * @param comparison the parsed comparison
+     * @return whether it is a null test
+     */
+    public static boolean isNullTest(Comparison comparison) {
+        return comparison != null && "null".equals(comparison.literal());
+    }
+
+    /** A null-test term - no value, typed {@link #NULL_TEST_TYPE}, never compared by key width. */
+    private static Map<String, Object> nullTerm(String owner, String property, Comparison comparison) {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("owner", owner);
+        term.put("property", property);
+        term.put("equal", comparison.equal());
+        term.put("type", NULL_TEST_TYPE);
+        term.put("numericKey", false);
+        return term;
     }
 
     private static boolean isQuoted(String literal) {

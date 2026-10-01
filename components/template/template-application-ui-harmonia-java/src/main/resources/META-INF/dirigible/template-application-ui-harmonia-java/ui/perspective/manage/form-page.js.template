@@ -202,6 +202,19 @@ document.addEventListener('alpine:init', () => {
     // (an outage must not lock the UI - the server still refuses the write).
     mutable: true,
 #end
+
+    // Record action bar (issue #7491). Two viewport flags, because the page changes twice: below
+    // 1024px the side rail stops being a column and becomes the last section of one, and below 768px
+    // the actions leave the header for a bar pinned to the bottom of the screen (where a thumb is)
+    // and the secondary folds into the overflow menu. The primary never folds.
+    isNarrow: false,
+    isWide: true,
+
+    // Deleting the record from its own page - the list has carried this since it existed, the
+    // record page only offered it one navigation away.
+    deleteOpen: false,
+    deleteBusy: false,
+    deleteError: '',
 #if($hasPrint == "true")
 
     // Print (document master rendered through this shared form): renders the CMS-seeded .print
@@ -213,6 +226,8 @@ document.addEventListener('alpine:init', () => {
 #end
 
     async init() {
+      // The action bar folds its secondary button below 768px (issue #7491).
+      this.watchViewport();
 #if($hasRestrictedFields)
       // Role-scoped fields: ask the controller which ones it withholds from this caller, so the form
       // leaves those inputs out rather than offering a control whose value is never served and never
@@ -422,8 +437,11 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // The option's label for a stored key. Compared as strings on purpose: a select's x-model holds
+    // the option's data-value, which is always a string, while the options an FK feeds carry numeric
+    // ids - an identity test silently matched nothing and every reference read as its raw id.
     optionText(options, value) {
-      const found = (options || []).find(o => o.value === value);
+      const found = (options || []).find(o => String(o.value) === String(value));
       return found ? found.text : value;
     },
 #if($hasCalculated)
@@ -814,6 +832,256 @@ document.addEventListener('alpine:init', () => {
       }
       const ret = this.returnToParam();
       window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit' + (ret ? '?returnTo=' + encodeURIComponent(ret) : ''));
+    },
+
+    // ---- Record action bar (issue #7491) ------------------------------------
+    // The bar carries at most ONE filled button, and which one is decided here rather than by
+    // five competing x-shows in the markup. Precedence: a workflow task the current user can act
+    // on outranks Edit, because the task is why the record was opened; Edit is primary when there
+    // is no task; and a record the user cannot change offers no primary at all. Everything else
+    // - print, the scoped calendars, the link, delete - lives in the overflow menu, so a page
+    // action never competes with the one thing to do next.
+
+#if($hasProcess)
+    // The tasks of THIS record: the store correlates entity.ProcessId with task.processInstanceId.
+    // Alpine.store, not the $store magic - in a .js template that spelling is a Velocity reference.
+    get recordTasks() {
+      const store = Alpine.store('processTasks');
+      return (store && this.form && (this.isEdit || this.isPreview)) ? store.getTasks(this.form) : [];
+    },
+
+    // The one the primary button runs: the first the store hands back, which is its oldest.
+    get primaryTask() {
+      const tasks = this.recordTasks;
+      return tasks.length ? tasks[0] : null;
+    },
+
+    openPrimaryTask() {
+      const task = this.primaryTask;
+      if (task) Alpine.store('processTasks').openTask(task);
+    },
+
+    taskButtonLabel() {
+      const task = this.primaryTask;
+      return task ? Alpine.store('processTasks').taskName(task) : '';
+    },
+
+    // " · assigned <when>" for the strip, from the task's own createTime. Empty when the engine did
+    // not report one, so the strip never trails a dangling separator.
+    taskAssignedLine() {
+      const task = this.primaryTask;
+      if (!task || !task.createTime || !window.HarmoniaFormat) return '';
+      return ' \u00b7 ' + T('$projectName:${tprefix}.messages.workflowAssigned', 'assigned') + ' ' + HarmoniaFormat.value(task.createTime, true);
+    },
+#else
+    get recordTasks() { return []; },
+    get primaryTask() { return null; },
+#end
+
+    // Whether Edit is offerable at all. The server stays authoritative - a caller the roles deny
+    // still gets a 403 - this only keeps the affordance honest where the page already knows.
+    get canEdit() {
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
+      return !!this.mutable;
+#else
+      return true;
+#end
+    },
+
+    // 'task' | 'edit' | 'none' - the filled slot.
+    get primaryAction() {
+      if (this.recordTasks.length) return 'task';
+      return this.canEdit ? 'edit' : 'none';
+    },
+
+    // Edit steps down to the outlined slot when a task holds the primary one, and folds into the
+    // overflow menu on a narrow viewport.
+    get showsSecondaryEdit() {
+      return this.primaryAction === 'task' && this.canEdit && !this.isNarrow;
+    },
+
+    get editInMenu() {
+      return this.primaryAction === 'task' && this.canEdit && this.isNarrow;
+    },
+
+    // The overflow menu renders only when it would carry something.
+    // What the overflow menu would actually carry. Asked here rather than guessed in the markup, so
+    // the trigger can hide when the menu would open empty and a group separator can render only when
+    // there is a group above it to separate. Both of those regressed the moment the one entry that
+    // used to be unconditional went away.
+    get menuHasPrint() {
+#if($hasPrint == "true")
+      return !!this.id;
+#else
+      return false;
+#end
+    },
+
+    get menuHasCalendars() {
+#if($scopedCalendars)
+      return !!this.id;
+#else
+      return false;
+#end
+    },
+
+    get menuHasDelete() {
+      return this.canEdit;
+    },
+
+    // Everything that would sit above the destructive group.
+    get menuHasAboveDelete() {
+      return this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
+    },
+
+    get hasOverflowMenu() {
+      if (!this.id || !(this.isEdit || this.isPreview)) return false;
+      return this.menuHasAboveDelete || this.menuHasDelete;
+    },
+
+    // Whether the side rail's Details block holds anything. Its properties are the ones the SERVER
+    // fills - audit columns, a process id, a calculated field - so on a record where none is set the
+    // heading stood alone over an empty column. The emptiness test is the one each row uses, to the
+    // character, so the block and its rows can never disagree.
+#set($railReadOnly = false)
+#foreach($property in $properties)
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($railReadOnly = true)#end
+#end
+    get hasDetailValues() {
+#if($railReadOnly)
+      return [
+#foreach($property in $properties)
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
+        this.form.${property.name},
+#end
+#end
+      ].some(v => v !== null && v !== undefined && v !== '');
+#else
+      return false;
+#end
+    },
+
+    // The rail itself is only worth its rule and its column when something inside it renders.
+    get hasRailContent() {
+#if($history == "true")
+      return this.hasDetailValues || (this.history || []).length > 0;
+#else
+      return this.hasDetailValues;
+#end
+    },
+
+    headerTitle() {
+      const name = T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}');
+      if (this.isPreview) return name;
+      return this.isEdit
+        ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Update {{name}}', { name: name })
+        : T('$projectName:${tprefix}.defaults.formHeadCreate', 'Create {{name}}', { name: name });
+    },
+
+    // One line of the record's own identity under the title, built from the properties the model
+    // already marks as major - the same flag that picks the list's columns, so the line follows
+    // the model instead of a second hand-kept list. The status is skipped: it is the badge.
+    summaryLine() {
+      if (!(this.isEdit || this.isPreview)) return '';
+      const parts = [];
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DOCUMENT_STATUS" && !$property.isHiddenProperty)
+#if($property.roleRead)
+      if (this.canSee('${property.name}')) {
+#end
+      this.pushSummary(parts, this.form.${property.name}, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")true#{else}false#end, #if($property.widgetType == "DROPDOWN")this.options${property.name}#{else}null#end);
+#if($property.roleRead)
+      }
+#end
+#end
+#end
+      return parts.slice(0, 4).join(' \u00b7 ');
+    },
+
+    pushSummary(parts, value, isDate, isNumber, options) {
+      const text = this.valueOf_(value, isDate, isNumber, options);
+      if (text !== null) parts.push(text);
+    },
+
+    // The one place a stored value becomes the text the page shows. Returns null for "nothing
+    // here" so the caller decides between skipping it (the summary) and the em dash (a field).
+    valueOf_(value, isDate, isNumber, options) {
+      if (value === null || value === undefined || value === '') return null;
+      if (Array.isArray(value) && !value.length) return null;
+      if (options) return this.optionText(options, value);
+      if (!window.HarmoniaFormat) return String(value);
+      if (isNumber) return HarmoniaFormat.number(value, null, '');
+      return HarmoniaFormat.value(value, !!isDate);
+    },
+
+    // Preview renders values, not disabled inputs, so an empty one needs to read as empty.
+    fieldText(value, isDate, isNumber, options) {
+      const text = this.valueOf_(value, isDate, isNumber, options);
+      return text === null ? '\u2014' : text;
+    },
+
+    checkboxText(value) {
+      return value
+        ? T('$projectName:${tprefix}.defaults.yes', 'Yes')
+        : T('$projectName:${tprefix}.defaults.no', 'No');
+    },
+
+    // A MULTISELECT holds a key list; preview shows the labels those keys stand for.
+    multiText(value, options) {
+      const keys = Array.isArray(value) ? value : String(value === null || value === undefined ? '' : value).split(',');
+      const text = keys.map(v => String(v).trim()).filter(v => v !== '')
+                       .map(v => this.optionText(options, v) || v).join(', ');
+      return text === '' ? '\u2014' : text;
+    },
+
+    // ---- Overflow menu actions ----------------------------------------------
+    askDelete() {
+      this.deleteError = '';
+      this.deleteOpen = true;
+    },
+
+    async confirmDelete() {
+      if (!this.id) return;
+      this.deleteBusy = true;
+      this.deleteError = '';
+      try {
+        await App.services.api.delete(this.apiPath + '/' + encodeURIComponent(this.id));
+        this.deleteOpen = false;
+        this.clearPristine();
+        if (this.isDialog) { this.emitClose(); return; }
+        this.navigateBack('/${name}');
+      } catch (e) {
+        this.deleteError = App.services.apiErrors.messageFor(e, 'Could not delete the ${name} record.');
+      } finally {
+        this.deleteBusy = false;
+      }
+    },
+
+    // Ctrl/Cmd+S saves from anywhere on the form, under the same guard the Save button carries.
+    saveShortcut() {
+      if (this.isPreview || this.state === 'saving') return;
+      if (this.isEdit && !this.isDirty()) return;
+      this.save();
+    },
+
+    // Escape leaves a preview the way Close does. Guarded on the dialogs so it never fires while
+    // one of them is the thing the user means to dismiss.
+    escapeDismiss() {
+      if (!this.isPreview) return;
+      if (this.leaveOpen || this.deleteOpen) return;
+#if($hasPrint == "true")
+      if (this.printLangOpen) return;
+#end
+      this.cancel();
+    },
+
+    // The two thresholds above. Bound in JS rather than by a responsive class because Harmonia ships
+    // md:/lg: variants for display, flex-direction and width only - the rail's border, padding and
+    // width, and the bar's position, have none, which is the same reason the shell binds its own.
+    watchViewport() {
+      if (!window.Harmonia || typeof Harmonia.getBreakpointListener !== 'function') return;
+      Harmonia.getBreakpointListener((narrow) => { this.isNarrow = !!narrow; }, 768);
+      Harmonia.getBreakpointListener((narrow) => { this.isWide = !narrow; }, 1024);
     },
   }));
 }, { once: true });

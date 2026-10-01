@@ -4,13 +4,16 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
+import org.springframework.web.server.ResponseStatusException;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+import gen.${javaGenFolderName}.api.${javaPerspective}.${entity}Controller;
 
 /**
  * Writes the reviewer's edits from the ${process} process variables back onto the ${entity}. Generated
@@ -32,6 +35,13 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Each editable field is coerced from its process variable to the entity's
  * Java type (LocalDate/Instant/Integer/Long/BigDecimal/Double/Boolean/String); the form-builder sends
  * date/timestamp values ISO-shaped so LocalDate.parse / Instant.parse accept them.
+ *
+ * Before anything is written, the edits are applied to the stored row and held to the entity's own
+ * rules - its controller's validation, so the same lengths, required fields, patterns and checks, with
+ * the same messages. The writer runs inside the transaction that completes the task, so a refusal rolls
+ * the completion back: the task stays in the inbox and the person who submitted the form is answered
+ * with the field's message (400), instead of the write failing later in a background job with the task
+ * already gone and the record stranded.
  */
 public class ${className} implements JavaDelegate {
 
@@ -70,6 +80,21 @@ public class ${className} implements JavaDelegate {
             return;
         }
         Object id = ((Number) key).${keyAccessor}();
+        ${entity}Entity edited = repository.findById(id);
+        if (edited == null) {
+            return;
+        }
+#set($writerJavaTypes = {"integer": "Integer", "long": "Long", "decimal": "java.math.BigDecimal", "double": "Double", "boolean": "Boolean", "date": "java.time.LocalDate", "timestamp": "java.time.Instant", "string": "String"})
+#foreach($field in $fields)
+        if (values.containsKey("${field.property}")) {
+            edited.${field.property} = (${writerJavaTypes.get($field.coercion)}) values.get("${field.property}");
+        }
+#end
+        try {
+            ${entity}Controller.validate(edited);
+        } catch (ResponseStatusException refusal) {
+            throw new ValidationException(refusal.getReason(), refusal);
+        }
         if (repository.updateProperties(id, values) == 0) {
             return;
         }

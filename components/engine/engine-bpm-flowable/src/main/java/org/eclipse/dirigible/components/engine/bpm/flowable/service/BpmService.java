@@ -414,6 +414,16 @@ public class BpmService {
                            .unclaimTask(taskId);
     }
 
+    /**
+     * The actions a task's form completes it with, as its user task declares them.
+     *
+     * @param taskId the task id
+     * @return the declared actions, empty when the task declares none
+     */
+    public List<String> getTaskActions(String taskId) {
+        return bpmProviderFlowable.getTaskActions(taskId);
+    }
+
     public void completeTask(String taskId, Map<String, Object> variables) {
         bpmProviderFlowable.getTaskService()
                            .completeTask(taskId, variables);
