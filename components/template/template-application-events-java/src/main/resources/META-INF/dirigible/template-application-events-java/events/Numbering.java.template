@@ -25,6 +25,21 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * asynchronous consumer sees the real number here instead of the create-time UUID placeholder.
  */
 public class ${entity}NumberStamp implements JavaDelegate {
+#if($statusGates && $statusGates.size() > 0)
+
+    /**
+     * The status each process step running this stamp precedes, keyed by process definition key and
+     * activity id: the status write the stamp is placed in front of so a posting sees the real number
+     * (#7577). The series is legal and gap-free, so the stamp asks whether that move will be accepted
+     * BEFORE it spends a value - a refused move leaves the placeholder, and the next document issued
+     * takes the number this one would have.
+     */
+    private static final java.util.Map<String, Integer> STATUS_AFTER_STEP = java.util.Map.ofEntries(
+#foreach($gate in $statusGates)
+            java.util.Map.entry("${gate.keyJavaLiteral}", ${gate.status})#if($foreach.hasNext),#end
+#end
+    );
+#end
 
     @Override
     public void execute(DelegateExecution execution) {
@@ -42,6 +57,15 @@ public class ${entity}NumberStamp implements JavaDelegate {
         if (entity.${field} != null && !isPlaceholder(entity.${field})) {
             return;
         }
+#if($statusGates && $statusGates.size() > 0)
+        // Refused here, before the series moves: the same lifecycle edge, capacity guards and checks
+        // the status write that follows would apply - thrown as the ValidationException the task
+        // completion answers 400 with, the placeholder untouched.
+        Integer statusAfter = STATUS_AFTER_STEP.get(processKey(execution) + "/" + execution.getCurrentActivityId());
+        if (statusAfter != null) {
+            repository.checkFor(entity, statusAfter);
+        }
+#end
 #if($per && $per != "")
 ## A null partition FK resolves to the relation's init: default (the value the row carries by
 ## construction), never to the series' base row - the default company is a partition like any other.
@@ -66,6 +90,15 @@ public class ${entity}NumberStamp implements JavaDelegate {
         }
     }
 
+#if($statusGates && $statusGates.size() > 0)
+    /** The running process's definition key - the first segment of Flowable's {@code key:version:id}. */
+    private static String processKey(DelegateExecution execution) {
+        String definitionId = execution.getProcessDefinitionId();
+        int separator = definitionId == null ? -1 : definitionId.indexOf(':');
+        return separator < 0 ? String.valueOf(definitionId) : definitionId.substring(0, separator);
+    }
+
+#end
     /** Whether the value is still the create-time UUID placeholder (vs an already-stamped number). */
     private static boolean isPlaceholder(String value) {
         try {

@@ -840,7 +840,11 @@ gives the field a platform-allocated, gap-free document number. The intent decla
 - `stampOn` - `create` (the generated repository allocates at insert) or `issue` (the document is
   created with a UUID placeholder and a generated delegate replaces it at the modeled issue step,
   idempotently - a re-issue after an amend keeps the number). Use `issue` for legal documents whose
-  number must only exist once issued.
+  number must only exist once issued. Place the stamp's `delegate:` step right BEFORE the step that
+  sets the issued status (`setRelationField` on the status), with only service tasks between them, so
+  a posting sees the real number. The stamp then checks that status's gated `checks:`, its lifecycle
+  edge and its capacity guards before it allocates (#7577), so a refused Issue answers 400 and spends
+  no number of the series.
 
 The removed keys `format`, `scope` and `resetOn` are REJECTED at parse time - shape lives in
 `.numbers` + settings, partitioning is `per:`, and there is no auto-reset. Prefer `number:` over a

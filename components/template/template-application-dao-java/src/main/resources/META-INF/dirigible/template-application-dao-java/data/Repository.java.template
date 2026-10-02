@@ -2,9 +2,16 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
+## The document's status (the `function: EntityStatus` relation, rendered as DOCUMENT_STATUS): the
+## property every status-gated rule is keyed on, and what checkFor() asks about (#7577).
+#set($entityStatusProperty = "")
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
+    #end
+    #if($property.widgetType == "DOCUMENT_STATUS")
+        #set($entityStatusProperty = $property.name)
+        #set($entityStatusJavaClass = $property.dataTypeJavaClass)
     #end
     #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
         #set($haveCalculatedPropertyOnCreate = "true")
@@ -1078,6 +1085,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
     }
 #end
+#end
+#if($entityStatusProperty != "")
+
+    /**
+     * Refuses a move of this ${name} to {@code status} exactly as the status write itself would - the
+     * lifecycle edge, the capacity guards gated on that status and the checks gated on it - WITHOUT
+     * writing anything. For a step that must not act unless the move will be accepted: the
+     * {@code stampOn: issue} number stamp spends a value of a legal, gap-free series, so it asks before
+     * it allocates, and a refusal leaves the document unnumbered rather than holding a number of a
+     * status it never reached (#7577). The record is evaluated as given and handed back unchanged.
+     *
+     * @param entity the record, as it stands before the move
+     * @param status the status it is about to be moved to
+     * @throws ValidationException with the refusing rule's message when the move would be refused
+     */
+    public void checkFor(${name}Entity entity, Object status) {
+        ${entityStatusJavaClass} previousStatus = entity.${entityStatusProperty};
+        entity.${entityStatusProperty} = status == null ? null : ${entityStatusJavaClass}.valueOf(String.valueOf(status));
+        try {
+#if($lifecycleEdges)
+            enforceLifecycleMove(previousStatus, entity.${entityStatusProperty});
+#end
+#if($hasGatedRollupGuards)
+#gatedRollupGuardCheck()
+#end
+#if($documentChecks && $documentChecks.size() > 0)
+            enforceChecks(entity);
+#end
+        } finally {
+            entity.${entityStatusProperty} = previousStatus;
+        }
+    }
 #end
 #if($documentChecks && $documentChecks.size() > 0)
 
