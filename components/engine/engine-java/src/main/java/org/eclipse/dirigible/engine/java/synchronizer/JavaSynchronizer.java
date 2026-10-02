@@ -12,7 +12,10 @@ package org.eclipse.dirigible.engine.java.synchronizer;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -86,6 +89,15 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
      * Also true on startup so that existing CREATED artefacts are re-registered after a restart.
      */
     private final AtomicBoolean dirty = new AtomicBoolean(true);
+
+    /**
+     * The source each FAILED artefact had when the rebuild that failed it read it, keyed by location.
+     * The FAILED retry (#7248) offers such an artefact only a {@code START}; a rebuild is owed then
+     * exactly when the source no longer matches what failed - a read that caught a file a publish was
+     * still writing - and never for a file that is merely broken, which would otherwise recompile the
+     * whole client codebase on every retry interval.
+     */
+    private final Map<String, String> failedSources = new ConcurrentHashMap<>();
 
     private SynchronizerCallback callback;
 
@@ -200,13 +212,34 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED, "");
                 }
                 break;
-            case PREPARE:
             case START:
+                if (lifecycle == ArtefactLifecycle.FAILED && sourceChangedSinceFailure(artefact)) {
+                    dirty.set(true);
+                }
+                break;
+            case PREPARE:
             case STOP:
                 // No-op.
                 break;
         }
         return true;
+    }
+
+    /**
+     * Whether a FAILED artefact's source differs from the one its failed rebuild read. Unknown (a
+     * failure recorded before a restart, or a read failure) counts as changed, so it is attempted once.
+     */
+    private boolean sourceChangedSinceFailure(JavaFile artefact) {
+        if (!RegistrySourceLoader.exists(artefact.getLocation())) {
+            // Gone or mid-publish: the cleanup, or the pass after the publish, deals with it.
+            return false;
+        }
+        String failed = failedSources.get(artefact.getLocation());
+        try {
+            return failed == null || !failed.equals(new String(RegistrySourceLoader.read(artefact.getLocation()), StandardCharsets.UTF_8));
+        } catch (RuntimeException e) {
+            return true;
+        }
     }
 
     @Override
@@ -233,6 +266,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
     private boolean rebuildAll() {
         List<JavaFile> all = javaFileService.getAll();
         List<JavaLoader.ClientSource> sources = new ArrayList<>(all.size());
+        Map<String, String> read = new HashMap<>(all.size());
         for (JavaFile file : all) {
             if (!RegistrySourceLoader.exists(file.getLocation())) {
                 // The source of a still-registered artefact is momentarily gone - a publish replaces
@@ -259,7 +293,9 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 recordCompilationProblems(file.getLocation(), List.of(), message);
                 continue;
             }
-            sources.add(new JavaLoader.ClientSource(file.getProject(), file.getClassFqn(), new String(bytes, StandardCharsets.UTF_8)));
+            String source = new String(bytes, StandardCharsets.UTF_8);
+            read.put(file.getLocation(), source);
+            sources.add(new JavaLoader.ClientSource(file.getProject(), file.getClassFqn(), source));
         }
 
         JavaLoader.RebuildResult result = javaLoader.rebuild(sources);
@@ -273,6 +309,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 file.setLifecycle(ArtefactLifecycle.FAILED);
                 file.setError(message);
                 javaFileService.save(file);
+                rememberFailedSource(file, read);
                 recordCompilationProblems(file.getLocation(), result.diagnostics()
                                                                     .getOrDefault(fqn, List.of()),
                         message);
@@ -286,12 +323,14 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 file.setLifecycle(ArtefactLifecycle.FAILED);
                 file.setError(message);
                 javaFileService.save(file);
+                rememberFailedSource(file, read);
                 recordCompilationProblems(file.getLocation(), List.of(), message);
             } else if (result.succeededFqns()
                              .contains(fqn)) {
                 file.setLifecycle(ArtefactLifecycle.CREATED);
                 file.setError(null);
                 javaFileService.save(file);
+                failedSources.remove(file.getLocation());
                 String warning = result.wiringWarnings()
                                        .get(fqn);
                 if (warning != null) {
@@ -306,6 +345,13 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
             }
         }
         return true;
+    }
+
+    private void rememberFailedSource(JavaFile file, Map<String, String> read) {
+        String source = read.get(file.getLocation());
+        if (source != null) {
+            failedSources.put(file.getLocation(), source);
+        }
     }
 
     /**
@@ -359,6 +405,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
         try {
             LOGGER.info("Removing Java artefact [{}] ([{}]) - its source is gone", artefact.getLocation(), artefact.getClassFqn());
             javaFileService.delete(artefact);
+            failedSources.remove(artefact.getLocation());
             // Clear any compilation problems for the removed source - the next rebuild won't see it,
             // so its entries would otherwise linger.
             clearCompilationProblems(artefact.getLocation());
