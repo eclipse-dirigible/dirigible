@@ -703,6 +703,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // on the parent by the EDM generator (EdmIntentGenerator.displacedStatusProperty) under the
             // same name.
             base.put("statusDisplacedField", withStatus ? IntentNaming.displacedStatusProperty(rollup.getStatus()) : "");
+            // WHICH of the child's rows this roll-up counts at all (#7542): the neutral clauses appended
+            // to the recompute's own foreign-key query, so a cancelled or voided row stops consuming the
+            // parent's capacity instead of holding it for ever. The SAME clauses are stamped on the
+            // capacity guard by the EDM generator, which is what keeps the stored balance and the
+            // enforced ceiling from disagreeing - one authored definition, two readers.
+            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
+            if (!filter.isEmpty()) {
+                base.put("filter", filter);
+            }
             // Recompute the value for the affected parent from the store on each child event. The query
             // is the foreign key alone, which the descriptor already carries - the template layer builds
             // the `Criteria` from it rather than the glue carrying the builder call (issue #7406).

@@ -13,8 +13,10 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,6 +38,7 @@ import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
+import org.eclipse.dirigible.components.intent.generator.ScheduleSupport;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
@@ -599,7 +602,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
-                    putPickable(fkProperty, relation, info.propertyNames());
+                    putPickable(fkProperty, name, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -620,7 +623,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
-                putPickable(fkProperty, relation, null);
+                putPickable(fkProperty, name, relation, null);
                 putStatusSteps(fkProperty, model, entity, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
@@ -639,6 +642,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // instead of the default fields-then-relations layout. Unlisted properties keep their
             // relative position, appended after the listed ones.
             properties = applyOrder(properties, entity.getOrder());
+            // List-only columns (intent `list:`, #7614): the named properties are the exact list column
+            // set - major on, every other property's major off - and their sequence rides the entity as
+            // `listOrder`, which the templates read so the list order no longer follows `order:`.
+            applyListColumns(entityMap, properties, entity.getList());
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -974,6 +981,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
             guard.put("childIdField", "Id");
+            // WHICH rows count (#7542). The very clauses the asynchronous recompute queries by, so the
+            // stored balance and the enforced ceiling are one authored definition - the guard re-sums
+            // synchronously from the child's own store, and a row the filter excludes must be excluded
+            // from that sum too, or the two disagree by exactly the rows the author retired.
+            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
+            if (!filter.isEmpty()) {
+                guard.put("filter", filter);
+            }
+            // WHEN the check runs. Without a gate it runs on every write of the child, which is right
+            // for a row carrying its own typed amount and useless for one whose amount is a DOCUMENT
+            // TOTAL - that is recomputed from the lines after the header is written, so the guard would
+            // only ever see the 0 the header was created with.
+            RelationIntent guardStatus = notBlank(rollup.getGuardAt()) ? entityStatusRelation(child) : null;
+            if (guardStatus != null) {
+                guard.put("guardStatusProperty", IntentNaming.pascalCase(guardStatus.getName()));
+                guard.put("guardStatusValue", rollup.getGuardAt()
+                                                    .trim());
+            }
+            if (notBlank(rollup.getMessage())) {
+                guard.put("message", rollup.getMessage());
+            }
             // Two roll-ups may name the same relation and capacity column (a sum and a count of the same
             // allocation, say). The guard they describe is one and the same check, so it is emitted once -
             // twice would refuse nothing extra and only duplicate the parent's import.
@@ -1184,6 +1212,61 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("roleRead", authoredRead != null ? authoredRead : conventionRead);
         entity.put("roleWrite", authoredWrite != null ? authoredWrite : conventionWrite);
         return entity;
+    }
+
+    /**
+     * Apply an entity's list-only column set (intent {@code list:}, issue #7614). Each named property
+     * (matched case-insensitively against its model name) becomes a list column and every other one
+     * stops being one, whatever its {@code major}; the resolved names, in the authored sequence, are
+     * put on the entity as the comma-separated {@code listOrder} the list templates iterate by. The
+     * property list itself keeps the control order, so the form and the detail rows are unaffected. A
+     * blank/empty list leaves everything as it was.
+     *
+     * @param entityMap the entity being emitted
+     * @param properties the entity's properties, in control order
+     * @param list the authored list column names (may be empty)
+     */
+    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, List<String> list) {
+        if (list == null || list.isEmpty()) {
+            return;
+        }
+        List<String> listOrder = new ArrayList<>();
+        Set<Map<String, Object>> listed = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (String wanted : list) {
+            if (wanted == null) {
+                continue;
+            }
+            for (Map<String, Object> property : properties) {
+                if (!listed.contains(property) && wanted.trim()
+                                                        .equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                    listed.add(property);
+                    listOrder.add(String.valueOf(property.get("name")));
+                    break;
+                }
+            }
+        }
+        for (Map<String, Object> property : properties) {
+            property.put("widgetIsMajor", listed.contains(property) ? "true" : "false");
+        }
+        entityMap.put("listOrder", String.join(",", listOrder));
+    }
+
+    /**
+     * An entity's properties in its list column order: the ones its {@code listOrder} names first, in
+     * that sequence, then the rest in control order. Without a {@code listOrder} the list is returned
+     * as it is. Used where another entity's list columns are reproduced (a related register).
+     *
+     * @param properties the entity's properties, in control order
+     * @param listOrder the entity's comma-separated {@code listOrder}, or {@code null}
+     * @return the properties in list order
+     */
+    static List<Map<String, Object>> listOrdered(List<Map<String, Object>> properties, Object listOrder) {
+        if (listOrder == null || String.valueOf(listOrder)
+                                       .isBlank()) {
+            return properties;
+        }
+        return applyOrder(properties, List.of(String.valueOf(listOrder)
+                                                    .split(",")));
     }
 
     /**
@@ -1985,7 +2068,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * same-model target's properties; a resolved cross-model target is checked here against the owner's
      * {@code .model}, an unresolved one (the unit-test convention fallback) is not.
      */
-    private static void putPickable(Map<String, Object> p, RelationIntent relation, Set<String> targetPropertyNames) {
+    private static void putPickable(Map<String, Object> p, String entityName, RelationIntent relation, Set<String> targetPropertyNames) {
         if (relation.getPickable() == null) {
             return;
         }
@@ -1999,7 +2082,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         + ", which the cross-model target [" + relation.getTo() + "] does not declare"));
             }
         }
-        p.put("widgetPickable", PickableSupport.rule(relation.getPickable()));
+        // The message's catalog key (#7611): the relation is unique within its entity, so it names the
+        // rule's message as stably as a check id names a check's.
+        p.put("widgetPickable", PickableSupport.rule(relation.getPickable(), entityName + "_" + relation.getName() + "_pickable"));
     }
 
     /**
@@ -2246,6 +2331,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> checkMap = new LinkedHashMap<>();
             checkMap.put("kind", check.getKind());
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            // The message's translation key (#7611): the catalog entry the generated en-US catalog writes
+            // it under and the language catalogs translate it under - the authored `id:`, or the check's
+            // kind and position in its entity's list.
+            checkMap.put("messageKey", entity.getName() + "_" + (check.getId() != null && !check.getId()
+                                                                                                .isBlank() ? check.getId()
+                                                                                                                  .trim()
+                                                                                                        : check.getKind() + "_" + index));
             if (check.isWarning()) {
                 // The soft tier (#7466): the check is asked of the person writing instead of refusing
                 // the write. The code is what a caller echoes back to confirm it - stable across saves
@@ -3216,7 +3308,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     LoggedValue.of(entity.getName()));
             return null;
         }
-        List<Map<String, Object>> properties = propertiesOf(source);
+        List<Map<String, Object>> properties = listOrdered(propertiesOf(source), source.get("listOrder"));
         String fkProperty = relatedForeignKey(properties, entity.getName(), related);
         if (fkProperty == null) {
             return null; // reported by the parser

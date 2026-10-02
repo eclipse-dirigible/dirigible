@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -93,6 +95,7 @@ final class ModelParameterProcessor {
             collectScopedChildren(entities);
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
+            resolveRollupGuards(entities);
             resolveDeleteRestrictors(entities, parameters);
         }
         resolveDependentWidgets(entities);
@@ -127,7 +130,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
-        resolveUniqueConstraintLiterals(entity);
+        resolveUniqueConstraintLiterals(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
 
@@ -135,6 +138,43 @@ final class ModelParameterProcessor {
             processProperty(property, entity, entities, parameters);
         }
         resolveVisibleWhen(entity);
+        resolveListProperties(entity);
+    }
+
+    /**
+     * Derives {@code listProperties}, the sequence the list templates iterate their columns in. An
+     * entity with a {@code listOrder} (intent {@code list:}, dirigible #7614) lists the named
+     * properties first, in that order, then the rest in control order - the rest are not major, so no
+     * list shows them. Without one it is the properties themselves, so the list follows the control
+     * order as before. Either way the elements are the same property maps the form iterates.
+     *
+     * @param entity the entity
+     */
+    private static void resolveListProperties(Map<String, Object> entity) {
+        List<Map<String, Object>> properties = asMaps(entity.get("properties"));
+        String listOrder = str(entity, "listOrder");
+        if (listOrder == null || listOrder.isBlank()) {
+            entity.put("listProperties", properties);
+            return;
+        }
+        List<Map<String, Object>> ordered = new ArrayList<>(properties.size());
+        Set<Map<String, Object>> placed = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (String wanted : listOrder.split(",")) {
+            for (Map<String, Object> property : properties) {
+                if (!placed.contains(property) && wanted.trim()
+                                                        .equalsIgnoreCase(str(property, "name"))) {
+                    ordered.add(property);
+                    placed.add(property);
+                    break;
+                }
+            }
+        }
+        for (Map<String, Object> property : properties) {
+            if (!placed.contains(property)) {
+                ordered.add(property);
+            }
+        }
+        entity.put("listProperties", ordered);
     }
 
     /**
@@ -250,9 +290,12 @@ final class ModelParameterProcessor {
         List<Object> forbidWhenGuards = new ArrayList<>();
         List<Object> deleteChecks = new ArrayList<>();
         List<Object> warningChecks = new ArrayList<>();
+        int index = -1;
         for (Map<String, Object> check : checks) {
+            index++;
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
+            resolveMessageCatalog(check, ModelTranslations.checkMessageKey(entity, check, index), parameters);
             resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
             if ("warn".equals(str(check, "severity"))) {
@@ -339,6 +382,32 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Derives the arguments a generated refusal or warning hands {@code CheckMessages} (issue #7611):
+     * the message's fully qualified catalog key ({@code <project>:<catalog prefix>.checks.<key>} - the
+     * same key the generated en-US catalog writes the message under and a language catalog translates)
+     * and the default-language text. The generated code resolves them for the request's language when
+     * the check fires, so one declaration reaches every reader in their own language.
+     *
+     * <p>
+     * {@code messageArgsJava} is the two arguments joined, ready to be written into the call; a
+     * template appends the placeholder values (`{count}`, `{match}`) after it.
+     *
+     * @param check the check
+     * @param messageKey the check's catalog key
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveMessageCatalog(Map<String, Object> check, String messageKey, Map<String, Object> parameters) {
+        String message = str(check, "message");
+        if (message == null) {
+            return;
+        }
+        String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+        check.put("messageCatalogKey", catalogKey);
+        check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
+        check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
+    }
+
+    /**
      * Derives the Java twins of a check's NEUTRAL halves - the literal a {@code compare} tests against
      * and the condition a {@code requiredWhen} / {@code forbidWhen} is gated by (issue #7405).
      *
@@ -390,10 +459,17 @@ final class ModelParameterProcessor {
      * controllers write into Java string literals when they translate a constraint violation.
      *
      * @param entity the entity
+     * @param parameters the generation parameters
      */
-    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity) {
+    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity, Map<String, Object> parameters) {
         for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
             resolveMessageLiteral(constraint);
+            // The message's translation key (#7611), so a collision is answered in the reader's language.
+            String uniqueKey = ModelTranslations.uniqueMessageKey(entity, constraint);
+            if (uniqueKey != null) {
+                constraint.put("messageCatalogKeyJavaLiteral",
+                        JavaLiterals.escape(ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + uniqueKey)));
+            }
             String name = str(constraint, "name");
             if (name != null) {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
@@ -539,6 +615,18 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // A picker rule naming its message's catalog key (#7611) gets the fully qualified key the
+        // shared runtime's T() resolves - the namespace is this project and the catalog prefix this
+        // model file's, neither of which the model itself may embed.
+        String pickable = str(property, "widgetPickable");
+        if (pickable != null && pickable.contains("\"messageKey\"")) {
+            Map<String, Object> rule = ModelJson.parseObject(pickable);
+            if (rule.get("messageKey") instanceof String messageKey) {
+                rule.put("messageCatalogKey",
+                        ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey));
+                property.put("widgetPickable", JavaScriptJson.compact(rule));
+            }
+        }
         // The authored description is the property's @Documentation argument in the generated entity -
         // a Java string literal, so a quote in it ({@code Customer's "trade" name}) would end that
         // literal and fail the compile of the whole generated module (#7295). The raw value stays for
@@ -951,6 +1039,137 @@ final class ModelParameterProcessor {
      * @param entities every entity in the model
      * @param parameters the generation parameters
      */
+    /**
+     * Renders what a capacity guard needs beyond its coordinates (issue #7542): the row filter, as the
+     * {@code Criteria} chain the re-sum appends and the Java test the row being written has to pass,
+     * and the authored refusal message.
+     *
+     * <p>
+     * The filter is applied TWICE, and that is the whole point of rendering both halves from the one
+     * declaration: the sum re-read from the store must exclude the rows the author retired, and so must
+     * the amount of the row in hand - otherwise cancelling an allocation would be refused by the very
+     * ceiling the cancellation frees. The guard is skipped outright when the incoming row does not
+     * count, since a row outside the filter changes no sum there is anything to refuse.
+     *
+     * <p>
+     * It is done here rather than in the model generator because the comparison has to be written in
+     * the property's own Java shape, and this is the pass that has resolved it - a boxed
+     * {@code Objects.equals} against a bare literal is the {@code #7237} class of guard that reads as
+     * authored and is never true.
+     *
+     * @param entities the entities
+     */
+    private static void resolveRollupGuards(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> guard : asMaps(entity.get("rollupGuards"))) {
+                List<Map<String, Object>> filter = asMaps(guard.get("filter"));
+                if (!filter.isEmpty()) {
+                    guard.put("filterChain", JavaLiterals.criteriaChain(filter));
+                    guard.put("incomingMatch", incomingRowMatch(entity, filter));
+                }
+                String message = str(guard, "message");
+                if (message != null && !message.isEmpty()) {
+                    guard.put("messageExpression", guardMessageExpression(message, guard));
+                }
+                if (truthy(guard, "guardStatusProperty")) {
+                    // The targeted write path has to run the gated guards too - a workflow setter is how
+                    // a document reaches the gate status - and Velocity cannot ask a list whether any of
+                    // its entries carries a key, so the answer is computed once here.
+                    entity.put("hasGatedRollupGuards", "true");
+                }
+            }
+        }
+    }
+
+    /**
+     * The row being written, tested against the roll-up's filter in Java - the clauses ANDed, each in
+     * the shape its own property carries.
+     *
+     * @param entity the child entity
+     * @param filter the filter clauses
+     * @return the Java boolean expression
+     */
+    private static String incomingRowMatch(Map<String, Object> entity, List<Map<String, Object>> filter) {
+        StringBuilder match = new StringBuilder();
+        for (Map<String, Object> clause : filter) {
+            String property = str(clause, "property");
+            String operator = str(clause, "op");
+            String value = JavaLiterals.valueExpression(clause.get("value"));
+            if (property == null || value == null) {
+                continue;
+            }
+            Map<String, Object> declared = findProperty(entity, property);
+            String javaClass = declared == null ? null : str(declared, "dataTypeJavaClass");
+            String read = "entity." + property;
+            String equal;
+            if ("Boolean".equals(javaClass) || "String".equals(javaClass)) {
+                equal = "java.util.Objects.equals(" + read + ", " + value + ")";
+            } else {
+                // A number is compared BY VALUE: the literal's own width says nothing about the
+                // column's, and a boxed equality across two of them is silently never true.
+                equal = "(" + read + " != null && " + read + ".longValue() == " + value + "L)";
+            }
+            if (match.length() > 0) {
+                match.append(" && ");
+            }
+            match.append("ne".equals(operator) ? "!" + equal : equal);
+        }
+        return match.toString();
+    }
+
+    /**
+     * The authored refusal message as a Java expression, with the four figures the guard has in hand
+     * spliced in where the author placed them.
+     *
+     * @param message the authored message
+     * @param guard the guard
+     * @return the Java string expression
+     */
+    private static String guardMessageExpression(String message, Map<String, Object> guard) {
+        String capacity = "guardParent." + str(guard, "capacityField");
+        Map<String, String> figures = new LinkedHashMap<>();
+        figures.put("{capacity}", capacity);
+        figures.put("{sum}", "guardConsumed");
+        figures.put("{requested}", "guardIncoming");
+        figures.put("{remaining}", capacity + ".subtract(guardConsumed)");
+        StringBuilder expression = new StringBuilder();
+        StringBuilder literal = new StringBuilder();
+        int index = 0;
+        while (index < message.length()) {
+            String matched = null;
+            for (String token : figures.keySet()) {
+                if (message.startsWith(token, index)) {
+                    matched = token;
+                    break;
+                }
+            }
+            if (matched == null) {
+                literal.append(message.charAt(index));
+                index++;
+                continue;
+            }
+            appendLiteral(expression, literal);
+            expression.append(expression.length() == 0 ? "" : " + ")
+                      .append(figures.get(matched));
+            index += matched.length();
+        }
+        appendLiteral(expression, literal);
+        return expression.length() == 0 ? "\"\"" : expression.toString();
+    }
+
+    private static void appendLiteral(StringBuilder expression, StringBuilder literal) {
+        if (literal.length() == 0) {
+            return;
+        }
+        if (expression.length() > 0) {
+            expression.append(" + ");
+        }
+        expression.append('"')
+                  .append(JavaLiterals.escape(literal.toString()))
+                  .append('"');
+        literal.setLength(0);
+    }
+
     private static void resolvePeriodLock(List<Map<String, Object>> entities, Map<String, Object> parameters) {
         for (Map<String, Object> entity : entities) {
             Map<String, Object> register = findEntity(entities, str(entity, "periodLockEntity"));

@@ -93,7 +93,7 @@
                 <thead x-h-table-header>
                   <tr x-h-table-row>
                     <template x-for="c in kpiColumns(r)" :key="c.alias">
-                      <th x-h-table-head scope="col" :class="kpiAlignClass(c)" x-text="c.label"></th>
+                      <th x-h-table-head scope="col" :class="kpiAlignClass(c)" x-text="$store.reports.widgetColumnLabel(r, c)"></th>
                     </template>
                   </tr>
                 </thead>

@@ -332,6 +332,7 @@ public final class IntentParser {
         rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
         rejectCheckOn(tree);
+        rejectMessageMaps(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
@@ -396,6 +397,7 @@ public final class IntentParser {
         validateDocumentItemsLayout(model, issues);
         validateDuplicable(model, issues);
         validateOrders(model, issues);
+        validateLists(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
@@ -920,6 +922,56 @@ public final class IntentParser {
                                                   .trim()
                                                   .toLowerCase())) {
                 issues.add("entity [" + name + "] calendar.scope [" + cal.getScope() + "] is not a declared to-one relation");
+            }
+        }
+    }
+
+    /**
+     * Each entity's optional {@code list} is the exact column set and order of its generated list
+     * tables (issue #7614). Validated like {@code order}: no blank entry, no name twice, and every name
+     * a property the list can show - a field, a to-one ({@code manyToOne} / {@code oneToOne}) or
+     * {@code subset} relation, or the {@code Name} a {@code label:} synthesizes. A {@code oneToMany} /
+     * {@code manyToMany} relation has no column on the entity, so it cannot be one of the list's.
+     */
+    private static void validateLists(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<String> list = entity.getList();
+            if (list == null || list.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            Set<String> known = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    known.add(field.getName()
+                                   .toLowerCase(Locale.ROOT));
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind())
+                        || "subset".equals(relation.getKind()))) {
+                    known.add(relation.getName()
+                                      .toLowerCase(Locale.ROOT));
+                }
+            }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                known.add("name");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String token : list) {
+                if (token == null || token.isBlank()) {
+                    issues.add("entity [" + entity.getName() + "] list has a blank entry");
+                    continue;
+                }
+                String key = token.trim()
+                                  .toLowerCase(Locale.ROOT);
+                if (!seen.add(key)) {
+                    issues.add("entity [" + entity.getName() + "] list names [" + token + "] more than once");
+                }
+                if (!known.contains(key)) {
+                    issues.add("entity [" + entity.getName() + "] list references [" + token
+                            + "] which is not a field or to-one relation of the entity");
+                }
             }
         }
     }
@@ -1772,6 +1824,7 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate rollup [" + name + "]");
             }
+            validateRollupMembershipAndTiming(rollup, name, byName, issues);
             if (rollup.isCrossModelChild()) {
                 validateCrossModelChildRollup(rollup, name, byName, usesAliases, issues);
                 continue;
@@ -4370,8 +4423,12 @@ public final class IntentParser {
                 validateImmutableInPeriod(entity, byName, issues);
             }
             if (entity.getChecks() != null) {
+                Set<String> checkIds = new java.util.HashSet<>();
                 for (CheckIntent check : entity.getChecks()) {
                     validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
+                    String checkSubject =
+                            "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
+                    validateCheckId(checkSubject, check, checkIds, issues);
                 }
             }
             if (!entity.getUnique()
@@ -5570,6 +5627,86 @@ public final class IntentParser {
         }
     }
 
+    /**
+     * Validate a roll-up's row filter and its capacity-guard gate (issue #7542).
+     *
+     * <p>
+     * {@code where:} says WHICH of the child's rows the roll-up counts at all - without it a cancelled
+     * or voided document keeps consuming the parent's capacity for ever and its replacement can never
+     * be issued. {@code guardAt:} says WHEN the capacity guard runs: a row carrying its own typed
+     * amount is guarded on every write, but one whose amount is a DOCUMENT TOTAL is recomputed from its
+     * lines after the header is written, so an ungated guard only ever sees the 0 the header was
+     * created with.
+     *
+     * <p>
+     * Both are refused on a CROSS-MODEL child: its rows are written by the owner's repository, which is
+     * also where its capacity guard would have to be emitted, so a filter or a gate declared here would
+     * narrow nothing and gate nothing - the same reason {@code capacity:} itself is refused on that
+     * direction.
+     *
+     * <p>
+     * The operator set is deliberately narrower than a schedule's: only {@code eq} / {@code ne}. The
+     * filter is applied twice - to the asynchronous recompute, as a query, and to the synchronous
+     * guard, where the row being written has to be tested IN JAVA before its amount is added to the sum
+     * - and an exact equality is the only comparison whose two renderings cannot disagree. It is also
+     * all the motivating case needs (exclude the statuses that no longer count).
+     */
+    private static void validateRollupMembershipAndTiming(RollupIntent rollup, String name, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        boolean hasWhere = rollup.getWhere() != null && !rollup.getWhere()
+                                                               .isEmpty();
+        boolean hasGuardAt = rollup.getGuardAt() != null && !rollup.getGuardAt()
+                                                                   .isBlank();
+        if (!hasWhere && !hasGuardAt) {
+            return;
+        }
+        if (rollup.isCrossModelChild()) {
+            issues.add("rollup [" + name + "] counts a cross-model child [" + rollup.getModel() + ":" + rollup.getEntity()
+                    + "], so where / guardAt are not supported - the rows are written by the owner's repository, which is where"
+                    + " the filter and the capacity guard would have to be emitted; declare them in the model that owns the child");
+            return;
+        }
+        EntityIntent child = byName.get(rollup.getEntity());
+        if (hasWhere) {
+            for (ScheduleConditionIntent condition : rollup.getWhere()) {
+                if (condition.getField() == null || condition.getField()
+                                                             .isBlank()) {
+                    issues.add("rollup [" + name + "] has a where-condition with no field");
+                    continue;
+                }
+                String op = condition.getOp();
+                if (!"eq".equals(op) && !"ne".equals(op)) {
+                    issues.add("rollup [" + name + "] where-condition uses operator [" + op
+                            + "] (supported: eq/ne) - the filter is applied both as a query and, for the row being written, as a Java"
+                            + " comparison, and an exact equality is the only one whose two renderings cannot disagree");
+                }
+                if (condition.getValue() == null) {
+                    issues.add("rollup [" + name + "] where-condition on [" + condition.getField() + "] has no value");
+                }
+                if (child != null && !hasPropertyIgnoreCase(child, condition.getField())) {
+                    issues.add("rollup [" + name + "] where-condition reads [" + condition.getField()
+                            + "], which is not a field or to-one relation of [" + rollup.getEntity() + "]");
+                }
+                validateWhereStatusValue(condition, child, "rollup [" + name + "]", issues);
+            }
+        }
+        if (hasGuardAt) {
+            if (rollup.getCapacity() == null || rollup.getCapacity()
+                                                      .isBlank()) {
+                issues.add("rollup [" + name + "] declares guardAt [" + rollup.getGuardAt()
+                        + "] with no capacity - guardAt names the status the CAPACITY guard is enforced at, so there is nothing to gate");
+            }
+            if (child != null && entityStatusRelationOf(child) == null) {
+                issues.add("rollup [" + name + "] declares guardAt [" + rollup.getGuardAt() + "], but [" + rollup.getEntity()
+                        + "] declares no function: EntityStatus relation to read the gate from");
+            }
+            if (!isIntegerLiteral(rollup.getGuardAt())) {
+                issues.add("rollup [" + name + "] guardAt [" + rollup.getGuardAt() + "] is not a status - name the seeded status of ["
+                        + rollup.getEntity() + "] (resolved to its id at parse) or give the numeric seed id");
+            }
+        }
+    }
+
     /** The entity's {@code function: EntityStatus} relation, or {@code null}. */
     private static RelationIntent entityStatusRelationOf(EntityIntent entity) {
         if (entity.getRelations() != null) {
@@ -6371,6 +6508,49 @@ public final class IntentParser {
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * A check's or a picker rule's {@code message:} is ONE text, in the module's default language
+     * (issue #7611). Translations live in the module's catalogs
+     * ({@code i18n/<locale>/<model>.model.json}, under {@code checks.<key>}) exactly like a label's -
+     * never as a per-language map inside the model: that would make every check an N-language block of
+     * UI copy, put a translator's edits behind a regen, and leave two sources of truth for one key.
+     */
+    private static void rejectMessageMaps(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity)) {
+                continue;
+            }
+            if (entity.get("checks") instanceof List<?> checks) {
+                for (Object checkNode : checks) {
+                    if (checkNode instanceof Map<?, ?> check && check.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] check [" + check.get("kind") + "]"));
+                    }
+                }
+            }
+            if (entity.get("relations") instanceof List<?> relations) {
+                for (Object relationNode : relations) {
+                    if (relationNode instanceof Map<?, ?> relation && relation.get("pickable") instanceof Map<?, ?> pickable
+                            && pickable.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] relation [" + relation.get("name") + "] pickable"));
+                    }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    private static String messageMapIssue(String subject) {
+        return subject + " message is a map - a message is one text in the module's default language;"
+                + " translate it in the module's catalog `i18n/<locale>/<model>.model.json` under `checks.<key>`"
+                + " (the key the generated en-US catalog writes it under), like a label";
     }
 
     private static void rejectRemovedNumberKeys(Object tree) {
@@ -11271,6 +11451,27 @@ public final class IntentParser {
                             + UnknownKeyValidator.suggestion(key, allowed));
                 }
             }
+        }
+    }
+
+    /** The shape of a check's {@code id:} - it becomes part of a translation catalog key (#7611). */
+    private static final java.util.regex.Pattern CHECK_ID = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+
+    /**
+     * A check's optional {@code id:} (issue #7611): an identifier, unique within its entity, since it
+     * names the check's message in the translation catalogs.
+     */
+    private static void validateCheckId(String subject, CheckIntent check, Set<String> seen, List<String> issues) {
+        if (check.getId() == null) {
+            return;
+        }
+        String id = check.getId()
+                         .trim();
+        if (!CHECK_ID.matcher(id)
+                     .matches()) {
+            issues.add(subject + " id [" + check.getId() + "] must be an identifier (letters, digits, underscore; a letter first)");
+        } else if (!seen.add(id)) {
+            issues.add(subject + " id [" + id + "] is declared by another check of the same entity - a check id names one message");
         }
     }
 

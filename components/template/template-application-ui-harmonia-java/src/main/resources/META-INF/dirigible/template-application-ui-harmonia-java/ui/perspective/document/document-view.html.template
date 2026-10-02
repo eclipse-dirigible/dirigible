@@ -479,8 +479,13 @@
       <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id, form)" x-show="visibleWhenHolds(d.visibleWhen, form)" x-h-card class="w-full">
         <div x-h-card-header>
           <h3 x-h-card-title x-text="T(d.tkey, d.label)"></h3>
-          <div x-h-card-action x-show="masterId && (!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()">
-            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+          <div x-h-card-action>
+            <div class="hbox items-center gap-2">
+              <!-- Refresh (#7612): the rows a server-side chain writes behind the panel's back - the Snapshot
+                   copy minted after Issue, an allocation a settlement recorded - without reloading the page. -->
+              <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" :disabled="refreshing" @click="refresh()" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" :title="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" :class="refreshing ? 'animate-spin' : ''"></svg></button>
+              <button x-h-button data-variant="primary" data-size="sm" x-show="masterId && (!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+            </div>
           </div>
         </div>
         <div x-h-card-content>

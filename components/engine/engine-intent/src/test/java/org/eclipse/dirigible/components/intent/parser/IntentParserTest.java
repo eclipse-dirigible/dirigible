@@ -1114,6 +1114,64 @@ class IntentParserTest {
                 "requires the entity to own a composition child");
     }
 
+    /**
+     * #7611: a check's {@code message} is ONE text in the module's default language - a per-language
+     * map is refused, pointing at the catalogs - and an optional {@code id} names it in them.
+     */
+    @Test
+    void checkMessagesAreOneTextAndMayCarryAnId() {
+        String yaml = """
+                name: billing
+                languages: [en, bg]
+                entities:
+                  - name: Customer
+                    checks:
+                      - id: discountCap
+                        kind: compare
+                        field: discount
+                        op: le
+                        value: 50
+                        message: "The discount is at most 50%"
+                      - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: discount, type: decimal }
+                      - { name: credit, type: decimal }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - name: customer
+                        kind: manyToOne
+                        to: Customer
+                        pickable: { when: "discount != null", message: "No discount agreed" }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent cap = model.getEntities()
+                               .get(0)
+                               .getChecks()
+                               .get(0);
+        assertEquals("The discount is at most 50%", cap.getMessage());
+        assertEquals("discountCap", cap.getId());
+        CheckIntent plain = model.getEntities()
+                                 .get(0)
+                                 .getChecks()
+                                 .get(1);
+        assertEquals("The credit is never negative", plain.getMessage());
+        assertNull(plain.getId());
+
+        // A per-language map is refused - translations live in the module's catalogs, like a label's.
+        assertCompareIssue(
+                yaml.replace("message: \"The discount is at most 50%\"",
+                        "message: { en: \"The discount is at most 50%\", bg: \"Отстъпката е най-много 50%\" }"),
+                "check [compare] message is a map - a message is one text in the module's default language");
+        assertCompareIssue(yaml.replace("message: \"No discount agreed\"", "message: { en: \"No discount agreed\", bg: \"Без отстъпка\" }"),
+                "relation [customer] pickable message is a map");
+        assertCompareIssue(yaml.replace("id: discountCap", "id: 1cap"), "must be an identifier");
+        assertCompareIssue(yaml.replace("- { kind: compare, field: credit", "- { id: discountCap, kind: compare, field: credit"),
+                "is declared by another check of the same entity");
+    }
+
     @Test
     void severityWarnIsRefusedOnTheKindsNobodyIsAskedAbout() {
         String yaml = """

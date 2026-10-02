@@ -20,6 +20,8 @@
 exports.getPerspectiveGroup = () => ({
 	id: 'personal',
 	label: 'Personal',
+	// The sidebar label in the user's language (#7610) - a group names its key the way a custom action does.
+	translation: { key: 'application-core:shell.nav.personal' },
 	order: 10,
 	isDefault: true,
 	// The service classifies a group by the presence of `items` - the aggregated personal

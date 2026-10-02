@@ -70,7 +70,8 @@ class ForbidWhenDeleteTemplateIT {
                     template + " must load the hop the condition reads: " + rendered);
             assertTrue(rendered.contains("java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)"),
                     template + " must emit the authored condition: " + rendered);
-            assertTrue(rendered.contains("HttpStatus.BAD_REQUEST, \"Cannot remove a line from a posted entry\""),
+            assertTrue(rendered.contains(
+                    "CheckMessages.refusal(\"sales:sales-model.checks.InvoiceItem_forbidWhen_0\", \"Cannot remove a line from a posted entry\""),
                     template + " must answer with the authored message: " + rendered);
             assertNoUnresolvedReferences(rendered);
         }
@@ -101,7 +102,8 @@ class ForbidWhenDeleteTemplateIT {
 
             assertTrue(rendered.contains("if (entity.Status != null && entity.Status == 3) {"),
                     template + " must gate the guard on the authored status: " + rendered);
-            assertTrue(rendered.contains("HttpStatus.BAD_REQUEST, \"Cannot remove a confirmed line\""),
+            assertTrue(rendered.contains(
+                    "CheckMessages.refusal(\"sales:sales-model.checks.InvoiceItem_forbidWhen_0\", \"Cannot remove a confirmed line\""),
                     template + " must answer with the authored message: " + rendered);
             assertNoUnresolvedReferences(rendered);
         }
@@ -128,6 +130,7 @@ class ForbidWhenDeleteTemplateIT {
         Map<String, Object> check = ungated();
         check.put("message", "A \"line\" of a posted entry cannot be removed");
         check.put("messageJavaLiteral", "A \\\"line\\\" of a posted entry cannot be removed");
+        check.put("messageArgsJava", messageArgs("A \\\"line\\\" of a posted entry cannot be removed"));
 
         for (String template : CONTROLLERS) {
             String rendered = render(template, context(check));
@@ -163,6 +166,7 @@ class ForbidWhenDeleteTemplateIT {
         check.put("kind", "forbidWhen");
         check.put("message", "Cannot remove a line from a posted entry");
         check.put("messageJavaLiteral", "Cannot remove a line from a posted entry");
+        check.put("messageArgsJava", messageArgs("Cannot remove a line from a posted entry"));
         check.put("guardJavaExpression", "java.util.Objects.equals((hop0 == null ? null : hop0.Status), 2)");
         check.put("pathLoads", List.of(hop()));
         return check;
@@ -173,9 +177,18 @@ class ForbidWhenDeleteTemplateIT {
         Map<String, Object> check = ungated();
         check.put("message", "Cannot remove a confirmed line");
         check.put("messageJavaLiteral", "Cannot remove a confirmed line");
+        check.put("messageArgsJava", messageArgs("Cannot remove a confirmed line"));
         check.put("status", "3");
         check.put("statusProperty", "Status");
         return check;
+    }
+
+    /**
+     * The resolution arguments the processor derives for a check message (#7611): the catalog key and
+     * the escaped default text.
+     */
+    private static String messageArgs(String literal) {
+        return "\"sales:sales-model.checks.InvoiceItem_forbidWhen_0\", \"" + literal + "\"";
     }
 
     private static Map<String, Object> hop() {

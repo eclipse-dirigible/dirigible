@@ -298,6 +298,10 @@ public final class JavaLiterals {
      * @param raw the reading, as the clause's {@code value}
      * @return the Java expression, or null when the reading is not one this renders
      */
+    static String valueExpression(Object raw) {
+        return criteriaValueExpression(raw);
+    }
+
     private static String criteriaValueExpression(Object raw) {
         if (!(raw instanceof Map<?, ?> reading)) {
             return null;

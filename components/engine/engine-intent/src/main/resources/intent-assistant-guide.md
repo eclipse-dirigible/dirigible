@@ -330,7 +330,8 @@ field may declare:
   ```
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
-  of wide/secondary fields (e.g. `uuid`, long notes).
+  of wide/secondary fields (e.g. `uuid`, long notes). To choose the list's columns AND their order in one
+  place, give the entity a `list:` instead (see "List columns" below) - it overrides `major`.
 - `aggregate: true` - include this numeric field in a document's **totals footer** (the sum across the
   line items is shown under the items table). Use it on money / quantity columns of a `DocumentItem`.
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
@@ -659,6 +660,21 @@ field may declare:
     when the document is saved for all the lines that break it - not once per line. `{count}` in the
     message is replaced with the number of lines. Always a warning; a hard per-line rule is a
     `compare` on the items entity.
+  **Translating check messages (#7611).** A check message is translated exactly like a label: write
+  it ONCE, in the module's default language, and it reaches every reader in their own. The generator
+  writes each message into the module's en-US catalog (`i18n/en-US/<model>.model.json`) under
+  `<model prefix>.checks.<key>`, and a translator's `i18n/bg-BG/<model>.model.json` translates it
+  under the same key. **A `message:` is never a per-language map** (`{ en: ..., bg: ... }` is
+  refused): the model declares structure, the catalogs carry the languages - otherwise every check
+  becomes an N-language block of UI copy, a translator's edit needs a regen, and one key has two
+  sources of truth. The key is `<Entity>_<kind>_<position>` (`Invoice_itemsCompare_0`), or
+  `<Entity>_<id>` when the check declares an `id:` - **give a check an `id:` once its message is
+  translated**, so reordering the entity's checks does not orphan the translation: `- { id:
+  zeroLines, kind: itemsCompare, ... }`. A picker rule's message is `<Entity>_<relation>_pickable`,
+  a `unique:` key's `<Entity>_unique_<constraint>`. The generated code resolves the request
+  language's catalog, else the default text; placeholders (`{count}`, `{match}`) are filled in AFTER
+  translation, so a translation may move them. A refusal's 400 body and each warning of a 428 carry
+  `messageKey` and `messageParams` next to the resolved `message`.
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
   reaches a status - or, for a source with no status lifecycle, when it is created; or when it
   reaches a declared enrichment `phases:` moment, the only trigger that may read an amount a
@@ -907,6 +923,23 @@ not listed keeps its default position and is appended after the listed ones. Sys
 (`ProcessId`, `ProcessIds`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
 
+**List columns (`list:`):** `order:` sequences the form, the list and the detail rows together, but a
+document wants its form in data-entry order and its list in scanning order. Give the entity a `list:`
+to set the list tables apart - it is the **exact** column set and order of every generated list (the
+power list, the master list, the my / partner lists, a composition child's register, a `related:`
+register without `show:`, and the export), and it overrides each property's `major` for the list:
+
+```yaml
+- name: SalesInvoice
+  order: [Id, Number, Date, Due, Customer, Company, Currency, PaymentMethod, BankAccount]   # the form
+  list:  [Number, Date, Customer, Total, Balance, Due, Status]                             # the list
+```
+
+Names match like `order:` (case-insensitive, no name twice) and must be a field, a `manyToOne` /
+`oneToOne` / `subset` relation, or the `Name` a `label:` generates - a `oneToMany` / `manyToMany` has no
+column. Without `list:` the list shows the `major` properties (every one unless `major: false`) in
+control order, as before.
+
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
 then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a
@@ -1024,6 +1057,23 @@ that navigation group in the **shared** application shell (the platform dashboar
 shells. The project's own standalone shell is unaffected. The group ids are defined once (e.g. in a
 dedicated navigation-groups project that exports `getPerspectiveGroup()` for each id) - the entity
 only references the id (e.g. `group: master-data`).
+
+A group's `label` is its English text. To show it in the user's language, the group names a
+translation key the same way a custom action does, `translation: { key: '<project>:<path>' }`, and
+the navigation-groups project ships that key in its own `i18n/<locale>/*.json` catalogs. The key
+must be fully qualified: its project part is the catalog namespace the shell loads.
+
+```javascript
+// base-nav-hr/configs/hr-group.js
+exports.getPerspectiveGroup = () => ({
+    id: 'hr', label: 'People', order: 45, items: [],
+    translation: { key: 'base-nav-hr:groups.hr' },
+});
+// base-nav-hr/i18n/bg-BG/groups.json   { "groups": { "hr": "Хора" } }
+// base-nav-hr/i18n/en-US/groups.json   { "groups": { "hr": "People" } }
+```
+
+A group that names no key, or a key the active language's catalog lacks, shows its `label`.
 
 ### Cross-model references (uses) - reuse entities owned by another intent model
 
@@ -3956,6 +4006,44 @@ against the owner's generated model at Generate time, and a `balance` without a 
 at parse (the balance IS capacity minus the sum). `status` stays refused on this direction: it moves
 the parent through the owner's own status seeds and its displaced-status column, which is the owner's
 lifecycle to declare.
+
+**WHICH rows count, and WHEN the ceiling is enforced (`where:` / `guardAt:` / `message:`).**
+Without a filter a roll-up counts EVERY child, so a cancelled or voided row keeps consuming the
+parent's capacity for ever and its replacement can never be issued. `where:` is the same
+`{ field, op, value }` triples a `schedules[].where` carries, over the CHILD's own fields and to-one
+relations, with a status named by its seed name like every other status site:
+```yaml
+rollups:
+  - name: contractCommitted
+    entity: CallOff
+    via: Contract
+    field: committed
+    op: sum
+    of: total
+    capacity: ceiling
+    where:
+      - { field: Status, op: ne, value: CANCELLED }   # eq / ne only
+    guardAt: ISSUED
+    message: "Only {remaining} left of {capacity}; this call-off asks {requested}."
+```
+One authored definition, two readers: the filter narrows the asynchronous recompute AND the
+synchronous re-sum the capacity guard runs, so the stored balance and the enforced ceiling cannot
+disagree. A row the filter excludes is not guarded at all - cancelling an allocation must never be
+refused by the very ceiling the cancellation frees. **Only `eq` / `ne`**: the filter is rendered twice
+(as a query and as a Java comparison of the row in hand) and an exact equality is the only comparison
+whose two renderings cannot disagree.
+
+`guardAt:` says WHEN the capacity guard runs. Without it the check runs on every write of the child,
+which is right for a row carrying its own typed amount (an allocation's) and useless for one whose
+amount is a DOCUMENT TOTAL - that is recomputed from the lines after the header is written, so the
+guard only ever sees the 0 the header was created with. Naming a status moves the check to the moment
+the document is persisted carrying it (its lines, and so its total, are in by then) and leaves a DRAFT
+free to exceed the ceiling while it is still being edited. It requires `capacity:` and a
+`function: EntityStatus` relation on the child. `message:` is the refusal, with `{capacity}`, `{sum}`,
+`{requested}` and `{remaining}` placeholders.
+
+Both are refused on a cross-model CHILD: those rows are written by the owner's repository, which is
+also where their guard would have to be emitted.
 
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum

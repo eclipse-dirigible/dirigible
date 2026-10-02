@@ -138,6 +138,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Unit
                 kind: setting
                 multilingual: true
+                # list: the list's own columns and order (#7614) - UnitPrice first, PackPrice off the
+                # list - while the form keeps the declaration order.
+                list: [unitPrice, name]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
@@ -1174,6 +1177,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: budget,      type: decimal, precision: 18, scale: 2 }
                   - { name: allocated,   type: decimal, precision: 18, scale: 2 }
                   - { name: unallocated, type: decimal, precision: 18, scale: 2 }
+              - name: PledgePaymentStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 50 }
               - name: PledgePayment
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -1181,6 +1189,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Pledge, kind: manyToOne, to: Pledge, composition: true, required: true }
                   - { name: Fund,   kind: manyToOne, to: PledgeFund }
+                  - { name: Status, kind: manyToOne, to: PledgePaymentStatus, function: EntityStatus, init: ACTIVE }
             """;
 
     // The rest of the same fixture. It is a SECOND constant only because a Java string constant
@@ -1212,8 +1221,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
               - { name: pledgePaid, entity: PledgePayment, via: Pledge, field: paid, op: sum, of: amount,
                   capacity: total, balance: balance, status: Status, statusWhenFull: 3, statusWhenPartial: 2 }
-              - { name: fundAllocated, entity: PledgePayment, via: Fund, field: allocated, op: sum, of: amount,
-                  capacity: budget, balance: unallocated }
+              # WHICH rows a capacity roll-up counts (#7542): a cancelled allocation must stop consuming
+              # the fund's budget, or the fund stays exhausted for ever and the replacement allocation
+              # can never be made. The same clauses narrow the asynchronous recompute AND the
+              # synchronous overdraw guard, so the stored balance and the enforced ceiling agree.
+              - name: fundAllocated
+                entity: PledgePayment
+                via: Fund
+                field: allocated
+                op: sum
+                of: amount
+                capacity: budget
+                balance: unallocated
+                where:
+                  - { field: Status, op: ne, value: CANCELLED }
+                message: "This fund has only {remaining} left of {capacity}; this allocation asks {requested}."
 
             expansions:
               - name: retainer-periods
@@ -1869,6 +1891,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { id: 1, name: OPEN }
                   - { id: 2, name: PARTIAL }
                   - { id: 3, name: SETTLED }
+              - name: pledge-payment-statuses
+                entity: PledgePaymentStatus
+                rows:
+                  - { id: 1, name: ACTIVE,    stage: live }
+                  - { id: 2, name: CANCELLED, stage: cancelled }
               - name: channels
                 entity: Channel
                 rows:
@@ -2732,8 +2759,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the fund capacity must be guarded alongside it - not dropped: " + pledgePaymentRepository);
         assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"Pledge capacity exceeded"),
                 "the pledge guard runs on create and on update: " + pledgePaymentRepository);
-        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"PledgeFund capacity exceeded"),
-                "so does the fund guard: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "throw new ValidationException(\"This fund has only \""),
+                "so does the fund guard, refusing in the authored words (#7542): " + pledgePaymentRepository);
+        // WHICH rows the fund's capacity counts (#7542): the filter narrows the re-sum, and the row being
+        // written is tested the same way - a row the filter excludes changes no sum, so cancelling an
+        // allocation is never refused by the ceiling the cancellation frees.
+        assertEquals(2, countOf(pledgePaymentRepository, "findAll(Criteria.create().eq(\"Fund\", entity.Fund).ne(\"Status\", 2))"),
+                "the fund re-sum must count only the rows the roll-up counts: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "!(entity.Status != null && entity.Status.longValue() == 2L)"),
+                "a cancelled allocation must not be guarded at all: " + pledgePaymentRepository);
+        // ...and the asynchronous recompute reads the SAME clauses, which is what keeps the stored
+        // balance and the enforced ceiling from disagreeing.
+        assertTrue(
+                contentOf("gen/events/emission/PledgePaymentFundRollupOnUpdate.java").contains(
+                        "Criteria.create().eq(\"Fund\", entity.Fund).ne(\"Status\", 2)"),
+                "the recompute must query by the same filter as the guard");
 
         assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
                 "the displaced status is bookkeeping - it must not reach the form model");
@@ -2812,8 +2852,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
                 "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
-        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient \\\"balance\\\"\")"),
-                "outcome block must fail the write with the authored message");
+        // The refusal resolves the authored message for the request's language (#7611): its catalog key
+        // and the default text.
+        assertTrue(
+                ledgerRepository.contains("throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(\"")
+                        && ledgerRepository.contains(".checks.") && ledgerRepository.contains("\", \"Insufficient \\\"balance\\\"\");"),
+                "outcome block must fail the write with the authored message: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
                 "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
 
@@ -2821,9 +2865,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(bookingRepository.contains("entity.WithinAllowance = guardWithin"),
                 "outcome task must stamp the boolean marker the process decision branches on");
         assertTrue(bookingRepository.contains("entity.Status = 3"), "outcome reject must force the authored EntityStatus seed id");
-        assertFalse(
-                bookingRepository.contains("throw new ValidationException(\"Over the allowance\")")
-                        || bookingRepository.contains("throw new ValidationException(\"No allowance left\")"),
+        assertFalse(bookingRepository.contains("\", \"Over the allowance\", ") || bookingRepository.contains("\", \"No allowance left\", "),
                 "a non-blocking outcome must NOT fail the write - that is the whole point of task/reject");
 
         // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
@@ -2856,6 +2898,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the manage list must export its filtered+sorted rows as CSV");
         assertTrue(unitManageList.contains("printRows(this.sortedItems"), "the manage list must print its filtered+sorted rows");
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
+        // list: [unitPrice, name] (#7614) is the list's exact column set and order - the header, the
+        // filter and the export columns all follow it - while the form keeps its own order.
+        assertTrue(
+                unitManageView.indexOf("cycleSort('UnitPrice')") >= 0
+                        && unitManageView.indexOf("cycleSort('UnitPrice')") < unitManageView.indexOf("cycleSort('Name')"),
+                "list: must put UnitPrice before Name in the list header");
+        assertFalse(unitManageView.contains("cycleSort('PackPrice')"), "a property list: leaves out must not be a list column");
+        assertTrue(
+                unitManageList.indexOf("{ name: 'UnitPrice'") >= 0
+                        && unitManageList.indexOf("{ name: 'UnitPrice'") < unitManageList.indexOf("{ name: 'Name'"),
+                "the filter / export columns must follow list: too");
+        assertFalse(unitManageList.contains("{ name: 'PackPrice'"), "the filter / export columns must leave out what list: leaves out");
+        String unitForm = contentOf("gen/emission/views/Settings/Unit-form.html");
+        assertTrue(
+                unitForm.indexOf("id=\"f_PackPrice\"") >= 0
+                        && unitForm.indexOf("id=\"f_PackPrice\"") < unitForm.indexOf("id=\"f_UnitPrice\""),
+                "list: must not reorder or trim the form");
         assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
                 "the manage list toolbar must carry the Export and Print actions");
         // The per-column filters live in the Filter menu (#7491), not in a row inside the table: the
@@ -5980,13 +6039,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .extract()
                                                                   .path("Id")));
         // Within both capacities: 1000 of a 1000 pledge, 1000 of a 1500 budget.
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Pledge\":" + firstPledge.get() + ",\"Fund\":" + fundId.get()
-                                                         + ",\"Amount\":1000}")
-                                                 .when()
-                                                 .post(API + "/pledge/PledgePaymentController")
-                                                 .then()
-                                                 .statusCode(200));
+        AtomicReference<Integer> firstAllocation = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> firstAllocation.set(given().contentType("application/json")
+                                                                     .body("{\"Pledge\":" + firstPledge.get() + ",\"Fund\":" + fundId.get()
+                                                                             + ",\"Amount\":1000}")
+                                                                     .when()
+                                                                     .post(API + "/pledge/PledgePaymentController")
+                                                                     .then()
+                                                                     .statusCode(200)
+                                                                     .extract()
+                                                                     .path("Id")));
         // The FIRST guard still refuses: 1500 against a 1000 pledge, whatever the fund has left.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
@@ -6005,7 +6067,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/pledge/PledgePaymentController")
                                                  .then()
                                                  .statusCode(400)
-                                                 .body(containsString("PledgeFund capacity exceeded")));
+                                                 // ...in the AUTHORED words (#7542): `message:` with its
+                                                 // four figures spliced in where the author placed them.
+                                                 .body(containsString("This fund has only 500.00 left of 1500.00"))
+                                                 .body(containsString("this allocation asks 1000")));
         // What fits under both is still accepted, and the fund's own roll-up follows it.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
@@ -6021,6 +6086,53 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Allocated", equalTo(1500.0F))
                                                  .body("Unallocated", equalTo(0.0F)),
                 30);
+        // ---- WHICH rows the capacity counts (#7542). The fund is exhausted, so a further allocation is
+        // refused - in the AUTHORED words, which is the whole point of `message:`.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + secondPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":100}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("This fund has only"))
+                                                 .body(containsString("this allocation asks")));
+        // Cancel the first allocation. Without the filter it would go on consuming the budget for ever
+        // and the replacement below could never be made - the defect the issue reports.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + firstAllocation.get() + ",\"Pledge\":" + firstPledge.get()
+                                                         + ",\"Fund\":" + fundId.get() + ",\"Amount\":1000,\"Status\":2}")
+                                                 .when()
+                                                 .put(API + "/pledge/PledgePaymentController/" + firstAllocation.get())
+                                                 .then()
+                                                 .statusCode(200));
+        // The asynchronous recompute reads the same filter, so the stored balance follows: 500 of 1500.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/pledgefund/PledgeFundController/" + fundId.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Allocated", equalTo(500.0F))
+                                                 .body("Unallocated", equalTo(1000.0F)),
+                30);
+        // ...and the synchronous guard agrees: the replacement allocation now fits. It is filed against a
+        // THIRD pledge, because the filter is per roll-up: the pledge's own `paid` sum declares none, so
+        // it still counts the cancelled row and its own ceiling is unmoved - which is the point.
+        AtomicReference<Integer> thirdPledge = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> thirdPledge.set(given().contentType("application/json")
+                                                                 .body("{\"Total\":1000,\"Status\":1}")
+                                                                 .when()
+                                                                 .post(API + "/pledge/PledgeController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Pledge\":" + thirdPledge.get() + ",\"Fund\":" + fundId.get()
+                                                         + ",\"Amount\":1000}")
+                                                 .when()
+                                                 .post(API + "/pledge/PledgePaymentController")
+                                                 .then()
+                                                 .statusCode(200));
 
         // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
         // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.

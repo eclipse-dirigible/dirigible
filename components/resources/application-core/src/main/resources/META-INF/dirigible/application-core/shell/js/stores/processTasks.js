@@ -21,6 +21,11 @@
  *   $store.processTasks.getTasks(row)        -> the record's actionable tasks
  *   $store.processTasks.openTask(task)       -> claim if needed, then open the task form
  * The task form is opened in the app-wide dialog wired in index.html; on close the store re-fetches.
+ *
+ * Every re-fetch compares the task set per process with the previous one and raises a window event
+ * `harmonia:tasks-changed` naming the processes that differ (basePage.onTasksChanged is the consumer),
+ * and a completed task form is followed by a bounded series of re-fetches, because the chain behind the
+ * task keeps writing the record after the completion returned (#7612).
  */
 document.addEventListener('alpine:init', () => {
   // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
@@ -66,6 +71,31 @@ document.addEventListener('alpine:init', () => {
     subjectKeys.delete(taskId);
   };
 
+  // The process instances whose task set differs between two readings of the inbox - a task completed
+  // (gone), the next wait state reached (a new one appeared) - compared by task id, so a re-read that
+  // changed nothing announces nothing.
+  const changedProcesses = (before, after) => {
+    const ids = (tasks) => (tasks || []).map((t) => t.id).sort().join(',');
+    const changed = [];
+    new Set([...Object.keys(before), ...Object.keys(after)]).forEach((processInstanceId) => {
+      if (ids(before[processInstanceId]) !== ids(after[processInstanceId])) changed.push(processInstanceId);
+    });
+    return changed;
+  };
+
+  // Tell the open page that these processes' records may have changed (basePage.onTasksChanged listens,
+  // filtered by the record's own ProcessId, so a change in someone else's documents re-reads nothing).
+  const announceTasksChanged = (processInstanceIds) => {
+    window.dispatchEvent(new CustomEvent('harmonia:tasks-changed', { detail: { processInstanceIds } }));
+  };
+
+  // How long after a completed task form closed the inbox is re-read and the record's page told to look
+  // again (cumulative: 2 s, 5 s, 10 s, 20 s). The chain behind a user task - number stamping, the status,
+  // the totals, the snapshot copy - runs behind Flowable's async boundaries, so the re-read the completion
+  // itself triggers can run before the chain has written (#7612). Bounded: a process that ends without a
+  // further task never reports "done", so this is the only way its last writes are picked up.
+  const SETTLE_DELAYS_MS = [2000, 3000, 5000, 10000];
+
   Alpine.store('processTasks', {
     byProcessId: {},
     tasks: [],          // flat list of all the user's tasks (assignee + groups) — the Inbox view
@@ -75,15 +105,17 @@ document.addEventListener('alpine:init', () => {
     formTitle: '',
     formTitleKey: '',   // the open task's translation key; '' for a process that declares no catalog
     formTaskId: '',     // the open task, so closing the form re-reads exactly the record it wrote
+    formProcessInstanceId: '',   // the open task's process, so the record's page is told to re-read once the form closed
     subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
     _poll: null,
+    _settle: null,      // the pending follow-up re-read after a completed task form closed (see settle)
 
     init() {
       this.load();
       // A task form (opened in the app-wide dialog) asks its host to close when it completes.
       window.addEventListener('message', (e) => {
-        if (e && e.data && e.data.type === 'harmonia.form.close' && this.formOpen) this.closeForm();
+        if (e && e.data && e.data.type === 'harmonia.form.close' && this.formOpen) this.closeForm(true);
       });
       // Keep every consumer fresh without a manual page refresh — the bell notifications AND the
       // in-record task buttons (which read this store) — by re-checking the inbox on navigation and
@@ -96,7 +128,7 @@ document.addEventListener('alpine:init', () => {
     async load() {
       // Once the server has gone away we stop polling entirely; a browser refresh recreates this
       // store (serverUnavailable back to false) and resumes.
-      if (this.serverUnavailable) return;
+      if (this.serverUnavailable) return [];
       try {
         // A personal shell (`taskScope: 'assignee'`) serves strictly the person's own work, so it asks
         // only for the tasks assigned to them. The back-office group queues a user's ROLES make them a
@@ -122,6 +154,8 @@ document.addEventListener('alpine:init', () => {
         });
         collect(mine, true);
         collect(groups, false);
+        // The first reading is a baseline, not a change: the page that is open loaded its own record.
+        const changed = this.loaded ? changedProcesses(this.byProcessId, map) : [];
         this.byProcessId = map;
         this.tasks = flat;
         this.loaded = true;
@@ -130,6 +164,8 @@ document.addEventListener('alpine:init', () => {
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
+        if (changed.length) announceTasksChanged(changed);
+        return changed;
       } catch (e) {
         // Stop the loop when retrying can't help: a transport failure (httpStatus 0 → dead server) or
         // an auth failure (401 not-authenticated / 403 forbidden → the session expired or lacks the
@@ -141,11 +177,12 @@ document.addEventListener('alpine:init', () => {
           if (this._poll) { clearInterval(this._poll); this._poll = null; }
           console.warn('processTasks: ' + (e.httpStatus === 0 ? 'server unavailable' : 'not authenticated (' + e.httpStatus + ')')
             + ' — stopped polling for tasks; refresh the page to resume');
-          return;
+          return [];
         }
         this.byProcessId = {};
         this.tasks = [];
         console.error('processTasks: unable to load inbox tasks', e);
+        return [];
       }
     },
 
@@ -302,12 +339,16 @@ document.addEventListener('alpine:init', () => {
       this.formTitle = task.name || 'Task';
       this.formTitleKey = task.nameKey || '';
       this.formTaskId = task.id;
+      this.formProcessInstanceId = task.processInstanceId || '';
       this.formOpen = true;
     },
 
     // Called when the task-form dialog closes; the generated task form completes the task itself,
-    // so a re-fetch drops the finished task from the originating view's badge.
-    closeForm() {
+    // so a re-fetch drops the finished task from the originating view's badge. `completed` is true when
+    // the form itself asked to close (its `harmonia.form.close`, posted once the task is completed) and
+    // absent when the user dismissed the dialog - only a completion has a chain to wait for.
+    closeForm(completed) {
+      const processInstanceId = this.formProcessInstanceId;
       // The form just wrote the record this task is about, so that one subject is re-read; the rest of
       // the inbox is untouched and keeps its cache.
       this.invalidate({ id: this.formTaskId });
@@ -315,7 +356,40 @@ document.addEventListener('alpine:init', () => {
       this.formUrl = '';
       this.formTitleKey = '';
       this.formTaskId = '';
-      this.load();
+      this.formProcessInstanceId = '';
+      // The re-read itself announces the process whose task just vanished, so the record's page re-reads
+      // at once; the follow-up below catches what the chain behind the task writes after that.
+      const reread = this.load();
+      if (completed) reread.then(() => this.settle(processInstanceId));
+    },
+
+    // The record a task was just completed on keeps changing AFTER the completion returned (#7612): see
+    // SETTLE_DELAYS_MS. Each tick re-reads the inbox and tells the record's page to look again, and stops
+    // early once the process reached its next wait state - a new task of that process appeared, which the
+    // re-read announces itself - because the chain up to that state has then run. A second completion
+    // restarts the schedule for its own process.
+    settle(processInstanceId) {
+      this.cancelSettle();
+      if (!processInstanceId) return;
+      const tick = (index) => {
+        if (index >= SETTLE_DELAYS_MS.length) return;
+        this._settle = setTimeout(async () => {
+          this._settle = null;
+          if (this.serverUnavailable) return;
+          const changed = await this.load();
+          if (changed.indexOf(processInstanceId) >= 0) return;
+          announceTasksChanged([processInstanceId]);
+          tick(index + 1);
+        }, SETTLE_DELAYS_MS[index]);
+      };
+      tick(0);
+    },
+
+    cancelSettle() {
+      if (this._settle) {
+        clearTimeout(this._settle);
+        this._settle = null;
+      }
     },
   });
 }, { once: true });

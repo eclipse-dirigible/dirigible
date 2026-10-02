@@ -1810,6 +1810,66 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * #7611: every check names its message's translation key - the authored {@code id}, else its kind
+     * and position - next to the default-language {@code message}; nothing else, the translations live
+     * in the catalogs. A picker rule names its own.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void checkMessagesCarryTheirTranslationKey() {
+        String yaml = """
+                name: billing
+                languages: [en, bg]
+                entities:
+                  - name: Customer
+                    checks:
+                      - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
+                      - id: discountCap
+                        kind: compare
+                        field: discount
+                        op: le
+                        value: 50
+                        message: "The discount is at most 50%"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: active, type: boolean }
+                      - { name: discount, type: decimal }
+                      - { name: credit, type: decimal }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - name: customer
+                        kind: manyToOne
+                        to: Customer
+                        pickable: { when: "active == true", message: "Inactive" }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Customer").get("checks");
+        assertEquals("Customer_compare_0", checks.get(0)
+                                                 .get("messageKey"));
+        assertFalse(checks.get(0)
+                          .containsKey("messageTranslations"));
+        assertEquals("Customer_discountCap", checks.get(1)
+                                                   .get("messageKey"));
+        assertEquals("The discount is at most 50%", checks.get(1)
+                                                          .get("message"));
+        assertFalse(checks.get(1)
+                          .containsKey("messageTranslations"));
+
+        Map<String, Object> picker = ((List<Map<String, Object>>) entityByName(entities(model), "Invoice").get("properties")).stream()
+                                                                                                                             .filter(p -> p.containsKey(
+                                                                                                                                     "widgetPickable"))
+                                                                                                                             .findFirst()
+                                                                                                                             .orElseThrow();
+        String rule = String.valueOf(picker.get("widgetPickable"));
+        assertTrue(rule.contains("\"messageKey\":\"Invoice_customer_pickable\""), rule);
+        assertTrue(rule.contains("\"message\":\"Inactive\""), rule);
+        assertFalse(rule.contains("\"messages\""), rule);
+    }
+
+    /**
      * #7524: only a {@code duplicate}'s text members are compared normalised - a to-one is its FK and a
      * number has no case - and on an entity with no label {@code {match}} names the record by its id.
      */
@@ -2447,6 +2507,69 @@ class EdmIntentGeneratorTest {
         // pushed last); the unlisted Quantity keeps its default position and is appended after.
         assertEquals(List.of("Id", "Header", "Product", "Name", "Quantity"), names,
                 "properties should follow the explicit order, with unlisted ones appended");
+    }
+
+    /**
+     * {@code list:} (#7614) is the list's exact column set and order: the named properties turn major
+     * and every other one stops being major, their sequence rides the entity as {@code listOrder}, and
+     * the property sequence - the form's - still follows {@code order:}.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void listSetsTheListColumnsWithoutReorderingTheForm() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Invoice
+                    order: [Id, Number, Date, Due, Customer, Notes]
+                    list: [Number, date, Customer, Total, Due]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: date, type: date }
+                      - { name: due, type: date }
+                      - { name: notes, type: string }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> invoice = entityByName(entities(model), "Invoice");
+        List<Map<String, Object>> properties = (List<Map<String, Object>>) invoice.get("properties");
+
+        assertEquals(List.of("Id", "Number", "Date", "Due", "Customer", "Notes", "Total"), properties.stream()
+                                                                                                     .map(p -> String.valueOf(
+                                                                                                             p.get("name")))
+                                                                                                     .toList(),
+                "the form keeps the order: sequence");
+        assertEquals("Number,Date,Customer,Total,Due", invoice.get("listOrder"), "the list order, in the properties' own names");
+        assertEquals("true", propertyByName(invoice, "Customer").get("widgetIsMajor"));
+        assertEquals("true", propertyByName(invoice, "Total").get("widgetIsMajor"));
+        assertEquals("false", propertyByName(invoice, "Notes").get("widgetIsMajor"), "an unlisted field leaves the list");
+        assertEquals("false", propertyByName(invoice, "Id").get("widgetIsMajor"));
+    }
+
+    /** Without {@code list:} nothing changes: no {@code listOrder}, and {@code major} decides alone. */
+    @Test
+    void noListLeavesMajorAndEmitsNoListOrder() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: notes, type: string, major: false }
+                """;
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales")), "Invoice");
+
+        assertNull(invoice.get("listOrder"));
+        assertEquals("true", propertyByName(invoice, "Number").get("widgetIsMajor"));
+        assertEquals("false", propertyByName(invoice, "Notes").get("widgetIsMajor"));
     }
 
     /**

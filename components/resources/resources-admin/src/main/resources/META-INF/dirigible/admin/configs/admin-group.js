@@ -20,6 +20,8 @@
 exports.getPerspectiveGroup = () => ({
 	id: 'admin',
 	label: 'Administration',
+	// The sidebar label in the user's language (#7610) - a group names its key the way a custom action does.
+	translation: { key: 'application-core:shell.nav.administration' },
 	order: 10,
 	isDefault: true,
 	// The service classifies a group by the presence of `items` - the aggregated admin

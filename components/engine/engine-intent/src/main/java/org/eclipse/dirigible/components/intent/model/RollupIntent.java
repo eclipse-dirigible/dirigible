@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * A denormalized roll-up: maintain a {@link #field} on a parent entity derived from the
  * {@link #entity} (child) rows pointing at it through the {@link #via} to-one relation.
@@ -90,6 +93,42 @@ public class RollupIntent {
     private Integer statusWhenFull;
     /** Seed id set on {@link #status} when the sum is positive but below the capacity. */
     private Integer statusWhenPartial;
+
+    /**
+     * Optional row filter: which of the child's rows this roll-up counts at all (issue #7542). Without
+     * one a roll-up counts EVERY child, so a cancelled or voided document keeps consuming the parent's
+     * capacity forever and its replacement can never be issued.
+     *
+     * <p>
+     * The same {@code {field, op, value}} triples a {@code schedules[].where} and a create-from's
+     * {@code items: where:} carry, over the CHILD's own fields and to-one relations, with a status
+     * named by its seed name like every other status site. It narrows both the async recompute the
+     * handlers run and the synchronous re-sum the {@link #capacity} guard runs - one authored
+     * definition, so the stored balance and the enforced ceiling cannot disagree.
+     */
+    private List<ScheduleConditionIntent> where = new ArrayList<>();
+
+    /**
+     * Optional (requires {@link #capacity}): the status the capacity guard is enforced AT, as a seed
+     * name or id (issue #7542).
+     *
+     * <p>
+     * Without it the guard runs on every write of the child, which is right for a row that carries its
+     * own typed amount (an allocation's) and useless for one whose amount is a DOCUMENT TOTAL: that is
+     * recomputed from the lines after the header is written, so the guard only ever sees the 0 the
+     * header was created with. Naming a status moves the check to the moment the document is persisted
+     * carrying it - by which time its lines, and so its total, are in - and leaves a DRAFT free to
+     * exceed the ceiling while it is still being edited. A gated write is on the synchronous path
+     * (#7014 / #7063), so the refusal reaches whoever pressed the button.
+     */
+    private String guardAt;
+
+    /**
+     * Optional refusal message for the {@link #capacity} guard, with {@code {capacity}}, {@code {sum}},
+     * {@code {requested}} and {@code {remaining}} placeholders (issue #7542). Without one the guard
+     * reports the same figures in its own words.
+     */
+    private String message;
 
     public String getName() {
         return name;
@@ -210,5 +249,29 @@ public class RollupIntent {
 
     public void setStatusWhenPartial(Integer statusWhenPartial) {
         this.statusWhenPartial = statusWhenPartial;
+    }
+
+    public List<ScheduleConditionIntent> getWhere() {
+        return where;
+    }
+
+    public void setWhere(List<ScheduleConditionIntent> where) {
+        this.where = where == null ? new ArrayList<>() : where;
+    }
+
+    public String getGuardAt() {
+        return guardAt;
+    }
+
+    public void setGuardAt(String guardAt) {
+        this.guardAt = guardAt;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 }

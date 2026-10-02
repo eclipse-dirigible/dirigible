@@ -97,6 +97,7 @@ final class StatusSymbolResolver {
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
         resolver.rewriteSchedules(root);
+        resolver.rewriteRollups(root);
         resolver.rewriteGlue(root);
         resolver.rewriteResolves(root);
         resolver.rewriteReports(root);
@@ -399,6 +400,29 @@ final class StatusSymbolResolver {
                 continue;
             }
             rewriteConditions(schedule.get("where"), text(schedule, "entity"), "schedule [" + text(schedule, "name") + "] where");
+        }
+    }
+
+    /**
+     * A roll-up's row filter and its capacity-guard gate (issue #7542) - both on the CHILD's own
+     * nomenclature, since both are about which of the child's rows count and when the row being written
+     * is checked against the parent's capacity.
+     *
+     * <p>
+     * Same-model child only, for the reason every other cross-model status site keeps the numeric form:
+     * a foreign child's seeds are declared in its owner model. The parser refuses both keys on that
+     * direction outright, so nothing is left here to render against the wrong nomenclature.
+     */
+    private void rewriteRollups(Map<?, ?> root) {
+        for (Object node : asList(root.get("rollups"))) {
+            Map<?, ?> rollup = asMap(node);
+            if (rollup == null || text(rollup, "model") != null) {
+                continue;
+            }
+            String child = text(rollup, "entity");
+            String subject = "rollup [" + text(rollup, "name") + "]";
+            rewriteConditions(rollup.get("where"), child, subject + " where");
+            putResolved(rollup, "guardAt", statusOf(child), subject + " guardAt");
         }
     }
 

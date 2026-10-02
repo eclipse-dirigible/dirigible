@@ -36,7 +36,7 @@ document.addEventListener('alpine:init', () => {
     // so 'none' contributes no condition by construction and the filter row renders an empty cell.
     columnFilters: {},
     filterColumns: [
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
       { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
 #end
@@ -181,14 +181,14 @@ document.addEventListener('alpine:init', () => {
       const parts = [];
       const has = (v) => v !== null && v !== undefined && v !== '';
 #set($textCandidates = 0)
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "MULTISELECT" && !$property.isNumberType && !$property.isDateType && !$property.isFloatType && $textCandidates < 4)
       if (has(node.${property.name})) parts.push(this.displayValue(node.${property.name}));
 #set($textCandidates = $textCandidates + 1)
 #end
 #end
 #set($otherCandidates = 0)
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "MULTISELECT" && ($property.isNumberType || $property.isDateType || $property.isFloatType) && $otherCandidates < 4)
 #if($property.isDateType)
       if (has(node.${property.name})) parts.push(this.displayValue(node.${property.name}, true));
@@ -531,7 +531,7 @@ document.addEventListener('alpine:init', () => {
     // ----- Export / print: the FULL filtered+sorted set (not the current page), cells resolved
     // exactly like the table (FK labels, formatted dates) via the shared basePage helpers.
     exportColumns: [
-#foreach($property in $properties)
+#foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
       { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end

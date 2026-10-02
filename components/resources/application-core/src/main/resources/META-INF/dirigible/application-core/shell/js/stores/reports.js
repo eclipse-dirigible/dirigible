@@ -188,6 +188,11 @@ document.addEventListener('alpine:init', () => {
       const w = it.widget || {};
       return (window.T && w.tId) ? T(this.tkey(it, w.tId), w.label) : w.label;
     },
+    // A list tile's column header: the report catalog carries one entry per column (its tId), the
+    // same label the report page itself shows - never the raw column alias (#7610).
+    widgetColumnLabel(it, c) {
+      return (window.T && c.tId) ? T(this.tkey(it, c.tId), c.label) : c.label;
+    },
 
     // Load a KPI widget's data from the report's generated controller. Returns
     //   { value }               for kind count/value (missing data coalesces to 0); a count over an

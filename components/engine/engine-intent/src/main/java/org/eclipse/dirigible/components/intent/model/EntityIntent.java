@@ -122,6 +122,14 @@ public class EntityIntent {
      */
     private List<String> order = new ArrayList<>();
     /**
+     * Optional list-only column set and order (issue #7614): the property names - fields and to-one
+     * relations, case-insensitive - the generated list tables show, in that order. When set it is the
+     * exact column set: it overrides every property's {@code major} for the list, and {@code order}
+     * keeps sequencing the form and detail rows alone. Absent or empty → the list shows the
+     * {@code major} properties in control order, as before.
+     */
+    private List<String> list = new ArrayList<>();
+    /**
      * Optional UI view type for this entity. {@code calendar} / {@code range} render its records as
      * events on a Harmonia calendar (see {@link #calendar}) - an ADDITIONAL page: the entity keeps the
      * list / manage / document layout inferred from structure (and everything it brings - the document
@@ -368,6 +376,14 @@ public class EntityIntent {
 
     public void setOrder(List<String> order) {
         this.order = order == null ? new ArrayList<>() : order;
+    }
+
+    public List<String> getList() {
+        return list;
+    }
+
+    public void setList(List<String> list) {
+        this.list = list == null ? new ArrayList<>() : list;
     }
 
     public void setName(String name) {

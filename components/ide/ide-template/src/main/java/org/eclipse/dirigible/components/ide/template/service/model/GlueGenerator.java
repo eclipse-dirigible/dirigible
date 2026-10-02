@@ -1497,8 +1497,12 @@ class GlueGenerator {
             return;
         }
         String fkProperty = str(source, "fkProperty");
+        // A roll-up may narrow WHICH of the child's rows it counts (issue #7542). The clauses are the
+        // neutral ones every other criteria carries, appended to the foreign key the recompute is keyed
+        // on - and the SAME clauses the capacity guard re-sums by, so the stored balance and the
+        // enforced ceiling cannot disagree. A descriptor carrying none renders exactly as before.
         target.put("criteriaExpression", "Criteria.create().eq(\"" + JavaLiterals.escape(fkProperty == null ? "" : fkProperty) + "\", "
-                + owner + "." + keyProperty + ")");
+                + owner + "." + keyProperty + ")" + JavaLiterals.criteriaChain(asMaps(source.get("filter"))));
     }
 
     /**

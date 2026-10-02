@@ -53,7 +53,7 @@
                       <thead x-h-table-header>
                         <tr x-h-table-row>
                           <template x-for="c in $store.reports.widgetColumns(r)" :key="c.alias">
-                            <th x-h-table-head scope="col" :class="$store.reports.widgetAlignClass(c)" x-text="c.label"></th>
+                            <th x-h-table-head scope="col" :class="$store.reports.widgetAlignClass(c)" x-text="$store.reports.widgetColumnLabel(r, c)"></th>
                           </template>
                         </tr>
                       </thead>

@@ -89,6 +89,64 @@ class RollupGuardCrossModelTemplateIT {
         assertFalse(rendered.contains(OWNER_TYPE), "a local parent must carry no owner-model package: " + rendered);
     }
 
+
+    /**
+     * The row filter (#7542) narrows the re-sum AND tests the row in hand: a row the filter excludes
+     * changes no sum, so its write is not guarded at all - cancelling an allocation must not be refused
+     * by the very ceiling the cancellation frees.
+     */
+    @Test
+    void aFilteredGuardNarrowsTheResumAndSkipsARowTheFilterExcludes() throws Exception {
+        Map<String, Object> guard = guard("");
+        guard.put("filterChain", ".ne(\"Status\", 3)");
+        guard.put("incomingMatch", "!(entity.Status != null && entity.Status.longValue() == 3L)");
+        String rendered = render(context(guard));
+
+        assertTrue(rendered.contains("findAll(Criteria.create().eq(\"CustomerPayment\", entity.CustomerPayment).ne(\"Status\", 3))"),
+                "the re-sum must count only the rows the roll-up counts: " + rendered);
+        assertTrue(
+                rendered.contains("if (entity.CustomerPayment != null && !(entity.Status != null && entity.Status.longValue() == 3L)) {"),
+                "a row outside the filter is not guarded at all: " + rendered);
+    }
+
+    /**
+     * The gate (#7542) moves the check to the moment the row is persisted carrying that status, which
+     * is what makes the guard usable on a row whose amount is a DOCUMENT TOTAL - recomputed from the
+     * lines after the header is written, so an ungated guard would only ever see the header's 0.
+     */
+    @Test
+    void aGatedGuardRunsOnlyAtItsStatusAndOnTheTargetedWritePathToo() throws Exception {
+        Map<String, Object> guard = guard("");
+        guard.put("guardStatusProperty", "Status");
+        guard.put("guardStatusValue", "2");
+        Map<String, Object> parameters = context(guard);
+        parameters.put("hasGatedRollupGuards", "true");
+        String rendered = render(parameters);
+
+        assertTrue(rendered.contains("if (entity.Status != null && entity.Status.longValue() == 2L) {"),
+                "the guard must be gated on the authored status: " + rendered);
+        // save, update and the targeted updateProperties - the last is how a workflow setter moves a
+        // document into the gate status, and #7014/#7063 keeps that write synchronous so the refusal
+        // reaches whoever pressed the button.
+        assertEquals(3,
+                rendered.split(java.util.regex.Pattern.quote("if (entity.Status != null && entity.Status.longValue() == 2L) {"), -1).length
+                        - 1,
+                "the gated guard must run wherever the row is persisted carrying the gate: " + rendered);
+    }
+
+    /** The authored refusal, with the figures the guard has in hand spliced in where it placed them. */
+    @Test
+    void anAuthoredMessageReplacesTheGeneratedOne() throws Exception {
+        Map<String, Object> guard = guard("");
+        guard.put("messageExpression", "\"Only \" + guardParent.Amount.subtract(guardConsumed) + \" left.\"");
+        String rendered = render(context(guard));
+
+        assertTrue(rendered.contains("throw new ValidationException(\"Only \" + guardParent.Amount.subtract(guardConsumed) + \" left.\");"),
+                "the authored message must be the refusal: " + rendered);
+        assertFalse(rendered.contains("CustomerPayment capacity exceeded"),
+                "the generated wording must not be emitted beside the authored one: " + rendered);
+    }
+
     private String render(Map<String, Object> parameters) throws Exception {
         String location = DAO_BASE + "Repository.java.template";
         String template;

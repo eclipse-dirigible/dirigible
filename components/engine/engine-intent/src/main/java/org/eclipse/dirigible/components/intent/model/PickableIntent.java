@@ -42,7 +42,8 @@ public class PickableIntent {
 
     /**
      * The text a marked row carries - why it cannot be picked. Optional: absent, the rule itself is
-     * shown.
+     * shown. Written in the module's default language; other languages translate it in the module's
+     * catalogs under {@code checks.<Entity>_<relation>_pickable} (issue #7611).
      */
     private String message;
 

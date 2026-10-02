@@ -208,4 +208,78 @@ class EdmRollupGuardTest {
         List<Map<String, Object>> guards = guardsOf(yaml, "SalesInvoicePayment");
         assertEquals(1, guards.size(), "the identical guard is emitted once: " + guards);
     }
+
+    private static final String FILTERED = """
+            name: contracts
+            entities:
+              - name: Contract
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: ceiling,   type: decimal }
+                  - { name: committed, type: decimal }
+              - name: CallOffStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: CallOff
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: total, type: decimal }
+                relations:
+                  - { name: Contract, kind: manyToOne, to: Contract }
+                  - { name: Status, kind: manyToOne, to: CallOffStatus, function: EntityStatus, init: DRAFT }
+            seeds:
+              - name: callOffStatuses
+                entity: CallOffStatus
+                rows:
+                  - { id: 1, name: DRAFT }
+                  - { id: 2, name: ISSUED }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
+            rollups:
+              - name: contractCommitted
+                entity: CallOff
+                via: Contract
+                field: committed
+                op: sum
+                of: total
+                capacity: ceiling
+                where:
+                  - { field: Status, op: ne, value: CANCELLED }
+                guardAt: ISSUED
+                message: "Only {remaining} left of {capacity} on this contract; this call-off asks {requested}."
+            """;
+
+    /**
+     * Both halves of #7542 travel on the guard: WHICH rows count, as the clauses the asynchronous
+     * recompute queries by, and WHEN the check runs, as the status the child must be persisted
+     * carrying. A status named in either is a seed id by the time the guard is built.
+     */
+    @Test
+    void aFilteredAndGatedGuardCarriesItsClausesItsGateAndItsMessage() {
+        Map<String, Object> guard = guardOf(FILTERED, "CallOff");
+        assertNotNull(guard, "a capacity-bearing roll-up must stamp its child with a guard");
+        assertEquals("Status", guard.get("guardStatusProperty"));
+        assertEquals("2", guard.get("guardStatusValue"), "the gate is the ISSUED seed id, resolved at parse");
+        assertEquals("Only {remaining} left of {capacity} on this contract; this call-off asks {requested}.", guard.get("message"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> filter = (List<Map<String, Object>>) guard.get("filter");
+        assertEquals(1, filter.size());
+        assertEquals("ne", filter.get(0)
+                                 .get("op"));
+        assertEquals("Status", filter.get(0)
+                                     .get("property"));
+        assertEquals("3", ((Map<?, ?>) filter.get(0)
+                                             .get("value")).get("text"),
+                "the CANCELLED name resolves to its seed id like every other status site");
+    }
+
+    /** A roll-up declaring neither key is byte-identical: no filter, no gate, no message. */
+    @Test
+    void aRollupThatDeclaresNeitherKeyCarriesNeither() {
+        Map<String, Object> guard = guardOf(LOCAL, "SalesInvoicePayment");
+        assertNull(guard.get("filter"));
+        assertNull(guard.get("guardStatusProperty"));
+        assertNull(guard.get("message"));
+    }
 }
