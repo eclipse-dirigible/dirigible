@@ -140,6 +140,7 @@ document.addEventListener('alpine:init', () => {
     mode: 'create',
     id: null,
     record: {},              // the loaded master (drives the read-only totals footer + calculated header fields)
+    recordLoaded: false,     // whether `record` holds the stored master yet - see recordActions()
 
     // Header form model — the master's editable scalar/relationship fields, EXCLUDING the aggregate
     // totals (those are server-calculated, shown read-only in the footer) and the auto-increment PK.
@@ -477,6 +478,7 @@ document.addEventListener('alpine:init', () => {
     async loadHeader() {
       const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
       this.record = record || {};
+      this.recordLoaded = true;
       for (const key of Object.keys(this.form)) {
         if (record[key] !== undefined) this.form[key] = record[key];
       }
@@ -1441,6 +1443,18 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.itemsError = App.services.apiErrors.messageFor(e, 'Could not delete the line.');
       }
+    },
+
+    // ----- More actions: the record's per-record actions --------------------------------------------
+    // The store leaves out what the record's status can never accept, and fails OPEN on a status it
+    // does not have. Until the record has loaded, `record` is an empty object, so every status-guarded
+    // action would be offered for the first moment and refused with a 409 when clicked - Generate
+    // Invoice on an INVOICED proforma (issue #7605). Those wait for the record; the rest (none of them
+    // reads a status) are offered at once.
+    recordActions() {
+      const store = Alpine.store('customActions');
+      const actions = store.getActions(this.caView, 'entity', this.record);
+      return this.recordLoaded ? actions : actions.filter((action) => !store.isGuarded(action));
     },
 
     // ----- Totals footer (aggregate fields, read-only) -------------------------------------------

@@ -209,6 +209,18 @@ document.addEventListener('alpine:init', () => {
       return true;
     },
 
+    // Whether an action's offer depends on the record's status - a transition's `from:` or a
+    // create-from's `guard` - i.e. exactly the actions appliesTo / isAvailable would consult the record
+    // for. A page whose record is still LOADING holds no status yet, and both checks fail open on an
+    // unknown one, so such a page leaves these actions out until the record arrives rather than
+    // offering one the server then refuses (issue #7605). A caller with no row at all keeps the
+    // fail-open answer.
+    isGuarded(action) {
+      if (!action) return false;
+      const transition = Array.isArray(action.from) && action.from.length && action.statusProperty;
+      return Boolean(transition || (action.guard && action.guard.property));
+    },
+
     // Trigger a contributed action. Two flavours, decided by the descriptor:
     //   - `endpoint` present: POST the selected record's id to a server endpoint (a create-from /
     //     generate action) AFTER an explicit confirmation, then toast the result and raise
