@@ -222,8 +222,9 @@
   <div x-show="state !== 'loading' && state !== 'load-failure'"
         class="vbox lg:hbox w-full items-start gap-6 px-4 py-6"
         :style="isNarrow ? 'padding-bottom: 5rem' : ''">
-    <!-- Main content column -->
-    <div class="vbox gap-4 flex-1 min-w-0">
+    <!-- Main content column. w-full: below lg the body is a column whose items-start would otherwise
+         shrink this to its content, leaving the collection tables narrower than the page. -->
+    <div class="vbox gap-4 flex-1 min-w-0 w-full">
 
     <!-- The record's groups, separated by headings and rules and nothing else (issue #7491). The
          page's own white card is the only frame: the fields used to sit bare on the background while
