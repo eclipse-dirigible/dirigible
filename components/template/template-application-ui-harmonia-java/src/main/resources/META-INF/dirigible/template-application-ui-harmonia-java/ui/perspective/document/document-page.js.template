@@ -32,6 +32,8 @@
  *   - division by zero -> 0
  *   - round = half-up, ties away from zero (Java RoundingMode.HALF_UP)
  *   - the final result is rounded to `scale` decimals (default 2) with the same rule
+ * It previews in JavaScript numbers; the server evaluates in decimal (#7578), so at the edge of a
+ * column's precision the persisted value - the server's - may differ from the preview in its last digits.
  */
 function harmoniaCalcEval(expr, vars, scale) {
   const roundHalfUp = (x, n) => {
