@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -130,26 +130,66 @@ class PermissionGatesTest {
         assertFalse(access.contains("CustomerController"), access);
     }
 
+    /**
+     * The roles {@code .settings} {@code access.extraRoles} appends to every gate are declared in
+     * {@code <intent>.roles} - also when the intent authors no {@code permissions:} at all, which is
+     * the multitenant case the setting exists for (dirigible #7652).
+     */
+    @Test
+    void theDeploymentsExtraRolesAreDeclaredWithoutAnyAuthoredPermission() {
+        String yaml = YAML.substring(0, YAML.indexOf("permissions:"));
+        String roles = written(yaml, settings(Map.of("extraRoles", List.of("Owner", "User"), "extraRolesReadOnly", List.of("Auditor"))),
+                "/sales.roles");
+        assertTrue(roles.contains("\"name\": \"Owner\""), roles);
+        assertTrue(roles.contains("\"name\": \"User\""), roles);
+        assertTrue(roles.contains("\"name\": \"Auditor\""), roles);
+    }
+
+    @Test
+    void anExtraRoleAnAuthoredPermissionDeclaresIsDeclaredOnce() {
+        String roles = written(YAML, settings(Map.of("extraRoles", List.of("SalesViewer", "Owner"))), "/sales.roles");
+        assertEquals(1, roles.split("\"SalesViewer\"", -1).length - 1, roles);
+        assertTrue(roles.contains("\"name\": \"Owner\""), roles);
+    }
+
+    @Test
+    void noRolesArtefactWithoutPermissionsOrExtraRoles() {
+        String yaml = YAML.substring(0, YAML.indexOf("permissions:"));
+        assertNull(written(yaml, settings(Map.of()), "/sales.roles"));
+    }
+
+    @Test
+    void theAccessConstraintsAdmitTheDeploymentsExtraRoles() {
+        String access = written(YAML, settings(Map.of("generate", true, "extraRoles", List.of("Owner"))), "/sales.access");
+        // No authored grant names Owner, so it can only be the appended extra.
+        assertTrue(access.contains("\"Owner\""), "a constraint must not refuse a caller the controller behind it admits: " + access);
+    }
+
     /** The written {@code .access} document, or null when the pass wrote none. */
     private static String access(boolean optIn) {
-        IntentModel model = IntentParser.parse(YAML);
+        return written(YAML, settings(optIn), "/sales.access");
+    }
+
+    /** The content the permission generator wrote to the path ending in the suffix, or null. */
+    private static String written(String yaml, IntentSettings settings, String suffix) {
+        IntentModel model = IntentParser.parse(yaml);
         IRepository repository = mock(IRepository.class);
         IResource missing = mock(IResource.class);
         when(repository.getResource(anyString())).thenReturn(missing);
         when(missing.exists()).thenReturn(false);
         IntentGenerationContext context = new IntentGenerationContext(model, "/proj", "proj", "workspace", "sales", repository);
-        context.setSettings(settings(optIn));
+        context.setSettings(settings);
 
         new PermissionIntentGenerator().generate(context);
 
         ArgumentCaptor<String> paths = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<byte[]> contents = ArgumentCaptor.forClass(byte[].class);
-        verify(repository, atLeastOnce()).createResource(paths.capture(), contents.capture());
+        verify(repository, atLeast(0)).createResource(paths.capture(), contents.capture());
         for (int i = 0; i < paths.getAllValues()
                                  .size(); i++) {
             if (paths.getAllValues()
                      .get(i)
-                     .endsWith("/sales.access")) {
+                     .endsWith(suffix)) {
                 return new String(contents.getAllValues()
                                           .get(i),
                         StandardCharsets.UTF_8);
@@ -159,8 +199,12 @@ class PermissionGatesTest {
     }
 
     private static IntentSettings settings(boolean generateAccess) {
+        return settings(Map.of("generate", generateAccess));
+    }
+
+    private static IntentSettings settings(Map<String, Object> access) {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("access", Map.of("generate", generateAccess));
+        document.put("access", access);
         return IntentSettings.parse(new com.google.gson.Gson().toJson(document));
     }
 }

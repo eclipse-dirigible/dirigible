@@ -428,6 +428,28 @@ class ModelParameterProcessorTest {
         assertEquals("book-write", role.get("roleWrite"));
     }
 
+    /**
+     * A gate admitting further roles after its own (an intent's {@code .settings}
+     * {@code access.extraRoles}) still declares only its own role as the default one - the whole list
+     * as one name would publish a role no caller can hold (dirigible #7652).
+     */
+    @Test
+    void aGateAdmittingFurtherRolesDeclaresOnlyItsOwn() {
+        Map<String, Object> entity = entity("Book", "Books", property("Name", "VARCHAR"));
+        entity.put("generateDefaultRoles", "true");
+        entity.put("roleRead", "library.Book.BookReadOnly,Owner,User");
+        entity.put("roleWrite", "library.Book.BookFullAccess,Owner,User");
+        Map<String, Object> parameters = parameters();
+
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        Map<String, Object> role = ModelValues.asMap(ModelValues.asList(parameters.get("roles"))
+                                                                .get(0));
+        assertEquals("library.Book.BookReadOnly", role.get("roleRead"));
+        assertEquals("library.Book.BookFullAccess", role.get("roleWrite"));
+        assertEquals("library.Book.BookReadOnly,Owner,User", entity.get("roleRead"), "the gate itself keeps every role it admits");
+    }
+
     @Test
     void aReportContributesNoWriteRole() {
         Map<String, Object> report = entity("Revenue", "Reports", property("Total", "DECIMAL"));

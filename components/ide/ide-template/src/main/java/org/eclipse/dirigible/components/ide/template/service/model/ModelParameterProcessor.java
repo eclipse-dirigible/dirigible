@@ -28,6 +28,7 @@ import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.defaultRole;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.isTrue;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.putNumber;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
@@ -1941,8 +1942,9 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Collects the default read and write roles the model asks to be generated. A projection owns no
-     * table, and a report or filter is read-only, so neither contributes a write role.
+     * Collects the default read and write roles the model asks to be generated - each gate's own role,
+     * its first (see {@link ModelValues#defaultRole}). A projection owns no table, and a report or
+     * filter is read-only, so neither contributes a write role.
      *
      * @param entities every entity in the model
      * @param parameters the generation parameters
@@ -1960,11 +1962,13 @@ final class ModelParameterProcessor {
             }
             Map<String, Object> rolePair = new LinkedHashMap<>();
             rolePair.put("entityName", entity.get("name"));
-            if (truthy(entity, "roleRead")) {
-                rolePair.put("roleRead", entity.get("roleRead"));
+            String roleRead = defaultRole(entity, "roleRead");
+            if (roleRead != null) {
+                rolePair.put("roleRead", roleRead);
             }
-            if (!"REPORT".equals(type) && !"FILTER".equals(type) && truthy(entity, "roleWrite")) {
-                rolePair.put("roleWrite", entity.get("roleWrite"));
+            String roleWrite = defaultRole(entity, "roleWrite");
+            if (!"REPORT".equals(type) && !"FILTER".equals(type) && roleWrite != null) {
+                rolePair.put("roleWrite", roleWrite);
             }
             roles.add(rolePair);
         }

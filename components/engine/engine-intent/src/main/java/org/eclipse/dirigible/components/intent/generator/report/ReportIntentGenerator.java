@@ -468,7 +468,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
         }
-        document.put("security", security(context, report.getName(), PermissionSupport.gates(context.getModel())));
+        document.put("security", security(context, report.getName(), PermissionSupport.gates(context.getModel(), context.getSettings())));
         return new Emission(document, views);
     }
 
@@ -2432,8 +2432,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /**
      * The report's read gate. A {@code permissions[].can: [<Report>:read]} token names the roles that
      * may open it, in which case the convention role is neither the gate nor declared; a report no
-     * token names keeps the convention {@code <project>.Report.<Report>ReadOnly}. A report has no write
-     * gate - it is a query.
+     * token names keeps the convention {@code <project>.Report.<Report>ReadOnly}. Either gate also
+     * admits the deployment's extra roles ({@code .settings} {@code access.extraRoles}), appended after
+     * its own. A report has no write gate - it is a query.
      *
      * @param context the generation context
      * @param reportName the report's declared name
@@ -2446,7 +2447,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         security.put("generateDefaultRoles", authoredRead != null ? "false" : "true");
         String project = context.getProjectName();
         String prefix = project == null || project.isEmpty() ? IntentNaming.baseName(context) : project;
-        security.put("roleRead", authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly");
+        security.put("roleRead", gates.appendRead(authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly"));
         return security;
     }
 

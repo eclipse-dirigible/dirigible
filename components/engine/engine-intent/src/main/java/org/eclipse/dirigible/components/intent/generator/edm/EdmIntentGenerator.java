@@ -147,10 +147,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             return;
         }
         String baseName = IntentNaming.baseName(context);
-        IntentSettings.Branding branding = context.getSettings() != null ? context.getSettings()
-                                                                                  .getBranding()
-                : new IntentSettings.Branding();
-        EdmDocument document = buildDocument(context, model, baseName, branding);
+        IntentSettings settings = context.getSettings() != null ? context.getSettings() : new IntentSettings();
+        EdmDocument document = buildDocument(context, model, baseName, settings);
         context.writeModelFile(baseName + ".model", JsonHelper.toJson(document.modelJson));
         context.writeModelFile(baseName + ".edm", renderEdmXml(document));
     }
@@ -161,7 +159,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * owner-model-reading path is exercised by the integration test). Never use in production code.
      */
     static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName) {
-        return buildDocument(null, model, intentName, new IntentSettings.Branding()).modelJson;
+        return buildModelJsonForTest(model, intentName, new IntentSettings());
+    }
+
+    /**
+     * Test seam: {@link #buildModelJsonForTest(IntentModel, String)} under the given project settings.
+     * Never use in production code.
+     */
+    static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName, IntentSettings settings) {
+        return buildDocument(null, model, intentName, settings).modelJson;
     }
 
     /**
@@ -170,7 +176,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * production code.
      */
     static String buildEdmXmlForTest(IntentModel model, String intentName) {
-        return renderEdmXml(buildDocument(null, model, intentName, new IntentSettings.Branding()));
+        return renderEdmXml(buildDocument(null, model, intentName, new IntentSettings()));
     }
 
     /** The two views over one model tree: the {@code .model} JSON root and the XML extras. */
@@ -182,7 +188,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static EdmDocument buildDocument(IntentGenerationContext context, IntentModel model, String intentName,
-            IntentSettings.Branding branding) {
+            IntentSettings settings) {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
@@ -222,8 +228,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, List<Map<String, Object>>> rollupGuards = buildRollupGuards(context, model, byName, compositionParents, usesByAlias);
         // The read / write gates the intent's `permissions[].can:` tokens authorize. An entity a token
         // names is gated by the roles the author declared instead of the convention-derived names,
-        // which nothing else in the intent mentions.
-        PermissionSupport.Gates gates = PermissionSupport.gates(model);
+        // which nothing else in the intent mentions. Every gate, either kind, also admits the roles the
+        // project's .settings append for the deployment (access.extraRoles).
+        PermissionSupport.Gates gates = PermissionSupport.gates(model, settings);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -787,6 +794,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Branding precedence: .settings branding (developer-owned, per-deployment) wins over the
         // intent's own name/description/icon, which win over the defaults. So one model can be
         // rebranded per deployment by editing .settings, without touching the intent.
+        IntentSettings.Branding branding = settings.getBranding();
         String title = notBlank(branding.getTitle()) ? branding.getTitle() : IntentNaming.humanize(model.getName());
         body.put("title", title);
         String description = notBlank(branding.getDescription()) ? branding.getDescription() : model.getDescription();
@@ -1207,8 +1215,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String authoredRead = covered ? gates.readRoles(gateName) : null;
         String authoredWrite = covered ? gates.writeRoles(gateName) : null;
         entity.put("generateDefaultRoles", covered ? "false" : "true");
-        entity.put("roleRead", authoredRead != null ? authoredRead : conventionRead);
-        entity.put("roleWrite", authoredWrite != null ? authoredWrite : conventionWrite);
+        // The deployment's extra roles (.settings access.extraRoles) are appended AFTER the gate's own
+        // roles and never suppress them: a convention gate keeps its roles declared (the template layer
+        // declares a gate's first role), so assignments made in the Security perspective keep working.
+        entity.put("roleRead", gates.appendRead(authoredRead != null ? authoredRead : conventionRead));
+        entity.put("roleWrite", gates.appendWrite(authoredWrite != null ? authoredWrite : conventionWrite));
         return entity;
     }
 
