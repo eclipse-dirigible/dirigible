@@ -24,7 +24,9 @@
  * INPUT shows and accepts: HarmoniaFormat.pickerConfig() describes the Date pattern to the Harmonia
  * date pickers, which would otherwise display and parse in the document's (or the browser's) locale —
  * the one surface where guessing is not merely inconsistent but silently wrong, 06.09.2026 typed into
- * an m/d/yyyy field being a valid 9 June. The MODEL behind those inputs stays ISO regardless, which is
+ * an m/d/yyyy field being a valid 9 June. A value typed in any OTHER shape the picker hands to the
+ * browser's Date constructor, which reads it month first whatever the pattern, so HarmoniaFormat.
+ * readTypedDate() reads it ahead of the picker: day first when dotted, refused when ambiguous. The MODEL behind those inputs stays ISO regardless, which is
  * what HarmoniaFormat.toDateInput produces: an <input> model dictates its own value shape
  * (YYYY-MM-DD, ...THH:mm, HH:mm), so that helper is pattern-free; it lives here only to dedupe.
  *
@@ -184,6 +186,54 @@
     return { order: fields.map((f) => ORDER_CODES[f]).join(''), delimiter: delimiter, options: options };
   };
 
+  // A typed date of three digit runs around one repeated separator: 06.09.2026, 6/9/26, 2026-9-6, and
+  // the 2026.09.06. that some locales close with a dot.
+  const TYPED_DATE = /^(\d{1,4})\s*([./-])\s*(\d{1,2})\s*\2\s*(\d{1,4})\s*\.?$/;
+  const ORDER_FIELDS = { Y: 'y', M: 'mo', D: 'da' };
+
+  // Whether three digit runs fit the configured order the way the picker's own parser reads them: a
+  // year of 2-4 digits, a month and a day of 1-2.
+  const fitsOrder = (order, runs) => [...order].every((code, i) => (code === 'Y' ? runs[i].length >= 2 : runs[i].length <= 2));
+
+  // Whether { y, mo, da } names a real day: the picker builds new Date(y, mo - 1, da), which rolls
+  // 31.02 over into March instead of refusing it.
+  const realDay = (c) => {
+    const d = new Date(c.y, c.mo - 1, c.da);
+    return d.getFullYear() === c.y && d.getMonth() === c.mo - 1 && d.getDate() === c.da;
+  };
+
+  // What a typed date reads as, where the picker would otherwise guess. The picker parses a value only
+  // in its configured shape; anything else goes to the browser's Date constructor, which reads
+  // 06.09.2026 month first - 9 June, silently, under the default ISO pattern. So, ahead of the picker:
+  // a value in the configured shape is left to it (null); a year-first value is unambiguous; a dotted
+  // one is day first, the order a dot implies; any other numeric value names no order and is refused,
+  // as is a day that does not exist. A recognised value comes back spelled in the instance pattern,
+  // which the picker then reads as configured. Without a picker configuration (a pattern the picker
+  // cannot take) only the unambiguous readings apply, spelled ISO, which the picker always accepts.
+  const readTypedDateFrom = (pattern, text) => {
+    const m = TYPED_DATE.exec(String(text === null || text === undefined ? '' : text).trim());
+    if (!m) return null;
+    const runs = [m[1], m[3], m[4]];
+    const separator = m[2];
+    const config = pickerConfigFrom(pattern);
+    const year = (run) => (run.length <= 2 ? 2000 + +run : +run);
+    let c;
+    if (config && separator === config.delimiter && fitsOrder(config.order, runs)) {
+      c = {};
+      [...config.order].forEach((code, i) => { c[ORDER_FIELDS[code]] = code === 'Y' ? year(runs[i]) : +runs[i]; });
+      return realDay(c) ? null : { refused: true };
+    }
+    if (runs[0].length === 4 && runs[2].length <= 2) {
+      c = { y: +runs[0], mo: +runs[1], da: +runs[2] };
+    } else if (separator === '.' && runs[0].length <= 2 && (runs[2].length === 2 || runs[2].length === 4)) {
+      c = { y: year(runs[2]), mo: +runs[1], da: +runs[0] };
+    } else {
+      return config ? { refused: true } : null;
+    }
+    if (!realDay(c)) return { refused: true };
+    return { value: applyDatePattern(config ? pattern : DEFAULTS.date, { ...c, h: 0, mi: 0, s: 0 }) };
+  };
+
   const HarmoniaFormat = {
     KEYS,
     defaults() {
@@ -286,6 +336,17 @@
     },
 
     /**
+     * How a date typed into a picker is read against the instance Date pattern, ahead of the picker:
+     * null when the picker reads it correctly itself (the configured shape, or not a numeric date at
+     * all), { value } with the same day spelled in the instance pattern (06.09.2026 is 6 September),
+     * or { refused: true } when the value names no unambiguous day (6/9/2026 under a year-first pattern,
+     * 31.02.2026). Applied to every picker input by the change guard below.
+     */
+    readTypedDate(text) {
+      return readTypedDateFrom(patterns().date, text);
+    },
+
+    /**
      * Convert a date/datetime value to the FIXED shape an HTML <input> requires — NOT pattern-driven.
      * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH, WEEK (case-insensitive). Empty -> ''.
      * An input holds a LOCAL wall clock, so an offset-carrying string is converted to the viewer's zone.
@@ -350,6 +411,26 @@
   };
 
   window.HarmoniaFormat = HarmoniaFormat;
+
+  // The date picker parses what was typed on the input's own `change`. This document-level CAPTURE
+  // listener runs before it, on every picker of the page (generated views are fragments of this
+  // document): a recognised value is respelled in the instance pattern for the picker to read, and a
+  // refused one stops the event short of the picker and the model, flagged the way the picker flags a
+  // value it cannot parse. The date-time picker types in segments, so it never sees free text.
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('change', (event) => {
+      const input = event.target;
+      if (!event.isTrusted || !input || input.tagName !== 'INPUT' || !input.closest || !input.closest('[x-h-date-picker]')) return;
+      const read = HarmoniaFormat.readTypedDate(input.value);
+      if (!read) return;
+      if (read.refused) {
+        event.stopPropagation();
+        input.setCustomValidity('Enter the date as ' + HarmoniaFormat.dateHint() + '.');
+        return;
+      }
+      input.value = read.value;
+    }, true);
+  }
 
   // The Region & Language editing surface. Values mirror localStorage; a change persists and reloads
   // (like the language flag) so every already-rendered cell re-formats. Absent Alpine (standalone
