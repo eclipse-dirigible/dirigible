@@ -302,10 +302,16 @@ field may declare:
   actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
   user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
   to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
-  (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. The to-one
-  relation analogue is `init:`.
+  (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. **`defaultValue:
+  now`** is the one default that reaches a moment field on every leg (#7603): the current moment in the
+  field's own shape (a `date` today, a `timestamp` this instant, a `month` `YYYY-MM`, a `week`
+  `YYYY-Www`), prefilled by the generated form when a new record opens, seeded into a new line's item
+  dialog, and assigned by the repository on a server-side create that leaves the field empty - REST, a
+  `generates` create-from, a schedule. A value the caller supplies wins. It is never a DB DEFAULT, and
+  it is refused on any other field type. The to-one relation analogue is `init:`.
   `- { name: hours, type: decimal, defaultValue: 8 }` /
-  `- { name: billable, type: boolean, defaultValue: true }`.
+  `- { name: billable, type: boolean, defaultValue: true }` /
+  `- { name: date, type: date, required: true, defaultValue: now }`.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
 - `label: <text>` - the field's display label, replacing the humanized field name everywhere it is
   rendered (form caption, list column header, details block) and seeding its en-US catalog entry, so

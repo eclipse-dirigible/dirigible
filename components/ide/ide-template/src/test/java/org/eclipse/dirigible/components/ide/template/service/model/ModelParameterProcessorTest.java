@@ -135,6 +135,43 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * {@code defaultValue: now} (#7603) is the moment of the create in the field's own shape: the
+     * repository fills it in the column's Java type, the pages compute it from the shape, and the
+     * column gets no DEFAULT - {@code now} is not SQL. On a property that holds no moment it stays a
+     * literal.
+     */
+    @Test
+    void aNowDefaultIsTheCreateMomentInTheFieldsShape() {
+        Map<String, Object> date = property("OrderedOn", "DATE");
+        date.put("dataDefaultValue", "now");
+        Map<String, Object> timestamp = property("RecordedAt", "TIMESTAMP");
+        timestamp.put("dataDefaultValue", "now");
+        Map<String, Object> month = property("Period", "VARCHAR");
+        month.put("widgetType", "MONTH");
+        month.put("dataDefaultValue", "now");
+        Map<String, Object> week = property("Week", "VARCHAR");
+        week.put("widgetType", "WEEK");
+        week.put("dataDefaultValue", " now ");
+        Map<String, Object> text = property("Word", "VARCHAR");
+        text.put("dataDefaultValue", "now");
+        ModelParameterProcessor.process(model(entity("Reorder", "Reorders", date, timestamp, month, week, text)), parameters());
+
+        assertEquals("date", date.get("dataDefaultNowShape"));
+        assertEquals("java.time.LocalDate.now()", date.get("dataDefaultValueJavaLiteral"));
+        assertEquals("timestamp", timestamp.get("dataDefaultNowShape"));
+        assertEquals("java.time.Instant.now()", timestamp.get("dataDefaultValueJavaLiteral"));
+        assertEquals("month", month.get("dataDefaultNowShape"));
+        assertEquals("java.time.YearMonth.now().toString()", month.get("dataDefaultValueJavaLiteral"));
+        assertEquals("week", week.get("dataDefaultNowShape"));
+        for (Map<String, Object> moment : List.of(date, timestamp, month, week)) {
+            assertFalse(moment.containsKey("dataDefaultValueJsonLiteral"), "now must never reach the DDL: " + moment);
+            assertFalse(moment.containsKey("dataDefaultValueJsLiteral"), "the page computes now, it is no literal seed: " + moment);
+        }
+        assertNull(text.get("dataDefaultNowShape"), "on a string column `now` is the text it says");
+        assertEquals("\"now\"", text.get("dataDefaultValueJavaLiteral"));
+    }
+
+    /**
      * The key's presence is what the template reads as "this property has a default to apply", so a
      * property with none must leave it absent rather than null.
      */

@@ -393,6 +393,13 @@ document.addEventListener('alpine:init', () => {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
         }
       } else {
+#foreach($property in $properties)
+#if($property.dataDefaultNowShape)
+        // `defaultValue: now`: a new document is dated today, in the field's own shape; a query-param
+        // prefill below still wins, and the server fills the same value on a create that omits it.
+        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+#end
+#end
         for (const key of Object.keys(this.form)) {
           const v = this.queryParam(key);
           if (v !== null) this.form[key] = v;
@@ -772,7 +779,7 @@ document.addEventListener('alpine:init', () => {
 #if($d.shape == "literal")
         header['${d.name}'] = ${d.js};
 #else
-        header['${d.name}'] = this.todayAs('${d.shape}');
+        header['${d.name}'] = App.utils.todayAs('${d.shape}');
 #end
 #end
 #end
@@ -798,29 +805,6 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.state = 'ready';
       }
-    },
-
-    // The current moment in the target field's own shape, for a `duplicable.defaults` value of `now`.
-    // The calendar shapes are built from the LOCAL calendar fields, never from toISOString(): that is
-    // UTC, so east of Greenwich every copy made after the evening cut-over would be dated yesterday.
-    // A `timestamp` field is the exception and the reason: it binds a java.time.Instant on the server,
-    // which is an instant and not a wall clock, so it carries the full ISO instant the form's own
-    // toPayload() sends for a datetime input - the local calendar shapes would not bind at all.
-    todayAs(shape) {
-      const now = new Date();
-      const pad = (n) => String(n).padStart(2, '0');
-      if (shape === 'timestamp') return now.toISOString();
-      if (shape === 'month') return now.getFullYear() + '-' + pad(now.getMonth() + 1);
-      if (shape === 'week') {
-        // ISO-8601 week: Thursday of the current week decides both the week number and its year.
-        const thursday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
-        const firstThursday = new Date(thursday.getFullYear(), 0, 4);
-        firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
-        const week = 1 + Math.round((thursday - firstThursday) / (7 * 24 * 60 * 60 * 1000));
-        return thursday.getFullYear() + '-W' + pad(week);
-      }
-      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
     },
 #end
 
@@ -1250,7 +1234,9 @@ document.addEventListener('alpine:init', () => {
         // affordance like Fill Month actually one click. An EXISTING row keeps what is stored,
         // including a value the user deliberately cleared: re-defaulting that would silently undo it.
         const blank = col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : (col.widget === 'MULTISELECT' ? [] : ''));
-        draft[col.name] = v == null ? (!row && col.def !== undefined ? col.def : blank) : v;
+        // A `defaultValue: now` column (col.defNow, its shape) is today at the moment the dialog opens.
+        const seed = col.defNow ? this.toDateInput(App.utils.todayAs(col.defNow), col.widget) : col.def;
+        draft[col.name] = v == null ? (!row && seed !== undefined ? seed : blank) : v;
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
       if (preset) {

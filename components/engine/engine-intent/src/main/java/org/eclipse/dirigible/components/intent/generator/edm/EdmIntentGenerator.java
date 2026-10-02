@@ -3936,12 +3936,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * The constants a Duplicate writes into the cloned header, as {@code {name, shape, js}} entries in
      * authored order. {@code shape} is {@code date} / {@code timestamp} / {@code month} / {@code week}
-     * for the {@code now} token - the current moment in the field's own shape, rendered by the document
-     * page's {@code todayAs} helper against the LOCAL clock - and {@code literal} otherwise, where
-     * {@code js} carries the value already coerced to the property's type as a JavaScript literal. The
-     * shape is the AUTHORED type, not a narrowing of it: a {@code timestamp} property binds a
-     * {@code java.time.Instant} on the server, which the {@code YYYY-MM-DD} a {@code date} shape
-     * produces does not fill (#7396).
+     * for the {@code now} token - the current moment in the field's own shape, rendered by the shared
+     * shell runtime's {@code App.utils.todayAs} against the LOCAL clock - and {@code literal}
+     * otherwise, where {@code js} carries the value already coerced to the property's type as a
+     * JavaScript literal. The shape is the AUTHORED type, not a narrowing of it: a {@code timestamp}
+     * property binds a {@code java.time.Instant} on the server, which the {@code YYYY-MM-DD} a
+     * {@code date} shape produces does not fill (#7396).
      *
      * @param entity the duplicable document master
      * @return the entries, never null

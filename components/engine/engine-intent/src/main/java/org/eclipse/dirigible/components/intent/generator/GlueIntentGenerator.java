@@ -2772,6 +2772,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (defaultValue == null || defaultValue.isBlank()) {
             return;
         }
+        if (field != null && "now".equals(defaultValue.trim())) {
+            // `defaultValue: now` (#7603) is the moment of the create, not a constant - a month / week
+            // column holds it as text, so read as a literal it would compare against the string "now".
+            target.put("compareOnlyWhenDerived", true);
+            return;
+        }
         // Branched on the SQL type the field's `type:` becomes, which is what decides the column's Java
         // class - the same test the DAO template's #applyDefaults() makes on dataTypeJavaClass.
         switch (IntentEntities.sqlType(type)) {

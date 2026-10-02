@@ -671,6 +671,15 @@ final class ModelParameterProcessor {
         if (defaultValue == null || defaultValue.isEmpty()) {
             return;
         }
+        String nowShape = nowDefaultShape(property, defaultValue);
+        if (nowShape != null) {
+            // `defaultValue: now` (#7603) is the moment of the create, in the field's own shape - filled
+            // by the repository on save (and by the generated form on open), never handed to the column:
+            // a DEFAULT of `now` is not SQL, and no database DEFAULT produces the month or week shape.
+            property.put("dataDefaultNowShape", nowShape);
+            property.put("dataDefaultValueJavaLiteral", JavaExpressions.expression(Map.of("kind", "now", "shape", nowShape)));
+            return;
+        }
         property.put("dataDefaultValueJsonLiteral", JsonLiterals.stringLiteral(defaultValue));
 
         // The generated key is the database's to assign, so its default is never applied in Java - the
@@ -683,6 +692,35 @@ final class ModelParameterProcessor {
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
         }
+    }
+
+    /**
+     * The shape a {@code now} default is the current moment in - {@code date}, {@code timestamp},
+     * {@code month} or {@code week}, the set {@code JavaExpressions} and the shell's
+     * {@code App.utils.todayAs} render - or null when the default is not the token, or the property
+     * holds no moment, in which case it stays an ordinary literal. A month and a week are stored as
+     * text, so their widget tells them apart from a string column.
+     *
+     * @param property the property
+     * @param defaultValue its authored default
+     * @return the shape, or null
+     */
+    private static String nowDefaultShape(Map<String, Object> property, String defaultValue) {
+        if (!"now".equals(defaultValue.trim())) {
+            return null;
+        }
+        String widget = strOr(property, "widgetType", "");
+        if ("MONTH".equals(widget)) {
+            return "month";
+        }
+        if ("WEEK".equals(widget)) {
+            return "week";
+        }
+        return switch (strOr(property, "dataType", "").toUpperCase(Locale.ROOT)) {
+            case "DATE" -> "date";
+            case "DATETIME", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE" -> "timestamp";
+            default -> null;
+        };
     }
 
     /**
@@ -702,6 +740,9 @@ final class ModelParameterProcessor {
      * @param property the property
      */
     private static void resolveDefaultValueJsLiteral(Map<String, Object> property) {
+        if (property.get("dataDefaultNowShape") != null) {
+            return; // today is computed by the page when the form or the line dialog opens
+        }
         String expression = JsLiterals.defaultValueExpression(str(property, "widgetType"),
                 Boolean.TRUE.equals(property.get("isNumberType")), str(property, "dataDefaultValue"));
         if (expression != null) {

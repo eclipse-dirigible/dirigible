@@ -733,6 +733,35 @@ public final class IntentParser {
     private static final Set<String> NOW_FIELD_TYPES = Set.of("date", "timestamp", "month", "week");
 
     /**
+     * Whether a field's own default is the {@code now} token (#7603) - the current moment in the
+     * field's own shape, filled on create by the generated form and by the server, rather than a
+     * literal handed to the column.
+     *
+     * @param field the field
+     * @return true when the field declares {@code defaultValue: now}
+     */
+    private static boolean isNowDefault(FieldIntent field) {
+        return field.getDefaultValue() != null && "now".equals(field.getDefaultValue()
+                                                                    .trim());
+    }
+
+    /**
+     * A field's {@code defaultValue: now} is only meaningful on a field that HOLDS a moment - the same
+     * rule, and the same set, as a {@code duplicable.defaults} {@code now}. On any other type the token
+     * would be stored as the literal text "now" (or refused as a number at generation), which is never
+     * what was meant.
+     */
+    private static void validateNowDefault(String subject, FieldIntent field, List<String> issues) {
+        String kind = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (!NOW_FIELD_TYPES.contains(kind)) {
+            issues.add(subject + " declares defaultValue: now, but a [" + field.getType() + "] field does not hold a moment - now is the"
+                    + " current moment in the field's own shape, so it is only a default for a date / timestamp / month / week field");
+        }
+    }
+
+    /**
      * A {@code defaults} value: {@code now} is the current moment in the field's own shape, so it is
      * only meaningful on a field that HOLDS one - the same rule and the same wording
      * {@code generates.defaults} uses. Anything else is a literal, coerced to the property's type at
@@ -4247,6 +4276,9 @@ public final class IntentParser {
                 }
                 if (!isBlank(field.getFormat())) {
                     validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
+                if (isNowDefault(field)) {
+                    validateNowDefault("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
                 if (field.getLabel() != null || !field.getCountryLabels()
                                                       .isEmpty()) {
