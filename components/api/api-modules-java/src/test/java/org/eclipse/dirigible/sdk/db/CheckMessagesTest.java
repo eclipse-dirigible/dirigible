@@ -20,36 +20,31 @@ import org.junit.jupiter.api.Test;
 import com.google.gson.JsonParser;
 
 /**
- * How a check message is resolved for the request's language (issue #7611): catalog, then inline,
- * then the default text, with the placeholders interpolated after translation.
+ * How a check message is resolved for the request's language (issue #7611): the language's catalog,
+ * else the default text, with the placeholders interpolated after translation.
  */
 class CheckMessagesTest {
 
     private static final String KEY = "billing:billing-model.checks.Invoice_zeroLines";
     private static final String TEXT = "{count} line(s) at price zero";
-    private static final Map<String, String> INLINE = Map.of("en", TEXT, "bg", "{count} ред(а) с нулева цена");
-
     private static final CheckMessages.CatalogReader NO_CATALOG = (language, key) -> null;
 
     @Test
-    void the_language_catalog_wins_over_the_inline_text() {
+    void the_language_catalog_translates_the_default_text() {
         CheckMessages.CatalogReader catalogs =
                 (language, key) -> "bg".equals(language) && KEY.equals(key) ? "Нулеви редове: {{count}}" : null;
-        assertEquals("Нулеви редове: 2", CheckMessages.resolve("bg", catalogs, KEY, TEXT, INLINE, Map.of("count", 2)));
-    }
-
-    @Test
-    void the_inline_text_stands_in_for_an_untranslated_catalog() {
-        assertEquals("2 ред(а) с нулева цена", CheckMessages.resolve("bg", NO_CATALOG, KEY, TEXT, INLINE, Map.of("count", 2)));
-        assertEquals("2 ред(а) с нулева цена", CheckMessages.resolve("bg-BG", NO_CATALOG, KEY, TEXT, INLINE, Map.of("count", 2)));
+        assertEquals("Нулеви редове: 2", CheckMessages.resolve("bg", catalogs, KEY, TEXT, Map.of("count", 2)));
+        // The reader is handed the request language as sent; the folder match (bg -> bg-BG) is its own.
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("bg-BG", catalogs, KEY, TEXT, Map.of("count", 2)));
     }
 
     @Test
     void an_untranslated_language_falls_back_to_the_default_text() {
-        assertEquals("2 line(s) at price zero", CheckMessages.resolve("de", NO_CATALOG, KEY, TEXT, INLINE, Map.of("count", 2)));
-        assertEquals("2 line(s) at price zero", CheckMessages.resolve("", NO_CATALOG, KEY, TEXT, INLINE, Map.of("count", 2)));
-        assertEquals("2 line(s) at price zero", CheckMessages.resolve(null, NO_CATALOG, KEY, TEXT, Map.of(), Map.of("count", 2)));
-        assertEquals("2 line(s) at price zero", CheckMessages.resolve("*", NO_CATALOG, KEY, TEXT, null, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("de", NO_CATALOG, KEY, TEXT, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("", NO_CATALOG, KEY, TEXT, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve(null, NO_CATALOG, KEY, TEXT, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("*", NO_CATALOG, KEY, TEXT, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("bg", NO_CATALOG, null, TEXT, Map.of("count", 2)));
     }
 
     @Test
@@ -57,7 +52,7 @@ class CheckMessagesTest {
         CheckMessages.CatalogReader broken = (language, key) -> {
             throw new IllegalStateException("registry down");
         };
-        assertEquals("2 ред(а) с нулева цена", CheckMessages.resolve("bg", broken, KEY, TEXT, INLINE, Map.of("count", 2)));
+        assertEquals("2 line(s) at price zero", CheckMessages.resolve("bg", broken, KEY, TEXT, Map.of("count", 2)));
     }
 
     @Test
@@ -75,11 +70,11 @@ class CheckMessagesTest {
 
     @Test
     void a_refusal_carries_the_key_and_the_parameters() {
-        ValidationException refusal = CheckMessages.refusal(KEY, TEXT, INLINE, "count", 2);
+        ValidationException refusal = CheckMessages.refusal(KEY, TEXT, "count", 2);
         assertEquals("2 line(s) at price zero", refusal.getMessage());
         assertEquals(KEY, refusal.getMessageKey());
         assertEquals(Map.of("count", 2), refusal.getMessageParams());
-        Warning warning = CheckMessages.warning("Invoice.itemsCompare.0", KEY, TEXT, INLINE, "count", 2);
+        Warning warning = CheckMessages.warning("Invoice.itemsCompare.0", KEY, TEXT, "count", 2);
         assertEquals("Invoice.itemsCompare.0", warning.code());
         assertEquals(KEY, warning.messageKey());
         assertEquals(Map.of("count", 2), warning.params());

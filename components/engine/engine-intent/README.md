@@ -232,10 +232,10 @@ gave it.
 
 ### Translating check messages (#7611)
 
-A check's `message:` (and a picker rule's) is a plain string - the default-language text - or a map of
-`languages:` codes to texts. Every message is also written into the model's en-US catalog
-(`i18n/en-US/<model>.model.json`) under `<model prefix>.checks.<key>`, so a language catalog
-(`i18n/bg-BG/<model>.model.json`) translates it like a label:
+A check's `message:` (and a picker rule's) is one plain string, in the module's default language.
+Every message is written into the model's en-US catalog (`i18n/en-US/<model>.model.json`) under
+`<model prefix>.checks.<key>`, so a language catalog (`i18n/bg-BG/<model>.model.json`) translates it
+like a label - the model never carries a per-language map:
 
 ```yaml
 languages: [en, bg]
@@ -247,13 +247,18 @@ entities:
         field: price
         op: gt
         value: 0
-        message: { en: "{count} line(s) at price zero", bg: "{count} ред(а) с нулева цена" }
+        message: "{count} line(s) at price zero"
+```
+
+```json
+// i18n/bg-BG/app.model.json
+{ "app-model": { "checks": { "Invoice_zeroLines": "{{count}} ред(а) с нулева цена" } } }
 ```
 
 The generated code (`org.eclipse.dirigible.sdk.db.CheckMessages`) resolves a message for the
-request's `Accept-Language`: that language's catalog, then the inline text for it, then the default
-text - with `{count}` / `{match}` filled in after translation. The 400 body of a refusal and every
-warning of a 428 carry `messageKey` and `messageParams` next to the resolved `message`.
+request's `Accept-Language`: that language's catalog, else the default text - with `{count}` /
+`{match}` filled in after translation. The 400 body of a refusal and every warning of a 428 carry
+`messageKey` and `messageParams` next to the resolved `message`.
 
 ## immutableWhen / immutable - user-write immutability
 

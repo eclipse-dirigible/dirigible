@@ -332,6 +332,7 @@ public final class IntentParser {
         rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
         rejectCheckOn(tree);
+        rejectMessageMaps(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
@@ -4314,10 +4315,6 @@ public final class IntentParser {
                 }
                 if (relation.getPickable() != null) {
                     validatePickable(entity, relation, byName, issues);
-                    validateLocalizedMessage("entity [" + entity.getName() + "] relation [" + relation.getName() + "] pickable",
-                            relation.getPickable()
-                                    .getAuthoredMessage(),
-                            model.getLanguages(), issues);
                 }
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
@@ -4379,7 +4376,6 @@ public final class IntentParser {
                     validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
                     String checkSubject =
                             "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
-                    validateLocalizedMessage(checkSubject, check.getAuthoredMessage(), model.getLanguages(), issues);
                     validateCheckId(checkSubject, check, checkIds, issues);
                 }
             }
@@ -6380,6 +6376,49 @@ public final class IntentParser {
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * A check's or a picker rule's {@code message:} is ONE text, in the module's default language
+     * (issue #7611). Translations live in the module's catalogs
+     * ({@code i18n/<locale>/<model>.model.json}, under {@code checks.<key>}) exactly like a label's -
+     * never as a per-language map inside the model: that would make every check an N-language block of
+     * UI copy, put a translator's edits behind a regen, and leave two sources of truth for one key.
+     */
+    private static void rejectMessageMaps(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity)) {
+                continue;
+            }
+            if (entity.get("checks") instanceof List<?> checks) {
+                for (Object checkNode : checks) {
+                    if (checkNode instanceof Map<?, ?> check && check.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] check [" + check.get("kind") + "]"));
+                    }
+                }
+            }
+            if (entity.get("relations") instanceof List<?> relations) {
+                for (Object relationNode : relations) {
+                    if (relationNode instanceof Map<?, ?> relation && relation.get("pickable") instanceof Map<?, ?> pickable
+                            && pickable.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] relation [" + relation.get("name") + "] pickable"));
+                    }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    private static String messageMapIssue(String subject) {
+        return subject + " message is a map - a message is one text in the module's default language;"
+                + " translate it in the module's catalog `i18n/<locale>/<model>.model.json` under `checks.<key>`"
+                + " (the key the generated en-US catalog writes it under), like a label";
     }
 
     private static void rejectRemovedNumberKeys(Object tree) {
@@ -11285,45 +11324,6 @@ public final class IntentParser {
 
     /** The shape of a check's {@code id:} - it becomes part of a translation catalog key (#7611). */
     private static final java.util.regex.Pattern CHECK_ID = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
-
-    /**
-     * An authored user-facing message that may be written per language (issue #7611): a plain string,
-     * or a map of {@code languages:} codes to the text in that language. The keys follow the
-     * {@code languages:} contract - a short lowercase code - and, when the module declares
-     * {@code languages:}, must be among them: a translation for a language the module says it does not
-     * provide would never be offered by the Region &amp; Language picker the declaration feeds.
-     *
-     * @param subject the message prefix
-     * @param authored the authored value
-     * @param languages the module's declared languages
-     * @param issues the issues collected so far
-     */
-    private static void validateLocalizedMessage(String subject, Object authored, List<String> languages, List<String> issues) {
-        if (authored == null || authored instanceof String) {
-            return;
-        }
-        if (!(authored instanceof java.util.Map<?, ?> map)) {
-            issues.add(subject + " message must be a text or a map of language codes to texts, e.g."
-                    + " `message: { en: \"...\", bg: \"...\" }`");
-            return;
-        }
-        if (map.isEmpty()) {
-            issues.add(subject + " message must not be an empty map - write at least the default-language text");
-            return;
-        }
-        for (java.util.Map.Entry<?, ?> entry : map.entrySet()) {
-            String language = String.valueOf(entry.getKey());
-            if (!language.matches("[a-z]{2,3}")) {
-                issues.add(subject + " message declares [" + language + "] which is not a short lowercase language code (e.g. en, bg)");
-            } else if (languages != null && !languages.isEmpty() && !languages.contains(language)) {
-                issues.add(
-                        subject + " message declares language [" + language + "] which is not among the module's languages: " + languages);
-            }
-            if (!(entry.getValue() instanceof String text) || text.isBlank()) {
-                issues.add(subject + " message [" + language + "] must be a non-blank text");
-            }
-        }
-    }
 
     /**
      * A check's optional {@code id:} (issue #7611): an identifier, unique within its entity, since it

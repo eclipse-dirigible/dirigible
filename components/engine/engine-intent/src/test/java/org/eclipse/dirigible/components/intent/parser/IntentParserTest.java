@@ -1115,11 +1115,11 @@ class IntentParserTest {
     }
 
     /**
-     * #7611: a check's {@code message} is a text or a map of language codes to texts, keyed by the
-     * {@code languages:} contract, and an optional {@code id} names it in the translation catalogs.
+     * #7611: a check's {@code message} is ONE text in the module's default language - a per-language
+     * map is refused, pointing at the catalogs - and an optional {@code id} names it in them.
      */
     @Test
-    void checkMessagesMayBeAuthoredPerLanguage() {
+    void checkMessagesAreOneTextAndMayCarryAnId() {
         String yaml = """
                 name: billing
                 languages: [en, bg]
@@ -1131,12 +1131,20 @@ class IntentParserTest {
                         field: discount
                         op: le
                         value: 50
-                        message: { en: "The discount is at most 50%", bg: "Отстъпката е най-много 50%" }
+                        message: "The discount is at most 50%"
                       - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: discount, type: decimal }
                       - { name: credit, type: decimal }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - name: customer
+                        kind: manyToOne
+                        to: Customer
+                        pickable: { when: "discount != null", message: "No discount agreed" }
                 """;
         IntentModel model = IntentParser.parse(yaml);
         CheckIntent cap = model.getEntities()
@@ -1144,27 +1152,21 @@ class IntentParserTest {
                                .getChecks()
                                .get(0);
         assertEquals("The discount is at most 50%", cap.getMessage());
-        assertEquals(java.util.Map.of("en", "The discount is at most 50%", "bg", "Отстъпката е най-много 50%"),
-                cap.getMessageTranslations());
         assertEquals("discountCap", cap.getId());
         CheckIntent plain = model.getEntities()
                                  .get(0)
                                  .getChecks()
                                  .get(1);
         assertEquals("The credit is never negative", plain.getMessage());
-        assertTrue(plain.getMessageTranslations()
-                        .isEmpty());
+        assertNull(plain.getId());
 
-        // The default-language text of a map without `en` is its first entry.
-        IntentParser.parse(yaml.replace("languages: [en, bg]", "languages: [bg, de]")
-                               .replace("en: \"The discount", "de: \"The discount"));
-
-        assertCompareIssue(yaml.replace("en: \"The discount", "EN: \"The discount"), "is not a short lowercase language code");
-        assertCompareIssue(yaml.replace("bg: \"Отстъпката", "de: \"Отстъпката"), "language [de] which is not among the module's languages");
-        assertCompareIssue(yaml.replace("bg: \"Отстъпката е най-много 50%\"", "bg: 5"), "message [bg] must be a non-blank text");
+        // A per-language map is refused - translations live in the module's catalogs, like a label's.
         assertCompareIssue(
-                yaml.replace("message: { en: \"The discount is at most 50%\", bg: \"Отстъпката е най-много 50%\" }", "message: {}"),
-                "must not be an empty map");
+                yaml.replace("message: \"The discount is at most 50%\"",
+                        "message: { en: \"The discount is at most 50%\", bg: \"Отстъпката е най-много 50%\" }"),
+                "check [compare] message is a map - a message is one text in the module's default language");
+        assertCompareIssue(yaml.replace("message: \"No discount agreed\"", "message: { en: \"No discount agreed\", bg: \"Без отстъпка\" }"),
+                "relation [customer] pickable message is a map");
         assertCompareIssue(yaml.replace("id: discountCap", "id: 1cap"), "must be an identifier");
         assertCompareIssue(yaml.replace("- { kind: compare, field: credit", "- { id: discountCap, kind: compare, field: credit"),
                 "is declared by another check of the same entity");

@@ -45,8 +45,7 @@ import com.google.gson.JsonParser;
  * translates it under the same key. The text is resolved in this order:
  * <ol>
  * <li>the request language's own catalog - an overlay a translator maintains;</li>
- * <li>the text authored inline for that language ({@code message: { en: "...", bg: "..." }});</li>
- * <li>the default-language text.</li>
+ * <li>the default-language text, the one the model authors.</li>
  * </ol>
  * Placeholders ({@code {count}}, {@code {match}}, and their i18next spelling {@code {{count}}}) are
  * interpolated AFTER translation, so a translation may move them.
@@ -83,14 +82,12 @@ public final class CheckMessages {
      *
      * @param catalogKey the message's fully qualified catalog key
      * @param text the default-language text
-     * @param translations the per-language texts authored inline (language code to text), may be empty
      * @param params the placeholder values, as alternating name and value
      * @return the exception to throw - mapped to HTTP 400 carrying the key and the parameters
      */
-    public static ValidationException refusal(String catalogKey, String text, Map<String, String> translations, Object... params) {
+    public static ValidationException refusal(String catalogKey, String text, Object... params) {
         Map<String, Object> values = params(params);
-        return new ValidationException(resolve(language(), CheckMessages::readCatalog, catalogKey, text, translations, values), catalogKey,
-                values);
+        return new ValidationException(resolve(language(), CheckMessages::readCatalog, catalogKey, text, values), catalogKey, values);
     }
 
     /**
@@ -99,14 +96,12 @@ public final class CheckMessages {
      * @param code the warning's confirmation code
      * @param catalogKey the message's fully qualified catalog key
      * @param text the default-language text
-     * @param translations the per-language texts authored inline, may be empty
      * @param params the placeholder values, as alternating name and value
      * @return the warning
      */
-    public static Warning warning(String code, String catalogKey, String text, Map<String, String> translations, Object... params) {
+    public static Warning warning(String code, String catalogKey, String text, Object... params) {
         Map<String, Object> values = params(params);
-        return new Warning(code, resolve(language(), CheckMessages::readCatalog, catalogKey, text, translations, values), catalogKey,
-                values);
+        return new Warning(code, resolve(language(), CheckMessages::readCatalog, catalogKey, text, values), catalogKey, values);
     }
 
     /**
@@ -114,43 +109,32 @@ public final class CheckMessages {
      *
      * @param catalogKey the message's fully qualified catalog key
      * @param text the default-language text
-     * @param translations the per-language texts authored inline, may be empty
      * @param params the placeholder values, as alternating name and value
      * @return the resolved, interpolated text
      */
-    public static String message(String catalogKey, String text, Map<String, String> translations, Object... params) {
-        return resolve(language(), CheckMessages::readCatalog, catalogKey, text, translations, params(params));
+    public static String message(String catalogKey, String text, Object... params) {
+        return resolve(language(), CheckMessages::readCatalog, catalogKey, text, params(params));
     }
 
     /**
-     * Resolves a message: the language's catalog, then the inline text for the language, then the
-     * default text - and interpolates the placeholders into the winner.
+     * Resolves a message: the language's catalog, else the default text - and interpolates the
+     * placeholders into the winner.
      *
      * @param language the request language, may be blank
      * @param catalogs the catalog reader
      * @param catalogKey the fully qualified catalog key, may be {@code null}
      * @param text the default-language text
-     * @param translations the inline per-language texts, may be {@code null}
      * @param params the placeholder values
      * @return the resolved text
      */
-    static String resolve(String language, CatalogReader catalogs, String catalogKey, String text, Map<String, String> translations,
-            Map<String, Object> params) {
+    static String resolve(String language, CatalogReader catalogs, String catalogKey, String text, Map<String, Object> params) {
         String resolved = null;
         String normalized = normalize(language);
-        if (normalized != null) {
-            if (catalogKey != null && catalogKey.indexOf(':') > 0) {
-                try {
-                    resolved = catalogs.read(normalized, catalogKey);
-                } catch (RuntimeException e) {
-                    LOGGER.debug("Could not read the [{}] catalogs for [{}]: {}", normalized, catalogKey, e.getMessage());
-                }
-            }
-            if (isBlank(resolved) && translations != null && !translations.isEmpty()) {
-                resolved = translations.get(normalized);
-                if (isBlank(resolved)) {
-                    resolved = translations.get(primary(normalized));
-                }
+        if (normalized != null && catalogKey != null && catalogKey.indexOf(':') > 0) {
+            try {
+                resolved = catalogs.read(normalized, catalogKey);
+            } catch (RuntimeException e) {
+                LOGGER.debug("Could not read the [{}] catalogs for [{}]: {}", normalized, catalogKey, e.getMessage());
             }
         }
         return interpolate(isBlank(resolved) ? text : resolved, params);

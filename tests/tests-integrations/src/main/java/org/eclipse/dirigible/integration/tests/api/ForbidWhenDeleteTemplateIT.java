@@ -184,11 +184,11 @@ class ForbidWhenDeleteTemplateIT {
     }
 
     /**
-     * The resolution arguments the processor derives for a check message (#7611): the catalog key, the
-     * escaped default text and the inline translations.
+     * The resolution arguments the processor derives for a check message (#7611): the catalog key and
+     * the escaped default text.
      */
     private static String messageArgs(String literal) {
-        return "\"sales:sales-model.checks.InvoiceItem_forbidWhen_0\", \"" + literal + "\", java.util.Map.<String, String>ofEntries()";
+        return "\"sales:sales-model.checks.InvoiceItem_forbidWhen_0\", \"" + literal + "\"";
     }
 
     private static Map<String, Object> hop() {

@@ -1811,12 +1811,12 @@ class EdmIntentGeneratorTest {
 
     /**
      * #7611: every check names its message's translation key - the authored {@code id}, else its kind
-     * and position - and carries the texts authored per language, the default-language one staying the
-     * {@code message}. A picker rule names its own.
+     * and position - next to the default-language {@code message}; nothing else, the translations live
+     * in the catalogs. A picker rule names its own.
      */
     @Test
     @SuppressWarnings("unchecked")
-    void checkMessagesCarryTheirTranslationKeyAndTexts() {
+    void checkMessagesCarryTheirTranslationKey() {
         String yaml = """
                 name: billing
                 languages: [en, bg]
@@ -1829,7 +1829,7 @@ class EdmIntentGeneratorTest {
                         field: discount
                         op: le
                         value: 50
-                        message: { bg: "Отстъпката е най-много 50%", en: "The discount is at most 50%" }
+                        message: "The discount is at most 50%"
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
@@ -1843,7 +1843,7 @@ class EdmIntentGeneratorTest {
                       - name: customer
                         kind: manyToOne
                         to: Customer
-                        pickable: { when: "active == true", message: { en: "Inactive", bg: "Неактивен" } }
+                        pickable: { when: "active == true", message: "Inactive" }
                 """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
         List<Map<String, Object>> checks = (List<Map<String, Object>>) entityByName(entities(model), "Customer").get("checks");
@@ -1855,8 +1855,8 @@ class EdmIntentGeneratorTest {
                                                    .get("messageKey"));
         assertEquals("The discount is at most 50%", checks.get(1)
                                                           .get("message"));
-        assertEquals(Map.of("bg", "Отстъпката е най-много 50%", "en", "The discount is at most 50%"), checks.get(1)
-                                                                                                            .get("messageTranslations"));
+        assertFalse(checks.get(1)
+                          .containsKey("messageTranslations"));
 
         Map<String, Object> picker = ((List<Map<String, Object>>) entityByName(entities(model), "Invoice").get("properties")).stream()
                                                                                                                              .filter(p -> p.containsKey(
@@ -1866,7 +1866,7 @@ class EdmIntentGeneratorTest {
         String rule = String.valueOf(picker.get("widgetPickable"));
         assertTrue(rule.contains("\"messageKey\":\"Invoice_customer_pickable\""), rule);
         assertTrue(rule.contains("\"message\":\"Inactive\""), rule);
-        assertTrue(rule.contains("\"bg\":\"Неактивен\""), rule);
+        assertFalse(rule.contains("\"messages\""), rule);
     }
 
     /**

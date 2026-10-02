@@ -73,22 +73,11 @@ function basePage() {
 
     /**
      * The message a marked row carries, in the UI language (issue #7611). The rule names its catalog
-     * key (`messageCatalogKey`, the module catalog's `checks.<key>`) - so a language catalog
-     * translates it like a label - and may carry the texts authored inline per language (`messages`),
-     * which stand in for the catalog when it does not translate it; `message` is the default-language
-     * text both fall back to.
+     * key (`messageCatalogKey`, the module catalog's `checks.<key>`), so a language catalog translates
+     * it like a label; `message` is the default-language text it falls back to.
      */
     pickableMessage(rule) {
-      let code;
-      try {
-        const locale = window.Alpine && Alpine.store('locale');
-        code = locale && locale.value;
-      } catch (e) {
-        code = undefined;
-      }
-      const inline = rule.messages && code ? (rule.messages[code] || rule.messages[String(code).split('-')[0]]) : undefined;
-      const fallback = inline || rule.message;
-      return rule.messageCatalogKey && typeof window.T === 'function' ? window.T(rule.messageCatalogKey, fallback) : fallback;
+      return rule.messageCatalogKey && typeof window.T === 'function' ? window.T(rule.messageCatalogKey, rule.message) : rule.message;
     },
 
     /**

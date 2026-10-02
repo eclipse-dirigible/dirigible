@@ -2225,16 +2225,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
             // The message's translation key (#7611): the catalog entry the generated en-US catalog writes
             // it under and the language catalogs translate it under - the authored `id:`, or the check's
-            // kind and position in its entity's list. The per-language texts authored inline ride along,
-            // the fallback the generated code resolves when the language's catalog does not translate it.
+            // kind and position in its entity's list.
             checkMap.put("messageKey", entity.getName() + "_" + (check.getId() != null && !check.getId()
                                                                                                 .isBlank() ? check.getId()
                                                                                                                   .trim()
                                                                                                         : check.getKind() + "_" + index));
-            Map<String, String> messageTranslations = check.getMessageTranslations();
-            if (!messageTranslations.isEmpty()) {
-                checkMap.put("messageTranslations", new LinkedHashMap<>(messageTranslations));
-            }
             if (check.isWarning()) {
                 // The soft tier (#7466): the check is asked of the person writing instead of refusing
                 // the write. The code is what a caller echoes back to confirm it - stable across saves

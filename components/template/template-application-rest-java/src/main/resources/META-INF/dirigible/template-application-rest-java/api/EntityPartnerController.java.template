@@ -1038,7 +1038,7 @@ public class ${name}PartnerController {
             if (upper.contains(constraint.getKey())) {
                 String key = DUPLICATE_MESSAGE_KEYS.get(constraint.getKey());
                 return key == null ? constraint.getValue()
-                        : org.eclipse.dirigible.sdk.db.CheckMessages.message(key, constraint.getValue(), java.util.Map.of());
+                        : org.eclipse.dirigible.sdk.db.CheckMessages.message(key, constraint.getValue());
             }
         }
         return null;

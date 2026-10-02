@@ -43,13 +43,13 @@ import io.restassured.specification.RequestSpecification;
  *
  * <p>
  * A check's message used to be one literal, so a Bulgarian user read an English refusal (or an
- * English user a Bulgarian one). This generates a module whose checks author their message per
- * language ({@code message: { en, bg }}), and whose plain-string checks are translated by a
- * hand-written bg-BG catalog overlay, then asserts on the running, generated code: the en-US
- * catalog carries every message under its stable key, a refusal (400) and a warning (428) are
- * answered in the request's {@code Accept-Language} with the placeholders interpolated after
- * translation, the body carries the key and the parameters next to the text, and an untranslated
- * language falls back to the default-language text.
+ * English user a Bulgarian one). This generates a module whose checks author their message once, in
+ * the default language, and translates them the way a label is translated - a hand-written bg-BG
+ * catalog overlay under the keys the generated en-US catalog writes - then asserts on the running,
+ * generated code: the en-US catalog carries every message under its stable key, a refusal (400) and
+ * a warning (428) are answered in the request's {@code Accept-Language} with the placeholders
+ * interpolated after translation, the body carries the key and the parameters next to the text, an
+ * untranslated key and an untranslated language fall back to the default-language text.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentCheckMessageI18nIT extends IntegrationTest {
@@ -75,12 +75,12 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                 checks:
                   - kind: duplicate
                     fields: [name]
-                    message: { en: "A customer named {match} already exists", bg: "Вече има клиент с име {match}" }
+                    message: "A customer named {match} already exists"
                   - kind: compare
                     field: discount
                     op: le
                     value: 50
-                    message: { en: "The discount is at most 50%", bg: "Отстъпката е най-много 50%" }
+                    message: "The discount is at most 50%"
                   - { kind: compare, field: credit, op: ge, value: 0, message: "The credit is never negative" }
                 fields:
                   - { name: id,       type: integer, primaryKey: true, generated: true }
@@ -95,7 +95,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                     field: price
                     op: gt
                     value: 0
-                    message: { en: "{count} line(s) at price zero", bg: "{count} ред(а) с нулева цена" }
+                    message: "{count} line(s) at price zero"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
@@ -109,14 +109,17 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
             """;
 
     /**
-     * A translator's overlay: the bg-BG catalog translates the plain-string check by its key, and
-     * overrides nothing else - the inline bg texts stand for the rest.
+     * A translator's overlay: the bg-BG catalog translates three of the four messages by their keys and
+     * leaves {@code Customer_compare_2} untranslated, so that one falls back to the default text. The
+     * {@code zeroLines} translation moves {@code {count}}, the i18next spelling included.
      */
     private static final String BG_OVERLAY = """
             {
               "checkmsg-model": {
                 "checks": {
-                  "Customer_compare_2": "Кредитът никога не е отрицателен"
+                  "Customer_duplicate_0": "Вече има клиент с име {match}",
+                  "Customer_compare_1": "Отстъпката е най-много 50%",
+                  "Invoice_zeroLines": "Редове с нулева цена: {{count}}"
                 }
               }
             }
@@ -139,7 +142,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
 
-        // A refusal authored per language: each reader gets their own, with the key next to it.
+        // A refusal translated by the language's catalog: each reader gets their own, with the key next to
+        // it.
         refused("{\"Name\":\"Acme\",\"Discount\":60}", "bg").body("message", equalTo("Отстъпката е най-много 50%"))
                                                             .body("messageKey", equalTo(CATALOG + "Customer_compare_1"));
         refused("{\"Name\":\"Acme\",\"Discount\":60}", "en").body("message", equalTo("The discount is at most 50%"));
@@ -148,8 +152,8 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
         refused("{\"Name\":\"Acme\",\"Discount\":60}", "de").body("message", equalTo("The discount is at most 50%"));
         refused("{\"Name\":\"Acme\",\"Discount\":60}", null).body("message", equalTo("The discount is at most 50%"));
 
-        // A plain-string message is translated by the language's catalog overlay, like a label.
-        refused("{\"Name\":\"Acme\",\"Credit\":-1}", "bg").body("message", equalTo("Кредитът никога не е отрицателен"))
+        // A key the language's catalog does not translate falls back to the default-language text.
+        refused("{\"Name\":\"Acme\",\"Credit\":-1}", "bg").body("message", equalTo("The credit is never negative"))
                                                           .body("messageKey", equalTo(CATALOG + "Customer_compare_2"));
         refused("{\"Name\":\"Acme\",\"Credit\":-1}", "en").body("message", equalTo("The credit is never negative"));
 
@@ -175,7 +179,7 @@ class IntentCheckMessageI18nIT extends IntegrationTest {
                 TIMEOUT_SECONDS);
         response.get()
                 .body("warnings[0].code", equalTo("Invoice.itemsCompare.0"))
-                .body("warnings[0].message", equalTo("2 ред(а) с нулева цена"))
+                .body("warnings[0].message", equalTo("Редове с нулева цена: 2"))
                 .body("warnings[0].messageKey", equalTo(CATALOG + "Invoice_zeroLines"))
                 .body("warnings[0].messageParams.count", equalTo(2));
     }

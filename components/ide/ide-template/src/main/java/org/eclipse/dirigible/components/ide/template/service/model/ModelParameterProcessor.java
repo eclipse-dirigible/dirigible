@@ -344,13 +344,12 @@ final class ModelParameterProcessor {
     /**
      * Derives the arguments a generated refusal or warning hands {@code CheckMessages} (issue #7611):
      * the message's fully qualified catalog key ({@code <project>:<catalog prefix>.checks.<key>} - the
-     * same key the generated en-US catalog writes the message under and a language catalog translates),
-     * the default-language text, and the per-language texts authored inline as a {@code Map} literal.
-     * The generated code resolves them for the request's language when the check fires, so one
-     * declaration reaches every reader in their own language.
+     * same key the generated en-US catalog writes the message under and a language catalog translates)
+     * and the default-language text. The generated code resolves them for the request's language when
+     * the check fires, so one declaration reaches every reader in their own language.
      *
      * <p>
-     * {@code messageArgsJava} is the three arguments joined, ready to be written into the call; a
+     * {@code messageArgsJava} is the two arguments joined, ready to be written into the call; a
      * template appends the placeholder values (`{count}`, `{match}`) after it.
      *
      * @param check the check
@@ -365,25 +364,7 @@ final class ModelParameterProcessor {
         String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
         check.put("messageCatalogKey", catalogKey);
         check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
-        StringBuilder translations = new StringBuilder("java.util.Map.<String, String>ofEntries(");
-        boolean first = true;
-        Map<?, ?> authored = check.get("messageTranslations") instanceof Map<?, ?> map ? map : Map.of();
-        for (Map.Entry<?, ?> entry : authored.entrySet()) {
-            if (entry.getKey() == null || entry.getValue() == null) {
-                continue;
-            }
-            translations.append(first ? "" : ", ")
-                        .append("java.util.Map.entry(\"")
-                        .append(JavaLiterals.escape(String.valueOf(entry.getKey())))
-                        .append("\", \"")
-                        .append(JavaLiterals.escape(String.valueOf(entry.getValue())))
-                        .append("\")");
-            first = false;
-        }
-        translations.append(")");
-        check.put("messageTranslationsJavaExpression", translations.toString());
-        check.put("messageArgsJava",
-                "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\", " + translations);
+        check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
     }
 
     /**

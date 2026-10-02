@@ -2801,12 +2801,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a guard must test every grouping key for null before it recomputes: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("boolean guardWithin = true;") && ledgerRepository.contains("if (guardKeyed) {"),
                 "a row belonging to no key-tuple must pass the guard untouched - no throw, no marker, no forced status");
-        // The refusal resolves the authored message for the request's language (#7611): its catalog key,
-        // the default text and the (here empty) inline translations.
+        // The refusal resolves the authored message for the request's language (#7611): its catalog key
+        // and the default text.
         assertTrue(
                 ledgerRepository.contains("throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(\"")
-                        && ledgerRepository.contains(".checks.")
-                        && ledgerRepository.contains("\", \"Insufficient \\\"balance\\\"\", java.util.Map.<String, String>ofEntries());"),
+                        && ledgerRepository.contains(".checks.") && ledgerRepository.contains("\", \"Insufficient \\\"balance\\\"\");"),
                 "outcome block must fail the write with the authored message: " + ledgerRepository);
         assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
                 "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
