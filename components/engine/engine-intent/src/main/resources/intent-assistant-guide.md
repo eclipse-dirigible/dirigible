@@ -926,7 +926,7 @@ the entity.
 **List columns (`list:`):** `order:` sequences the form, the list and the detail rows together, but a
 document wants its form in data-entry order and its list in scanning order. Give the entity a `list:`
 to set the list tables apart - it is the **exact** column set and order of every generated list (the
-power list, the master list, the my / partner lists, a composition child's register, a `related:`
+power list (masters included), the my / partner lists, a composition child's register, a `related:`
 register without `show:`, and the export), and it overrides each property's `major` for the list:
 
 ```yaml
@@ -1127,7 +1127,7 @@ one:
         show: [number, employee, totalHours, status]   # omit for the source's own list columns
 ```
 
-The register renders as a read-only grid on the referenced record's form / document / master page,
+The register renders as a read-only grid on the referenced record's form / document page,
 filtered to that record, and each row opens the source's own record page - **there is no add, edit
 or delete**: the listed records have their own lifecycle, pages and processes. That is the whole
 difference from a composition child, which IS edited in place as a detail / document-items

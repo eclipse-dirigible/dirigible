@@ -2199,8 +2199,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryFormPage = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
         assertTrue(entryFormPage.contains("/mutable"),
                 "the edit form page must ask the mutable pre-check so a direct /edit URL opens read-only");
-        String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
-        assertTrue(entryMasterPage.contains("isRowImmutable"),
+        String entryListPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
+        assertTrue(entryListPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         // Date-based immutability: the guard queries the register the intent named, and the same
         // pre-check endpoint the status lock exposes now answers for it too.
@@ -2767,7 +2767,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
                 "the displaced status is bookkeeping - it must not reach the form model");
         assertFalse(contentOf("gen/emission/views/Pledge/Pledge-form.html").contains("DisplacedStatus"), "...nor be rendered on the form");
-        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-master.html").contains("DisplacedStatus"), "...nor on the master list");
+        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-manage-list.html").contains("DisplacedStatus"),
+                "...nor on the master's list");
 
         // The keyed aggregate handler writes the aggregate column of an EXISTING target row targeted. The
         // resolved primary key in the call also proves the descriptor's targetPk reached the template: an
@@ -2857,15 +2858,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(bookingRepository.contains("\", \"Over the allowance\", ") || bookingRepository.contains("\", \"No allowance left\", "),
                 "a non-blocking outcome must NOT fail the write - that is the whole point of task/reject");
 
-        // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
-        // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id
-        // regression class: the lookup loop skipped DOCUMENT_STATUS widgets).
-        String campaignMasterPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js");
-        assertTrue(campaignMasterPage.contains("all['Status']"),
-                "the master page must load the EntityStatus label lookup like any dropdown relation");
-        String campaignMasterView = contentOf("gen/emission/views/Campaign/Campaign-master.html");
-        assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
-                "the master table must render the EntityStatus column as a resolved badge, not a raw id");
+        // A master (MANAGE_MASTER) browses on the manage list - the same page a MANAGE entity gets -
+        // and its own page-pair is gone: the record sheet shows its fields, its detail collections
+        // render on the form it opens (#7390).
+        String campaignListPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignManageListPage.js");
+        String campaignListView = contentOf("gen/emission/views/Campaign/Campaign-manage-list.html");
+        assertTrue(campaignListView.contains("x-data=\"CampaignManageListPage\""), "a master must browse on the manage list");
+        assertFalse(exists("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js"),
+                "a master must not emit the retired master page component");
+        assertFalse(exists("gen/emission/views/Campaign/Campaign-master.html"), "a master must not emit the retired master view");
+        String emissionShell = contentOf("gen/emission/index.html");
+        assertTrue(
+                emissionShell.contains("x-route=\"/Campaign\" x-template.target.app=\"./views/Campaign/Campaign-manage-list.html\"")
+                        && emissionShell.contains(
+                                "x-route=\"/Campaign/:id\" x-template.target.app=\"./views/Campaign/Campaign-manage-list.html\"")
+                        && emissionShell.contains("/Campaign/CampaignManageListPage.js"),
+                "the shell must route a master's browse and deep-link routes to its manage list");
+        assertTrue(campaignListView.contains("@click=\"applyFilterDraft()\"") && campaignListPage.contains("'/search'"),
+                "a master's list must carry the server-side Filter menu");
+        // ...which resolves an EntityStatus FK like every list: a label lookup loaded on the page and
+        // a badge cell in the table (the raw-id regression class: the lookup loop skipped
+        // DOCUMENT_STATUS widgets).
+        assertTrue(campaignListPage.contains("all['Status']"),
+                "the master's list must load the EntityStatus label lookup like any dropdown relation");
+        assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status))"),
+                "the master's table must render the EntityStatus column as a resolved badge, not a raw id");
+        assertFalse(campaignListView.contains("detailPanel("), "the record sheet shows the master's fields only, not its collections");
+        assertTrue(contentOf("gen/emission/views/Campaign/Campaign-form.html").contains("detailPanel({...d"),
+                "a master's detail collections must render on the form its Preview / Edit open");
 
         // #6693: a record that owns detail collections is not finished at create - its children are
         // the next step of the same working session and can only be added from the record's own
@@ -2922,15 +2942,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
                 "applyServerFilter must discard a stale response superseded by a newer keystroke");
-        assertTrue(campaignMasterPage.contains("exportRowsCsv(this.filteredMasters"),
-                "the master list must export its filtered rows as CSV");
-        assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),
-                "the master toolbar must carry the Export and Print actions");
+        assertTrue(campaignListPage.contains("exportRowsCsv(this.sortedItems"),
+                "the master's list must export its filtered+sorted rows as CSV");
+        assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList()"),
+                "the master's list must carry the Export and Print actions");
 
         // The detail side panel's field pairs must stack into one column until the pane is wide enough
         // (lg:) and each cell must shrink+wrap its value, so an email/phone value cannot overflow its
         // column and overlap the neighbour at narrow browser widths (issue #7462).
-        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+        for (String detailView : new String[] {unitManageView, campaignListView}) {
             assertTrue(detailView.contains("grid grid-cols-1 lg:grid-cols-2"),
                     "the detail panel must stack field pairs to one column below the lg breakpoint");
             assertFalse(detailView.contains("grid grid-cols-1 sm:grid-cols-2"),
@@ -2941,18 +2961,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // The detail side panel must be dismissible: a close control in its toolbar plus Esc, both
         // wired to closeDetails() which clears the selection and returns to the full-width list (#7463).
-        assertTrue(campaignMasterPage.contains("closeDetails()"), "the master page must define closeDetails()");
         assertTrue(unitManageList.contains("closeDetails()"), "the manage list page must define closeDetails()");
-        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+        for (String detailView : new String[] {unitManageView, campaignListView}) {
             assertTrue(detailView.contains("@click=\"closeDetails()\""), "the detail panel must carry a control wired to closeDetails()");
             assertTrue(detailView.contains("@keydown.escape.window"), "Esc must dismiss the detail panel");
         }
         // The manage list's record opens in a sheet OVER the list, so its dismissal is named after
-        // where it returns you (#7491); the master-detail pane closes a panel beside the list.
+        // where it returns you (#7491).
         assertTrue(unitManageView.contains("defaults.backToList"),
                 "the record sheet's dismissal must use the translated Back to list label");
-        assertTrue(campaignMasterView.contains("defaults.close"),
-                "the master-detail panel's close control must use the translated Close label");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
@@ -3623,12 +3640,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // #6546: a scoped calendar filters through /<Calendar>?<Scope>=<id>, so the record it filters
         // BY must link there. Both of the scope target's record surfaces carry the affordance - the
-        // master's detail pane (selected row) and the entity's own form (open record).
+        // record sheet of its list (selected row) and the entity's own form (open record).
         assertTrue(leaveCalendar.contains("scopeId"), "a scoped calendar must read its scope from the route");
         assertTrue(
-                contentOf("gen/emission/views/Campaign/Campaign-master.html").contains(
+                contentOf("gen/emission/views/Campaign/Campaign-manage-list.html").contains(
                         "openScopedCalendar('CampaignEvent', 'Campaign', selectedId)"),
-                "the scope target's master pane must open the calendar filtered to the selected record");
+                "the scope target's record sheet must open the calendar filtered to the selected record");
         assertTrue(personForm.contains("openScopedCalendar('Leave', 'Person', id)"),
                 "the scope target's form must open the calendar filtered to the open record");
         assertTrue(contentOf("gen/emission/views/Person/Person-manage-list.html").contains(
@@ -7340,6 +7357,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
     private static int countOf(String haystack, String needle) {
         return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
+    }
+
+    private boolean exists(String fileName) {
+        return repository.hasResource(PROJECT_PATH + "/" + fileName);
     }
 
     private String contentOf(String fileName) {

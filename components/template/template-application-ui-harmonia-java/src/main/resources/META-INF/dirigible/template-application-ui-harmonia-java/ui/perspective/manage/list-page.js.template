@@ -93,6 +93,14 @@ document.addEventListener('alpine:init', () => {
       // the table, the selected record's pane and the status-filtered action buttons agree with the
       // server (issue #7073).
       this.onActionDone(async () => { await this.load(); this.loadLookups(); });
+#if($hasProcess)
+      // A completed BPM task on the selected record changes it behind this view's back, and the chain
+      // behind the task keeps writing after the completion returned, which is why the processTasks
+      // store announces that record's process again on a bounded schedule after the task form closed
+      // (#7612). Re-read the list quietly - the rows stay on screen - so the table and the open sheet
+      // move too.
+      this.onTasksChanged(() => this.selected && this.selected.ProcessId, async () => { await this.load(true); this.loadLookups(); });
+#end
     },
 
     // Deep link / reload support: /${name}/:id pre-selects that row once the list is loaded, and
@@ -139,12 +147,19 @@ document.addEventListener('alpine:init', () => {
       try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (e) { /* older browsers */ }
     },
 
-    async load() {
-      this.state = 'loading';
+    // `quiet` keeps the current rows, page and filters on screen until the fresh rows arrive (a
+    // background re-read), so it re-runs the filter in force rather than the full list.
+    async load(quiet) {
+      if (!quiet) {
+        this.state = 'loading';
+        this.currentPage = 1;
+      }
       this.error = null;
-      this.currentPage = 1;
       try {
-        this.items = await App.services.api.getAll(this.apiPath);
+        const conditions = quiet ? this.buildConditions() : [];
+        this.items = conditions.length
+          ? await App.services.api.post(this.apiPath + '/search', { conditions })
+          : await App.services.api.getAll(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
         // Keep the current selection if it still exists, else clear it.
         if (this.selected) {
