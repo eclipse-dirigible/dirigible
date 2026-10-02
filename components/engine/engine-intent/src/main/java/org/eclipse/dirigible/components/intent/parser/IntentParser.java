@@ -4350,7 +4350,7 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["
                             + relation.getTo() + "]");
                 }
-                validateWhenTargetDeleted(entity, relation, crossModel, issues);
+                validateWhenTargetDeleted(entity, relation, issues);
                 if (relation.getDependsOn() != null) {
                     String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
                     boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
@@ -5268,19 +5268,19 @@ public final class IntentParser {
 
     /**
      * {@code whenTargetDeleted: restrict} on a to-one association refuses a DELETE of the TARGET while
-     * this entity still references it, naming both entities and the count (v1 same-model only - the
-     * generated repository constructs the target's repository directly, which a cross-model reference
-     * cannot resolve; the cross-model case is deferred follow-up work). Valid only on a
-     * manyToOne/oneToOne that is NOT a composition - composition already answers "what happens to my
-     * children when I, the master, am deleted" through {@link #validateWhenMasterDeleted}, and this key
-     * is the opposite direction: what happens to ME when the entity I POINT AT is deleted.
+     * this entity still references it, naming both entities and the count. A same-model target's
+     * repository checks the referencing repository directly; a cross-model target's cannot know this
+     * model, so this entity's repository contributes a {@code DeleteRestrictor} the target's delete
+     * consults (#7547). Valid only on a manyToOne/oneToOne that is NOT a composition - composition
+     * already answers "what happens to my children when I, the master, am deleted" through
+     * {@link #validateWhenMasterDeleted}, and this key is the opposite direction: what happens to ME
+     * when the entity I POINT AT is deleted.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
-     * @param crossModel whether the relation targets another intent model
      * @param issues the issue list to add to
      */
-    private static void validateWhenTargetDeleted(EntityIntent entity, RelationIntent relation, boolean crossModel, List<String> issues) {
+    private static void validateWhenTargetDeleted(EntityIntent entity, RelationIntent relation, List<String> issues) {
         String whenTargetDeleted = relation.getWhenTargetDeleted();
         if (whenTargetDeleted == null) {
             return;
@@ -5300,11 +5300,6 @@ public final class IntentParser {
         if (relation.isComposition()) {
             issues.add(subject
                     + " is a composition so its master's delete is whenMasterDeleted's question, not whenTargetDeleted's - the target here is the PARENT this entity is a detail of");
-            return;
-        }
-        if (crossModel) {
-            issues.add(subject
-                    + " is cross-model so whenTargetDeleted is not yet supported - the target's repository is generated in another model and cannot be constructed here");
         }
     }
 

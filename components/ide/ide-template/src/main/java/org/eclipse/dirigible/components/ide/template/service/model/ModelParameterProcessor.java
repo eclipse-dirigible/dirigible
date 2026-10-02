@@ -909,6 +909,13 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
+        // whenTargetDeleted: restrict on a cross-model relation (#7547): the target's repository cannot
+        // see this model, so this entity's repository contributes the count it asks for - keyed by the
+        // target's generated entity class, which is what the target's delete names itself by.
+        if (truthy(property, "restrictsTargetDelete")) {
+            property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
+            entity.put("restrictsTargetDeletes", Boolean.TRUE);
+        }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));
             entity.put("personalFkJavaClass", property.get("dataTypeJavaClass"));

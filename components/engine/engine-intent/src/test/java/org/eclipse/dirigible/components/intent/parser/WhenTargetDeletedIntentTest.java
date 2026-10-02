@@ -19,9 +19,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Validation of a to-one association's {@code whenTargetDeleted: restrict} construct (dirigible
- * #7547) - what a DELETE of the TARGET does while this entity still references it. The same-model,
- * restrict-only v1: the mirror of {@link WhenMasterDeletedIntentTest}'s composition case, for a
- * plain association instead.
+ * #7547) - what a DELETE of the TARGET does while this entity still references it. Restrict-only,
+ * same-model and cross-model: the mirror of {@link WhenMasterDeletedIntentTest}'s composition case,
+ * for a plain association instead.
  */
 class WhenTargetDeletedIntentTest {
 
@@ -83,9 +83,13 @@ class WhenTargetDeletedIntentTest {
                 "is a composition so its master's delete is whenMasterDeleted's question");
     }
 
-    /** v1 is same-model only - the target's repository is generated in another model. */
+    /**
+     * A cross-model target is restricted too (the issue's employee referenced by another module's
+     * expense claims): the target's repository cannot see this model, so this entity's repository
+     * contributes the count it consults.
+     */
     @Test
-    void crossModelIsRejected() {
+    void crossModelIsAccepted() {
         String yaml = """
                 name: expenses
                 uses:
@@ -97,7 +101,12 @@ class WhenTargetDeletedIntentTest {
                     relations:
                       - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: restrict }
                 """;
-        assertIssue(yaml, "is cross-model so whenTargetDeleted is not yet supported");
+        assertTrue(IntentParser.parse(yaml)
+                               .getEntities()
+                               .get(0)
+                               .getRelations()
+                               .get(0)
+                               .isTargetDeleteRestricted());
     }
 
     @Test

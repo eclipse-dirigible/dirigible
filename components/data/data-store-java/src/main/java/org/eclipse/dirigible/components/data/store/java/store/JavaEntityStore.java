@@ -501,14 +501,24 @@ public class JavaEntityStore {
      * @param eventTopic the topic to publish the deleted row on; {@code null} publishes nothing
      */
     public <T> void delete(T entity, String eventTopic) {
-        RegisteredEntity meta = resolve(entity.getClass());
-        Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
-        Object id = data.get(meta.idField()
-                                 .getName());
+        Object id = idOf(entity);
         if (id == null) {
             return;
         }
-        removeById(entity.getClass(), meta, id, eventTopic);
+        removeById(entity.getClass(), resolve(entity.getClass()), id, eventTopic);
+    }
+
+    /**
+     * The primary-key value an entity instance carries.
+     *
+     * @param entity a registered entity instance
+     * @return its primary key, or {@code null} when it carries none
+     */
+    public Object idOf(Object entity) {
+        RegisteredEntity meta = resolve(entity.getClass());
+        return EntityBeanMapper.toMap(entity, meta)
+                               .get(meta.idField()
+                                        .getName());
     }
 
     /**

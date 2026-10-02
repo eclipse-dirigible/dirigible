@@ -733,6 +733,35 @@ class ModelParameterProcessorTest {
         assertEquals("currencies", referenced.get("genFolderName"));
     }
 
+    /**
+     * whenTargetDeleted: restrict on a cross-model relation (#7547): the referencing property learns
+     * the target's generated entity class - from the owner model's coordinates, as its repository class
+     * does - and the entity is flagged, so its repository contributes the count the target's delete
+     * consults. A relation that restricts nothing gets neither.
+     */
+    @Test
+    void aCrossModelRestrictResolvesTheTargetsEntityClass() {
+        Map<String, Object> employee = property("Employee", "INTEGER");
+        employee.put("relationshipEntityName", "Employee");
+        employee.put("relationshipEntityPerspectiveName", "Employees");
+        employee.put("widgetType", "DROPDOWN");
+        employee.put("restrictsTargetDelete", "true");
+        Map<String, Object> approver = property("Approver", "INTEGER");
+        approver.put("relationshipEntityName", "Employee");
+        approver.put("relationshipEntityPerspectiveName", "Employees");
+        approver.put("widgetType", "DROPDOWN");
+        Map<String, Object> claim = entity("ExpenseClaim", "Claims", property("Id", "INTEGER"), employee, approver);
+        Map<String, Object> projection = entity("Employee", "Employees", property("Name", "VARCHAR"));
+        projection.put("type", "PROJECTION");
+        projection.put("projectionReferencedModel", "/hr-app/hr.model");
+
+        ModelParameterProcessor.process(model(claim, projection), javaParameters());
+
+        assertEquals("gen.hr.data.employees.EmployeeEntity", employee.get("targetEntityClass"));
+        assertEquals(Boolean.TRUE, claim.get("restrictsTargetDeletes"));
+        assertNull(approver.get("targetEntityClass"));
+    }
+
     @Test
     void resolvesAProjectionOwnerFromTheOlderThreeSegmentReferenceToo() {
         Map<String, Object> foreignKey = property("Currency", "INTEGER");

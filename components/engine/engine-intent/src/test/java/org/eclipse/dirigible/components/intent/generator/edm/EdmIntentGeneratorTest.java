@@ -2899,6 +2899,32 @@ class EdmIntentGeneratorTest {
         assertNull(entityByName(entities(model), "ExpenseCategory").get("deleteRestrictors"));
     }
 
+    /**
+     * A cross-model target is restricted from the referencing side (#7547): its repository is generated
+     * by another model and cannot be stamped with a restrictor, so the referencing FK property carries
+     * {@code restrictsTargetDelete} - and only the restricting relation does.
+     */
+    @Test
+    void aCrossModelRestrictRidesTheReferencingProperty() {
+        String yaml = """
+                name: expenses
+                uses:
+                  - { model: hr, project: hr-app }
+                entities:
+                  - name: ExpenseClaim
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: restrict }
+                      - { name: approver, kind: manyToOne, model: hr, to: Employee }
+                """;
+        Map<String, Object> claim =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses")), "ExpenseClaim");
+        assertEquals("true", propertyByName(claim, "Employee").get("restrictsTargetDelete"));
+        assertNull(propertyByName(claim, "Approver").get("restrictsTargetDelete"), "only the restricting relation carries it");
+        assertNull(claim.get("deleteRestrictors"), "the referencing entity is no target of its own restriction");
+    }
+
     @Test
     // `related:` emits a read-only register carrying the source's key, its back-reference and the
     // metadata its columns render from - and no URL, which belongs to the generation parameters.

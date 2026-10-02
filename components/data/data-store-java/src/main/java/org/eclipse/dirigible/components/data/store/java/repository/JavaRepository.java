@@ -15,6 +15,9 @@ import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
+import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+import org.eclipse.dirigible.sdk.db.DeleteRestrictor;
+import org.eclipse.dirigible.sdk.extensions.Extensions;
 
 /**
  * Typed CRUD facade for a single Dirigible {@code @Entity} type. Client code subclasses this,
@@ -267,6 +270,7 @@ public abstract class JavaRepository<T> {
      * @param entity the entity to delete
      */
     public void delete(T entity) {
+        requireNotReferencedByOtherModels(store().idOf(entity));
         store().delete(entity);
     }
 
@@ -279,6 +283,7 @@ public abstract class JavaRepository<T> {
      * @param eventTopic the topic to publish the deleted row on
      */
     public void delete(T entity, String eventTopic) {
+        requireNotReferencedByOtherModels(store().idOf(entity));
         store().delete(entity, eventTopic);
     }
 
@@ -288,6 +293,7 @@ public abstract class JavaRepository<T> {
      * @param id the primary-key value
      */
     public void deleteById(Object id) {
+        requireNotReferencedByOtherModels(id);
         store().deleteById(entityClass, id);
     }
 
@@ -300,7 +306,45 @@ public abstract class JavaRepository<T> {
      * @param eventTopic the topic to publish the deleted row on
      */
     public void deleteById(Object id, String eventTopic) {
+        requireNotReferencedByOtherModels(id);
         store().deleteById(entityClass, id, eventTopic);
+    }
+
+    /**
+     * Refuses the delete while a record of ANOTHER model still references this one (intent
+     * {@code whenTargetDeleted: restrict} on a cross-model relation, dirigible #7547). This entity's
+     * own generation cannot know those models, so each referencing repository contributes a
+     * {@link DeleteRestrictor} and every delete asks all of them. A same-model restriction is the
+     * generated subclass's own check and never contributes here.
+     *
+     * <p>
+     * A read-then-act guard, like every reference check the platform generates: a referencing row
+     * inserted between this count and the delete is not seen.
+     *
+     * @param id the primary key of the record being deleted
+     * @throws DeleteRestrictionException while a contribution counts a reference to it
+     */
+    private void requireNotReferencedByOtherModels(Object id) {
+        if (id == null || !BeanProvider.isInitialzed()) {
+            return; // outside a running platform there is no bean container, so no contribution either
+        }
+        String target = entityClass.getName();
+        for (DeleteRestrictor restrictor : Extensions.find(DeleteRestrictor.class)) {
+            int referencing = restrictor.countReferencing(target, id);
+            if (referencing > 0) {
+                throw new DeleteRestrictionException("This " + label() + " is referenced by " + referencing + " "
+                        + restrictor.referencingLabel() + " record(s) and cannot be deleted");
+            }
+        }
+    }
+
+    /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */
+    private String label() {
+        String name = entityClass.getSimpleName();
+        if (name.endsWith("Entity") && name.length() > "Entity".length()) {
+            name = name.substring(0, name.length() - "Entity".length());
+        }
+        return name.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ");
     }
 
     /**

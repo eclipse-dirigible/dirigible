@@ -368,7 +368,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity> {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($restrictsTargetDeletes) implements org.eclipse.dirigible.sdk.db.DeleteRestrictor#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -1520,6 +1520,33 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                     + " ${restrictor.referencingLabel} record(s) and cannot be deleted");
         }
 #end
+    }
+#end
+#if($restrictsTargetDeletes)
+
+    /**
+     * The ${name} rows that still reference a record of ANOTHER model this entity restricts the delete
+     * of (intent {@code whenTargetDeleted: restrict} on a cross-model relation, dirigible #7547). That
+     * record's repository cannot know this model, so it asks every {@code DeleteRestrictor} before it
+     * deletes, and refuses while one of them counts a reference.
+     */
+    @Override
+    public int countReferencing(String targetEntity, Object targetId) {
+        int referencing = 0;
+#foreach($property in $properties)
+#if($property.restrictsTargetDelete && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            referencing += findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId))
+                    .size();
+        }
+#end
+#end
+        return referencing;
+    }
+
+    @Override
+    public String referencingLabel() {
+        return "${entityLabel}";
     }
 #end
 #if($multilingual == "true")
