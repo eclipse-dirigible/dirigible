@@ -1735,6 +1735,63 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * The parent side of an {@code agree} check (#7589): each record the junction links carries an
+     * {@code agreeGuards} entry naming the junction, its foreign key and the agreed property, so the
+     * parent's repository can refuse re-pointing that property while a junction row references it -
+     * with the check's own message. A warning refuses nothing, so it guards no parent either.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void agreeChecksGuardBothParents() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Currency
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: customer, kind: manyToOne, to: Customer }
+                      - { name: currency, kind: manyToOne, to: Currency }
+                  - name: InvoicePayment
+                    checks:
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: customer,
+                          message: "This payment belongs to a different customer than the invoice" }
+                      - { kind: agree, relations: [salesInvoice, customerPayment], onProperty: currency, severity: warn }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: customerPayment, kind: manyToOne, to: CustomerPayment }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing"));
+
+        List<Map<String, Object>> invoiceGuards = (List<Map<String, Object>>) entityByName(entities, "SalesInvoice").get("agreeGuards");
+        assertEquals(
+                List.of(Map.of("referencingEntity", "InvoicePayment", "fkProperty", "SalesInvoice", "property", "Customer", "message",
+                        "This payment belongs to a different customer than the invoice")),
+                invoiceGuards, "the warning on currency must guard nothing");
+        List<Map<String, Object>> paymentGuards = (List<Map<String, Object>>) entityByName(entities, "CustomerPayment").get("agreeGuards");
+        assertEquals(List.of(Map.of("referencingEntity", "InvoicePayment", "fkProperty", "CustomerPayment", "property", "Customer",
+                "message", "This payment belongs to a different customer than the invoice")), paymentGuards);
+        // The agreed-on record itself is not a side of the junction - changing a customer's own fields
+        // re-points nothing.
+        assertNull(entityByName(entities, "Customer").get("agreeGuards"));
+        assertNull(entityByName(entities, "InvoicePayment").get("agreeGuards"));
+    }
+
+    /**
      * The soft tier (#7466) reaches the {@code .model} as data: every warning carries
      * {@code severity: warn} and the stable {@code code} a caller confirms it by, a {@code duplicate}
      * its PascalCased fields, an {@code itemsCompare} the items it reads and a literal typed by the

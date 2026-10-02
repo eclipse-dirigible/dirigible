@@ -365,6 +365,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: entry,  kind: manyToOne, to: Entry }
                   - { name: storno, kind: manyToOne, to: Entry }
 
+              # ...and the agree check guards the PARENTS too (#7589): a junction's check runs when the
+              # junction row is written, so re-pointing a parent's agreed property afterwards would
+              # leave the row standing in the very pairing the check refuses. Each parent's repository
+              # refuses that change while a junction row references it, with the check's own message.
+              - name: Wallet
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party }
+              - name: Coupon
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party }
+              - name: WalletCoupon
+                checks:
+                  - { kind: agree, relations: [wallet, coupon], onProperty: party,
+                      message: "A coupon is redeemed only against a wallet of its own party" }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: wallet, kind: manyToOne, to: Wallet }
+                  - { name: coupon, kind: manyToOne, to: Coupon }
+
               - name: EntryLine
                 checks:
                   - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
@@ -2136,6 +2161,73 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertTextColumnKeepsItsDeclaredWidth();
         assertRuntimeEnforcement();
+        assertAgreeGuardsTheParentsRuntime();
+    }
+
+    /**
+     * The parent side of {@code checks: agree} (#7589), compiled and running: once a junction row links
+     * a wallet and a coupon of one party, neither may be re-pointed to another party - the check's own
+     * message, a 400 - while an edit that leaves the party alone, and a re-point of a coupon no
+     * junction row references, go through.
+     */
+    private void assertAgreeGuardsTheParentsRuntime() {
+        int party = createRecord("/party/PartyController", "{\"Name\":\"Agree Party A\"}");
+        int otherParty = createRecord("/party/PartyController", "{\"Name\":\"Agree Party B\"}");
+        int wallet = createRecord("/wallet/WalletController", "{\"Name\":\"W\",\"Party\":" + party + "}");
+        int coupon = createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        int looseCoupon = createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        createRecord("/walletcoupon/WalletCouponController", "{\"Wallet\":" + wallet + ",\"Coupon\":" + coupon + "}");
+
+        String refusal = "A coupon is redeemed only against a wallet of its own party";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + wallet + ",\"Name\":\"W\",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + coupon + ",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/coupon/CouponController/" + coupon)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        // An edit that keeps the party is no re-point...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + wallet + ",\"Name\":\"W2\",\"Party\":" + party + "}")
+                                                 .when()
+                                                 .put(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("W2")));
+        // ...and a coupon nothing redeems is free to move.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + looseCoupon + ",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/coupon/CouponController/" + looseCoupon)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Party", equalTo(otherParty)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Party", equalTo(party)));
+    }
+
+    /** POSTs a record to a generated controller and answers its generated id. */
+    private int createRecord(String controller, String body) {
+        AtomicReference<Integer> id = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body(body)
+                                                        .when()
+                                                        .post(API + controller)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")));
+        return id.get();
     }
 
     /**
@@ -2480,6 +2572,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 linkController.contains("agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)")
                         && linkController.contains("An entry and its storno must be in the same state"),
                 "whenNull: refuse must reject an unset side too, got: " + linkController);
+        // ...and each parent's repository guards the agreed property on every update path (#7589): the
+        // user's full-row update, the system's updateWithoutEvent and the targeted write a workflow
+        // setter uses, the last comparing against the values captured before it applies its own.
+        String walletRepository = contentOf("gen/emission/data/wallet/WalletRepository.java");
+        assertTrue(
+                walletRepository.contains("new gen.emission.data.walletcoupon.WalletCouponRepository()")
+                        && walletRepository.contains(".eq(\"Wallet\", id))")
+                        && walletRepository.contains(
+                                "throw new ValidationException(\"A coupon is redeemed only against a wallet of its own party\")"),
+                "a parent of an agree junction must refuse re-pointing the agreed property while referenced, got: " + walletRepository);
+        assertEquals(2, countOf(walletRepository, "requireAgreementKept(entity);"), "update() and updateWithoutEvent() must both ask");
+        assertTrue(walletRepository.contains("requireAgreementKept(id, agreedBefore, entity);"),
+                "the targeted write must ask too, against the values it captured before applying its own");
+        assertTrue(contentOf("gen/emission/data/coupon/CouponRepository.java").contains(".eq(\"Coupon\", id))"),
+                "BOTH sides of the junction are guarded");
 
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
