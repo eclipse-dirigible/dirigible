@@ -583,6 +583,27 @@ public class JavaEntityStore {
     }
 
     /**
+     * Count the entities of the given type matching a typed {@link Criteria} - in the database, without
+     * loading a row. Any ordering on the criteria is ignored.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param criteria the query criteria
+     * @return the number of matching entities
+     */
+    public <T> long count(Class<T> type, Criteria criteria) {
+        RegisteredEntity meta = resolve(type);
+        String hql = criteria.appendConditions("select count(*) from " + meta.entityName());
+        return read(session -> {
+            Query<Long> query = session.createQuery(hql, Long.class);
+            criteria.parameters()
+                    .forEach(query::setParameter);
+            Long result = query.getSingleResult();
+            return result == null ? 0L : result;
+        });
+    }
+
+    /**
      * Execute an HQL/JPQL query against the entity. Parameters are bound by name. The query must select
      * map projections (default for dynamic-map entities — {@code from <entityName>} works out of the
      * box).

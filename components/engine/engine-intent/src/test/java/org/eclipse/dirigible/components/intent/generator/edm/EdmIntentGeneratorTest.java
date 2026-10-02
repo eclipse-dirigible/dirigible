@@ -2843,86 +2843,42 @@ class EdmIntentGeneratorTest {
         assertNull(entityByName(entities, "EmployeeTimesheet").get("scopedCalendars"));
     }
 
-    @Test
-    // whenTargetDeleted: restrict (#7547) is authored on the REFERENCING side, so its own sweep
-    // stamps the reverse index onto the TARGET - facts only (which entity, which FK), never a URL or
-    // a package: those are resolved once at Java-generation time.
-    void whenTargetDeletedEmitsTheReverseIndexOnItsTarget() {
-        String yaml = """
-                name: expenses
-                entities:
-                  - name: ExpenseCategory
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: name, type: string, required: true }
-                  - name: Expense
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                      - { name: amount, type: decimal }
-                    relations:
-                      - { name: category, kind: manyToOne, to: ExpenseCategory, required: true, whenTargetDeleted: restrict }
-                """;
-        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses");
-        List<Map<String, Object>> entities = entities(model);
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> restrictors =
-                (List<Map<String, Object>>) entityByName(entities, "ExpenseCategory").get("deleteRestrictors");
-        assertEquals(1, restrictors.size());
-        assertEquals("Expense", restrictors.get(0)
-                                           .get("referencingEntity"));
-        assertEquals("Category", restrictors.get(0)
-                                            .get("fkProperty"));
-
-        // Nothing is stamped on the declaring (Expense) side - the reverse index lives only on the
-        // target, which is the entity whose delete gets guarded.
-        assertNull(entityByName(entities, "Expense").get("deleteRestrictors"));
-    }
-
-    @Test
-    // No whenTargetDeleted anywhere -> no attribute at all, so an existing model regenerates
-    // byte-identically.
-    void noWhenTargetDeletedEmitsNoDeleteRestrictors() {
-        String yaml = """
-                name: expenses
-                entities:
-                  - name: ExpenseCategory
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                  - name: Expense
-                    fields:
-                      - { name: id, type: integer, primaryKey: true, generated: true }
-                    relations:
-                      - { name: category, kind: manyToOne, to: ExpenseCategory, required: true }
-                """;
-        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses");
-        assertNull(entityByName(entities(model), "ExpenseCategory").get("deleteRestrictors"));
-    }
-
     /**
-     * A cross-model target is restricted from the referencing side (#7547): its repository is generated
-     * by another model and cannot be stamped with a restrictor, so the referencing FK property carries
-     * {@code restrictsTargetDelete} - and only the restricting relation does.
+     * whenTargetDeleted (#7547) is applied from the REFERENCING side, so it rides the referencing FK
+     * property - same-model and cross-model alike, the default included: an unauthored relation is
+     * written as {@code restrict}, so the {@code .model} says what the repository enforces. A
+     * composition is whenMasterDeleted's question and carries no rule.
      */
     @Test
-    void aCrossModelRestrictRidesTheReferencingProperty() {
+    void everyPlainToOneCarriesItsTargetDeleteRule() {
         String yaml = """
                 name: expenses
                 uses:
                   - { model: hr, project: hr-app }
                 entities:
+                  - name: ExpenseCategory
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
                   - name: ExpenseClaim
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:
-                      - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: restrict }
-                      - { name: approver, kind: manyToOne, model: hr, to: Employee }
+                      - { name: category, kind: manyToOne, to: ExpenseCategory }
+                      - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: cascade }
+                      - { name: approver, kind: manyToOne, model: hr, to: Employee, whenTargetDeleted: nullify }
+                  - name: ExpenseLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: claim, kind: manyToOne, to: ExpenseClaim, composition: true, required: true }
                 """;
-        Map<String, Object> claim =
-                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses")), "ExpenseClaim");
-        assertEquals("true", propertyByName(claim, "Employee").get("restrictsTargetDelete"));
-        assertNull(propertyByName(claim, "Approver").get("restrictsTargetDelete"), "only the restricting relation carries it");
-        assertNull(claim.get("deleteRestrictors"), "the referencing entity is no target of its own restriction");
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses"));
+        Map<String, Object> claim = entityByName(entities, "ExpenseClaim");
+        assertEquals("restrict", propertyByName(claim, "Category").get("whenTargetDeleted"), "unauthored is restrict");
+        assertEquals("cascade", propertyByName(claim, "Employee").get("whenTargetDeleted"));
+        assertEquals("nullify", propertyByName(claim, "Approver").get("whenTargetDeleted"));
+        assertNull(propertyByName(entityByName(entities, "ExpenseLine"), "Claim").get("whenTargetDeleted"),
+                "a composition is whenMasterDeleted's question");
     }
 
     @Test

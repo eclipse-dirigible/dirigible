@@ -198,14 +198,21 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
-- **`whenTargetDeleted: restrict` on a plain (non-composition) `manyToOne`/`oneToOne` = the record it
-  points at cannot be deleted while this one still references it** (#7547). Without it, deleting a
-  referenced master answers 200 and the referencing rows keep a dangling foreign key. With it, the
-  target's delete is refused with a 409 that names the referencing records and their count ("This
-  Employee is referenced by 2 Expense Claim record(s) and cannot be deleted"). It works across models
-  too (a `model:` relation): the owning module needs no change, because the referencing repository
-  contributes the check the target's delete consults. `restrict` is the only value; a composition's
-  master delete is `whenMasterDeleted`'s question instead.
+- **`whenTargetDeleted: restrict | nullify | cascade` on a plain (non-composition) `manyToOne`/
+  `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
+  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
+    referencing records and their count ("This Employee is referenced by 2 Expense Claim record(s)
+    and cannot be deleted").
+  - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
+  - `cascade` deletes this record together with the target, through its own repository, so its
+    events, history and own rules apply.
+
+  Every restriction is checked before anything is released, so a refused delete changes nothing. It
+  works across models too (a `model:` relation): the owning module needs no change, because the
+  referencing repository contributes the rule the target's delete applies. A composition's master
+  delete is `whenMasterDeleted`'s question instead. Write `cascade` only for records that have no life
+  without their target (a timesheet of an employee), and `nullify` for an optional pointer (a
+  reviewer, an assignee).
 - **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
   a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
   invoice starts as DRAFT / Bank transfer / E-mail:
@@ -4303,7 +4310,7 @@ or a seeded name.
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
-| relation `whenTargetDeleted` | `restrict` (the target's delete is answered 409 while this relation still references it); plain to-one relations, same-model or cross-model |
+| relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
@@ -4345,7 +4352,7 @@ or a seeded name.
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
-- "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> the referencing **to-one relation** (`whenTargetDeleted: restrict`)
+- "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)
 - "a screen to enter / edit X" -> **forms**

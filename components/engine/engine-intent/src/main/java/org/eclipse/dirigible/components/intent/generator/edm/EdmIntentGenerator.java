@@ -771,10 +771,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
         buildScopedCalendars(entities, builtByName);
-        // The reverse index of whenTargetDeleted: restrict - a target entity must know every same-model
-        // relation that restricts its delete, which its own declaration cannot see (only the REFERENCING
-        // side authors the key). Same sweep reason as the two above.
-        buildDeleteRestrictors(entities, builtByName);
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -1695,6 +1691,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (composition && relation.isMasterDeleteRefused()) {
             p.put("relationshipMasterDeleteRefused", "true");
         }
+        if (!composition) {
+            putTargetDeleteRule(p, relation);
+        }
         // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
         // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
         p.put("widgetType", relation.isEntityStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
@@ -1807,15 +1806,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
-        // whenTargetDeleted: restrict across models (#7547): the target's repository cannot see this
-        // model, so THIS entity's repository answers for the reference - see ModelParameterProcessor,
-        // which resolves the target's generated entity class next to its repository.
-        if (relation.isTargetDeleteRestricted()) {
-            p.put("restrictsTargetDelete", "true");
-        }
+        putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
         putLookupColumns(p, relation);
         return p;
+    }
+
+    /**
+     * Emit what a DELETE of the record a plain to-one points at does to this one (#7547): the authored
+     * {@code whenTargetDeleted}, else {@code restrict}. Always written, the default included, so the
+     * {@code .model} says what the generated repository enforces. The target's repository cannot know
+     * which entities reference it - another model may - so the rule is applied from THIS side: the
+     * referencing repository contributes it to the delete (see {@code TargetDeleteRule}).
+     */
+    private static void putTargetDeleteRule(Map<String, Object> p, RelationIntent relation) {
+        p.put("whenTargetDeleted", relation.getTargetDeleteRule());
     }
 
     /**
@@ -3169,56 +3174,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    /**
-     * Emits the {@code deleteRestrictors} model attribute on the entity a {@code whenTargetDeleted:
-     * restrict} relation POINTS AT - the reverse of the declaration, same reason
-     * {@link #buildScopedCalendars} runs its own sweep: only the referencing side authors the key, and
-     * it may be declared before or after the target entity.
-     *
-     * <p>
-     * Same-model only - the generated repository constructs each referencing entity's repository
-     * directly, by its generated FQN, which only resolves within this model's own generation folder. A
-     * cross-model target is restricted from the other side: the referencing FK property carries
-     * {@code restrictsTargetDelete} and its repository contributes a {@code DeleteRestrictor} (#7547).
-     *
-     * <p>
-     * Carries FACTS only (the referencing entity's authored name and its FK property) - never a package
-     * or a class name. The referencing entity's OWN generated coordinates (its perspective, and from
-     * that its FQN) are resolved once, canonically, by {@code ModelParameterProcessor} at
-     * Java-generation time - the same division of labour as {@code masterLock} and every other
-     * cross-entity reference in this pipeline, so the two cannot drift.
-     *
-     * @param entities the authored entities
-     * @param builtByName every built entity map, by name
-     */
-    private static void buildDeleteRestrictors(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
-        for (EntityIntent entity : entities) {
-            Map<String, Object> entityMap = builtByName.get(entity.getName());
-            if (entityMap == null) {
-                continue; // an unnamed / skipped entity
-            }
-            for (RelationIntent relation : entity.getRelations()) {
-                if (!relation.isTargetDeleteRestricted() || relation.isCrossModel()) {
-                    // A cross-model target is not generated by this model, so no restrictor can be
-                    // stamped on it - its restriction rides the referencing FK property instead
-                    // (crossModelRelationProperty).
-                    continue;
-                }
-                Map<String, Object> targetMap = builtByName.get(relation.getTo());
-                if (targetMap == null) {
-                    continue; // unknown target, reported by the parser
-                }
-                Map<String, Object> restrictor = new LinkedHashMap<>();
-                restrictor.put("referencingEntity", entity.getName());
-                restrictor.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
-                @SuppressWarnings("unchecked")
-                List<Map<String, Object>> restrictors = (List<Map<String, Object>>) targetMap.computeIfAbsent("deleteRestrictors",
-                        key -> new ArrayList<Map<String, Object>>());
-                restrictors.add(restrictor);
-            }
-        }
-    }
-
     /** The entity's to-one relation with the given authored name, or null when there is none. */
     private static RelationIntent toOneNamed(EntityIntent entity, String name) {
         for (RelationIntent relation : entity.getRelations()) {
@@ -4519,8 +4474,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "deleteRestrictors", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "groupingKeys", "relatedEntities", "scopedCalendars", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults",
+            "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

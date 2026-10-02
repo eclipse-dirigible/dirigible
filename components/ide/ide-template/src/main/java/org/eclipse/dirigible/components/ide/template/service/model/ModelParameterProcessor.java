@@ -96,7 +96,6 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
-            resolveDeleteRestrictors(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -909,12 +908,13 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
-        // whenTargetDeleted: restrict on a cross-model relation (#7547): the target's repository cannot
-        // see this model, so this entity's repository contributes the count it asks for - keyed by the
-        // target's generated entity class, which is what the target's delete names itself by.
-        if (truthy(property, "restrictsTargetDelete")) {
+        // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
+        // another model may - so this entity's repository contributes the rule the target's delete
+        // applies, keyed by the target's generated entity class, which is what that delete names itself
+        // by. Same-model and cross-model alike: this is the package the target is generated into.
+        if (truthy(property, "whenTargetDeleted")) {
             property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
-            entity.put("restrictsTargetDeletes", Boolean.TRUE);
+            entity.put("hasTargetDeleteRules", Boolean.TRUE);
         }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));
@@ -1290,41 +1290,6 @@ final class ModelParameterProcessor {
         String statusProperty = str(entity, "immutableStatusProperty");
         return truthy(entity, "immutableAlways") || (statusProperty != null && !statusProperty.isEmpty())
                 || entity.get("periodLock") != null;
-    }
-
-    /**
-     * Resolves each entity's {@code deleteRestrictors} (intent {@code whenTargetDeleted: restrict})
-     * into the referencing entity's generated FQN, so the DAO can construct that repository directly
-     * and query it - same-model only, exactly like {@link #inheritMasterLock} resolves a composition
-     * parent's coordinates from the child's own FK metadata.
-     *
-     * @param entities every entity in the model
-     * @param parameters the generation parameters
-     */
-    private static void resolveDeleteRestrictors(List<Map<String, Object>> entities, Map<String, Object> parameters) {
-        for (Map<String, Object> entity : entities) {
-            List<Map<String, Object>> restrictors = asMaps(entity.get("deleteRestrictors"));
-            if (restrictors.isEmpty()) {
-                continue;
-            }
-            List<Map<String, Object>> resolved = new ArrayList<>();
-            for (Map<String, Object> restrictor : restrictors) {
-                Map<String, Object> referencing = findEntity(entities, str(restrictor, "referencingEntity"));
-                if (referencing == null) {
-                    continue; // the referencing entity was not generated - drop rather than emit a broken reference
-                }
-                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
-                String referencingPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + ".";
-                restrictor.put("entityClass", referencingPackage + str(referencing, "name") + "Entity");
-                restrictor.put("repositoryClass", referencingPackage + str(referencing, "name") + "Repository");
-                // The refusal names the referencing entity the way a person reading the page knows it,
-                // not by its raw identifier - the same source the composition cascade's own refusal
-                // uses for its child.
-                restrictor.put("referencingLabel", strOr(referencing, "entityLabel", str(referencing, "name")));
-                resolved.add(restrictor);
-            }
-            entity.put("deleteRestrictors", resolved);
-        }
     }
 
     /**
