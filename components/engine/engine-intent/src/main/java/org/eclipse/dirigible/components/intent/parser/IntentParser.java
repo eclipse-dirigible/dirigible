@@ -336,6 +336,7 @@ public final class IntentParser {
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
+        normalizeSettlementOrder(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -1072,7 +1073,14 @@ public final class IntentParser {
             if (invoice != null) {
                 requireField(invoice, s.getTotal(), label, "total", issues);
                 requireField(invoice, s.getPaid(), label, "paid", issues);
-                requireField(invoice, s.getOrder(), label, "order", issues);
+                if (s.getOrder()
+                     .isEmpty()) {
+                    issues.add(
+                            "settlement [" + label + "] must name at least one order field (e.g. order: date, or order: [date, number])");
+                }
+                for (String order : s.getOrder()) {
+                    requireField(invoice, order, label, "order", issues);
+                }
                 if (s.getStatus() != null && !s.getStatus()
                                                .isBlank()
                         && toOneRelationByName(invoice, s.getStatus()) == null) {
@@ -6414,6 +6422,34 @@ public final class IntentParser {
         }
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * A settlement's {@code order:} is EITHER one field ({@code order: date}) or a list of them
+     * ({@code order: [date, number]}, issue #7556). Both map to the one typed list, so the scalar form
+     * is wrapped on the raw tree here - before the typed mapping, where Gson would refuse a string for
+     * a list - and an explicit null is dropped so the typed default (empty, reported by the validator)
+     * applies.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeSettlementOrder(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("settlements") instanceof List<?> settlements)) {
+            return;
+        }
+        for (Object settlementNode : settlements) {
+            if (!(settlementNode instanceof Map<?, ?> settlement) || !settlement.containsKey("order")) {
+                continue;
+            }
+            Object declared = settlement.get("order");
+            Map<Object, Object> writable = (Map<Object, Object>) settlement;
+            if (declared == null) {
+                writable.remove("order");
+            } else if (declared instanceof String field) {
+                writable.put("order", new ArrayList<>(List.of(field)));
+            }
         }
     }
 

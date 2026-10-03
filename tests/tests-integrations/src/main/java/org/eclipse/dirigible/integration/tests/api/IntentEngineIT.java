@@ -2955,6 +2955,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPayment.contains("PaymentEntity payment = Json.parse(message, PaymentEntity.class)"),
                 "it should deserialize the created payment from the event");
         assertTrue(onPayment.contains(".eq(\"Customer\", payment.Customer)"), "it should match invoices on the shared Customer");
+        // Oldest first is a TOTAL order (#7556): same-day invoices fall back to creation order, never to
+        // whatever order the database returns them in.
+        assertTrue(onPayment.replaceAll("\\s+", "")
+                            .contains(".orderByAsc(\"Date\").orderByAsc(\"Id\");"),
+                "the open invoices should be ordered by date, then by key");
         assertTrue(onPayment.contains("s == 3 || s == 4 || s == 6"), "it should only allocate to invoices in a payable status");
         assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
                 "it should create allocation rows through the junction repository (never the generic Store)");
@@ -3010,12 +3015,16 @@ class IntentEngineIT extends IntegrationTest {
                 "it should bind the payment's delete topic");
         assertTrue(onPaymentDeleted.contains(".eq(\"Payment\", payment.Id)") && onPaymentDeleted.contains("rows.delete(row)"),
                 "it should delete every allocation row of that payment through the junction repository");
+        assertTrue(onPaymentDeleted.contains(".orderByDesc(\"Id\")"), "the allocations should be given back newest first");
 
         String onInvoice = codeOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
                 "the onInvoice settlement delegate should be generated");
         assertTrue(onInvoice.contains("new PaymentRepository().findAll") && onInvoice.contains(".eq(\"Customer\", invoice.Customer)"),
                 "it should pull the customer's payments matching on the shared Customer");
+        assertTrue(onInvoice.replaceAll("\\s+", "")
+                            .contains(".orderByAsc(\"Date\").orderByAsc(\"Id\");"),
+                "the customer's payments should be drawn by date, then by key");
     }
 
     @Test

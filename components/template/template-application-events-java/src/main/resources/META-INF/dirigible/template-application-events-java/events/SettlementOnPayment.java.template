@@ -25,7 +25,9 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Re
 /**
  * Auto-settlement (on ${paymentEntity} #if($topicSuffix == "")create#elseif($topicSuffix == "-rekeyed")re-key#{else}correction#end): allocates the payment across the payer's open
  * ${invoiceEntity}s - oldest first, matching ${match} - creating ${junctionEntity} rows until the
- * payment is used up. The paid roll-up then updates each invoice's paid / balance / status.
+ * payment is used up. Oldest first is a total order: the ${invoiceEntity} key breaks every tie of the
+ * authored order, so same-day documents settle in creation order, never in whatever order the
+ * database happens to return them. The paid roll-up then updates each invoice's paid / balance / status.
  *
  * This is a RECOMPUTE of the payment's unallocated balance, not an append: it allocates only what is
  * still unallocated#if($topicSuffix != ""), and releases the excess - newest allocation first - when the payment is corrected
@@ -99,8 +101,8 @@ public class ${className} implements MessageHandler {
             return;
         }
         Criteria criteria = Criteria.create()#foreach($m in $match)
-                                    .eq("${m}", payment.${m})#end
-                                    .orderByAsc("${order}");
+                                    .eq("${m}", payment.${m})#end#foreach($o in $invoiceOrder)
+                                    .orderByAsc("${o}")#end;
         for (${invoiceEntity}Entity invoice : new ${invoiceEntity}Repository().findAll(criteria)) {
             if (pot.signum() <= 0) {
                 break;

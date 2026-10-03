@@ -682,9 +682,9 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     private static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoicePaid", "invoiceStatus",
-                "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount",
-                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
+        copy(context, item, "name", "match", "invoiceOrder", "paymentOrder", "invoiceEntity", "invoicePk", "invoiceTotal", "invoicePaid",
+                "invoiceStatus", "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment",
+                "junctionAmount", "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
         context.put("invoiceJavaPerspective", sanitize(item, "invoicePerspective"));
         context.put("junctionJavaPerspective", sanitize(item, "junctionPerspective"));
         context.put("paymentGenFolder", truthy(item, "crossModel") ? sanitize(item, "paymentModel") : str(parameters, "javaGenFolderName"));

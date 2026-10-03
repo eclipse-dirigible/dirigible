@@ -22,7 +22,9 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}En
  * would take the allocation with the payment: the rows survived as orphans pointing at an id that no
  * longer exists and kept the ${invoiceEntity} settled forever. The rows are removed through the
  * junction repository, so each one's delete event fires and the paid roll-up recomputes the
- * ${invoiceEntity}'s paid / balance / status exactly as for a hand-deleted allocation.
+ * ${invoiceEntity}'s paid / balance / status exactly as for a hand-deleted allocation. They go newest
+ * first, as a downward correction releases them, so the documents pass through their partial states
+ * in one deterministic order.
  *
  * The delete event is published after the payment row is gone, so a re-delivery finds an empty
  * allocation set and is a no-op - the handler is idempotent without a guard of its own.
@@ -50,7 +52,8 @@ public class ${className} implements MessageHandler {
         }
         ${junctionEntity}Repository rows = new ${junctionEntity}Repository();
         for (${junctionEntity}Entity row : rows.findAll(Criteria.create()
-                                                                .eq("${junctionFkPayment}", payment.${paymentPk}))) {
+                                                                .eq("${junctionFkPayment}", payment.${paymentPk})
+                                                                .orderByDesc("${junctionPk}"))) {
             rows.delete(row);
         }
     }

@@ -45,8 +45,11 @@ public class SettlementIntent {
     private String paid;
     /** The payment pot field (e.g. amount); unallocated = pot - already-allocated. */
     private String pot;
-    /** The field both sides are ordered by, oldest first (e.g. date). */
-    private String order;
+    /**
+     * The fields both sides are ordered by, oldest first (e.g. date, or [date, number]); the generated
+     * query always breaks the remaining ties by each side's primary key, i.e. creation order.
+     */
+    private List<String> order = new ArrayList<>();
     /**
      * Shared to-one relations both the invoice and the payment must agree on (e.g. Customer, Currency).
      */
@@ -122,12 +125,12 @@ public class SettlementIntent {
         this.pot = pot;
     }
 
-    public String getOrder() {
+    public List<String> getOrder() {
         return order;
     }
 
-    public void setOrder(String order) {
-        this.order = order;
+    public void setOrder(List<String> order) {
+        this.order = order == null ? new ArrayList<>() : order;
     }
 
     public List<String> getMatch() {

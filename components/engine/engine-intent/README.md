@@ -794,7 +794,7 @@ settlements:
     total: total
     paid: paid
     pot: amount
-    order: date                       # oldest first
+    order: date                       # oldest first; or a list: [date, number]
     match: [Customer, Currency]
     status: Status
     payableStatuses: [3, 4, 6]
@@ -805,7 +805,8 @@ entry that maintains `paid`/`balance`/status. The spread handler is bound to the
 AND its update event, and is a recompute of the payment's unallocated balance rather than an append:
 a payment corrected after it was booked - or created incomplete and completed later - is re-allocated
 for the amount it actually carries, and an amount corrected downwards releases the excess allocation
-(newest first).
+(newest first). Oldest first is a total order: after the `order` fields, each side is sorted by its
+own primary key, so same-day documents settle in creation order.
 
 ## reports - read-only aggregations
 

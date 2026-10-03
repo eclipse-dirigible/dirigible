@@ -4074,7 +4074,7 @@ settlements:
     total: total                            # invoice capacity; open = total - paid
     paid: paid                              # invoice consumed (kept by the paid roll-up)
     pot: amount                             # payment pot field (payment.amount)
-    order: date                             # allocate oldest first (FIFO)
+    order: date                             # allocate oldest first (FIFO); or a list: [date, number]
     match: [Customer, Currency]             # only allocate within the same customer + currency
     status: Status                          # invoice status relation
     payableStatuses: [3, 4, 6]              # seed ids that are payable (e.g. ISSUED / SENT / PARTIAL)
@@ -4094,10 +4094,13 @@ Generates two client-Java glue classes (bind them with a `rollups` sum entry tha
   (the bare `gen.events.<ClassName>` shorthand resolves to this module's generated events package).
 
 **Rules:** `junction` / `invoice` / `payment` are declared entities; the junction must have a to-one
-relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` / `order`
-are invoice fields; `status` a to-one relation of the invoice; `match` are to-one relations of the
-invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
-payment's unallocated balance; entity writes go only through the generated repositories.
+relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` and every
+`order` field are invoice fields; `status` a to-one relation of the invoice; `match` are to-one
+relations of the invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
+payment's unallocated balance; entity writes go only through the generated repositories. The order is
+always total: both sides sort by the `order` fields and then by their own primary key, so documents
+sharing a date (every invoice issued that day) settle in creation order, never in database order. Give
+`order` a second field (`[date, number]`) when creation order is not the order you mean.
 
 ### resolves - fill a relation from a register valid on a date
 
