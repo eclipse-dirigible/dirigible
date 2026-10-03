@@ -90,14 +90,14 @@ class SelfServiceReferenceValidationTemplateIT {
         for (String template : SELF_SERVICE_SURFACES) {
             String rendered = render(template);
 
-            int validate = rendered.indexOf("        validate(entity);");
-            int references = rendered.indexOf("        validateReferences(entity);");
+            int validate = rendered.indexOf("        validate(checked);");
+            int references = rendered.indexOf("        validateReferences(checked);");
             int save = rendered.indexOf("repository.save(entity)");
             assertTrue(validate >= 0 && references > validate, template + " must check references after the values: " + rendered);
             assertTrue(save > references, template + " must check references before the insert: " + rendered);
 
             int update = rendered.indexOf("repository.update(entity)");
-            assertTrue(rendered.lastIndexOf("        validateReferences(entity);") < update,
+            assertTrue(rendered.lastIndexOf("        validateReferences(checked);") < update,
                     template + " must check references before the update too: " + rendered);
         }
     }

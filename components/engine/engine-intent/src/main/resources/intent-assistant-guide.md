@@ -692,6 +692,17 @@ field may declare:
     when the document is saved for all the lines that break it - not once per line. `{count}` in the
     message is replaced with the number of lines. Always a warning; a hard per-line rule is a
     `compare` on the items entity.
+  **A check may read a calculated field (#7544).** The row-level checks - refusing and `severity:
+  warn` alike - judge the record as the write will store it: a field's `calculatedOnCreate` /
+  `calculatedOnUpdate` expression is evaluated first (on an update, over the stored values of the
+  system-owned fields such as a roll-up's `paid`), so a client never has to send the computed value.
+  "Warn when an invoice is issued more than 5 days after its tax event" is a calculated delay plus a
+  soft compare on it:
+  `{ name: issueDelayDays, type: integer, calculatedOnCreate: "daysBetween(TaxEventDate, Date)",
+  calculatedOnUpdate: "daysBetween(TaxEventDate, Date)" }` and
+  `{ kind: compare, field: issueDelayDays, op: le, value: 5, severity: warn, message: "..." }`. Only
+  the neutral expressions are evaluated for the checks; a `calculatedAction*` runs on the write
+  itself, so a check on an action-calculated field still reads the value it was sent.
   **Translating check messages (#7611).** A check message is translated exactly like a label: write
   it ONCE, in the module's default language, and it reaches every reader in their own. The generator
   writes each message into the module's en-US catalog (`i18n/en-US/<model>.model.json`) under

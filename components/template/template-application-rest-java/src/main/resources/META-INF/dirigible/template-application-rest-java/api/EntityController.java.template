@@ -256,14 +256,17 @@ public class ${name}Controller {
 #if($workflowStatusProperty)
         requireWorkflowStatusOnCreate(entity);
 #end
-        validate(entity);
+        // The checks read the record as the write will store it - its calculated fields computed, not
+        // taken from the payload (#7544). What is persisted is still computed by the repository.
+        ${name}Entity checked = repository.calculatedForCreate(entity);
+        validate(checked);
 #if($hasReferenceValidations)
-        validateReferences(entity);
+        validateReferences(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
-        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
 #if($systemOwnedOnCreate.size() > 0)
         // After every check above, so what a create refuses is unchanged; before the save, so the
@@ -362,14 +365,17 @@ public class ${name}Controller {
         ${name}Entity existing = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
         mergeWritable(existing, entity);
-        validate(existing);
+        // The checks read the record as the write will store it - its calculated fields computed, not
+        // taken from the payload (#7544). What is persisted is still computed by the repository.
+        ${name}Entity checked = repository.calculatedForUpdate(existing);
+        validate(checked);
 #if($hasReferenceValidations)
-        validateReferences(existing);
+        validateReferences(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
-        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(existing));
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
 #if($hasDuplicateKeys)
         try {
@@ -382,14 +388,17 @@ public class ${name}Controller {
 #end
 #else
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
-        validate(entity);
+        // The checks read the record as the write will store it - its calculated fields computed, not
+        // taken from the payload (#7544). What is persisted is still computed by the repository.
+        ${name}Entity checked = repository.calculatedForUpdate(entity);
+        validate(checked);
 #if($hasReferenceValidations)
-        validateReferences(entity);
+        validateReferences(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
-        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
 #if($hasDuplicateKeys)
         try {
