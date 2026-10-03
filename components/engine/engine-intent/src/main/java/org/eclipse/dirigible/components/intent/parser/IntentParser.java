@@ -336,6 +336,7 @@ public final class IntentParser {
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
+        normalizeSettlementOrder(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -734,6 +735,35 @@ public final class IntentParser {
     private static final Set<String> NOW_FIELD_TYPES = Set.of("date", "timestamp", "month", "week");
 
     /**
+     * Whether a field's own default is the {@code now} token (#7603) - the current moment in the
+     * field's own shape, filled on create by the generated form and by the server, rather than a
+     * literal handed to the column.
+     *
+     * @param field the field
+     * @return true when the field declares {@code defaultValue: now}
+     */
+    private static boolean isNowDefault(FieldIntent field) {
+        return field.getDefaultValue() != null && "now".equals(field.getDefaultValue()
+                                                                    .trim());
+    }
+
+    /**
+     * A field's {@code defaultValue: now} is only meaningful on a field that HOLDS a moment - the same
+     * rule, and the same set, as a {@code duplicable.defaults} {@code now}. On any other type the token
+     * would be stored as the literal text "now" (or refused as a number at generation), which is never
+     * what was meant.
+     */
+    private static void validateNowDefault(String subject, FieldIntent field, List<String> issues) {
+        String kind = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (!NOW_FIELD_TYPES.contains(kind)) {
+            issues.add(subject + " declares defaultValue: now, but a [" + field.getType() + "] field does not hold a moment - now is the"
+                    + " current moment in the field's own shape, so it is only a default for a date / timestamp / month / week field");
+        }
+    }
+
+    /**
      * A {@code defaults} value: {@code now} is the current moment in the field's own shape, so it is
      * only meaningful on a field that HOLDS one - the same rule and the same wording
      * {@code generates.defaults} uses. Anything else is a literal, coerced to the property's type at
@@ -1072,7 +1102,14 @@ public final class IntentParser {
             if (invoice != null) {
                 requireField(invoice, s.getTotal(), label, "total", issues);
                 requireField(invoice, s.getPaid(), label, "paid", issues);
-                requireField(invoice, s.getOrder(), label, "order", issues);
+                if (s.getOrder()
+                     .isEmpty()) {
+                    issues.add(
+                            "settlement [" + label + "] must name at least one order field (e.g. order: date, or order: [date, number])");
+                }
+                for (String order : s.getOrder()) {
+                    requireField(invoice, order, label, "order", issues);
+                }
                 if (s.getStatus() != null && !s.getStatus()
                                                .isBlank()
                         && toOneRelationByName(invoice, s.getStatus()) == null) {
@@ -4249,6 +4286,9 @@ public final class IntentParser {
                 if (!isBlank(field.getFormat())) {
                     validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (isNowDefault(field)) {
+                    validateNowDefault("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.getLabel() != null || !field.getCountryLabels()
                                                       .isEmpty()) {
                     validateLabels("entity [" + name + "] field [" + field.getName() + "]", field, issues);
@@ -4350,7 +4390,7 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["
                             + relation.getTo() + "]");
                 }
-                validateWhenTargetDeleted(entity, relation, crossModel, issues);
+                validateWhenTargetDeleted(entity, relation, issues);
                 if (relation.getDependsOn() != null) {
                     String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
                     boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
@@ -5266,30 +5306,35 @@ public final class IntentParser {
         }
     }
 
+    /** The values {@code whenTargetDeleted} accepts. */
+    private static final Set<String> TARGET_DELETE_RULES = Set.of("restrict", "nullify", "cascade");
+
     /**
-     * {@code whenTargetDeleted: restrict} on a to-one association refuses a DELETE of the TARGET while
-     * this entity still references it, naming both entities and the count (v1 same-model only - the
-     * generated repository constructs the target's repository directly, which a cross-model reference
-     * cannot resolve; the cross-model case is deferred follow-up work). Valid only on a
-     * manyToOne/oneToOne that is NOT a composition - composition already answers "what happens to my
-     * children when I, the master, am deleted" through {@link #validateWhenMasterDeleted}, and this key
-     * is the opposite direction: what happens to ME when the entity I POINT AT is deleted.
+     * {@code whenTargetDeleted} on a to-one association = what a DELETE of the TARGET does to the
+     * records still pointing at it (#7547): {@code restrict} refuses it (the default, also when the key
+     * is absent), {@code nullify} clears their foreign key, {@code cascade} deletes them with it.
+     * Same-model or cross-model alike - the referencing repository contributes the rule the target's
+     * delete applies. Valid only on a manyToOne/oneToOne that is NOT a composition - composition
+     * already answers "what happens to my children when I, the master, am deleted" through
+     * {@link #validateWhenMasterDeleted}, and this key is the opposite direction: what happens to ME
+     * when the entity I POINT AT is deleted. {@code nullify} needs a column that may be empty, so it is
+     * refused on a required relation.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
-     * @param crossModel whether the relation targets another intent model
      * @param issues the issue list to add to
      */
-    private static void validateWhenTargetDeleted(EntityIntent entity, RelationIntent relation, boolean crossModel, List<String> issues) {
+    private static void validateWhenTargetDeleted(EntityIntent entity, RelationIntent relation, List<String> issues) {
         String whenTargetDeleted = relation.getWhenTargetDeleted();
         if (whenTargetDeleted == null) {
             return;
         }
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
         String value = whenTargetDeleted.trim();
-        if (!"restrict".equals(value)) {
+        if (!TARGET_DELETE_RULES.contains(value)) {
             issues.add(subject + " whenTargetDeleted [" + whenTargetDeleted
-                    + "] must be `restrict` (refuse the target's delete while this relation still references it) - `nullify`/`cascade` are not supported yet");
+                    + "] must be `restrict` (refuse the target's delete while this relation references it, the default), `nullify`"
+                    + " (clear this relation) or `cascade` (delete this record with it)");
             return;
         }
         if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
@@ -5302,9 +5347,8 @@ public final class IntentParser {
                     + " is a composition so its master's delete is whenMasterDeleted's question, not whenTargetDeleted's - the target here is the PARENT this entity is a detail of");
             return;
         }
-        if (crossModel) {
-            issues.add(subject
-                    + " is cross-model so whenTargetDeleted is not yet supported - the target's repository is generated in another model and cannot be constructed here");
+        if ("nullify".equals(value) && relation.isRequired()) {
+            issues.add(subject + " is required, so whenTargetDeleted: nullify cannot clear it - use `restrict` or `cascade`");
         }
     }
 
@@ -6414,6 +6458,34 @@ public final class IntentParser {
         }
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * A settlement's {@code order:} is EITHER one field ({@code order: date}) or a list of them
+     * ({@code order: [date, number]}, issue #7556). Both map to the one typed list, so the scalar form
+     * is wrapped on the raw tree here - before the typed mapping, where Gson would refuse a string for
+     * a list - and an explicit null is dropped so the typed default (empty, reported by the validator)
+     * applies.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeSettlementOrder(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("settlements") instanceof List<?> settlements)) {
+            return;
+        }
+        for (Object settlementNode : settlements) {
+            if (!(settlementNode instanceof Map<?, ?> settlement) || !settlement.containsKey("order")) {
+                continue;
+            }
+            Object declared = settlement.get("order");
+            Map<Object, Object> writable = (Map<Object, Object>) settlement;
+            if (declared == null) {
+                writable.remove("order");
+            } else if (declared instanceof String field) {
+                writable.put("order", new ArrayList<>(List.of(field)));
+            }
         }
     }
 

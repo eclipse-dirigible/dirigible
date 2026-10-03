@@ -3433,4 +3433,47 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("composition child")),
                 "a composition child is already an editable collection, got: " + ex.getIssues());
     }
+
+    /**
+     * {@code defaultValue: now} (#7603) is the current moment in the field's own shape, so it parses on
+     * the four fields that hold one and is refused on any other - where it would be stored as the text
+     * "now", or fail as a number - with the same wording the duplicable rule uses.
+     */
+    @Test
+    void defaultValueNowIsOnlyAMomentFieldsDefault() {
+        String ok = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id,         type: integer, primaryKey: true, generated: true }
+                      - { name: date,       type: date, required: true, defaultValue: now }
+                      - { name: recordedAt, type: timestamp, defaultValue: now }
+                      - { name: period,     type: month, defaultValue: now }
+                      - { name: week,       type: week, defaultValue: now }
+                """;
+        IntentModel model = IntentParser.parse(ok);
+        assertEquals("now", model.getEntities()
+                                 .get(0)
+                                 .getFields()
+                                 .get(1)
+                                 .getDefaultValue());
+
+        String bad = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: note,  type: string, defaultValue: now }
+                      - { name: total, type: decimal, defaultValue: now }
+                """;
+        List<String> issues = assertThrows(IntentValidationException.class, () -> IntentParser.parse(bad)).getIssues();
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("field [note] declares defaultValue: now, but a [string] field does not hold a moment")),
+                "expected the string field refused, got: " + issues);
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("field [total] declares defaultValue: now")),
+                "expected the decimal field refused, got: " + issues);
+    }
 }

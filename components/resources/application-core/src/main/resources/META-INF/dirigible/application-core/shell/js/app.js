@@ -42,6 +42,29 @@ window.App = {
       }
       return base + '?embedded=1#/' + entity + '/create?embedded=1&dialog=1';
     },
+
+    // The current moment in a field's own shape - the `now` of a `defaultValue: now` field and of a
+    // `duplicable.defaults` value. The calendar shapes are built from the LOCAL calendar fields, never
+    // from toISOString(): that is UTC, so east of Greenwich every record made after the evening
+    // cut-over would be dated yesterday. A `timestamp` field is the exception and the reason: it binds
+    // a java.time.Instant on the server, which is an instant and not a wall clock, so it carries the
+    // full ISO instant the form's own toPayload() sends for a datetime input.
+    todayAs(shape) {
+      const now = new Date();
+      const pad = (n) => String(n).padStart(2, '0');
+      if (shape === 'timestamp') return now.toISOString();
+      if (shape === 'month') return now.getFullYear() + '-' + pad(now.getMonth() + 1);
+      if (shape === 'week') {
+        // ISO-8601 week: Thursday of the current week decides both the week number and its year.
+        const thursday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        thursday.setDate(thursday.getDate() + 3 - ((thursday.getDay() + 6) % 7));
+        const firstThursday = new Date(thursday.getFullYear(), 0, 4);
+        firstThursday.setDate(firstThursday.getDate() + 3 - ((firstThursday.getDay() + 6) % 7));
+        const week = 1 + Math.round((thursday - firstThursday) / (7 * 24 * 60 * 60 * 1000));
+        return thursday.getFullYear() + '-W' + pad(week);
+      }
+      return now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    },
   },
   config: {},
 

@@ -316,7 +316,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               - name: Payment
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
-                  - { name: date,   type: date, required: true }
+                  # #7603: a plain record's date defaults to today too - the manage form's prefill.
+                  - { name: date,   type: date, required: true, defaultValue: now }
                   - { name: amount, type: decimal }
 
               # postings source-FK-copy counterparty (#6533): a plain nomenclature copied by FK id.
@@ -837,16 +838,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,         type: integer, primaryKey: true, generated: true }
                   - { name: reference,  type: string, length: 40, function: DocumentTitle }
-                  - { name: orderedOn,  type: date, required: true }
-                  - { name: period,     type: month }
-                  - { name: recordedAt, type: timestamp }
+                  # #7603: and a NEW one is dated today - `defaultValue: now`, in each field's own shape,
+                  # prefilled by the page and filled by the server on a create that omits it.
+                  - { name: orderedOn,  type: date, required: true, defaultValue: now }
+                  - { name: period,     type: month, defaultValue: now }
+                  - { name: recordedAt, type: timestamp, defaultValue: now }
                   - { name: note,       type: string, length: 100 }
                   - { name: comment,    type: string, length: 100 }
               - name: ReorderItem
                 function: DocumentItem
                 fields:
-                  - { name: id,       type: integer, primaryKey: true, generated: true }
-                  - { name: quantity, type: decimal }
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: quantity,  type: decimal }
+                  - { name: deliverOn, type: date, defaultValue: now }
                 relations:
                   - { name: Reorder, kind: manyToOne, to: Reorder, composition: true, required: true }
 
@@ -1696,6 +1700,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # at-most-once guard (the Voucher.Slip back-reference the map writes). The status is named,
             # not numbered.
             generates:
+              # A SYSTEM write dated inside a period (#7590): the create-from copies the period's own
+              # start date onto the booking and writes through the repository - never a controller -
+              # so only a repository-side period lock can refuse it.
+              - name: booking-from-period
+                from: AccountingPeriod
+                to: LedgerBooking
+                map:
+                  bookedOn: startDate
+                defaults:
+                  amount: 5.00
               - name: voucher-from-slip
                 from: Slip
                 to: Voucher
@@ -2162,7 +2176,36 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertTextColumnKeepsItsDeclaredWidth();
         assertRuntimeEnforcement();
+        assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
+    }
+
+    /**
+     * {@code defaultValue: now} on the server (#7603): a REST create that leaves the moment fields
+     * empty gets today in each one's own shape - REST, a create-from and a schedule all create
+     * documents without the form - while a value the caller supplies wins.
+     */
+    private void assertNowDefaultRuntime() {
+        java.time.LocalDate today = java.time.LocalDate.now();
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Reference\":\"R-now\"}")
+                                                 .when()
+                                                 .post(API + "/reorder/ReorderController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("OrderedOn",
+                                                         equalTo(List.of(today.getYear(), today.getMonthValue(), today.getDayOfMonth())))
+                                                 .body("Period", equalTo(java.time.YearMonth.from(today)
+                                                                                            .toString()))
+                                                 .body("RecordedAt", notNullValue()));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Reference\":\"R-given\",\"OrderedOn\":\"2020-01-15\",\"Period\":\"2020-01\"}")
+                                                 .when()
+                                                 .post(API + "/reorder/ReorderController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("OrderedOn", equalTo(List.of(2020, 1, 15)))
+                                                 .body("Period", equalTo("2020-01")));
     }
 
     /**
@@ -2297,6 +2340,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         // Date-based immutability: the guard queries the register the intent named, and the same
         // pre-check endpoint the status lock exposes now answers for it too.
+        // ...and the REPOSITORY carries the same lock (#7590): a posting, a create-from or a schedule
+        // writes through it and never meets the controller's 409.
+        String ledgerBookingRepository = contentOf("gen/emission/data/ledgerbooking/LedgerBookingRepository.java");
+        assertEquals(3, countOf(ledgerBookingRepository, "requirePeriodOpen(entity.BookedOn);"),
+                "immutableInPeriod must be enforced on save, update and updateWithoutEvent in the repository, got: "
+                        + ledgerBookingRepository);
+        assertTrue(
+                ledgerBookingRepository.contains(
+                        "\"The AccountingPeriod covering this date is closed - book the correction in an open period\""),
+                "the repository refuses with the period sentence, got: " + ledgerBookingRepository);
         String ledgerBookingController = contentOf("gen/emission/api/ledgerbooking/LedgerBookingController.java");
         assertTrue(ledgerBookingController.contains("requirePeriodOpen(") && ledgerBookingController.contains("AccountingPeriodRepository"),
                 "immutableInPeriod must emit the period guard querying the declared register");
@@ -3228,20 +3281,58 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // present one.
         String reorderDoc = contentOf("gen/emission/js/components/pages/Reorder/ReorderDocumentPage.js");
         assertTrue(reorderDoc.contains("delete header['Note'];"), "a duplicable reset must be dropped from the cloned header");
-        assertTrue(reorderDoc.contains("header['OrderedOn'] = this.todayAs('date');"),
+        assertTrue(reorderDoc.contains("header['OrderedOn'] = App.utils.todayAs('date');"),
                 "now on a date field must be written as today in that field's shape");
-        assertTrue(reorderDoc.contains("header['Period'] = this.todayAs('month');"),
+        assertTrue(reorderDoc.contains("header['Period'] = App.utils.todayAs('month');"),
                 "now on a month field must be the YYYY-MM shape, not a full date");
         // #7396: the same rule one shape further - a timestamp property binds a java.time.Instant, so
         // the copy carries the full ISO instant, not the local YYYY-MM-DD a `date` shape produces.
-        assertTrue(reorderDoc.contains("header['RecordedAt'] = this.todayAs('timestamp');"),
+        assertTrue(reorderDoc.contains("header['RecordedAt'] = App.utils.todayAs('timestamp');"),
                 "now on a timestamp field must be written in the timestamp shape, not narrowed to a date");
-        assertTrue(reorderDoc.contains("if (shape === 'timestamp') return now.toISOString();"),
-                "todayAs must render a timestamp as the ISO instant the backend binds for a java.time.Instant");
         assertTrue(reorderDoc.contains("header['Comment'] = \"Copy\";"), "a literal default must reach the page quoted");
-        assertTrue(reorderDoc.contains("todayAs(shape)") && reorderDoc.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
+        // The shape has ONE implementation, in the shared runtime, read by the duplicate and by the
+        // create prefill of every generated page (#7603).
+        assertFalse(reorderDoc.contains("todayAs(shape) {"), "the page must not carry its own copy of todayAs");
+        String shellApp = classpathResource("/META-INF/dirigible/application-core/shell/js/app.js");
+        assertTrue(shellApp.contains("todayAs(shape) {") && shellApp.contains("if (shape === 'timestamp') return now.toISOString();"),
+                "todayAs must render a timestamp as the ISO instant the backend binds for a java.time.Instant");
+        assertTrue(shellApp.contains("now.getFullYear() + '-' + pad(now.getMonth() + 1)"),
                 "todayAs must build from the LOCAL calendar fields - toISOString is UTC, so a copy made in the evening"
                         + " east of Greenwich would be dated yesterday");
+
+        // #7603: `defaultValue: now` - a NEW document opens dated today, in each field's own input shape,
+        // before the query-param prefill (so a preset still wins)...
+        assertTrue(
+                reorderDoc.contains(
+                        "if ('OrderedOn' in this.form) this.form.OrderedOn = this.toDateInput(App.utils.todayAs('date'), 'DATE');")
+                        && reorderDoc.contains("this.form.Period = this.toDateInput(App.utils.todayAs('month'), 'MONTH');")
+                        && reorderDoc.contains(
+                                "this.form.RecordedAt = this.toDateInput(App.utils.todayAs('timestamp'), 'DATETIME-LOCAL');"),
+                "a defaultValue: now field must be prefilled when a new document opens, got: " + reorderDoc);
+        assertTrue(
+                reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(") < reorderDoc.indexOf(
+                        "const v = this.queryParam(key);", reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(")),
+                "a query-param prefill must still win over the default");
+        assertTrue(
+                contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
+                        "if ('Date' in this.form) this.form.Date = this.toDateInput(App.utils.todayAs('date'), 'DATE');"),
+                "...and so must the plain form");
+        // ...a new LINE carries the shape, so its dialog computes today when it opens...
+        String reorderItemDetail = contentOf("gen/emission/js/components/pages/Reorder/ReorderItem.detail.js");
+        assertTrue(reorderItemDetail.contains("defNow: 'date'") && !reorderItemDetail.contains("def: 'now'"),
+                "a line's defaultValue: now must be seeded as a shape, never as the string 'now', got: " + reorderItemDetail);
+        assertTrue(reorderDoc.contains("col.defNow ? this.toDateInput(App.utils.todayAs(col.defNow), col.widget) : col.def"),
+                "the line dialog must compute a now seed when it opens");
+        // ...the server fills it on a create that omits it, in the column's Java type...
+        String reorderRepository = contentOf("gen/emission/data/reorder/ReorderRepository.java");
+        assertTrue(
+                reorderRepository.contains("entity.OrderedOn = java.time.LocalDate.now();")
+                        && reorderRepository.contains("entity.Period = java.time.YearMonth.now().toString();")
+                        && reorderRepository.contains("entity.RecordedAt = java.time.Instant.now();"),
+                "the repository must fill a defaultValue: now on create, got: " + reorderRepository);
+        // ...and the column gets no DEFAULT: `now` is not SQL.
+        String reorderSchema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
+        assertFalse(reorderSchema.contains("\"defaultValue\": \"now\""), "now must never reach the DDL as a column DEFAULT");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
@@ -5593,6 +5684,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .put(API + "/ledgerbooking/LedgerBookingController/" + april.get())
                                                  .then()
                                                  .statusCode(409));
+        // ...and a SYSTEM writer meets the same lock (#7590): the create-from books a row dated with the
+        // period's own start, through the repository - it used to land in the closed period with every
+        // step green. Refused for the closed period, accepted for an open one.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + fiscalPeriod.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/BookingFromPeriodGenerate/run")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("The AccountingPeriod covering this date is closed")));
+        AtomicInteger openPeriod = new AtomicInteger();
+        restAssuredExecutor.execute(() -> openPeriod.set(given().contentType("application/json")
+                                                                .body("{\"Name\":\"2026-05\",\"StartDate\":\"2026-05-01\",\"EndDate\":\"2026-05-31\",\"Status\":1}")
+                                                                .when()
+                                                                .post(API + "/accountingperiod/AccountingPeriodController")
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .extract()
+                                                                .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + openPeriod.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/BookingFromPeriodGenerate/run")
+                                                 .then()
+                                                 .statusCode(200));
         // ...and the pre-check endpoint reports it, so the form opens read-only rather than 409-ing
         // on Save.
         restAssuredExecutor.execute(() -> given().when()
@@ -7506,6 +7622,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         return new String(repository.getResource(PROJECT_PATH + "/" + fileName)
                                     .getContent(),
                 StandardCharsets.UTF_8);
+    }
+
+    /** A resource the platform ships on the classpath - the shared shell runtime, for one. */
+    private static String classpathResource(String resource) {
+        try (java.io.InputStream content = IntentEmissionCoverageIT.class.getResourceAsStream(resource)) {
+            assertNotNull(content, "missing classpath resource " + resource);
+            return new String(content.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     @AfterEach

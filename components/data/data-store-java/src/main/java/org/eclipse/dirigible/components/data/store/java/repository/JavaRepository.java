@@ -9,12 +9,17 @@
  */
 package org.eclipse.dirigible.components.data.store.java.repository;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
+import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+import org.eclipse.dirigible.sdk.db.TargetDeleteRule;
+import org.eclipse.dirigible.sdk.extensions.Extensions;
 
 /**
  * Typed CRUD facade for a single Dirigible {@code @Entity} type. Client code subclasses this,
@@ -34,6 +39,12 @@ import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
  * @param <T> the entity type managed by this repository
  */
 public abstract class JavaRepository<T> {
+
+    /**
+     * The records being deleted on this thread, keyed by entity class and id - so a cascade that comes
+     * back round to one of them stops there instead of recursing for ever.
+     */
+    private static final ThreadLocal<Set<String>> DELETING = ThreadLocal.withInitial(HashSet::new);
 
     private final Class<T> entityClass;
 
@@ -262,45 +273,148 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * Delete an entity instance.
+     * Delete an entity instance, applying the delete rules of the records that reference it - see
+     * {@link #requireDeletable(Object)}.
      *
      * @param entity the entity to delete
      */
     public void delete(T entity) {
-        store().delete(entity);
+        deleteApplyingRules(store().idOf(entity), () -> store().delete(entity));
     }
 
     /**
      * Delete an entity instance and publish it on the given topic — atomically, see
      * {@link #save(Object, String)}. The payload is the row as it was read inside the deleting
-     * transaction, so a caller holding a partial snapshot still announces the whole row.
+     * transaction, so a caller holding a partial snapshot still announces the whole row. The delete
+     * rules of the records that reference it apply, see {@link #requireDeletable(Object)}.
      *
      * @param entity the entity to delete
      * @param eventTopic the topic to publish the deleted row on
      */
     public void delete(T entity, String eventTopic) {
-        store().delete(entity, eventTopic);
+        deleteApplyingRules(store().idOf(entity), () -> store().delete(entity, eventTopic));
     }
 
     /**
-     * Delete an entity by primary key.
+     * Delete an entity by primary key, applying the delete rules of the records that reference it - see
+     * {@link #requireDeletable(Object)}.
      *
      * @param id the primary-key value
      */
     public void deleteById(Object id) {
-        store().deleteById(entityClass, id);
+        deleteApplyingRules(id, () -> store().deleteById(entityClass, id));
     }
 
     /**
      * Delete an entity by primary key and publish the deleted row on the given topic — atomically, see
      * {@link #save(Object, String)}. The payload is the row as it was read inside the deleting
-     * transaction.
+     * transaction. The delete rules of the records that reference it apply, see
+     * {@link #requireDeletable(Object)}.
      *
      * @param id the primary-key value
      * @param eventTopic the topic to publish the deleted row on
      */
     public void deleteById(Object id, String eventTopic) {
-        store().deleteById(entityClass, id, eventTopic);
+        deleteApplyingRules(id, () -> store().deleteById(entityClass, id, eventTopic));
+    }
+
+    /**
+     * Refuses the delete of a record while a record referencing it through a relation that RESTRICTS
+     * its delete still exists (intent {@code whenTargetDeleted: restrict}, the default for a to-one,
+     * dirigible #7547). Every delete runs it before anything is written; a generated repository whose
+     * own delete writes first - a composition master deleting its children - calls it at the very top,
+     * so the refusal arrives before any of those writes (the history trail is not part of the
+     * transaction, and would otherwise record deletes that were rolled back).
+     *
+     * <p>
+     * The rules come from the REFERENCING side: this entity's own generation cannot know which entities
+     * point at it - another model may - so each referencing repository contributes a
+     * {@link TargetDeleteRule}, and this asks all of them. A read-then-act guard, like every reference
+     * check the platform generates: a referencing row inserted between this count and the delete is not
+     * seen.
+     *
+     * @param id the primary key of the record about to be deleted
+     * @throws DeleteRestrictionException while a restricting reference to it exists
+     */
+    protected void requireDeletable(Object id) {
+        requireDeletable(id, deleteRules());
+    }
+
+    private void requireDeletable(Object id, List<TargetDeleteRule> rules) {
+        if (id == null) {
+            return;
+        }
+        String target = entityClass.getName();
+        for (TargetDeleteRule rule : rules) {
+            int referencing = rule.countRestricting(target, id);
+            if (referencing > 0) {
+                throw new DeleteRestrictionException("This " + label() + " is referenced by " + referencing + " " + rule.referencingLabel()
+                        + " record(s) and cannot be deleted");
+            }
+        }
+    }
+
+    /**
+     * The delete itself, with the referencing records' rules around it: first every restriction is
+     * checked, then - in ONE transaction with the delete - every rule releases its references (a
+     * {@code nullify} clears the foreign key, a {@code cascade} deletes the referencing record through
+     * its own repository, its own rules applying in turn). A cascade that comes back round to a record
+     * already being deleted on this thread stops there, so a cycle of cascading relations terminates.
+     *
+     * @param id the primary key of the record to delete
+     * @param delete the store call that deletes it
+     */
+    private void deleteApplyingRules(Object id, Runnable delete) {
+        List<TargetDeleteRule> rules = deleteRules();
+        if (id == null || rules.isEmpty()) {
+            delete.run();
+            return;
+        }
+        String key = entityClass.getName() + "#" + id;
+        Set<String> deleting = DELETING.get();
+        if (!deleting.add(key)) {
+            return; // already being deleted further up this cascade
+        }
+        try {
+            requireDeletable(id, rules);
+            String target = entityClass.getName();
+            UnitOfWork.run(() -> {
+                rules.forEach(rule -> rule.release(target, id));
+                delete.run();
+            });
+        } finally {
+            deleting.remove(key);
+            if (deleting.isEmpty()) {
+                DELETING.remove();
+            }
+        }
+    }
+
+    /**
+     * Every contributed delete rule. Outside a running platform there is no bean container, so no
+     * contribution either.
+     */
+    private static List<TargetDeleteRule> deleteRules() {
+        return BeanProvider.isInitialzed() ? Extensions.find(TargetDeleteRule.class) : List.of();
+    }
+
+    /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */
+    private String label() {
+        String name = entityClass.getSimpleName();
+        if (name.endsWith("Entity") && name.length() > "Entity".length()) {
+            name = name.substring(0, name.length() - "Entity".length());
+        }
+        return name.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ");
+    }
+
+    /**
+     * Count the entities matching a typed {@link Criteria}, in the database - without loading them.
+     *
+     * @param criteria the query criteria
+     * @return the number of matching entities
+     */
+    public long count(Criteria criteria) {
+        return store().count(entityClass, criteria);
     }
 
     /**

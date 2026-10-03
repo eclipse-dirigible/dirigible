@@ -682,9 +682,9 @@ class GlueGenerator {
      * @param parameters the generation parameters
      */
     static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoiceStatus", "payableCondition",
-                "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount", "paymentEntity", "paymentPk",
-                "paymentPot", "paymentTopic");
+        copy(context, item, "name", "match", "invoiceOrder", "paymentOrder", "invoiceEntity", "invoicePk", "invoiceTotal",
+                "invoiceStatus", "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment",
+                "junctionAmount", "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
         // The rows that consume an invoice, as the paid roll-up and its capacity guard count them (#7559):
         // the settlement sizes an allocation by re-summing them, never from the lagging paid column. A
         // descriptor carrying no clauses - or one written before the key existed - sums every row.
@@ -1092,6 +1092,21 @@ class GlueGenerator {
         copy(context, item, "entity", "masterPk", "field", "series", "per", "perDefault", "perspective");
         copyJavaLiterals(context, item, "series", "perDefault");
         context.put("javaPerspective", sanitize(item, "perspective"));
+        // The status each stamp step precedes (#7577), keyed the way the running stamp finds itself:
+        // the process definition's key and the activity id. A .glue written before the key carries no
+        // gates, which leaves the stamp as it was.
+        List<Map<String, Object>> gates = new ArrayList<>();
+        for (Map<String, Object> gate : asMaps(item.get("gates"))) {
+            String status = str(gate, "status");
+            if (status == null || !status.matches("\\d+")) {
+                continue;
+            }
+            Map<String, Object> bound = new LinkedHashMap<>();
+            bound.put("keyJavaLiteral", JavaLiterals.escape(str(gate, "process") + "/" + str(gate, "step")));
+            bound.put("status", status);
+            gates.add(bound);
+        }
+        context.put("statusGates", gates);
     }
 
     /**

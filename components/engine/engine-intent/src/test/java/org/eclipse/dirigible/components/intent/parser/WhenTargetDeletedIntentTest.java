@@ -11,17 +11,17 @@ package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
 /**
- * Validation of a to-one association's {@code whenTargetDeleted: restrict} construct (dirigible
- * #7547) - what a DELETE of the TARGET does while this entity still references it. The same-model,
- * restrict-only v1: the mirror of {@link WhenMasterDeletedIntentTest}'s composition case, for a
- * plain association instead.
+ * Validation of a to-one association's {@code whenTargetDeleted} construct (dirigible #7547) - what
+ * a DELETE of the TARGET does to the records still referencing it: {@code restrict} (the default,
+ * also when the key is absent), {@code nullify} or {@code cascade}, same-model and cross-model. The
+ * mirror of {@link WhenMasterDeletedIntentTest}'s composition case, for a plain association
+ * instead.
  */
 class WhenTargetDeletedIntentTest {
 
@@ -42,29 +42,36 @@ class WhenTargetDeletedIntentTest {
 
     @Test
     void restrictParses() {
-        assertEquals("restrict", IntentParser.parse(YAML)
-                                             .getEntities()
-                                             .get(1)
-                                             .getRelations()
-                                             .get(0)
-                                             .getWhenTargetDeleted());
+        assertEquals("restrict", ruleOf(YAML));
     }
 
-    /** Omitted is the default - no restriction - and needs no key at all. */
+    /** Omitted is restrict: a reference left pointing at a deleted record is never a valid state. */
     @Test
-    void omittedParsesAndDoesNotRestrict() {
-        assertFalse(IntentParser.parse(YAML.replace(", whenTargetDeleted: restrict", ""))
-                                .getEntities()
-                                .get(1)
-                                .getRelations()
-                                .get(0)
-                                .isTargetDeleteRestricted());
+    void omittedIsRestrict() {
+        assertEquals("restrict", ruleOf(YAML.replace(", whenTargetDeleted: restrict", "")));
+    }
+
+    @Test
+    void cascadeParses() {
+        assertEquals("cascade", ruleOf(YAML.replace("whenTargetDeleted: restrict", "whenTargetDeleted: cascade")));
+    }
+
+    /** Nullify clears the foreign key, so it needs a relation that may be empty. */
+    @Test
+    void nullifyParsesOnAnOptionalRelation() {
+        assertEquals("nullify", ruleOf(YAML.replace("required: true, whenTargetDeleted: restrict", "whenTargetDeleted: nullify")));
+    }
+
+    @Test
+    void nullifyIsRejectedOnARequiredRelation() {
+        assertIssue(YAML.replace("whenTargetDeleted: restrict", "whenTargetDeleted: nullify"),
+                "is required, so whenTargetDeleted: nullify cannot clear it");
     }
 
     @Test
     void anUnknownValueIsRejected() {
-        assertIssue(YAML.replace("whenTargetDeleted: restrict", "whenTargetDeleted: cascade"),
-                "whenTargetDeleted [cascade] must be `restrict`");
+        assertIssue(YAML.replace("whenTargetDeleted: restrict", "whenTargetDeleted: ignore"),
+                "whenTargetDeleted [ignore] must be `restrict`");
     }
 
     /** Only a manyToOne/oneToOne association points at a target whose delete this could restrict. */
@@ -83,9 +90,13 @@ class WhenTargetDeletedIntentTest {
                 "is a composition so its master's delete is whenMasterDeleted's question");
     }
 
-    /** v1 is same-model only - the target's repository is generated in another model. */
+    /**
+     * A cross-model target takes every rule too (the issue's employee referenced by another module's
+     * expense claims): the target's repository cannot see this model, so this entity's repository
+     * contributes the rule its delete applies.
+     */
     @Test
-    void crossModelIsRejected() {
+    void crossModelIsAccepted() {
         String yaml = """
                 name: expenses
                 uses:
@@ -95,14 +106,24 @@ class WhenTargetDeletedIntentTest {
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:
-                      - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: restrict }
+                      - { name: employee, kind: manyToOne, model: hr, to: Employee, required: true, whenTargetDeleted: cascade }
                 """;
-        assertIssue(yaml, "is cross-model so whenTargetDeleted is not yet supported");
+        assertEquals("cascade", ruleOf(yaml));
     }
 
     @Test
     void restrictOnAOneToOneIsAccepted() {
         assertDoesNotThrow(() -> IntentParser.parse(YAML.replace("kind: manyToOne", "kind: oneToOne")));
+    }
+
+    /** The rule of the last entity's first relation. */
+    private static String ruleOf(String yaml) {
+        var entities = IntentParser.parse(yaml)
+                                   .getEntities();
+        return entities.get(entities.size() - 1)
+                       .getRelations()
+                       .get(0)
+                       .getTargetDeleteRule();
     }
 
     private static void assertIssue(String yaml, String expected) {

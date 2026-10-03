@@ -2,11 +2,18 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
+## The document's status (the `function: EntityStatus` relation, rendered as DOCUMENT_STATUS): the
+## property every status-gated rule is keyed on, and what checkFor() asks about (#7577).
+#set($entityStatusProperty = "")
 ## The parent side of a junction's `checks: agree` (#7589): the properties a junction row relies on.
 #set($hasAgreeGuards = $agreeGuards && $agreeGuards.size() > 0)
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
+    #end
+    #if($property.widgetType == "DOCUMENT_STATUS")
+        #set($entityStatusProperty = $property.name)
+        #set($entityStatusJavaClass = $property.dataTypeJavaClass)
     #end
     #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
         #set($haveCalculatedPropertyOnCreate = "true")
@@ -293,11 +300,8 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired || $hasAgreeGuards)
+#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired || $periodLock || $hasAgreeGuards)
 import org.eclipse.dirigible.sdk.db.ValidationException;
-#end
-#if($deleteRestrictors && $deleteRestrictors.size() > 0)
-import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 #end
 #if($multilingual == "true")
 #if(!$documentMaster)
@@ -370,7 +374,7 @@ ${importsCode}
 
 @Repository
 @Component("${javaGenFolderName}_${name}Repository")
-public class ${name}Repository extends JavaRepository<${name}Entity> {
+public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTargetDeleteRules) implements org.eclipse.dirigible.sdk.db.TargetDeleteRule#end {
 
 #if($reportedOnUpdate.size() > 0 || ($guardChecks && $guardChecks.size() > 0))
     /**
@@ -403,6 +407,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #normalizeSubsets()
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
+#end
+#if($periodLock)
+        requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
 #rollupGuardCheck()
 #gatedRollupGuardCheck()
@@ -509,6 +516,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #normalizeSubsets()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
+#end
+#if($periodLock)
+        requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
 #if($hasAgreeGuards)
         requireAgreementKept(entity);
@@ -654,6 +664,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // Workflow writes change label inputs too (e.g. the stamped document number) - keep the
         // stored display name current on the system path as well.
         computeName(entity);
+#end
+#if($periodLock)
+        requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
 #if($documentChecks && $documentChecks.size() > 0)
         // The workflow transition (e.g. the setter flipping the status to POSTED) comes through here -
@@ -1097,6 +1110,38 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     }
 #end
 #end
+#if($entityStatusProperty != "")
+
+    /**
+     * Refuses a move of this ${name} to {@code status} exactly as the status write itself would - the
+     * lifecycle edge, the capacity guards gated on that status and the checks gated on it - WITHOUT
+     * writing anything. For a step that must not act unless the move will be accepted: the
+     * {@code stampOn: issue} number stamp spends a value of a legal, gap-free series, so it asks before
+     * it allocates, and a refusal leaves the document unnumbered rather than holding a number of a
+     * status it never reached (#7577). The record is evaluated as given and handed back unchanged.
+     *
+     * @param entity the record, as it stands before the move
+     * @param status the status it is about to be moved to
+     * @throws ValidationException with the refusing rule's message when the move would be refused
+     */
+    public void checkFor(${name}Entity entity, Object status) {
+        ${entityStatusJavaClass} previousStatus = entity.${entityStatusProperty};
+        entity.${entityStatusProperty} = status == null ? null : ${entityStatusJavaClass}.valueOf(String.valueOf(status));
+        try {
+#if($lifecycleEdges)
+            enforceLifecycleMove(previousStatus, entity.${entityStatusProperty});
+#end
+#if($hasGatedRollupGuards)
+#gatedRollupGuardCheck()
+#end
+#if($documentChecks && $documentChecks.size() > 0)
+            enforceChecks(entity);
+#end
+        } finally {
+            entity.${entityStatusProperty} = previousStatus;
+        }
+    }
+#end
 #if($documentChecks && $documentChecks.size() > 0)
 
     /**
@@ -1376,10 +1421,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void delete(${name}Entity entity) {
-#if($deleteRestrictors && $deleteRestrictors.size() > 0)
-        requireNotReferenced(entity.${pkPropertyName});
-#end
 #if($compositionChildren && $compositionChildren.size() > 0)
+        // Refused by a referencing record's whenTargetDeleted: restrict BEFORE the children are touched -
+        // the history trail is not part of the transaction, so a later refusal would leave it recording
+        // child deletes that were rolled back.
+        requireDeletable(entity.${pkPropertyName});
         // The record and the children it owns leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through the cascade would commit some of
         // the children and keep the record - the orphan state this cascade exists to prevent.
@@ -1419,10 +1465,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public void deleteById(Object id) {
-#if($deleteRestrictors && $deleteRestrictors.size() > 0)
-        requireNotReferenced(id);
-#end
 #if($compositionChildren && $compositionChildren.size() > 0)
+        // Refused before the children are touched - see delete(entity).
+        requireDeletable(id);
         // One transaction for the record and the children it owns - see delete(entity).
         UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
     }
@@ -1509,35 +1554,57 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
     }
 #end
-#if($deleteRestrictors && $deleteRestrictors.size() > 0)
+#if($hasTargetDeleteRules)
 
     /**
-     * Refuses this ${name}'s delete while another record still references it (intent
-     * {@code whenTargetDeleted: restrict}). Checked before any composition cascade, on both {@code
-     * delete} and {@code deleteById} - a restricted reference is not this record's own child to sweep
-     * away with it.
-     *
-     * <p>
-     * A read-then-act guard, like every other reference check the platform generates: a row inserted
-     * between this count and the delete is not seen. Closing that needs a database constraint, which
-     * this platform deliberately does not emit for a foreign key - referential integrity is a
-     * business-layer check here.
+     * The ${name} rows that reference a record through a relation that RESTRICTS its delete (intent
+     * {@code whenTargetDeleted: restrict}, the default for a to-one, dirigible #7547). The referenced
+     * record's repository cannot know this entity - it may be generated by another model - so it asks
+     * every {@code TargetDeleteRule} before it deletes, and refuses while one of them counts a reference.
      */
-    private void requireNotReferenced(Object id) {
-        if (id == null) {
-            return;
-        }
-#foreach($restrictor in $deleteRestrictors)
-        int ${restrictor.referencingEntity}Referencing = new ${restrictor.repositoryClass}()
-                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${restrictor.fkProperty}", id))
-                .size();
-        if (${restrictor.referencingEntity}Referencing > 0) {
-            // The count is the caller's next question - "what still points at this?" - so the refusal
-            // answers it rather than making them go and look.
-            throw new DeleteRestrictionException("This ${entityLabel} is referenced by " + ${restrictor.referencingEntity}Referencing
-                    + " ${restrictor.referencingLabel} record(s) and cannot be deleted");
+    @Override
+    public int countRestricting(String targetEntity, Object targetId) {
+        long restricting = 0;
+#foreach($property in $properties)
+#if($property.whenTargetDeleted == "restrict" && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            restricting += count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId));
         }
 #end
+#end
+        return (int) Math.min(restricting, Integer.MAX_VALUE);
+    }
+
+    /**
+     * Releases this entity's references to a record being deleted, inside the delete's own transaction
+     * (intent {@code whenTargetDeleted: nullify | cascade}): a nullifying relation is cleared through
+     * the targeted write, a cascading one deletes the referencing ${name} through this repository, so
+     * its own validations, events, history and delete rules apply as for any other write.
+     */
+    @Override
+    public void release(String targetEntity, Object targetId) {
+#foreach($property in $properties)
+#if($property.whenTargetDeleted == "nullify" && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            for (${name}Entity referencing : findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId))) {
+                updateProperty(referencing.${pkPropertyName}, "${property.name}", null);
+            }
+        }
+#elseif($property.whenTargetDeleted == "cascade" && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            for (${name}Entity referencing : findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId))) {
+                delete(referencing);
+            }
+        }
+#end
+#end
+    }
+
+    @Override
+    public String referencingLabel() {
+        return "${entityLabel}";
     }
 #end
 #if($hasAgreeGuards)
@@ -1774,6 +1841,36 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             }
         }
         return String.valueOf(value);
+    }
+#end
+#if($periodLock)
+
+    // Date-based immutability (intent `immutableInPeriod:`), enforced where EVERY writer passes
+    // (#7590): the REST controllers refuse a user's write dated inside a closed ${periodLock.entity}
+    // with a 409, but a generated posting, a create-from and a schedule write through this
+    // repository and never meet a controller - so a journal entry was booked into a CLOSED period
+    // with every step green. A closed period is closed for the system too; a write dated inside one
+    // is refused here with the same sentence, as a ValidationException (a 400 over REST, and the
+    // failure of the unit of work that carried it elsewhere). An uncovered date stays open, exactly
+    // as on the controllers: periods are declared as they are needed.
+    private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
+        if (date == null) {
+            return;
+        }
+        for (${periodLock.entityClass} period : new ${periodLock.repositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .le("${periodLock.startProperty}", date)
+                                                                                   .ge("${periodLock.endProperty}", date))) {
+            if (period.${periodLock.statusProperty} == null) {
+                continue;
+            }
+            for (String closed : "${periodLock.closedValues}".split(",")) {
+                if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
+                    throw new ValidationException(
+                            "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+                }
+            }
+        }
     }
 #end
 }

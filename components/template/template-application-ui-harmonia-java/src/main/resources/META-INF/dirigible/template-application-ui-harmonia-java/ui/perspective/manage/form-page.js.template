@@ -253,6 +253,13 @@ document.addEventListener('alpine:init', () => {
       if (this.isEdit || this.isPreview) {
         await this.loadRecord();
       } else {
+#foreach($property in $properties)
+#if($property.dataDefaultNowShape)
+        // `defaultValue: now`: a new record is dated today, in the field's own shape; a query-param
+        // prefill below still wins, and the server fills the same value on a create that omits it.
+        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+#end
+#end
         // Prefill any form field whose name is supplied as a query param — used by
         // master-detail "Add" to preset the FK to the master (e.g. ?Customer=3). A MULTISELECT
         // field is skipped: its model is an ARRAY (that is what puts the select in multiple mode),
@@ -266,16 +273,23 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && !$property.widgetDependsOnHeader)
-#if($property.widgetType == "DROPDOWN")
-      // Depends-On: filter ${property.name}'s options for an already-populated trigger
-      // (edit/prefill) WITHOUT touching the stored value, then watch for user changes.
-      if (this.form.${property.widgetDependsOnProperty} != null && this.form.${property.widgetDependsOnProperty} !== '') {
-        await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, false);
-      }
-#end
+      // Depends-On: the watcher FIRST, then the catch-up for a trigger already in the form (#7604).
+      // A pick made during the awaited loads above happened before any watcher existed, so it is
+      // only ever seen here - and it is the USER's pick, so it applies its prefill (adjust=true).
+      // A trigger the page itself put in the form - the stored record, a URL prefill - only filters
+      // the options (adjust=false): a stored value is never touched. Registering the watcher before
+      // the catch-up leaves no gap between the two for a pick to fall into.
       this.${dollar}watch('form.${property.widgetDependsOnProperty}', (v) => {
         if (v != null && v !== '') this.applyDependsOn${property.name}(v, true);
       });
+      if (this.form.${property.widgetDependsOnProperty} != null && this.form.${property.widgetDependsOnProperty} !== '') {
+        const pickedDuringLoad${property.name} = !this.isEdit && !this.isPreview && this.queryParam('${property.widgetDependsOnProperty}') === null;
+#if($property.widgetType == "DROPDOWN")
+        await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, pickedDuringLoad${property.name});
+#else
+        if (pickedDuringLoad${property.name}) await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, true);
+#end
+      }
 #end
 #end
 #if($hasCalculated)

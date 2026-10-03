@@ -850,7 +850,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents, model));
             e.put("invoicePk", IntentEntities.keyFieldName(invoice));
             e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
-            e.put("order", IntentNaming.pascalCase(s.getOrder()));
             e.put("invoiceStatus", s.getStatus() == null ? "" : IntentNaming.pascalCase(s.getStatus()));
             e.put("payableCondition", payableCondition(s.getPayableStatuses()));
             // junction (this project)
@@ -870,7 +869,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("paymentProject", paymentProject);
             e.put("paymentModel", crossModel ? fkPayment.getModel() : "");
             e.put("paymentPerspective", paymentPerspective);
-            e.put("paymentPk", payTarget != null ? payTarget.keyField() : "Id");
+            String paymentPk = payTarget != null ? payTarget.keyField() : "Id";
+            e.put("paymentPk", paymentPk);
+            e.put("invoiceOrder", totalOrder(s.getOrder(), IntentEntities.keyFieldName(invoice)));
+            e.put("paymentOrder", totalOrder(s.getOrder(), paymentPk));
             e.put("paymentPot", IntentNaming.pascalCase(s.getPot()));
             e.put("paymentTopic", paymentProject + "-" + paymentPerspective + "-" + s.getPayment());
             out.add(e);
@@ -906,6 +908,28 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return List.of();
+    }
+
+    /**
+     * The settlement's authored order made TOTAL by the side's primary key (#7556): ordered by
+     * {@code order:} alone, documents sharing that value - every invoice issued on the same day - came
+     * back in whatever order the database returned them, so a payment could pay the newer invoice and
+     * leave the older one partly open. The key ascending is creation order, the oldest-first the
+     * settlement promises; it is not repeated when the author already ordered by it.
+     *
+     * @param order the authored order fields
+     * @param primaryKey the side's primary key property
+     * @return the order properties, the primary key last
+     */
+    private static List<String> totalOrder(List<String> order, String primaryKey) {
+        List<String> properties = new ArrayList<>();
+        for (String field : order) {
+            properties.add(IntentNaming.pascalCase(field));
+        }
+        if (!properties.contains(primaryKey)) {
+            properties.add(primaryKey);
+        }
+        return properties;
     }
 
     /**
@@ -2803,6 +2827,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         if (defaultValue == null || defaultValue.isBlank()) {
+            return;
+        }
+        if (field != null && "now".equals(defaultValue.trim())) {
+            // `defaultValue: now` (#7603) is the moment of the create, not a constant - a month / week
+            // column holds it as text, so read as a literal it would compare against the string "now".
+            target.put("compareOnlyWhenDerived", true);
             return;
         }
         // Branched on the SQL type the field's `type:` becomes, which is what decides the column's Java

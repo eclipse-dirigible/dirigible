@@ -18,6 +18,8 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Re
  * balance onto this ${invoiceEntity} - oldest payment first, matching ${match} - creating
  * ${junctionEntity} rows until the invoice is settled or the balance runs out. Wired as a
  * {@code delegate:} service task after the invoice becomes payable (e.g. right after Issue).
+ * Oldest first is a total order: the ${paymentEntity} key breaks every tie of the authored order, so
+ * same-day payments are drawn in creation order.
  *
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
@@ -40,8 +42,8 @@ public class ${name}OnInvoice implements JavaDelegate {
             return;
         }
         Criteria criteria = Criteria.create()#foreach($m in $match)
-                                    .eq("${m}", invoice.${m})#end
-                                    .orderByAsc("${order}");
+                                    .eq("${m}", invoice.${m})#end#foreach($o in $paymentOrder)
+                                    .orderByAsc("${o}")#end;
         for (${paymentEntity}Entity payment : new ${paymentEntity}Repository().findAll(criteria)) {
             if (remaining.signum() <= 0) {
                 break;

@@ -387,10 +387,16 @@ public class RelationIntent {
     }
 
     /**
-     * @return true when {@code whenTargetDeleted: restrict} was authored
+     * What a DELETE of the record this to-one points at does to the records pointing at it:
+     * {@code restrict} (refused while they exist), {@code nullify} (their foreign key is cleared) or
+     * {@code cascade} (they are deleted with it). The authored value, else {@code restrict} - a
+     * reference left pointing at a deleted record is never a valid state (#7547). Meaningful only on a
+     * plain (non-composition) to-one association.
+     *
+     * @return the rule, never null
      */
-    public boolean isTargetDeleteRestricted() {
-        return "restrict".equals(whenTargetDeleted == null ? null : whenTargetDeleted.trim());
+    public String getTargetDeleteRule() {
+        return whenTargetDeleted == null || whenTargetDeleted.isBlank() ? "restrict" : whenTargetDeleted.trim();
     }
 
     public boolean isLeafOnly() {

@@ -187,7 +187,6 @@ class SystemOwnedOnCreateControllerTemplateIT {
         parameters.put("pkPropertyName", "Id");
         parameters.put("dataSource", "DefaultDB");
         parameters.put("properties", List.of(primaryKey(), plain("Title"), readOnly("Solution"), aggregate("Total"), createdAt()));
-        parameters.put("deleteRestrictors", new ArrayList<>());
         return parameters;
     }
 

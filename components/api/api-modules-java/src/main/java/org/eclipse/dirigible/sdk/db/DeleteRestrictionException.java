@@ -10,11 +10,11 @@
 package org.eclipse.dirigible.sdk.db;
 
 /**
- * Thrown by a generated repository's {@code whenTargetDeleted: restrict} guard to refuse a delete
- * while another record still references it. The Java controller runtime maps it to HTTP
- * {@code 409 Conflict} carrying the message, distinct from {@link ValidationException}'s
- * {@code 400} because this is not a malformed request - the request is well-formed and refused only
- * because of other rows that exist right now.
+ * Thrown to refuse a delete while another record still references it through a relation that
+ * restricts it (intent {@code whenTargetDeleted: restrict}, see {@link TargetDeleteRule}). The Java
+ * controller runtime maps it to HTTP {@code 409 Conflict} carrying the message, distinct from
+ * {@link ValidationException}'s {@code 400} because this is not a malformed request - the request
+ * is well-formed and refused only because of other rows that exist right now.
  */
 public class DeleteRestrictionException extends RuntimeException {
 

@@ -154,6 +154,13 @@ document.addEventListener('alpine:init', () => {
           this.state = 'error';
         }
       } else {
+#foreach($property in $properties)
+#if($property.dataDefaultNowShape)
+        // `defaultValue: now`: a new record is dated today, in the field's own shape; a query-param
+        // prefill below still wins, and the server fills the same value on a create that omits it.
+        if ('${property.name}' in this.form) this.form.${property.name} = window.HarmoniaFormat.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+#end
+#end
         // A MULTISELECT field (an ARRAY - what keeps the select in multiple mode) takes no prefill.
         for (const key of Object.keys(this.form)) {
           if (Array.isArray(this.form[key])) continue;

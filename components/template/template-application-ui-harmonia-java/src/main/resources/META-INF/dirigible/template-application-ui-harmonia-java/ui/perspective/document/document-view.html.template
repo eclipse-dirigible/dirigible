@@ -103,10 +103,11 @@
         <svg role="presentation" x-h-lucide data-lucide="copy"></svg><span x-text="T('$projectName:${tprefix}.defaults.duplicate', 'Duplicate')"></span>
       </li>
 #end
-      <!-- Developer-contributed per-record actions (customActions extension point). getActions takes
-           the open record so a transition its CURRENT status can never accept is not offered at all -
-           Void on a paid invoice was answered with a 409 the user never saw (issue #7068). -->
-      <template x-for="action in $store.customActions.getActions(caView, 'entity', record)" :key="action.id">
+      <!-- Developer-contributed per-record actions (customActions extension point). The open record
+           decides them, so a transition its CURRENT status can never accept is not offered at all -
+           Void on a paid invoice was answered with a 409 the user never saw (issue #7068) - and until
+           that record has loaded, no status-guarded action is offered (issue #7605). -->
+      <template x-for="action in recordActions()" :key="action.id">
         <li x-h-menu-item @click="$store.customActions.trigger(action, id)">
           <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
         </li>

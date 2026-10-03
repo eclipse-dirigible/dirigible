@@ -198,6 +198,21 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
+- **`whenTargetDeleted: restrict | nullify | cascade` on a plain (non-composition) `manyToOne`/
+  `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
+  - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
+    referencing records and their count ("This Employee is referenced by 2 Expense Claim record(s)
+    and cannot be deleted").
+  - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
+  - `cascade` deletes this record together with the target, through its own repository, so its
+    events, history and own rules apply.
+
+  Every restriction is checked before anything is released, so a refused delete changes nothing. It
+  works across models too (a `model:` relation): the owning module needs no change, because the
+  referencing repository contributes the rule the target's delete applies. A composition's master
+  delete is `whenMasterDeleted`'s question instead. Write `cascade` only for records that have no life
+  without their target (a timesheet of an employee), and `nullify` for an optional pointer (a
+  reviewer, an assignee).
 - **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
   a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
   invoice starts as DRAFT / Bank transfer / E-mail:
@@ -302,10 +317,16 @@ field may declare:
   actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
   user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
   to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
-  (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. The to-one
-  relation analogue is `init:`.
+  (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. **`defaultValue:
+  now`** is the one default that reaches a moment field on every leg (#7603): the current moment in the
+  field's own shape (a `date` today, a `timestamp` this instant, a `month` `YYYY-MM`, a `week`
+  `YYYY-Www`), prefilled by the generated form when a new record opens, seeded into a new line's item
+  dialog, and assigned by the repository on a server-side create that leaves the field empty - REST, a
+  `generates` create-from, a schedule. A value the caller supplies wins. It is never a DB DEFAULT, and
+  it is refused on any other field type. The to-one relation analogue is `init:`.
   `- { name: hours, type: decimal, defaultValue: 8 }` /
-  `- { name: billable, type: boolean, defaultValue: true }`.
+  `- { name: billable, type: boolean, defaultValue: true }` /
+  `- { name: date, type: date, required: true, defaultValue: now }`.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
 - `label: <text>` - the field's display label, replacing the humanized field name everywhere it is
   rendered (form caption, list column header, details block) and seeding its en-US catalog entry, so
@@ -475,7 +496,9 @@ field may declare:
   freezes it for WHEN it falls, and the two compose (an entity may declare either, both or neither).
   Unlike the status guard it also refuses a **create** dated inside a closed window and an update
   that would MOVE a record into one - once March is closed, nothing dated in March may appear,
-  change or vanish. Workflow/system writes through the repository stay possible, as always. A date
+  change or vanish. The lock is enforced in the generated REPOSITORY as well (#7590), so a posting,
+  a create-from or a schedule booking into a closed period is refused with the same sentence (a 400,
+  or the failure of the handler that carried it) - a closed period is closed for the system too. A date
   covered by no period is open (periods are opened as they are needed) and an unset date falls in
   none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
   must be an entity of the SAME model - the guard is generated into this model's controllers, which
@@ -842,7 +865,11 @@ gives the field a platform-allocated, gap-free document number. The intent decla
 - `stampOn` - `create` (the generated repository allocates at insert) or `issue` (the document is
   created with a UUID placeholder and a generated delegate replaces it at the modeled issue step,
   idempotently - a re-issue after an amend keeps the number). Use `issue` for legal documents whose
-  number must only exist once issued.
+  number must only exist once issued. Place the stamp's `delegate:` step right BEFORE the step that
+  sets the issued status (`setRelationField` on the status), with only service tasks between them, so
+  a posting sees the real number. The stamp then checks that status's gated `checks:`, its lifecycle
+  edge and its capacity guards before it allocates (#7577), so a refused Issue answers 400 and spends
+  no number of the series.
 
 The removed keys `format`, `scope` and `resetOn` are REJECTED at parse time - shape lives in
 `.numbers` + settings, partitioning is `per:`, and there is no auto-reset. Prefer `number:` over a
@@ -4074,7 +4101,7 @@ settlements:
     total: total                            # invoice capacity; open = total - its allocation rows
     paid: paid                              # invoice consumed (kept by the paid roll-up; its where: decides which rows count)
     pot: amount                             # payment pot field (payment.amount)
-    order: date                             # allocate oldest first (FIFO)
+    order: date                             # allocate oldest first (FIFO); or a list: [date, number]
     match: [Customer, Currency]             # only allocate within the same customer + currency
     status: Status                          # invoice status relation
     payableStatuses: [3, 4, 6]              # seed ids that are payable (e.g. ISSUED / SENT / PARTIAL)
@@ -4094,13 +4121,17 @@ Generates two client-Java glue classes (bind them with a `rollups` sum entry tha
   (the bare `gen.events.<ClassName>` shorthand resolves to this module's generated events package).
 
 **Rules:** `junction` / `invoice` / `payment` are declared entities; the junction must have a to-one
-relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` / `order`
-are invoice fields; `status` a to-one relation of the invoice; `match` are to-one relations of the
-invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
+relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` and every
+`order` field are invoice fields; `status` a to-one relation of the invoice; `match` are to-one
+relations of the invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
 payment's unallocated balance; entity writes go only through the generated repositories. The open
 amount is re-summed from the invoice's junction rows - the rows its capacity guard counts, narrowed by
 the paid roll-up's `where:` - and never read off `paid`, which the roll-up maintains asynchronously:
 sized from it, a payment event racing the roll-up asked for more than the guard allows and failed.
+The order is always total: both sides sort by the `order` fields and then by their own primary key,
+so documents sharing a date (every invoice issued that day) settle in creation order, never in
+database order. Give `order` a second field (`[date, number]`) when creation order is not the order
+you mean.
 
 ### resolves - fill a relation from a register valid on a date
 
@@ -4300,6 +4331,7 @@ or a seeded name.
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
+| relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |
@@ -4341,6 +4373,7 @@ or a seeded name.
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
+- "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)
 - "a screen to enter / edit X" -> **forms**

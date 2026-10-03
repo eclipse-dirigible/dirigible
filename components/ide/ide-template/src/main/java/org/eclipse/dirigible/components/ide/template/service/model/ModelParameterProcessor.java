@@ -97,7 +97,6 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
-            resolveDeleteRestrictors(entities, parameters);
             resolveAgreeGuards(entities, parameters);
         }
         resolveDependentWidgets(entities);
@@ -721,6 +720,15 @@ final class ModelParameterProcessor {
         if (defaultValue == null || defaultValue.isEmpty()) {
             return;
         }
+        String nowShape = nowDefaultShape(property, defaultValue);
+        if (nowShape != null) {
+            // `defaultValue: now` (#7603) is the moment of the create, in the field's own shape - filled
+            // by the repository on save (and by the generated form on open), never handed to the column:
+            // a DEFAULT of `now` is not SQL, and no database DEFAULT produces the month or week shape.
+            property.put("dataDefaultNowShape", nowShape);
+            property.put("dataDefaultValueJavaLiteral", JavaExpressions.expression(Map.of("kind", "now", "shape", nowShape)));
+            return;
+        }
         property.put("dataDefaultValueJsonLiteral", JsonLiterals.stringLiteral(defaultValue));
 
         // The generated key is the database's to assign, so its default is never applied in Java - the
@@ -733,6 +741,35 @@ final class ModelParameterProcessor {
         if (expression != null) {
             property.put("dataDefaultValueJavaLiteral", expression);
         }
+    }
+
+    /**
+     * The shape a {@code now} default is the current moment in - {@code date}, {@code timestamp},
+     * {@code month} or {@code week}, the set {@code JavaExpressions} and the shell's
+     * {@code App.utils.todayAs} render - or null when the default is not the token, or the property
+     * holds no moment, in which case it stays an ordinary literal. A month and a week are stored as
+     * text, so their widget tells them apart from a string column.
+     *
+     * @param property the property
+     * @param defaultValue its authored default
+     * @return the shape, or null
+     */
+    private static String nowDefaultShape(Map<String, Object> property, String defaultValue) {
+        if (!"now".equals(defaultValue.trim())) {
+            return null;
+        }
+        String widget = strOr(property, "widgetType", "");
+        if ("MONTH".equals(widget)) {
+            return "month";
+        }
+        if ("WEEK".equals(widget)) {
+            return "week";
+        }
+        return switch (strOr(property, "dataType", "").toUpperCase(Locale.ROOT)) {
+            case "DATE" -> "date";
+            case "DATETIME", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE" -> "timestamp";
+            default -> null;
+        };
     }
 
     /**
@@ -752,6 +789,9 @@ final class ModelParameterProcessor {
      * @param property the property
      */
     private static void resolveDefaultValueJsLiteral(Map<String, Object> property) {
+        if (property.get("dataDefaultNowShape") != null) {
+            return; // today is computed by the page when the form or the line dialog opens
+        }
         String expression = JsLiterals.defaultValueExpression(str(property, "widgetType"),
                 Boolean.TRUE.equals(property.get("isNumberType")), str(property, "dataDefaultValue"));
         if (expression != null) {
@@ -911,6 +951,14 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
+        // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
+        // another model may - so this entity's repository contributes the rule the target's delete
+        // applies, keyed by the target's generated entity class, which is what that delete names itself
+        // by. Same-model and cross-model alike: this is the package the target is generated into.
+        if (truthy(property, "whenTargetDeleted")) {
+            property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
+            entity.put("hasTargetDeleteRules", Boolean.TRUE);
+        }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));
             entity.put("personalFkJavaClass", property.get("dataTypeJavaClass"));
@@ -1288,46 +1336,11 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Resolves each entity's {@code deleteRestrictors} (intent {@code whenTargetDeleted: restrict})
-     * into the referencing entity's generated FQN, so the DAO can construct that repository directly
-     * and query it - same-model only, exactly like {@link #inheritMasterLock} resolves a composition
-     * parent's coordinates from the child's own FK metadata.
-     *
-     * @param entities every entity in the model
-     * @param parameters the generation parameters
-     */
-    private static void resolveDeleteRestrictors(List<Map<String, Object>> entities, Map<String, Object> parameters) {
-        for (Map<String, Object> entity : entities) {
-            List<Map<String, Object>> restrictors = asMaps(entity.get("deleteRestrictors"));
-            if (restrictors.isEmpty()) {
-                continue;
-            }
-            List<Map<String, Object>> resolved = new ArrayList<>();
-            for (Map<String, Object> restrictor : restrictors) {
-                Map<String, Object> referencing = findEntity(entities, str(restrictor, "referencingEntity"));
-                if (referencing == null) {
-                    continue; // the referencing entity was not generated - drop rather than emit a broken reference
-                }
-                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
-                String referencingPackage = "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + ".";
-                restrictor.put("entityClass", referencingPackage + str(referencing, "name") + "Entity");
-                restrictor.put("repositoryClass", referencingPackage + str(referencing, "name") + "Repository");
-                // The refusal names the referencing entity the way a person reading the page knows it,
-                // not by its raw identifier - the same source the composition cascade's own refusal
-                // uses for its child.
-                restrictor.put("referencingLabel", strOr(referencing, "entityLabel", str(referencing, "name")));
-                resolved.add(restrictor);
-            }
-            entity.put("deleteRestrictors", resolved);
-        }
-    }
-
-    /**
      * Resolves each entity's {@code agreeGuards} (the parent side of a junction's
      * {@code checks: agree}, #7589) into the junction's generated repository, so the DAO can ask
      * whether a junction row still references the record before it lets the agreed property change -
-     * same-model only, exactly like {@link #resolveDeleteRestrictors}. The message gets its
-     * Java-literal twin here, as a check's does.
+     * same-model only, exactly like {@link #inheritMasterLock} resolves a composition parent's
+     * coordinates. The message gets its Java-literal twin here, as a check's does.
      *
      * @param entities every entity in the model
      * @param parameters the generation parameters

@@ -245,16 +245,26 @@ public final class Criteria {
      * @return the full HQL query string
      */
     public String append(String fromClause) {
-        StringBuilder hql = new StringBuilder(fromClause);
-        if (!conditions.isEmpty()) {
-            hql.append(" where ")
-               .append(String.join(" and ", conditions));
-        }
+        StringBuilder hql = new StringBuilder(appendConditions(fromClause));
         if (!orderings.isEmpty()) {
             hql.append(" order by ")
                .append(String.join(", ", orderings));
         }
         return hql.toString();
+    }
+
+    /**
+     * Append only the conditions to a query - the shape an aggregate such as a count needs, where an
+     * ordering is meaningless and refused by the query language.
+     *
+     * @param fromClause the query's head, e.g. {@code select count(*) from Customer}
+     * @return the query with the {@code where} clause appended
+     */
+    public String appendConditions(String fromClause) {
+        if (conditions.isEmpty()) {
+            return fromClause;
+        }
+        return fromClause + " where " + String.join(" and ", conditions);
     }
 
     /**
