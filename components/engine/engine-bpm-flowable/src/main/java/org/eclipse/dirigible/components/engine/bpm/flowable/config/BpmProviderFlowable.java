@@ -477,6 +477,20 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
+     * Whether the task is still active in the current tenant - i.e. neither completed nor deleted.
+     *
+     * @param taskId the task id
+     * @return true while the task exists
+     */
+    public boolean isTaskActive(String taskId) {
+        return processEngine.getTaskService()
+                            .createTaskQuery()
+                            .taskTenantId(getTenantId())
+                            .taskId(taskId)
+                            .count() > 0;
+    }
+
+    /**
      * The actions a task's form completes it with, as its user task declares them:
      *
      * <pre>
