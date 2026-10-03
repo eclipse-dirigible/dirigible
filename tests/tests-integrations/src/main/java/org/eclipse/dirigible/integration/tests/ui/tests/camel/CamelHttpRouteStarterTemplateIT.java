@@ -55,4 +55,3 @@ public class CamelHttpRouteStarterTemplateIT extends UserInterfaceIntegrationTes
     }
 
 }
-
