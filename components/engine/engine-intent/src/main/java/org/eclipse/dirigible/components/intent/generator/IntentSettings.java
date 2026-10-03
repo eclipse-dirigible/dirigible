@@ -40,6 +40,8 @@ import com.google.gson.JsonParser;
  * artefact so an existing hand-written one is used (the BPMN/DAO still reference it).</li>
  * <li>{@code userTasks.candidateGroupsExtra} - extra candidate groups appended to every generated
  * user task (defaults to {@code ADMINISTRATOR} so an administrator can always claim).</li>
+ * <li>{@code access} - the opt-in {@code <intent>.access} artefact and the roles appended to every
+ * generated entity and report gate (see {@link AccessGeneration}).</li>
  * </ul>
  * Parsed with a plain {@link Gson} (not the platform {@code JsonHelper}, which would null out
  * un-{@code @Expose}d fields).
@@ -83,14 +85,25 @@ public final class IntentSettings {
     }
 
     /**
-     * Whether Generate emits the project's {@code <intent>.access} - the URL-shaped constraints over
-     * the paths the generated templates publish, derived from the intent's {@code permissions[].can:}
-     * tokens. OPT-IN, and deliberately so: the constraints name the controller and page paths of the
-     * stack the recipes above materialise, so turning them on is a decision about this project's
-     * deployment rather than a property of its domain - which is why it lives here and not in the DSL.
+     * The deployment's side of the generated access model.
+     * <ul>
+     * <li>{@code generate} - whether Generate emits the project's {@code <intent>.access}, the
+     * URL-shaped constraints over the paths the generated templates publish, derived from the intent's
+     * {@code permissions[].can:} tokens. OPT-IN, and deliberately so: the constraints name the
+     * controller and page paths of the stack the recipes above materialise.</li>
+     * <li>{@code extraRoles} - roles appended to the read AND write gate of every generated entity and
+     * report, whether that gate is the convention one or authored through {@code can:}. The roles a
+     * multitenant deployment grants a tenant member ({@code Owner} / {@code User}) are the case: every
+     * gate must admit them, while the convention roles stay declared and assignable beside them.</li>
+     * <li>{@code extraRolesReadOnly} - the same, appended to the read gates only.</li>
+     * </ul>
+     * All three describe the surrounding deployment rather than the domain - which is why they live
+     * here and not in the DSL.
      */
     public static final class AccessGeneration {
         private Boolean generate;
+        private List<String> extraRoles = new ArrayList<>();
+        private List<String> extraRolesReadOnly = new ArrayList<>();
 
         AccessGeneration(Boolean generate) {
             this.generate = generate;
@@ -250,6 +263,28 @@ public final class IntentSettings {
      */
     public boolean isGenerateAccess() {
         return access != null && access.isGenerate();
+    }
+
+    /** Roles appended to the read and write gate of every generated entity and report. */
+    public List<String> extraRoles() {
+        return access == null ? List.of() : roleNames(access.extraRoles);
+    }
+
+    /** Roles appended to the read gate of every generated entity and report. */
+    public List<String> extraRolesReadOnly() {
+        return access == null ? List.of() : roleNames(access.extraRolesReadOnly);
+    }
+
+    /** The trimmed, non-blank role names of a hand-edited list, in order and without repeats. */
+    private static List<String> roleNames(List<String> roles) {
+        if (roles == null) {
+            return List.of();
+        }
+        return roles.stream()
+                    .filter(role -> role != null && !role.isBlank())
+                    .map(String::trim)
+                    .distinct()
+                    .toList();
     }
 
     /** Per-deployment branding (title / description / icon) for the shell header. Never null. */

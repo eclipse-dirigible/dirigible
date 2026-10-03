@@ -68,4 +68,25 @@ class IntentSettingsTest {
                 """);
         assertEquals(List.of("Supervisor"), settings.candidateGroupsExtra());
     }
+
+    @Test
+    void theAccessExtraRolesAreReadTrimmedAndWithoutBlanksOrRepeats() {
+        IntentSettings settings = IntentSettings.parse("""
+                {
+                  "access": { "extraRoles": ["Owner", " User ", "", "Owner"], "extraRolesReadOnly": ["Auditor"] }
+                }
+                """);
+        assertEquals(List.of("Owner", "User"), settings.extraRoles());
+        assertEquals(List.of("Auditor"), settings.extraRolesReadOnly());
+    }
+
+    @Test
+    void noAccessExtraRolesUnlessTheSettingsDeclareThem() {
+        assertTrue(IntentSettings.parse("{}")
+                                 .extraRoles()
+                                 .isEmpty());
+        assertTrue(IntentSettings.parse("{\"access\": {\"generate\": true}}")
+                                 .extraRolesReadOnly()
+                                 .isEmpty());
+    }
 }

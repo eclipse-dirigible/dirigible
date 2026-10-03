@@ -99,9 +99,15 @@ public class UserService {
     /**
      * Update user.
      *
+     * <p>
+     * A new password is stored encoded, exactly as {@link #createNewUser} stores one. A blank password,
+     * or one equal to the stored value, keeps the stored hash: the Security view's edit dialog is
+     * pre-filled with the user as {@code GET /services/security/users} returns it, so an edit that does
+     * not touch the password sends the stored hash back - encoding it again would lock the user out.
+     *
      * @param id the id
      * @param username the username
-     * @param password the password
+     * @param password the new raw password; blank or the stored hash keeps the current one
      * @param tenantId the tenant id
      * @return the user
      */
@@ -112,7 +118,9 @@ public class UserService {
                                   .orElseThrow(() -> new TenantNotFoundException("User " + id + " not found."));
         user.setName(username);
         user.setUsername(username);
-        user.setPassword(password);
+        if (password != null && !password.isBlank() && !password.equals(user.getPassword())) {
+            user.setPassword(passwordEncoder.encode(password));
+        }
         user.setTenant(tenant);
         user.updateKey();
         return userRepository.save(user);

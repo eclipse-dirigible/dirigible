@@ -7,14 +7,15 @@
 /*
  * Master-detail view types — Harmonia SPA variant.
  *
- * Master entities (LIST_MASTER / MANAGE_MASTER, PRIMARY) get a master page at /<Master>:
- * an x-h-split with the master record list on the left and, for the selected master, its
- * editable form plus one detail panel per dependent entity on the right.
+ * Master entities (LIST_MASTER / MANAGE_MASTER, PRIMARY) browse on the manage list at /<Master> -
+ * the same page a MANAGE entity gets, its record sheet showing the master's own fields - and open on
+ * the manage form, which renders one detail panel per dependent entity at /<Master>/{id}/preview
+ * and /<Master>/{id}/edit.
  *
  * Detail entities (LIST_DETAILS / MANAGE_DETAILS, DEPENDENT) do NOT get their own list
  * route; instead each emits:
  *   - a registration (<Detail>.detail.js) that calls App.registerDetail(<masterEntity>, {...})
- *     so the master page can render a generic detailPanel for it (decoupled — masters never
+ *     so the master's form can render a generic detailPanel for it (decoupled — masters never
  *     enumerate their details at generation time), and
  *   - a routed create/edit form (reusing the manage form templates) at /<Detail>/create and
  *     /<Detail>/{id}/edit, which the detail panel navigates to with the FK + returnTo preset.
@@ -24,21 +25,21 @@
  * entity name — both derived by ModelParameterProcessor for MANAGE_DETAILS/LIST_DETAILS entities).
  */
 export function getSources(parameters) {
-    // A master gets: the master page (list + detail orchestration) AND the manage form
-    // (reused for its own routed create/edit at /<Master>/create and /<Master>/{id}/edit).
-    const masterPage = (collection) => ([
+    // A master gets the manage list (its browse page) AND the manage form (its own routed
+    // create/edit/preview, where its detail panels render).
+    const master = (collection) => ([
         {
-            location: "/template-application-ui-harmonia-java/ui/perspective/master/master-page.js.template",
+            location: "/template-application-ui-harmonia-java/ui/perspective/manage/list-page.js.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/js/components/pages/{{perspectiveName}}/{{name}}MasterPage.js",
+            rename: "gen/{{genFolderName}}/js/components/pages/{{perspectiveName}}/{{name}}ManageListPage.js",
             collection
         },
         {
-            location: "/template-application-ui-harmonia-java/ui/perspective/master/master-view.html.template",
+            location: "/template-application-ui-harmonia-java/ui/perspective/manage/list-view.html.template",
             action: "generate",
             engine: "velocity",
-            rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-master.html",
+            rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-manage-list.html",
             collection
         },
         {
@@ -82,8 +83,8 @@ export function getSources(parameters) {
     ]);
 
     return [
-        ...masterPage("uiManageMasterModels"),
-        ...masterPage("uiListMasterModels"),
+        ...master("uiManageMasterModels"),
+        ...master("uiListMasterModels"),
         ...detail("uiManageDetailsModels"),
         ...detail("uiListDetailsModels")
     ];

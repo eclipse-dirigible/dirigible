@@ -28,6 +28,7 @@ import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.defaultRole;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.isTrue;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.putNumber;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
@@ -96,6 +97,7 @@ final class ModelParameterProcessor {
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
+            resolveAgreeGuards(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -1293,6 +1295,38 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Resolves each entity's {@code agreeGuards} (the parent side of a junction's
+     * {@code checks: agree}, #7589) into the junction's generated repository, so the DAO can ask
+     * whether a junction row still references the record before it lets the agreed property change -
+     * same-model only, exactly like {@link #inheritMasterLock} resolves a composition parent's coordinates. The message gets its
+     * Java-literal twin here, as a check's does.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveAgreeGuards(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> guards = asMaps(entity.get("agreeGuards"));
+            if (guards.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> resolved = new ArrayList<>();
+            for (Map<String, Object> guard : guards) {
+                Map<String, Object> referencing = findEntity(entities, str(guard, "referencingEntity"));
+                if (referencing == null) {
+                    continue; // the junction was not generated - drop rather than emit a broken reference
+                }
+                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
+                guard.put("repositoryClass", "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + "."
+                        + str(referencing, "name") + "Repository");
+                resolveMessageLiteral(guard);
+                resolved.add(guard);
+            }
+            entity.put("agreeGuards", resolved);
+        }
+    }
+
+    /**
      * Propagates the personal scope from a composition parent to its direct children - one hop only,
      * which is what the generated surfaces support. A deeper child simply has no personal surface.
      *
@@ -1913,8 +1947,9 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Collects the default read and write roles the model asks to be generated. A projection owns no
-     * table, and a report or filter is read-only, so neither contributes a write role.
+     * Collects the default read and write roles the model asks to be generated - each gate's own role,
+     * its first (see {@link ModelValues#defaultRole}). A projection owns no table, and a report or
+     * filter is read-only, so neither contributes a write role.
      *
      * @param entities every entity in the model
      * @param parameters the generation parameters
@@ -1932,11 +1967,13 @@ final class ModelParameterProcessor {
             }
             Map<String, Object> rolePair = new LinkedHashMap<>();
             rolePair.put("entityName", entity.get("name"));
-            if (truthy(entity, "roleRead")) {
-                rolePair.put("roleRead", entity.get("roleRead"));
+            String roleRead = defaultRole(entity, "roleRead");
+            if (roleRead != null) {
+                rolePair.put("roleRead", roleRead);
             }
-            if (!"REPORT".equals(type) && !"FILTER".equals(type) && truthy(entity, "roleWrite")) {
-                rolePair.put("roleWrite", entity.get("roleWrite"));
+            String roleWrite = defaultRole(entity, "roleWrite");
+            if (!"REPORT".equals(type) && !"FILTER".equals(type) && roleWrite != null) {
+                rolePair.put("roleWrite", roleWrite);
             }
             roles.add(rolePair);
         }

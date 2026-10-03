@@ -222,8 +222,9 @@
   <div x-show="state !== 'loading' && state !== 'load-failure'"
         class="vbox lg:hbox w-full items-start gap-6 px-4 py-6"
         :style="isNarrow ? 'padding-bottom: 5rem' : ''">
-    <!-- Main content column -->
-    <div class="vbox gap-4 flex-1 min-w-0">
+    <!-- Main content column. w-full: below lg the body is a column whose items-start would otherwise
+         shrink this to its content, leaving the collection tables narrower than the page. -->
+    <div class="vbox gap-4 flex-1 min-w-0 w-full">
 
     <!-- The record's groups, separated by headings and rules and nothing else (issue #7491). The
          page's own white card is the only frame: the fields used to sit bare on the background while
@@ -534,7 +535,7 @@
                     <template x-for="col in def.columns" :key="col.name">
                       <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                     </template>
-                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false"></th>
+                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length)"></th>
                   </tr>
                 </thead>
                 <tbody x-h-table-body>
@@ -548,14 +549,26 @@
                           </template>
                         </td>
                       </template>
-                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false">
-                        <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
-                        <ul x-h-menu data-align="bottom-end">
-                          <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                          <li x-h-menu-item x-show="!isForbidden()" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                          <li x-h-menu-separator x-show="!isForbidden()"></li>
-                          <li x-h-menu-item x-show="!isForbidden()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
-                        </ul>
+                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length)">
+                        <div class="hbox items-center justify-end gap-2">
+                          <!-- The child row's own actionable user tasks (a review its process waits on),
+                               one button each - offered on Preview too, where the row menu is withheld:
+                               completing a task is not editing the record. -->
+                          <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
+                            <button type="button" x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+                              <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
+                            </button>
+                          </template>
+                          <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false">
+                            <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                            <ul x-h-menu data-align="bottom-end">
+                              <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+                              <li x-h-menu-item x-show="!isForbidden()" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                              <li x-h-menu-separator x-show="!isForbidden()"></li>
+                              <li x-h-menu-item x-show="!isForbidden()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                            </ul>
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   </template>

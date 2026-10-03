@@ -53,6 +53,7 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -364,6 +365,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: doc,    kind: manyToOne, to: Doc }
                   - { name: entry,  kind: manyToOne, to: Entry }
                   - { name: storno, kind: manyToOne, to: Entry }
+
+              # ...and the agree check guards the PARENTS too (#7589): a junction's check runs when the
+              # junction row is written, so re-pointing a parent's agreed property afterwards would
+              # leave the row standing in the very pairing the check refuses. Each parent's repository
+              # refuses that change while a junction row references it, with the check's own message.
+              - name: Wallet
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party }
+              - name: Coupon
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: party, kind: manyToOne, to: Party }
+              - name: WalletCoupon
+                checks:
+                  - { kind: agree, relations: [wallet, coupon], onProperty: party,
+                      message: "A coupon is redeemed only against a wallet of its own party" }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: wallet, kind: manyToOne, to: Wallet }
+                  - { name: coupon, kind: manyToOne, to: Coupon }
 
               - name: EntryLine
                 checks:
@@ -2136,6 +2162,73 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertTextColumnKeepsItsDeclaredWidth();
         assertRuntimeEnforcement();
+        assertAgreeGuardsTheParentsRuntime();
+    }
+
+    /**
+     * The parent side of {@code checks: agree} (#7589), compiled and running: once a junction row links
+     * a wallet and a coupon of one party, neither may be re-pointed to another party - the check's own
+     * message, a 400 - while an edit that leaves the party alone, and a re-point of a coupon no
+     * junction row references, go through.
+     */
+    private void assertAgreeGuardsTheParentsRuntime() {
+        int party = createRecord("/party/PartyController", "{\"Name\":\"Agree Party A\"}");
+        int otherParty = createRecord("/party/PartyController", "{\"Name\":\"Agree Party B\"}");
+        int wallet = createRecord("/wallet/WalletController", "{\"Name\":\"W\",\"Party\":" + party + "}");
+        int coupon = createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        int looseCoupon = createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        createRecord("/walletcoupon/WalletCouponController", "{\"Wallet\":" + wallet + ",\"Coupon\":" + coupon + "}");
+
+        String refusal = "A coupon is redeemed only against a wallet of its own party";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + wallet + ",\"Name\":\"W\",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + coupon + ",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/coupon/CouponController/" + coupon)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(refusal)));
+        // An edit that keeps the party is no re-point...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + wallet + ",\"Name\":\"W2\",\"Party\":" + party + "}")
+                                                 .when()
+                                                 .put(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("W2")));
+        // ...and a coupon nothing redeems is free to move.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + looseCoupon + ",\"Party\":" + otherParty + "}")
+                                                 .when()
+                                                 .put(API + "/coupon/CouponController/" + looseCoupon)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Party", equalTo(otherParty)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/wallet/WalletController/" + wallet)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Party", equalTo(party)));
+    }
+
+    /** POSTs a record to a generated controller and answers its generated id. */
+    private int createRecord(String controller, String body) {
+        AtomicReference<Integer> id = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body(body)
+                                                        .when()
+                                                        .post(API + controller)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")));
+        return id.get();
     }
 
     /**
@@ -2199,8 +2292,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryFormPage = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
         assertTrue(entryFormPage.contains("/mutable"),
                 "the edit form page must ask the mutable pre-check so a direct /edit URL opens read-only");
-        String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
-        assertTrue(entryMasterPage.contains("isRowImmutable"),
+        String entryListPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
+        assertTrue(entryListPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         // Date-based immutability: the guard queries the register the intent named, and the same
         // pre-check endpoint the status lock exposes now answers for it too.
@@ -2480,6 +2573,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 linkController.contains("agreeLeft == null || agreeRight == null || !agreeLeft.equals(agreeRight)")
                         && linkController.contains("An entry and its storno must be in the same state"),
                 "whenNull: refuse must reject an unset side too, got: " + linkController);
+        // ...and each parent's repository guards the agreed property on every update path (#7589): the
+        // user's full-row update, the system's updateWithoutEvent and the targeted write a workflow
+        // setter uses, the last comparing against the values captured before it applies its own.
+        String walletRepository = contentOf("gen/emission/data/wallet/WalletRepository.java");
+        assertTrue(
+                walletRepository.contains("new gen.emission.data.walletcoupon.WalletCouponRepository()")
+                        && walletRepository.contains(".eq(\"Wallet\", id))")
+                        && walletRepository.contains(
+                                "throw new ValidationException(\"A coupon is redeemed only against a wallet of its own party\")"),
+                "a parent of an agree junction must refuse re-pointing the agreed property while referenced, got: " + walletRepository);
+        assertEquals(2, countOf(walletRepository, "requireAgreementKept(entity);"), "update() and updateWithoutEvent() must both ask");
+        assertTrue(walletRepository.contains("requireAgreementKept(id, agreedBefore, entity);"),
+                "the targeted write must ask too, against the values it captured before applying its own");
+        assertTrue(contentOf("gen/emission/data/coupon/CouponRepository.java").contains(".eq(\"Coupon\", id))"),
+                "BOTH sides of the junction are guarded");
 
         // The document's own line items are the same story through a different layout - and it is the
         // one where the child literally resums the master (BillLineRepository -> BillRepository).
@@ -2650,6 +2758,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(billDocumentView.contains("x-text=\"form."), "no read-only card may print a raw form value: " + billDocumentView);
         assertTrue(billDocumentView.contains("class=\"vbox gap-4 w-full\" x-show=\"mutable\""),
                 "immutableWhen on a MANAGE_DOCUMENT master must hide the header edit form once the record is immutable");
+        // The page's status stepper is chosen and ordered by status id, never by the label it renders
+        // (#7592): the picker's options arrive sorted by their TRANSLATED label - here Bulgarian, which
+        // the English terminal heuristic cannot read either - and the stepper read off them listed
+        // Анулирана, Публикувана, Чернова with a DRAFT record on step 3. No flow of Bill writes its
+        // status, so the steps are the non-terminal nomenclature, DRAFT then POSTED, in seed order.
+        String billDocumentPage = contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js");
+        assertEquals("[1,2] active 1",
+                pageStatusSteps(billDocumentPage, "BillDocumentPage", "Status",
+                        "[{ value: 3, text: 'Анулирана' }, { value: 2, text: 'Публикувана' }, { value: 1, text: 'Чернова' }]", 1),
+                "the document page's stepper must follow the lifecycle, not the label order of its options");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
         // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
         // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
@@ -2767,7 +2885,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(contentOf("gen/emission/js/components/pages/Pledge/PledgeFormPage.js").contains("DisplacedStatus"),
                 "the displaced status is bookkeeping - it must not reach the form model");
         assertFalse(contentOf("gen/emission/views/Pledge/Pledge-form.html").contains("DisplacedStatus"), "...nor be rendered on the form");
-        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-master.html").contains("DisplacedStatus"), "...nor on the master list");
+        assertFalse(contentOf("gen/emission/views/Pledge/Pledge-manage-list.html").contains("DisplacedStatus"),
+                "...nor on the master's list");
 
         // The keyed aggregate handler writes the aggregate column of an EXISTING target row targeted. The
         // resolved primary key in the call also proves the descriptor's targetPk reached the template: an
@@ -2857,15 +2976,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(bookingRepository.contains("\", \"Over the allowance\", ") || bookingRepository.contains("\", \"No allowance left\", "),
                 "a non-blocking outcome must NOT fail the write - that is the whole point of task/reject");
 
-        // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
-        // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id
-        // regression class: the lookup loop skipped DOCUMENT_STATUS widgets).
-        String campaignMasterPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js");
-        assertTrue(campaignMasterPage.contains("all['Status']"),
-                "the master page must load the EntityStatus label lookup like any dropdown relation");
-        String campaignMasterView = contentOf("gen/emission/views/Campaign/Campaign-master.html");
-        assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
-                "the master table must render the EntityStatus column as a resolved badge, not a raw id");
+        // A master (MANAGE_MASTER) browses on the manage list - the same page a MANAGE entity gets -
+        // and its own page-pair is gone: the record sheet shows its fields, its detail collections
+        // render on the form it opens (#7390).
+        String campaignListPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignManageListPage.js");
+        String campaignListView = contentOf("gen/emission/views/Campaign/Campaign-manage-list.html");
+        assertTrue(campaignListView.contains("x-data=\"CampaignManageListPage\""), "a master must browse on the manage list");
+        assertFalse(exists("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js"),
+                "a master must not emit the retired master page component");
+        assertFalse(exists("gen/emission/views/Campaign/Campaign-master.html"), "a master must not emit the retired master view");
+        String emissionShell = contentOf("gen/emission/index.html");
+        assertTrue(
+                emissionShell.contains("x-route=\"/Campaign\" x-template.target.app=\"./views/Campaign/Campaign-manage-list.html\"")
+                        && emissionShell.contains(
+                                "x-route=\"/Campaign/:id\" x-template.target.app=\"./views/Campaign/Campaign-manage-list.html\"")
+                        && emissionShell.contains("/Campaign/CampaignManageListPage.js"),
+                "the shell must route a master's browse and deep-link routes to its manage list");
+        assertTrue(campaignListView.contains("@click=\"applyFilterDraft()\"") && campaignListPage.contains("'/search'"),
+                "a master's list must carry the server-side Filter menu");
+        // ...which resolves an EntityStatus FK like every list: a label lookup loaded on the page and
+        // a badge cell in the table (the raw-id regression class: the lookup loop skipped
+        // DOCUMENT_STATUS widgets).
+        assertTrue(campaignListPage.contains("all['Status']"),
+                "the master's list must load the EntityStatus label lookup like any dropdown relation");
+        assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status))"),
+                "the master's table must render the EntityStatus column as a resolved badge, not a raw id");
+        assertFalse(campaignListView.contains("detailPanel("), "the record sheet shows the master's fields only, not its collections");
+        assertTrue(contentOf("gen/emission/views/Campaign/Campaign-form.html").contains("detailPanel({...d"),
+                "a master's detail collections must render on the form its Preview / Edit open");
 
         // #6693: a record that owns detail collections is not finished at create - its children are
         // the next step of the same working session and can only be added from the record's own
@@ -2922,15 +3060,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
                 "applyServerFilter must discard a stale response superseded by a newer keystroke");
-        assertTrue(campaignMasterPage.contains("exportRowsCsv(this.filteredMasters"),
-                "the master list must export its filtered rows as CSV");
-        assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),
-                "the master toolbar must carry the Export and Print actions");
+        assertTrue(campaignListPage.contains("exportRowsCsv(this.sortedItems"),
+                "the master's list must export its filtered+sorted rows as CSV");
+        assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList()"),
+                "the master's list must carry the Export and Print actions");
 
         // The detail side panel's field pairs must stack into one column until the pane is wide enough
         // (lg:) and each cell must shrink+wrap its value, so an email/phone value cannot overflow its
         // column and overlap the neighbour at narrow browser widths (issue #7462).
-        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+        for (String detailView : new String[] {unitManageView, campaignListView}) {
             assertTrue(detailView.contains("grid grid-cols-1 lg:grid-cols-2"),
                     "the detail panel must stack field pairs to one column below the lg breakpoint");
             assertFalse(detailView.contains("grid grid-cols-1 sm:grid-cols-2"),
@@ -2941,18 +3079,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // The detail side panel must be dismissible: a close control in its toolbar plus Esc, both
         // wired to closeDetails() which clears the selection and returns to the full-width list (#7463).
-        assertTrue(campaignMasterPage.contains("closeDetails()"), "the master page must define closeDetails()");
         assertTrue(unitManageList.contains("closeDetails()"), "the manage list page must define closeDetails()");
-        for (String detailView : new String[] {unitManageView, campaignMasterView}) {
+        for (String detailView : new String[] {unitManageView, campaignListView}) {
             assertTrue(detailView.contains("@click=\"closeDetails()\""), "the detail panel must carry a control wired to closeDetails()");
             assertTrue(detailView.contains("@keydown.escape.window"), "Esc must dismiss the detail panel");
         }
         // The manage list's record opens in a sheet OVER the list, so its dismissal is named after
-        // where it returns you (#7491); the master-detail pane closes a panel beside the list.
+        // where it returns you (#7491).
         assertTrue(unitManageView.contains("defaults.backToList"),
                 "the record sheet's dismissal must use the translated Back to list label");
-        assertTrue(campaignMasterView.contains("defaults.close"),
-                "the master-detail panel's close control must use the translated Close label");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
@@ -3623,12 +3758,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // #6546: a scoped calendar filters through /<Calendar>?<Scope>=<id>, so the record it filters
         // BY must link there. Both of the scope target's record surfaces carry the affordance - the
-        // master's detail pane (selected row) and the entity's own form (open record).
+        // record sheet of its list (selected row) and the entity's own form (open record).
         assertTrue(leaveCalendar.contains("scopeId"), "a scoped calendar must read its scope from the route");
         assertTrue(
-                contentOf("gen/emission/views/Campaign/Campaign-master.html").contains(
+                contentOf("gen/emission/views/Campaign/Campaign-manage-list.html").contains(
                         "openScopedCalendar('CampaignEvent', 'Campaign', selectedId)"),
-                "the scope target's master pane must open the calendar filtered to the selected record");
+                "the scope target's record sheet must open the calendar filtered to the selected record");
         assertTrue(personForm.contains("openScopedCalendar('Leave', 'Person', id)"),
                 "the scope target's form must open the calendar filtered to the open record");
         assertTrue(contentOf("gen/emission/views/Person/Person-manage-list.html").contains(
@@ -7282,6 +7417,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 90);
     }
 
+    /**
+     * Run a generated document page's status stepper: the step values {@code statusSteps()} returns and
+     * the {@code activeStep()} it marks, for a record standing at {@code current} whose status options
+     * are {@code options}. The page registers itself through Alpine.data inside an alpine:init
+     * listener; both are stubbed, and baseFormPage contributes nothing the stepper reads.
+     */
+    private static String pageStatusSteps(String pageScript, String componentName, String statusProperty, String options, int current) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var pages = {}; var window = {}; var document = { addEventListener: (event, callback) => callback() };"
+                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } }; var baseFormPage = () => ({});");
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.options" + statusProperty + " = " + options + ";"
+                            + " page.form = { " + statusProperty + ": " + current + " };"
+                            + " return '[' + page.statusSteps().map(o => o.value).join(',') + '] active ' + page.activeStep(); })()")
+                          .asString();
+        }
+    }
+
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -7340,6 +7496,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     /** How many times a literal occurs - a guard must be emitted on BOTH write paths, not just one. */
     private static int countOf(String haystack, String needle) {
         return haystack.split(java.util.regex.Pattern.quote(needle), -1).length - 1;
+    }
+
+    private boolean exists(String fileName) {
+        return repository.hasResource(PROJECT_PATH + "/" + fileName);
     }
 
     private String contentOf(String fileName) {

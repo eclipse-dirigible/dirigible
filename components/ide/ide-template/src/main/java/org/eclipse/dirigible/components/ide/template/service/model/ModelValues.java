@@ -162,6 +162,26 @@ final class ModelValues {
     }
 
     /**
+     * Reads the role a gate declares as its default role: the first of its comma-separated roles. A
+     * gate may admit further roles after its own - an intent's {@code .settings}
+     * {@code access.extraRoles} appends the deployment's {@code Owner} / {@code User} to every
+     * generated gate - and those are declared by whoever owns them, so declaring the whole list as one
+     * role name would publish a role no caller can hold.
+     *
+     * @param map the node
+     * @param key the gate key ({@code roleRead} / {@code roleWrite})
+     * @return the gate's own role, or null when the gate is absent or empty
+     */
+    static String defaultRole(Map<String, Object> map, String key) {
+        String gate = str(map, key);
+        if (gate == null) {
+            return null;
+        }
+        String role = gate.split(",", 2)[0].trim();
+        return role.isEmpty() ? null : role;
+    }
+
+    /**
      * Stores a number, as the {@link Double} every number in the graph is.
      *
      * @param map the node

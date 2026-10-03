@@ -474,9 +474,10 @@
     <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-list.html"></template>
 #end
 #end
-    <!-- MANAGE entities: CRUD list + shared create/edit form (same view for create + :id/edit). -->
+    <!-- MANAGE and MASTER entities: CRUD list + shared create/edit form (same view for create +
+         :id/edit). A master's detail collections render on that form, at :id/preview and :id/edit. -->
 #foreach($entity in $models)
-#if($entity.layoutType == "MANAGE" && $entity.type == "PRIMARY")
+#if(($entity.layoutType == "MANAGE" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
 #set($browse = "/${entity.name}")
 #if($entity.calendarView == "true" || $entity.slotsView == "true")#set($browse = "/${entity.name}/list")#end
     <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
@@ -494,18 +495,6 @@
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
-#end
-#end
-    <!-- MASTER entities: master-detail page (list + selected record's detail panels) + own form. -->
-#foreach($entity in $models)
-#if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
-#set($browse = "/${entity.name}")
-#if($entity.calendarView == "true" || $entity.slotsView == "true")#set($browse = "/${entity.name}/list")#end
-    <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
-    <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="${browse}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
 #end
 #end
     <!-- DOCUMENT entities (header-items): browse list + a full-page document editor at create/edit. -->
@@ -650,12 +639,8 @@
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ListPage.js" defer></script>
 #end
-#if(($entity.layoutType == "MANAGE" && $entity.type == "PRIMARY") || $entity.type == "SETTING")
+#if((($entity.layoutType == "MANAGE" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY") || $entity.type == "SETTING")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ManageListPage.js" defer></script>
-    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
-#end
-#if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
-    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}MasterPage.js" defer></script>
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
 #end
 #if($entity.layoutType == "MANAGE_DOCUMENT" && $entity.type == "PRIMARY")
@@ -679,7 +664,7 @@
 #end
 #if($entity.relatedEntities)
     <!-- the records REFERENCING this entity: one read-only register per declaration, rendered by
-         its own form / document / master pages off the runtime registry -->
+         its own form / document pages off the runtime registry -->
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}.related.js" defer></script>
 #end
 #if($entity.personalProperty && $entity.calendarView == "true")

@@ -27,7 +27,9 @@
 #if($hasCalculated)
 /*
  * Neutral calculated-field evaluator - the exact JS mirror of the Java SDK Calc (same grammar,
- * null-as-0, division-by-zero-as-0, half-up rounding, date identifiers as epoch days). Keep in sync
+ * null-as-0, division-by-zero-as-0, half-up rounding, date identifiers as epoch days). It previews in
+ * JavaScript numbers; the server evaluates in decimal (#7578), so at the edge of a column's precision
+ * the persisted value - the server's - may differ from the preview in its last digits. Keep in sync
  * with the copy in document-page.js.template; both are generated, never hand-edited.
  */
 function harmoniaCalcEval(expr, vars, scale) {

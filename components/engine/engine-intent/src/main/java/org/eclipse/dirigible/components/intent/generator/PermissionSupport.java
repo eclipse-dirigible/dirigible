@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -74,8 +75,13 @@ public final class PermissionSupport {
      * @param write resource name to the roles granted its write gate (insertion-ordered)
      * @param issues actionable problems - a token naming an undeclared resource
      * @param advisories observations - a token whose action maps to no generated gate
+     * @param extraRead the deployment's roles every read gate admits besides its own ({@code .settings}
+     *        {@code access.extraRoles} + {@code access.extraRolesReadOnly})
+     * @param extraWrite the deployment's roles every write gate admits besides its own
+     *        ({@code .settings} {@code access.extraRoles})
      */
-    public record Gates(Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories) {
+    public record Gates(Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories,
+            List<String> extraRead, List<String> extraWrite) {
 
         /** Whether any {@code can:} token named this resource, i.e. whether it has authored gates. */
         public boolean covers(String resource) {
@@ -92,18 +98,77 @@ public final class PermissionSupport {
             return join(write.get(resource));
         }
 
+        /**
+         * A read gate as the generated surfaces check it: the given comma-separated roles followed by the
+         * deployment's extra read roles. The gate's own roles stay FIRST - the template layer declares a
+         * gate's first role as its default role, and the extras are declared in {@code <intent>.roles}.
+         *
+         * @param gate the gate's own comma-separated roles (authored or convention)
+         * @return the gate with the extras appended, without repeats
+         */
+        public String appendRead(String gate) {
+            return String.join(",", appendRead(List.of(gate.split(","))));
+        }
+
+        /**
+         * A write gate as the generated surfaces check it - see {@link #appendRead(String)}.
+         *
+         * @param gate the gate's own comma-separated roles (authored or convention)
+         * @return the gate with the extras appended, without repeats
+         */
+        public String appendWrite(String gate) {
+            return String.join(",", append(List.of(gate.split(",")), extraWrite));
+        }
+
+        /**
+         * The given read roles followed by the deployment's extra read roles.
+         *
+         * @param roles the gate's own roles
+         * @return the roles with the extras appended, without repeats
+         */
+        public List<String> appendRead(Collection<String> roles) {
+            return append(roles, extraRead);
+        }
+
+        /** Every extra role the deployment appends to some gate - what {@code <intent>.roles} declares. */
+        public Set<String> extraRoles() {
+            Set<String> roles = new LinkedHashSet<>(extraWrite);
+            roles.addAll(extraRead);
+            return roles;
+        }
+
+        private static List<String> append(Collection<String> roles, List<String> extras) {
+            Set<String> gate = new LinkedHashSet<>(roles);
+            gate.addAll(extras);
+            return List.copyOf(gate);
+        }
+
         private static String join(Set<String> roles) {
             return roles == null || roles.isEmpty() ? null : String.join(",", roles);
         }
     }
 
     /**
-     * Resolve the intent's {@code permissions} block into the gates the generators bind.
+     * Resolve the intent's {@code permissions} block into the gates the generators bind, with no
+     * deployment extras.
      *
      * @param model the parsed intent
      * @return the gates; empty maps when the intent declares no {@code can:} tokens
      */
     public static Gates gates(IntentModel model) {
+        return gates(model, null);
+    }
+
+    /**
+     * Resolve the intent's {@code permissions} block into the gates the generators bind, together with
+     * the roles the project's {@code .settings} append to every gate ({@code access.extraRoles} /
+     * {@code access.extraRolesReadOnly}).
+     *
+     * @param model the parsed intent
+     * @param settings the project's settings, or {@code null} for none
+     * @return the gates; empty maps when the intent declares no {@code can:} tokens
+     */
+    public static Gates gates(IntentModel model, IntentSettings settings) {
         Map<String, Set<String>> read = new LinkedHashMap<>();
         Map<String, Set<String>> write = new LinkedHashMap<>();
         List<String> issues = new ArrayList<>();
@@ -119,8 +184,10 @@ public final class PermissionSupport {
                 bind(role.trim(), token, gateBearing, declared, read, write, issues, advisories);
             }
         }
+        List<String> extraWrite = settings == null ? List.of() : settings.extraRoles();
+        List<String> extraRead = settings == null ? List.of() : Gates.append(extraWrite, settings.extraRolesReadOnly());
         return new Gates(Collections.unmodifiableMap(read), Collections.unmodifiableMap(write), Collections.unmodifiableList(issues),
-                Collections.unmodifiableList(advisories));
+                Collections.unmodifiableList(advisories), extraRead, extraWrite);
     }
 
     private static void bind(String role, String token, Set<String> gateBearing, Set<String> declared, Map<String, Set<String>> read,
