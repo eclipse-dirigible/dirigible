@@ -218,14 +218,17 @@ public class ${name}PartnerController {
         // sensitive / role-scoped fields are cleared, so validating earlier would judge a payload the
         // server has not finished deciding. Before the save, so a refused create never reaches the
         // insert - and never allocates a document number.
-        validate(entity);
+        // The checks read the record as the write will store it - its calculated fields computed, not
+        // taken from the payload (#7544). What is persisted is still computed by the repository.
+        ${name}Entity checked = repository.calculatedForCreate(entity);
+        validate(checked);
 #if($hasReferenceValidations)
-        validateReferences(entity);
+        validateReferences(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
-        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
 #if($systemOwnedOnCreate.size() > 0)
         // After every check above, so what a create refuses is unchanged; before the save, so the
@@ -279,14 +282,17 @@ public class ${name}PartnerController {
         }
 #end
 #end
-        validate(entity);
+        // The checks read the record as the write will store it - its calculated fields computed, not
+        // taken from the payload (#7544). What is persisted is still computed by the repository.
+        ${name}Entity checked = repository.calculatedForUpdate(entity);
+        validate(checked);
 #if($hasReferenceValidations)
-        validateReferences(entity);
+        validateReferences(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
-        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(entity));
+        org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
 #if($hasDuplicateKeys)
         try {

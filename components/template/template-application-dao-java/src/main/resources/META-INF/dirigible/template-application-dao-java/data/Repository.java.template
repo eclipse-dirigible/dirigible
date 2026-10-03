@@ -27,6 +27,14 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyAction = "true")
     #end
+## The expression-calculated fields the checks' candidate row computes (#7544) - an action wins over an
+## expression on the same field, exactly as in save() / update(), and an action is never run there.
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate && !$property.calculatedActionOnCreate)
+        #set($haveCalculatedExpressionOnCreate = "true")
+    #end
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)
+        #set($haveCalculatedExpressionOnUpdate = "true")
+    #end
     #if($property.widgetType == "MULTISELECT")
         #set($haveSubsets = "true")
     #end
@@ -1281,6 +1289,80 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
         }
 #end
+    }
+#end
+
+    /**
+     * The record this create would store, as far as its calculated fields go - the row the controller's
+     * checks read before the write (#7544). The calculated expressions are assigned inside save(), so a
+     * check reading the submitted record saw whatever the caller sent for a calculated field (usually
+     * nothing, or the value of a previous save) and a soft or hard check on one never fired for a REST
+     * write. The defaults the create applies come first, as in save(), since an expression may read
+     * them. Only the neutral expressions are evaluated: a calculated ACTION may mint or mutate state,
+     * and runs on the write path alone. The submitted record itself is not touched - what is persisted
+     * is still computed by save().
+     *
+     * @param submitted the record about to be created
+     * @return a copy carrying the computed values, or the record itself when nothing is calculated
+     */
+    public ${name}Entity calculatedForCreate(${name}Entity submitted) {
+#if($haveCalculatedExpressionOnCreate)
+        ${name}Entity entity = copyOf(submitted);
+#applyDefaults()
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate && !$property.calculatedActionOnCreate)
+#calcAssign($property $property.calculatedPropertyExpressionCreate)
+#end
+#end
+        return entity;
+#else
+        return submitted;
+#end
+    }
+
+    /**
+     * The record this update would store, as far as its calculated fields go - the row the controller's
+     * checks read before the write (#7544). Built as update() builds it: the system-owned fields taken
+     * from the stored row, the document totals recomputed, then the update-time expressions - so an
+     * expression such as Balance = Total - Paid reads the stored Paid, never the payload's. Only the
+     * neutral expressions are evaluated (an action runs on the write path alone), and the submitted
+     * record itself is not touched.
+     *
+     * @param submitted the record about to be updated, carrying its id
+     * @return a copy carrying the computed values, or the record itself when nothing is calculated
+     */
+    public ${name}Entity calculatedForUpdate(${name}Entity submitted) {
+#if($haveCalculatedExpressionOnUpdate)
+        ${name}Entity entity = copyOf(submitted);
+#if($preservedOnUpdate.size() > 0)
+        ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
+        if (stored != null) {
+#foreach($property in $preservedOnUpdate)
+            entity.${property.name} = stored.${property.name};
+#end
+        }
+#end
+#if($documentMaster)
+        recalculate(entity);
+#end
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate && !$property.calculatedActionOnUpdate)
+#calcAssign($property $property.calculatedPropertyExpressionUpdate)
+#end
+#end
+        return entity;
+#else
+        return submitted;
+#end
+    }
+#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate)
+
+    private static ${name}Entity copyOf(${name}Entity source) {
+        ${name}Entity copy = new ${name}Entity();
+#foreach ($property in $properties)
+        copy.${property.name} = source.${property.name};
+#end
+        return copy;
     }
 #end
 #if($warningChecks && $warningChecks.size() > 0)

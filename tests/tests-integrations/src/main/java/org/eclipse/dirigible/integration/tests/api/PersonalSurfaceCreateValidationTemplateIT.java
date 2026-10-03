@@ -87,13 +87,13 @@ class PersonalSurfaceCreateValidationTemplateIT {
             String rendered = render(template, context());
 
             int owner = rendered.indexOf("// The owner is the server's decision");
-            int validate = rendered.indexOf("        validate(entity);");
+            int validate = rendered.indexOf("        validate(checked);");
             int save = rendered.indexOf("repository.save(entity)");
             assertTrue(owner >= 0 && validate > owner, template + " must validate what it decided, not the raw payload: " + rendered);
             assertTrue(save > validate, template + " must validate before the insert: " + rendered);
 
             int update = rendered.indexOf("repository.update(entity)");
-            assertTrue(rendered.lastIndexOf("        validate(entity);") < update, template + " must validate before the update too");
+            assertTrue(rendered.lastIndexOf("        validate(checked);") < update, template + " must validate before the update too");
         }
     }
 
