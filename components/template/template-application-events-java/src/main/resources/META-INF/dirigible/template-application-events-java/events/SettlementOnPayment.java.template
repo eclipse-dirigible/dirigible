@@ -126,10 +126,22 @@ public class ${className} implements MessageHandler {
         LOG.error("Settlement ${name}: the listener on [{}] failed - [{}]", destination(), error);
     }
 
+    /**
+     * What the ${invoiceEntity} can still take, re-summed from its ${junctionEntity} rows - the rows its
+     * capacity guard counts - and never read off its paid roll-up column. That column is maintained
+     * asynchronously and lags the rows, so an allocation sized from it could be one the guard has
+     * to refuse, failing this handler before it reached the remaining ${invoiceEntity}s.
+     */
     private static BigDecimal open(${invoiceEntity}Entity invoice) {
         BigDecimal total = invoice.${invoiceTotal} == null ? BigDecimal.ZERO : invoice.${invoiceTotal};
-        BigDecimal paid = invoice.${invoicePaid} == null ? BigDecimal.ZERO : invoice.${invoicePaid};
-        return total.subtract(paid)
+        BigDecimal settled = BigDecimal.ZERO;
+        for (${junctionEntity}Entity row : new ${junctionEntity}Repository().findAll(Criteria.create()
+                                                                                            .eq("${junctionFkInvoice}", invoice.${invoicePk})${invoiceRowsFilter})) {
+            if (row.${junctionAmount} != null) {
+                settled = settled.add(row.${junctionAmount});
+            }
+        }
+        return total.subtract(settled)
                     .max(BigDecimal.ZERO);
     }
 

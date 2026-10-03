@@ -681,10 +681,14 @@ class GlueGenerator {
      * @param context the template context
      * @param parameters the generation parameters
      */
-    private static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
-        copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoicePaid", "invoiceStatus",
-                "payableCondition", "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount",
-                "paymentEntity", "paymentPk", "paymentPot", "paymentTopic");
+    static void bindSettlement(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        copy(context, item, "name", "match", "order", "invoiceEntity", "invoicePk", "invoiceTotal", "invoiceStatus", "payableCondition",
+                "junctionEntity", "junctionPk", "junctionFkInvoice", "junctionFkPayment", "junctionAmount", "paymentEntity", "paymentPk",
+                "paymentPot", "paymentTopic");
+        // The rows that consume an invoice, as the paid roll-up and its capacity guard count them (#7559):
+        // the settlement sizes an allocation by re-summing them, never from the lagging paid column. A
+        // descriptor carrying no clauses - or one written before the key existed - sums every row.
+        context.put("invoiceRowsFilter", JavaLiterals.criteriaChain(asMaps(item.get("invoiceRowsFilter"))));
         context.put("invoiceJavaPerspective", sanitize(item, "invoicePerspective"));
         context.put("junctionJavaPerspective", sanitize(item, "junctionPerspective"));
         context.put("paymentGenFolder", truthy(item, "crossModel") ? sanitize(item, "paymentModel") : str(parameters, "javaGenFolderName"));

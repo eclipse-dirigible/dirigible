@@ -850,7 +850,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents, model));
             e.put("invoicePk", IntentEntities.keyFieldName(invoice));
             e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
-            e.put("invoicePaid", IntentNaming.pascalCase(s.getPaid()));
             e.put("order", IntentNaming.pascalCase(s.getOrder()));
             e.put("invoiceStatus", s.getStatus() == null ? "" : IntentNaming.pascalCase(s.getStatus()));
             e.put("payableCondition", payableCondition(s.getPayableStatuses()));
@@ -861,6 +860,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
             e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
             e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
+            List<Map<String, Object>> invoiceRowsFilter = paidRollupFilter(model, s, fkInvoice);
+            if (!invoiceRowsFilter.isEmpty()) {
+                e.put("invoiceRowsFilter", invoiceRowsFilter);
+            }
             // payment (possibly cross-model)
             e.put("crossModel", crossModel);
             e.put("paymentEntity", s.getPayment());
@@ -873,6 +876,36 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * Which of the junction's rows consume an invoice, as the settlement re-sums them (#7559): the
+     * {@code where:} clauses of the roll-up that keeps the settlement's {@code paid} column, i.e. the
+     * one over the junction, via its invoice relation, summing its amount. The settlement sizes an
+     * allocation from the rows rather than from that column, which the roll-up maintains asynchronously
+     * and which lags them; summing the very rows the roll-up and its capacity guard count keeps the
+     * three on one authored definition, so a cancelled allocation the roll-up has retired does not
+     * still hold the invoice's capacity here.
+     *
+     * @param model the intent model
+     * @param settlement the settlement
+     * @param fkInvoice the junction's relation to the invoice
+     * @return the roll-up's filter clauses, empty when it declares none or no such roll-up exists
+     */
+    private static List<Map<String, Object>> paidRollupFilter(IntentModel model, SettlementIntent settlement, RelationIntent fkInvoice) {
+        for (RollupIntent rollup : model.getRollups()) {
+            if (settlement.getJunction()
+                          .equals(rollup.getEntity())
+                    && fkInvoice.getName()
+                                .equalsIgnoreCase(rollup.getVia())
+                    && settlement.getPaid()
+                                 .equalsIgnoreCase(rollup.getField())
+                    && settlement.getAmount()
+                                 .equalsIgnoreCase(rollup.getOf())) {
+                return ScheduleSupport.conditions(rollup.getWhere());
+            }
+        }
+        return List.of();
     }
 
     /**

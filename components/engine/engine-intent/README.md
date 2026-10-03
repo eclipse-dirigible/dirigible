@@ -805,7 +805,8 @@ entry that maintains `paid`/`balance`/status. The spread handler is bound to the
 AND its update event, and is a recompute of the payment's unallocated balance rather than an append:
 a payment corrected after it was booked - or created incomplete and completed later - is re-allocated
 for the amount it actually carries, and an amount corrected downwards releases the excess allocation
-(newest first).
+(newest first). What an invoice can still take is re-summed from its allocation rows (narrowed by the
+paid roll-up's `where:`), not read off `paid`, which the roll-up updates asynchronously.
 
 ## reports - read-only aggregations
 

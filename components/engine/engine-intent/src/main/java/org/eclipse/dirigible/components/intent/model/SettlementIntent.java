@@ -22,9 +22,9 @@ import java.util.List;
  * payment's create event, spreads the payment across open invoices) and an {@code onInvoice}
  * {@code JavaDelegate} (wired as a {@code delegate:} service task after the invoice becomes
  * payable, pulls the customer's unallocated payment balance onto it). Allocation for both
- * directions is bounded by the invoice open amount ({@link #total} - {@link #paid}) and the payment
- * pot ({@link #pot} minus what it has already allocated), and restricted to rows agreeing on every
- * {@link #match} relation.
+ * directions is bounded by the invoice open amount ({@link #total} minus the invoice's junction
+ * rows, re-summed from the store) and the payment pot ({@link #pot} minus what it has already
+ * allocated), and restricted to rows agreeing on every {@link #match} relation.
  */
 public class SettlementIntent {
 
@@ -39,9 +39,13 @@ public class SettlementIntent {
     private String payment;
     /** The junction's amount payload field (the allocated slice). */
     private String amount;
-    /** The invoice capacity field (e.g. total); open = total - paid. */
+    /** The invoice capacity field (e.g. total); open = total - the invoice's allocation rows. */
     private String total;
-    /** The invoice consumed field (e.g. paid); open = total - paid. */
+    /**
+     * The invoice consumed field (e.g. paid) the roll-up over the junction keeps. The settlement does
+     * not read it - it lags the rows (#7559) - but that roll-up's {@code where:} decides which rows
+     * count as consumed.
+     */
     private String paid;
     /** The payment pot field (e.g. amount); unallocated = pot - already-allocated. */
     private String pot;

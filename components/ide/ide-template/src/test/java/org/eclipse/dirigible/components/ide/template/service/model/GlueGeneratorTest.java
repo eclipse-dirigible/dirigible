@@ -196,6 +196,25 @@ class GlueGeneratorTest {
     }
 
     /**
+     * A settlement re-sums an invoice's allocation rows to size what it may still take (#7559), and the
+     * rows it sums are the ones the paid roll-up counts - its clauses rendered as the same chain the
+     * roll-up recompute and the capacity guard append. A descriptor without them, including a .glue
+     * generated before the key existed, sums every row.
+     */
+    @Test
+    void aSettlementSumsTheInvoicesRowsThePaidRollupCounts() {
+        Map<String, Object> settlement = new LinkedHashMap<>();
+        settlement.put("invoiceRowsFilter", List.of(clause("ne", "Status", Map.of("kind", "number", "text", "2"))));
+        Map<String, Object> context = new LinkedHashMap<>();
+
+        GlueGenerator.bindSettlement(settlement, context, Map.of("javaGenFolderName", "shop"));
+        assertThat(context).containsEntry("invoiceRowsFilter", ".ne(\"Status\", 2)");
+
+        GlueGenerator.bindSettlement(new LinkedHashMap<>(), context, Map.of("javaGenFolderName", "shop"));
+        assertThat(context).containsEntry("invoiceRowsFilter", "");
+    }
+
+    /**
      * A scheduled generation's {@code run:} key term carries the PERIOD, and the calendar arithmetic
      * the guard queries by is derived from it here - which is also the only place the two bounds stay
      * derived from one another (issue #7406).
