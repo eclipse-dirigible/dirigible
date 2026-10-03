@@ -46,6 +46,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
+import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
@@ -630,6 +631,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
                 putPickable(fkProperty, name, relation, null);
+                putStatusSteps(fkProperty, model, entity, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -782,6 +784,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // relation that restricts its delete, which its own declaration cannot see (only the REFERENCING
         // side authors the key). Same sweep reason as the two above.
         buildDeleteRestrictors(entities, builtByName);
+        // The reverse index of checks: agree - each record a junction row links must know which of its
+        // properties the junction's rows rely on, so a write to the parent cannot re-point what the
+        // check holds the pairing to (#7589). Same sweep reason as the three above.
+        buildAgreeGuards(entities, builtByName);
         // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
         // perspective so they stay out of this app's navigation, and downstream filters skip them for
         // table / DAO / controller / role generation.
@@ -2047,6 +2053,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Emit the document page's status stepper as the {@code widgetStatusSteps} attribute of the
+     * {@code DOCUMENT_STATUS} property: the seed ids of the steps, comma-joined in seed order
+     * ({@link StatusStepsSupport#lifecycleStepIds} - the statuses the entity's flows walk, terminals
+     * dropped). The page builds its stepper from these ids, so neither the order nor the choice of
+     * steps depends on the label a status renders with: read from the status picker's options, which
+     * are sorted by their translated label, the stepper listed the statuses alphabetically in whichever
+     * language the user had chosen, with a DRAFT document showing APPROVED and CONFIRMED as done (issue
+     * #7592). Same-model status entities only - a cross-model one's seeds are not on this model, and
+     * its page falls back to the nomenclature's id order.
+     */
+    private static void putStatusSteps(Map<String, Object> p, IntentModel model, EntityIntent entity, RelationIntent relation) {
+        if (!relation.isEntityStatus()) {
+            return;
+        }
+        List<Integer> steps = StatusStepsSupport.lifecycleStepIds(model, entity, relation);
+        if (!steps.isEmpty()) {
+            p.put("widgetStatusSteps", steps.stream()
+                                            .map(String::valueOf)
+                                            .collect(Collectors.joining(",")));
+        }
+    }
+
+    /**
      * Emit the picker rule of a relation that declares {@code pickable:} (issue #7496) as the
      * {@code widgetPickable} attribute: the rule as JSON ({@link PickableSupport#rule}), a scalar so it
      * rides the {@code .edm} and the {@code .model} like every other widget attribute, and which every
@@ -2533,14 +2562,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (!pathLoads.isEmpty()) {
                     checkMap.put("pathLoads", pathLoads);
                 }
-                if (check.getMessage() == null || check.getMessage()
-                                                       .isBlank()) {
-                    // A check with no authored message still has to say something the person who pressed
-                    // Save can act on, and only the declaration knows what disagreed.
-                    checkMap.put("message",
-                            "The " + IntentNaming.humanize(relations.get(0)) + " and the " + IntentNaming.humanize(relations.get(1))
-                                    + " must have the same " + IntentNaming.humanize(check.getOnProperty()));
-                }
+                // A check with no authored message still has to say something the person who pressed
+                // Save can act on, and only the declaration knows what disagreed.
+                checkMap.put("message", agreeMessage(check));
                 checkMaps.add(checkMap);
                 continue;
             }
@@ -3221,6 +3245,77 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 restrictors.add(restrictor);
             }
         }
+    }
+
+    /**
+     * Emits the {@code agreeGuards} model attribute on each record a {@code checks: agree} junction
+     * links (#7589) - the reverse of the declaration, same reason {@link #buildDeleteRestrictors} runs
+     * its own sweep: only the junction authors the check, and its targets may be declared before or
+     * after it.
+     *
+     * <p>
+     * The junction's own check runs only when the junction row is written, so without this a parent
+     * could change the agreed property afterwards and stand in exactly the pairing the check refuses at
+     * create - an allocated payment re-pointed to another customer, currency or company. Each guard
+     * tells the parent's repository to refuse a change of that property while a junction row still
+     * references it, with the check's own message.
+     *
+     * <p>
+     * A warning ({@code severity: warn}) carries no guard: it never refuses the junction's own write,
+     * so it must not refuse the parent's either. A cross-model target carries none either - its
+     * repository is generated by the model that owns it, which never reads this one's declarations.
+     * Facts only, as for the restrictors: the junction's generated coordinates are resolved by
+     * {@code ModelParameterProcessor}.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     */
+    private static void buildAgreeGuards(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
+        for (EntityIntent entity : entities) {
+            if (builtByName.get(entity.getName()) == null || entity.getChecks() == null) {
+                continue; // an unnamed / skipped entity, or one with no checks
+            }
+            for (org.eclipse.dirigible.components.intent.model.CheckIntent check : entity.getChecks()) {
+                if (!"agree".equals(check.getKind()) || check.isWarning() || check.getRelations() == null || check.getRelations()
+                                                                                                                  .size() != 2
+                        || check.getOnProperty() == null) {
+                    continue; // not a refusing agree check, or one the parser already reported
+                }
+                for (String relationName : check.getRelations()) {
+                    RelationIntent relation = toOneNamed(entity, relationName);
+                    if (relation == null || relation.isCrossModel()) {
+                        continue;
+                    }
+                    Map<String, Object> targetMap = builtByName.get(relation.getTo());
+                    if (targetMap == null) {
+                        continue; // unknown target, reported by the parser
+                    }
+                    Map<String, Object> guard = new LinkedHashMap<>();
+                    guard.put("referencingEntity", entity.getName());
+                    guard.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
+                    guard.put("property", IntentNaming.pascalCase(check.getOnProperty()));
+                    guard.put("message", agreeMessage(check));
+                    @SuppressWarnings("unchecked")
+                    List<Map<String, Object>> guards = (List<Map<String, Object>>) targetMap.computeIfAbsent("agreeGuards",
+                            key -> new ArrayList<Map<String, Object>>());
+                    guards.add(guard);
+                }
+            }
+        }
+    }
+
+    /**
+     * An {@code agree} check's refusal: the authored message, else one naming what has to agree - read
+     * by the junction's own check and by the guards on its parents, so the two say the same thing.
+     */
+    private static String agreeMessage(org.eclipse.dirigible.components.intent.model.CheckIntent check) {
+        if (check.getMessage() != null && !check.getMessage()
+                                                .isBlank()) {
+            return check.getMessage();
+        }
+        List<String> relations = check.getRelations();
+        return "The " + IntentNaming.humanize(relations.get(0)) + " and the " + IntentNaming.humanize(relations.get(1))
+                + " must have the same " + IntentNaming.humanize(check.getOnProperty());
     }
 
     /** The entity's to-one relation with the given authored name, or null when there is none. */
@@ -4523,8 +4618,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "deleteRestrictors", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "groupingKeys", "relatedEntities", "scopedCalendars", "deleteRestrictors", "agreeGuards", "lifecycleStatusNameList",
+            "duplicateReset", "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

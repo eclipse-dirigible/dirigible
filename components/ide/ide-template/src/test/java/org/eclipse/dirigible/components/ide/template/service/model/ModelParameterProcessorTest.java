@@ -920,6 +920,36 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * The parent side of a junction's {@code checks: agree} (#7589): the guard carries facts only and
+     * this pass resolves the junction's repository FQN and the message's Java-literal twin - a quoted
+     * field name in the message must not end the literal it is written into. A guard naming a junction
+     * that was not generated is dropped, as an unresolvable restrictor is.
+     */
+    @Test
+    void anAgreeGuardResolvesToTheJunctionsRepositoryAndEscapesItsMessage() {
+        Map<String, Object> payment = entity("CustomerPayment", "payments", property("Id", "INTEGER"));
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("referencingEntity", "InvoicePayment");
+        guard.put("fkProperty", "CustomerPayment");
+        guard.put("property", "Customer");
+        guard.put("message", "The \"customer\" must match the invoice's");
+        Map<String, Object> ghost = new LinkedHashMap<>(guard);
+        ghost.put("referencingEntity", "Ghost");
+        payment.put("agreeGuards", new java.util.ArrayList<>(List.of(guard, ghost)));
+        Map<String, Object> allocation = entity("InvoicePayment", "allocations", property("Id", "INTEGER"));
+
+        ModelParameterProcessor.process(model(payment, allocation), javaParameters());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> guards = (List<Map<String, Object>>) payment.get("agreeGuards");
+        assertEquals(1, guards.size(), "the guard naming an ungenerated junction must be dropped: " + guards);
+        assertEquals("gen.sales_order.data.allocations.InvoicePaymentRepository", guards.get(0)
+                                                                                        .get("repositoryClass"));
+        assertEquals("The \\\"customer\\\" must match the invoice's", guards.get(0)
+                                                                            .get("messageJavaLiteral"));
+    }
+
+    /**
      * Date-based immutability (intent {@code immutableInPeriod:}): the guarded entity names the
      * register and its own date, the register carries its bounds and closed statuses, and only this
      * pass knows both plus the package each one is generated into.

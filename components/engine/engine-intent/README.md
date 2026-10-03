@@ -394,7 +394,9 @@ A cross-model source declares its phases in its own model, so the name cannot be
 - { name: Account, kind: manyToOne, to: Account, model: accounts, leafOnly: true }
 ```
 
-The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
+The list renders as a tree-table - the list's own columns, the first one indented under an expand
+chevron - and as the flat table while no record has a parent, for a search or a filter, or when the
+user picks Table on the toolbar toggle. The server rejects cycles and leaf-only references to a
 node with children.
 
 ## label - the stored display name

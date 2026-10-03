@@ -54,6 +54,50 @@ class CalcTest {
         assertEquals(new BigDecimal("0.00"), Calc.eval("Hours / 0", subject(), 2), "division by zero yields 0");
     }
 
+    /**
+     * Money is evaluated in decimal, not double (#7578): a {@code decimal(18, 2)} column holds 18
+     * significant digits, a double about 15, so the largest value the column holds came back as
+     * {@code 1.0E16} - longer than the column, a 500 on the insert - and below the ceiling the low
+     * cents were silently wrong.
+     */
+    @Test
+    void moneyAtTheColumnsCeilingKeepsEveryDigit() {
+        Map<String, Object> payment = new HashMap<>();
+        payment.put("Amount", new BigDecimal("9999999999999999.99"));
+        payment.put("Allocated", BigDecimal.ZERO);
+        assertEquals(new BigDecimal("9999999999999999.99"), Calc.eval("Amount - Allocated", payment, 2),
+                "the largest decimal(18, 2) value minus 0 is itself, not 1.0E16");
+
+        payment.put("Amount", new BigDecimal("1234567890123456.78"));
+        payment.put("Allocated", new BigDecimal("0.01"));
+        assertEquals(new BigDecimal("1234567890123456.77"), Calc.eval("Amount - Allocated", payment, 2), "the low cents are exact");
+
+        Map<String, Object> line = new HashMap<>();
+        line.put("Quantity", new BigDecimal("3"));
+        line.put("Price", new BigDecimal("3333333333333333.33"));
+        assertEquals(new BigDecimal("9999999999999999.99"), Calc.eval("Quantity * Price", line, 2), "a product is exact too");
+    }
+
+    /**
+     * Decimal semantics end to end: a tie rounds half-up on the decimal value, not its binary
+     * approximation.
+     */
+    @Test
+    void roundingAndDivisionAreDecimal() {
+        Map<String, Object> values = new HashMap<>();
+        values.put("Amount", new BigDecimal("1.005"));
+        assertEquals(new BigDecimal("1.01"), Calc.eval("round(Amount, 2)", values, 2), "1.005 is a tie in decimal; in double it was 1.00");
+        assertEquals(new BigDecimal("1.01"), Calc.eval("Amount", values, 2), "the final rounding to the column's scale too");
+
+        values.put("Amount", new BigDecimal("100"));
+        assertEquals(new BigDecimal("33.33"), Calc.eval("Amount / 3", values, 2));
+        assertEquals(new BigDecimal("100.00"), Calc.eval("Amount / 3 * 3", values, 2), "a quotient carries enough digits to come back");
+        assertEquals(new BigDecimal("0.30"), Calc.eval("0.1 + 0.2", values, 2));
+        assertEquals(new BigDecimal("-2"), Calc.eval("floor(-1.5)", values, 0));
+        assertEquals(new BigDecimal("-1"), Calc.eval("ceil(-1.5)", values, 0));
+        assertEquals(new BigDecimal("-2"), Calc.eval("round(-1.5)", values, 0), "half-up rounds a tie away from zero");
+    }
+
     @Test
     void daysBetweenIsTheExclusiveDifference() {
         assertEquals(new BigDecimal("4"), Calc.eval("daysBetween(FromDate, ToDate)", subject(), 0));

@@ -98,6 +98,7 @@ final class ModelParameterProcessor {
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
             resolveDeleteRestrictors(entities, parameters);
+            resolveAgreeGuards(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -1318,6 +1319,38 @@ final class ModelParameterProcessor {
                 resolved.add(restrictor);
             }
             entity.put("deleteRestrictors", resolved);
+        }
+    }
+
+    /**
+     * Resolves each entity's {@code agreeGuards} (the parent side of a junction's
+     * {@code checks: agree}, #7589) into the junction's generated repository, so the DAO can ask
+     * whether a junction row still references the record before it lets the agreed property change -
+     * same-model only, exactly like {@link #resolveDeleteRestrictors}. The message gets its
+     * Java-literal twin here, as a check's does.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveAgreeGuards(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> guards = asMaps(entity.get("agreeGuards"));
+            if (guards.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> resolved = new ArrayList<>();
+            for (Map<String, Object> guard : guards) {
+                Map<String, Object> referencing = findEntity(entities, str(guard, "referencingEntity"));
+                if (referencing == null) {
+                    continue; // the junction was not generated - drop rather than emit a broken reference
+                }
+                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
+                guard.put("repositoryClass", "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + "."
+                        + str(referencing, "name") + "Repository");
+                resolveMessageLiteral(guard);
+                resolved.add(guard);
+            }
+            entity.put("agreeGuards", resolved);
         }
     }
 

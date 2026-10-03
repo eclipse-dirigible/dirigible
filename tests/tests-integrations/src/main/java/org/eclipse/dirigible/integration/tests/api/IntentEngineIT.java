@@ -3494,11 +3494,11 @@ class IntentEngineIT extends IntegrationTest {
         assertFalse(badgeForm.contains("'Owner's copy'"),
                 "the raw unescaped apostrophe must never reach the generated form, got: " + badgeForm);
 
-        // The master page's column literal (Badge owns a oneToMany, so it generates as a MASTER,
-        // not a plain manage list) - a raw apostrophe here is a syntax error in the whole file.
-        String badgeMasterPage = contentOf("gen/labels/js/components/pages/Badge/BadgeMasterPage.js");
-        assertTrue(badgeMasterPage.contains("label: 'Owner\\'s copy'"),
-                "the master page's column label literal must escape the apostrophe, got: " + badgeMasterPage);
+        // The list page's column literal (Badge owns a oneToMany, so it generates as a MASTER, which
+        // browses on the manage list) - a raw apostrophe here is a syntax error in the whole file.
+        String badgeListPage = contentOf("gen/labels/js/components/pages/Badge/BadgeManageListPage.js");
+        assertTrue(badgeListPage.contains("label: 'Owner\\'s copy'"),
+                "the list page's column label literal must escape the apostrophe, got: " + badgeListPage);
 
         // The item dialog's column metadata (detail-register), the sibling #7152/#7255 already
         // escape the seeded DEFAULT for.

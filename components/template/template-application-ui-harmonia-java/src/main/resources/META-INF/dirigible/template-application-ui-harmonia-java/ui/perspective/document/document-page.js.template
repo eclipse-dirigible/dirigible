@@ -32,6 +32,8 @@
  *   - division by zero -> 0
  *   - round = half-up, ties away from zero (Java RoundingMode.HALF_UP)
  *   - the final result is rounded to `scale` decimals (default 2) with the same rule
+ * It previews in JavaScript numbers; the server evaluates in decimal (#7578), so at the edge of a
+ * column's precision the persisted value - the server's - may differ from the preview in its last digits.
  */
 function harmoniaCalcEval(expr, vars, scale) {
   const roundHalfUp = (x, n) => {
@@ -1175,8 +1177,9 @@ document.addEventListener('alpine:init', () => {
       return v;
     },
 #set($docStatusProp = "")
+#set($docStatusSteps = "")
 #foreach($property in $properties)
-#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#end
+#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#set($docStatusSteps = "$!property.widgetStatusSteps")#end
 #end
 #if($docStatusProp != "")
 
@@ -1196,18 +1199,32 @@ document.addEventListener('alpine:init', () => {
       if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
       return 'default';
     },
-    // Forward status flow for the read-only step indicator: the loaded status options minus the
-    // terminal / off-path ones (cancel/void/... stay the pill). Each option carries {value, text} and,
+    // Forward status flow for the read-only step indicator. Each option carries {value, text} and,
     // when the status entity has a `description` seed column, `description` (shown under the title).
+    // Steps are chosen and ordered by status id, never by label: the options are sorted by their
+    // translated label for the picker, and a stepper read off that order listed the lifecycle
+    // alphabetically in the user's language (issue #7592).
     statusSteps() {
-      return (this.options${docStatusProp} || []).filter(o => this.statusVariant(o.text) !== 'negative');
+      const options = this.options${docStatusProp} || [];
+#if($docStatusSteps != "")
+      // The statuses the document's flows walk, in lifecycle order - settlement and terminal states
+      // stay the pill (decided at generation, the same rule as the task form's stepper).
+      return [${docStatusSteps}]
+        .map(id => options.find(o => String(o.value) === String(id)))
+        .filter(o => o);
+#else
+      // No flow information in the model: the nomenclature in id order, minus the terminal /
+      // off-path statuses (cancel/void/... stay the pill).
+      return options.filter(o => this.statusVariant(o.text) !== 'negative')
+        .sort((a, b) => (Number(a.value) - Number(b.value)) || String(a.value).localeCompare(String(b.value)));
+#end
     },
-    // 1-based index of the current status among the steps (0 when the status is terminal or unset,
-    // so no step is active).
+    // 1-based index of the current status among the steps (0 when the status is off the steps or
+    // unset, so no step is active).
     activeStep() {
-      const current = this.statusText();
+      const current = this.form.${docStatusProp};
       return this.statusSteps()
-                 .findIndex(o => String(o.text) === String(current)) + 1;
+                 .findIndex(o => String(o.value) === String(current)) + 1;
     },
 #end
 
