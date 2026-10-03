@@ -27,6 +27,42 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ModelParameterProcessorTest {
 
+    /**
+     * #7611: a check's message reaches the Java templates as the arguments of the per-language
+     * resolution - the fully qualified catalog key and the default text - and the en-US catalog
+     * collects every message under the same key, a model written before the key was recorded deriving
+     * it the same way.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void checkMessagesBecomeCatalogKeysAndResolutionArguments() {
+        Map<String, Object> translated = new LinkedHashMap<>();
+        translated.put("kind", "compare");
+        translated.put("message", "The \"discount\" is at most 50%");
+        translated.put("messageKey", "Customer_discountCap");
+        Map<String, Object> legacy = new LinkedHashMap<>();
+        legacy.put("kind", "exactlyOne");
+        legacy.put("message", "Exactly one");
+        legacy.put("fields", List.of("A", "B"));
+        Map<String, Object> customer = entity("Customer", "Customers", property("Id", "INTEGER"));
+        customer.put("checks", List.of(translated, legacy));
+        Map<String, Object> model = model(customer);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("bookstore:billing-model.checks.Customer_discountCap", translated.get("messageCatalogKey"));
+        assertEquals("\"bookstore:billing-model.checks.Customer_discountCap\", \"The \\\"discount\\\" is at most 50%\"",
+                translated.get("messageArgsJava"));
+        assertEquals("bookstore:billing-model.checks.Customer_exactlyOne_1", legacy.get("messageCatalogKey"));
+        assertEquals("\"bookstore:billing-model.checks.Customer_exactlyOne_1\", \"Exactly one\"", legacy.get("messageArgsJava"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("The \"discount\" is at most 50%", catalog.get("Customer_discountCap"));
+        assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");
@@ -427,6 +463,28 @@ class ModelParameterProcessorTest {
         assertEquals("Book", role.get("entityName"));
         assertEquals("book-read", role.get("roleRead"));
         assertEquals("book-write", role.get("roleWrite"));
+    }
+
+    /**
+     * A gate admitting further roles after its own (an intent's {@code .settings}
+     * {@code access.extraRoles}) still declares only its own role as the default one - the whole list
+     * as one name would publish a role no caller can hold (dirigible #7652).
+     */
+    @Test
+    void aGateAdmittingFurtherRolesDeclaresOnlyItsOwn() {
+        Map<String, Object> entity = entity("Book", "Books", property("Name", "VARCHAR"));
+        entity.put("generateDefaultRoles", "true");
+        entity.put("roleRead", "library.Book.BookReadOnly,Owner,User");
+        entity.put("roleWrite", "library.Book.BookFullAccess,Owner,User");
+        Map<String, Object> parameters = parameters();
+
+        ModelParameterProcessor.process(model(entity), parameters);
+
+        Map<String, Object> role = ModelValues.asMap(ModelValues.asList(parameters.get("roles"))
+                                                                .get(0));
+        assertEquals("library.Book.BookReadOnly", role.get("roleRead"));
+        assertEquals("library.Book.BookFullAccess", role.get("roleWrite"));
+        assertEquals("library.Book.BookReadOnly,Owner,User", entity.get("roleRead"), "the gate itself keeps every role it admits");
     }
 
     @Test
@@ -896,6 +954,36 @@ class ModelParameterProcessorTest {
         ModelParameterProcessor.process(model(category), javaParameters());
 
         assertEquals(List.of(), category.get("deleteRestrictors"));
+    }
+
+    /**
+     * The parent side of a junction's {@code checks: agree} (#7589): the guard carries facts only and
+     * this pass resolves the junction's repository FQN and the message's Java-literal twin - a quoted
+     * field name in the message must not end the literal it is written into. A guard naming a junction
+     * that was not generated is dropped, as an unresolvable restrictor is.
+     */
+    @Test
+    void anAgreeGuardResolvesToTheJunctionsRepositoryAndEscapesItsMessage() {
+        Map<String, Object> payment = entity("CustomerPayment", "payments", property("Id", "INTEGER"));
+        Map<String, Object> guard = new LinkedHashMap<>();
+        guard.put("referencingEntity", "InvoicePayment");
+        guard.put("fkProperty", "CustomerPayment");
+        guard.put("property", "Customer");
+        guard.put("message", "The \"customer\" must match the invoice's");
+        Map<String, Object> ghost = new LinkedHashMap<>(guard);
+        ghost.put("referencingEntity", "Ghost");
+        payment.put("agreeGuards", new java.util.ArrayList<>(List.of(guard, ghost)));
+        Map<String, Object> allocation = entity("InvoicePayment", "allocations", property("Id", "INTEGER"));
+
+        ModelParameterProcessor.process(model(payment, allocation), javaParameters());
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> guards = (List<Map<String, Object>>) payment.get("agreeGuards");
+        assertEquals(1, guards.size(), "the guard naming an ungenerated junction must be dropped: " + guards);
+        assertEquals("gen.sales_order.data.allocations.InvoicePaymentRepository", guards.get(0)
+                                                                                        .get("repositoryClass"));
+        assertEquals("The \\\"customer\\\" must match the invoice's", guards.get(0)
+                                                                            .get("messageJavaLiteral"));
     }
 
     /**

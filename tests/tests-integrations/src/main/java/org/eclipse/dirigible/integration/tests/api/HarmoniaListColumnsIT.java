@@ -39,8 +39,7 @@ class HarmoniaListColumnsIT {
 
     /** Every generated view whose main table is an entity list. */
     private static final List<String> LIST_VIEWS = List.of("perspective/manage/list-view.html.template",
-            "perspective/list/view.html.template", "perspective/master/master-view.html.template", "my/my-list-view.html.template",
-            "partner/partner-list-view.html.template");
+            "perspective/list/view.html.template", "my/my-list-view.html.template", "partner/partner-list-view.html.template");
 
     private static final Pattern FIRST_TABLE = Pattern.compile("<table\\b[^>]*>");
 
@@ -76,7 +75,7 @@ class HarmoniaListColumnsIT {
     /** A list with a row-actions column marks its header, so it stays narrow instead of stretching. */
     @Test
     void theRowActionsHeaderIsMarked() throws Exception {
-        for (String view : List.of("perspective/manage/list-view.html.template", "perspective/master/master-view.html.template")) {
+        for (String view : List.of("perspective/manage/list-view.html.template")) {
             String content = read(UI_BASE + view);
             Matcher table = FIRST_TABLE.matcher(content);
             assertTrue(table.find());

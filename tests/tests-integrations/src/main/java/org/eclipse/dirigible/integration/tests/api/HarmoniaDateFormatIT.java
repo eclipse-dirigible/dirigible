@@ -121,6 +121,68 @@ class HarmoniaDateFormatIT {
     }
 
     /**
+     * A value typed in a shape other than the configured one is handed by the picker to the browser's
+     * Date constructor, which reads {@code 06.09.2026} month first: 9 June under the default ISO
+     * pattern (#7591). A dotted date is read day first and respelled in the instance pattern, which the
+     * picker then reads as configured.
+     */
+    @Test
+    void aDottedDateIsReadDayFirstWhateverThePattern() {
+        try (Context context = load(null)) {
+            assertEquals("2026-09-06", typed(context, "06.09.2026"));
+            assertEquals("2026-09-06", typed(context, "6.9.2026"));
+            assertEquals("2026-09-06", typed(context, " 06. 09. 26 "));
+            assertEquals("2026-09-06", typed(context, "2026.09.06."));
+            assertEquals("2026-09-06", typed(context, "2026/9/6"));
+        }
+        try (Context context = load("MM/dd/yyyy")) {
+            assertEquals("09/06/2026", typed(context, "06.09.2026"));
+        }
+        // No picker configuration: the picker keeps its locale default, and ISO is what it always reads.
+        try (Context context = load("MMMM d, yyyy")) {
+            assertEquals("2026-09-06", typed(context, "06.09.2026"));
+            assertEquals("null", typed(context, "6/9/2026"));
+        }
+    }
+
+    /**
+     * A value already in the configured shape, or no numeric date at all, is the picker's own to read.
+     */
+    @Test
+    void aValueInTheConfiguredShapeIsLeftToThePicker() {
+        try (Context context = load(null)) {
+            assertEquals("null", typed(context, "2026-09-06"));
+            assertEquals("null", typed(context, "Sep 6, 2026"));
+            assertEquals("null", typed(context, ""));
+        }
+        try (Context context = load("dd.MM.yyyy")) {
+            assertEquals("null", typed(context, "06.09.2026"));
+            assertEquals("null", typed(context, "6.9.26"));
+        }
+        try (Context context = load("MM/dd/yyyy")) {
+            assertEquals("null", typed(context, "09/06/2026"));
+        }
+    }
+
+    /**
+     * A numeric date whose separator implies no order is refused rather than guessed, and so is a day
+     * that does not exist - the picker would roll 31.02 over into March.
+     */
+    @Test
+    void anAmbiguousOrImpossibleDateIsRefused() {
+        try (Context context = load(null)) {
+            assertEquals("refused", typed(context, "6/9/2026"));
+            assertEquals("refused", typed(context, "06-09-2026"));
+            assertEquals("refused", typed(context, "31.02.2026"));
+            assertEquals("refused", typed(context, "2026-02-31"));
+        }
+        try (Context context = load("dd.MM.yyyy")) {
+            assertEquals("refused", typed(context, "31.02.2026"));
+            assertEquals("refused", typed(context, "6/9/2026"));
+        }
+    }
+
+    /**
      * The Inbox prints a task's timestamp - a {@code java.util.Date} on the wire, a {@code Date} object
      * for its own "updated" stamp - and used to hand both to {@code toLocaleString()}.
      */
@@ -163,6 +225,14 @@ class HarmoniaDateFormatIT {
 
     private static Value eval(Context context, String expression) {
         return context.eval("js", expression);
+    }
+
+    /** What readTypedDate makes of a typed value: the respelled value, "refused" or "null". */
+    private static String typed(Context context, String text) {
+        context.getBindings("js")
+               .putMember("__typed", text);
+        return eval(context, "(function (r) { return r === null ? 'null' : r.refused ? 'refused' : r.value; })"
+                + "(HarmoniaFormat.readTypedDate(__typed))").asString();
     }
 
     private static Context load(String datePattern) {

@@ -113,6 +113,21 @@
     <!-- A filter query is in flight: the table keeps the previous rows (see displayState), this
          spinner just signals the refresh so the empty state is never shown mid-query (#7461). -->
     <span x-show="filtering" x-h-spinner aria-hidden="true"></span>
+#if($hierarchyProperty)
+    <!-- Tree / Table (#7613): a single-choice button group, offered once the records form a hierarchy;
+         the choice is remembered per user (rememberViewMode). -->
+    <div x-h-button-group x-model="viewMode" @change="rememberViewMode($event.detail.value)" x-show="hasHierarchy" x-cloak
+         :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')">
+      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'tree'">
+        <svg role="presentation" x-h-lucide data-lucide="list-tree"></svg>
+        <span x-text="T('$projectName:${tprefix}.defaults.tree', 'Tree')"></span>
+      </button>
+      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'table'">
+        <svg role="presentation" x-h-lucide data-lucide="table"></svg>
+        <span x-text="T('$projectName:${tprefix}.defaults.table', 'Table')"></span>
+      </button>
+    </div>
+#end
     <div class="flex-1"></div>
 
     <button x-h-button data-variant="primary" @click="newEntity()">
@@ -234,91 +249,6 @@
   <!-- Data: master-detail — the table shows only the major columns; selecting a row reveals the
        record's full property list (and its actionable process tasks) in the right-hand pane. -->
   <div x-show="displayState === 'default' || displayState === 'no-results'" class="vbox min-w-0 gap-4">
-#if($hierarchyProperty)
-        <!-- Hierarchy (intent `hierarchy:`): the records render as a Harmonia tree off
-             ${hierarchyProperty} when no search/filter is active; searching falls back to the flat
-             table so matches outside collapsed branches stay findable. Markup recursion is a fixed
-             6 levels deep - deeper nodes are not rendered. (Harmonia's x-h-template can render a
-             tree of any depth from data; folding these six copies into one is a worthwhile
-             follow-up, but it is a behaviour change and not part of the 2.9 API migration.) -->
-        <div x-show="treeVisible" x-h-table-container.scroll class="flex-1" data-border="true">
-          <ul x-h-tree class="p-2" :aria-label="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')">
-              <template x-for="n1 in childrenOf(null)" :key="n1.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n1)" @tree-item-click.self="selectRow(n1)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n1) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n1)"></span>
-                  </div>
-                  <template x-if="hasChildren(n1)">
-                    <ul x-h-tree.sub data-line="true">
-                      <template x-for="n2 in childrenOf(n1)" :key="n2.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n2)" @tree-item-click.self="selectRow(n2)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n2) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n2)"></span>
-                  </div>
-                  <template x-if="hasChildren(n2)">
-                    <ul x-h-tree.sub data-line="true">
-                      <template x-for="n3 in childrenOf(n2)" :key="n3.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n3)" @tree-item-click.self="selectRow(n3)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n3) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n3)"></span>
-                  </div>
-                  <template x-if="hasChildren(n3)">
-                    <ul x-h-tree.sub data-line="true">
-                      <template x-for="n4 in childrenOf(n3)" :key="n4.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n4)" @tree-item-click.self="selectRow(n4)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n4) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n4)"></span>
-                  </div>
-                  <template x-if="hasChildren(n4)">
-                    <ul x-h-tree.sub data-line="true">
-                      <template x-for="n5 in childrenOf(n4)" :key="n5.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n5)" @tree-item-click.self="selectRow(n5)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n5) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n5)"></span>
-                  </div>
-                  <template x-if="hasChildren(n5)">
-                    <ul x-h-tree.sub data-line="true">
-                      <template x-for="n6 in childrenOf(n5)" :key="n6.${primaryKeysString}">
-                <li x-h-tree-item="true" :aria-selected="isSelected(n6)" @tree-item-click.self="selectRow(n6)">
-                  <div x-h-tree-row>
-                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n6) ? 'folder' : 'file-text'"></svg>
-                    <span x-h-tree-label x-text="nodeLabel(n6)"></span>
-                  </div>
-                  <template x-if="hasChildren(n6)">
-                    <ul x-h-tree.sub data-line="true">
-                      <!-- depth limit: 6 levels (see the page comment) -->
-                    </ul>
-                  </template>
-                </li>
-              </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
-                    </ul>
-                  </template>
-                </li>
-              </template>
-          </ul>
-        </div>
-#end
         <!-- A search or filter that matches nothing: the table's own header would say it in one cell,
              which reads as a broken row rather than an answer. -->
         <div x-show="displayState === 'no-results'" x-h-info-page>
@@ -333,7 +263,13 @@
           </div>
         </div>
 
-        <div x-show="displayState !== 'no-results'#if($hierarchyProperty) &amp;&amp; !treeVisible#end" x-h-table-container data-border="true">
+#if($hierarchyProperty)
+        <!-- Hierarchy (intent `hierarchy:`, #7613): ONE table for both modes. In tree mode (treeVisible)
+             the body is the tree flattened depth-first - same columns, headers and sort as the flat
+             list, the first column indented under an expand chevron and carrying the entity's icon;
+             otherwise it is the current page. -->
+#end
+        <div x-show="displayState !== 'no-results'" x-h-table-container data-border="true">
           <table x-h-table x-list-columns data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
@@ -352,11 +288,45 @@
               </tr>
             </thead>
             <tbody x-h-table-body>
+#if($hierarchyProperty)
+              <template x-for="{ row, depth, hasChildren } in visibleRows" :key="row.${primaryKeysString}">
+#else
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
+#end
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
+#set($treeColumnDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+#if($hierarchyProperty && !$treeColumnDone)
+#set($treeColumnDone = true)
+                  <!-- The tree column: indent by depth, the expand chevron (or a spacer of its width on a
+                       leaf, so siblings line up), the entity's icon, then the value as the flat table
+                       prints it. In table mode the depth is 0 and the tree affordances are hidden. -->
+                  <td x-h-table-cell#visibleGate($property)>
+                    <div class="hbox items-center gap-1 min-w-0" :style="treeVisible ? 'padding-left: ' + (depth * 1.5) + 'rem' : ''">
+                      <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" class="shrink-0" x-show="treeVisible &amp;&amp; hasChildren"
+                              @click.stop="toggleNode(row)" :aria-expanded="isCollapsed(row) ? 'false' : 'true'"
+                              :aria-label="isCollapsed(row) ? T('$projectName:${tprefix}.defaults.expand', 'Expand') : T('$projectName:${tprefix}.defaults.collapse', 'Collapse')">
+                        <svg x-h-lucide role="presentation" :data-lucide="isCollapsed(row) ? 'chevron-right' : 'chevron-down'"></svg>
+                      </button>
+                      <span class="size-8 shrink-0" aria-hidden="true" x-show="treeVisible &amp;&amp; !hasChildren"></span>
+                      <svg x-h-lucide role="presentation" data-lucide="${iconName}" class="size-4 shrink-0 text-muted-foreground" x-show="treeVisible"></svg>
 #if($property.widgetType == "DOCUMENT_STATUS")
+                      <span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span>
+#elseif($property.widgetType == "DROPDOWN")
+                      <span class="truncate" x-text="lookupText('${property.name}', row.${property.name})"></span>
+#elseif($property.widgetType == "MULTISELECT")
+                      <span class="truncate" x-text="multiLookupText('${property.name}', row.${property.name})"></span>
+#elseif($property.isDateType)
+                      <span class="truncate" x-text="displayValue(row.${property.name}, true)"></span>
+#elseif($property.isFloatType)
+                      <span class="truncate" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></span>
+#else
+                      <span class="truncate" x-text="displayValue(row.${property.name})"></span>
+#end
+                    </div>
+                  </td>
+#elseif($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
                   <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
 #elseif($property.widgetType == "DROPDOWN")

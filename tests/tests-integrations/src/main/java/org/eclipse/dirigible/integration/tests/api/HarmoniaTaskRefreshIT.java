@@ -45,11 +45,11 @@ class HarmoniaTaskRefreshIT {
 
     /** Every generated page that surfaces a record's BPM tasks. */
     private static final List<String> PROCESS_PAGES = List.of("perspective/document/document-page.js.template",
-            "perspective/manage/form-page.js.template", "perspective/master/master-page.js.template");
+            "perspective/manage/form-page.js.template", "perspective/manage/list-page.js.template");
 
     /** Every generated view rendering the shared detail panel. */
-    private static final List<String> PANEL_VIEWS = List.of("perspective/document/document-view.html.template",
-            "perspective/manage/form-view.html.template", "perspective/master/master-view.html.template");
+    private static final List<String> PANEL_VIEWS =
+            List.of("perspective/document/document-view.html.template", "perspective/manage/form-view.html.template");
 
     private static final String ISSUE_TASK = "{ id: 't1', processInstanceId: 'p1', name: 'Issue', formKey: '/form', mine: true }";
 
@@ -149,8 +149,16 @@ class HarmoniaTaskRefreshIT {
             assertTrue(content.contains("@click=\"refresh()\"") && content.contains("data-lucide=\"refresh-cw\""),
                     view + " renders a detail panel without a Refresh action");
         }
-        assertTrue(read(UI_BASE + "perspective/master/master-view.html.template").contains("detailPanel(d, selectedId, selected)"),
-                "the master-detail view does not hand the selected record to its panels, so they cannot tell whose task completed");
+        String form = read(UI_BASE + "perspective/manage/form-view.html.template");
+        assertTrue(form.contains("+ (isPreview ? '/preview' : '/edit')}, id, form)"),
+                "the form does not hand its record to its panels, so they cannot tell whose task completed");
+        // A child row's own task is offered on the form's detail table, on Preview too - the row menu
+        // is withheld there, and with the master-detail browse pane retired the form is where a
+        // master's children are worked from (#7390).
+        assertTrue(form.contains("<template x-for=\"task in $store.processTasks.getTasks(row)\" :key=\"task.id\">"),
+                "the form's detail rows do not offer their own actionable tasks");
+        assertTrue(read(UI_BASE + "perspective/manage/list-page.js.template").contains("await this.load(true)"),
+                "the manage list's task-driven re-read is not quiet - it would blank the rows behind the open sheet");
     }
 
     private static String announced(Context context) {

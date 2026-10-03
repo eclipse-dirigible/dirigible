@@ -246,6 +246,9 @@ class PersonalSurfaceCreateValidationTemplateIT {
         check.put("fields", List.of("FromDate", "Note"));
         check.put("message", "exactly one of FromDate / Note must be set");
         check.put("messageJavaLiteral", "exactly one of FromDate / Note must be set");
+        // The resolution arguments the processor derives for the message (#7611).
+        check.put("messageArgsJava",
+                "\"vacations:vacations-model.checks.VacationRequest_exactlyOne_0\", " + "\"exactly one of FromDate / Note must be set\"");
         return check;
     }
 }

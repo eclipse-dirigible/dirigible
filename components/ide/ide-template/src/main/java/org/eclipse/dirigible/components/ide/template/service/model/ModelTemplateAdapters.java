@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.defaultRole;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.strOr;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.truthy;
@@ -279,7 +280,8 @@ final class ModelTemplateAdapters {
     }
 
     /**
-     * Collects the default roles a report asks to be generated.
+     * Collects the default roles a report asks to be generated - each gate's own role, its first (see
+     * {@link ModelValues#defaultRole}).
      *
      * @param model the report model
      * @return the roles
@@ -292,11 +294,13 @@ final class ModelTemplateAdapters {
         }
         Map<String, Object> rolePair = new LinkedHashMap<>();
         rolePair.put("entityName", model.get("name"));
-        if (truthy(security, "roleRead")) {
-            rolePair.put("roleRead", security.get("roleRead"));
+        String roleRead = defaultRole(security, "roleRead");
+        if (roleRead != null) {
+            rolePair.put("roleRead", roleRead);
         }
-        if (truthy(security, "roleWrite")) {
-            rolePair.put("roleWrite", security.get("roleWrite"));
+        String roleWrite = defaultRole(security, "roleWrite");
+        if (roleWrite != null) {
+            rolePair.put("roleWrite", roleWrite);
         }
         roles.add(rolePair);
         return roles;

@@ -35,7 +35,9 @@ import org.springframework.stereotype.Component;
  * Emits the intent's access model from its {@code permissions} block:
  * <ul>
  * <li>{@code <intent>.roles} - the role NAMES the application uses, deduped by name, which the
- * {@code RolesSynchronizer} picks up.</li>
+ * {@code RolesSynchronizer} picks up: the authored {@code permissions[].role}s plus the roles the
+ * project's {@code .settings} append to every gate ({@code access.extraRoles} /
+ * {@code access.extraRolesReadOnly}), so a gate never names a role the instance does not know.</li>
  * <li>{@code <intent>.access} - the URL-shaped constraints over the paths the generated stack
  * publishes (each entity's controller subtree and generated pages, each report's controller and
  * page), derived from the {@code can: [Resource:action, ...]} tokens. <b>Opt-in</b> through the
@@ -76,16 +78,18 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
     @Override
     public void generate(IntentGenerationContext context) {
         IntentModel model = context.getModel();
+        PermissionSupport.Gates gates = PermissionSupport.gates(model, context.getSettings());
         if (model.getPermissions()
-                 .isEmpty()) {
+                 .isEmpty()
+                && gates.extraRoles()
+                        .isEmpty()) {
             return;
         }
-        PermissionSupport.Gates gates = PermissionSupport.gates(model);
         gates.issues()
              .forEach(context::addIssue);
         gates.advisories()
              .forEach(context::addAdvisory);
-        context.writeModelFile(IntentNaming.baseName(context) + ".roles", buildRolesJson(model));
+        context.writeModelFile(IntentNaming.baseName(context) + ".roles", buildRolesJson(model, gates.extraRoles()));
         if (context.getSettings()
                    .isGenerateAccess()) {
             List<Map<String, Object>> constraints = buildConstraints(context, gates);
@@ -97,7 +101,7 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    private static String buildRolesJson(IntentModel model) {
+    private static String buildRolesJson(IntentModel model, Set<String> extraRoles) {
         Set<String> seenNames = new LinkedHashSet<>();
         List<Map<String, String>> roles = new ArrayList<>();
         for (PermissionIntent permission : model.getPermissions()) {
@@ -117,6 +121,14 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             }
             roles.add(entry);
         }
+        for (String name : extraRoles) {
+            if (seenNames.add(name)) {
+                Map<String, String> entry = new LinkedHashMap<>();
+                entry.put("name", name);
+                entry.put("description", "Admitted by every generated entity and report gate (.settings access.extraRoles).");
+                roles.add(entry);
+            }
+        }
         return JsonHelper.toJson(roles);
     }
 
@@ -124,12 +136,13 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
      * The constraints for every gate-bearing resource a {@code can:} token names.
      *
      * <p>
-     * Each constraint carries the resource's READ roles and method {@code *}: the artefact gates
-     * whether the caller may reach the endpoint or the page at all, while the read-versus-write split
-     * stays in the generated controller's own {@code checkPermissions}. Splitting it here by HTTP
-     * method would be wrong rather than merely redundant - the generated controllers read through
-     * {@code POST .../search} and {@code POST .../count}, so "POST means write" would lock a read-only
-     * role out of every list and register.
+     * Each constraint carries the resource's READ roles (the deployment's extra roles included, or the
+     * constraint would refuse a caller the controller behind it admits) and method {@code *}: the
+     * artefact gates whether the caller may reach the endpoint or the page at all, while the
+     * read-versus-write split stays in the generated controller's own {@code checkPermissions}.
+     * Splitting it here by HTTP method would be wrong rather than merely redundant - the generated
+     * controllers read through {@code POST .../search} and {@code POST .../count}, so "POST means
+     * write" would lock a read-only role out of every list and register.
      *
      * @param context the generation context
      * @param gates the authored read / write role sets
@@ -162,7 +175,7 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             if (readRoles == null) {
                 continue;
             }
-            List<String> roles = List.copyOf(readRoles);
+            List<String> roles = gates.appendRead(readRoles);
             String perspective = IntentEntities.resolvePerspective(name, compositionParents, model);
             constraints.add(constraint("/services/java/" + project + "/gen/" + module + "/api/" + IntentNaming.javaIdentifier(perspective)
                     + "/" + name + "Controller/**", roles));
@@ -177,8 +190,8 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
                                       .containsKey(name)) {
                 continue;
             }
-            List<String> roles = List.copyOf(gates.read()
-                                                  .get(name));
+            List<String> roles = gates.appendRead(gates.read()
+                                                       .get(name));
             // A report is generated from its own <Report>.report, so its generation folder is the
             // report's name - not the intent's base name - and its controller sits under Reports.
             constraints.add(constraint("/services/java/" + project + "/gen/" + IntentNaming.javaIdentifier(name) + "/api/"

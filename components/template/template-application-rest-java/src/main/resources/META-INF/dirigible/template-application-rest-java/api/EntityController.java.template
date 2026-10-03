@@ -460,6 +460,24 @@ public class ${name}Controller {
      */
     private static final Map<String, String> DUPLICATE_MESSAGES = duplicateMessages();
 
+    /**
+     * The translation keys of the authored business-key messages (#7611), by the same constraint
+     * names: a key's message is resolved for the request's language when the collision is answered.
+     */
+    private static final Map<String, String> DUPLICATE_MESSAGE_KEYS = duplicateMessageKeys();
+
+    private static Map<String, String> duplicateMessageKeys() {
+        Map<String, String> keys = new java.util.HashMap<>();
+#if($uniqueConstraints)
+#foreach($uniqueConstraint in $uniqueConstraints)
+#if($uniqueConstraint.messageCatalogKeyJavaLiteral)
+        keys.put("${uniqueConstraint.nameJavaLiteral}".toUpperCase(Locale.ROOT), "${uniqueConstraint.messageCatalogKeyJavaLiteral}");
+#end
+#end
+#end
+        return java.util.Collections.unmodifiableMap(keys);
+    }
+
     private static Map<String, String> duplicateMessages() {
         Map<String, String> messages = new java.util.TreeMap<>(java.util.Comparator.comparingInt(String::length)
                                                                                    .reversed()
@@ -511,7 +529,9 @@ public class ${name}Controller {
         String upper = violation.toUpperCase(Locale.ROOT);
         for (Map.Entry<String, String> constraint : DUPLICATE_MESSAGES.entrySet()) {
             if (upper.contains(constraint.getKey())) {
-                return constraint.getValue();
+                String key = DUPLICATE_MESSAGE_KEYS.get(constraint.getKey());
+                return key == null ? constraint.getValue()
+                        : org.eclipse.dirigible.sdk.db.CheckMessages.message(key, constraint.getValue());
             }
         }
         return null;
@@ -1137,7 +1157,7 @@ public class ${name}Controller {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
 #elseif($check.kind == "forbidWhen")
@@ -1152,7 +1172,7 @@ public class ${name}Controller {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
 #elseif($check.kind == "agree")
@@ -1174,7 +1194,7 @@ public class ${name}Controller {
 #else
             if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
 #end
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
 #elseif($check.kind == "compare")
@@ -1192,7 +1212,7 @@ public class ${name}Controller {
 #else
                 && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
         }
 #else
         if (entity.${check.field} != null && entity.${check.than} != null
@@ -1201,7 +1221,7 @@ public class ${name}Controller {
 #else
                 && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+            throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
         }
 #end
 #else
@@ -1214,7 +1234,7 @@ public class ${name}Controller {
             }
 #end
             if (assigned != 1) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
 #end
@@ -1284,7 +1304,7 @@ public class ${name}Controller {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
 #if($check.status && $check.status != "")

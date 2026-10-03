@@ -277,6 +277,12 @@ public class ControllerInvoker {
         if (e.getReason() != null) {
             body.put("message", e.getReason());
         }
+        if (e.getCause() instanceof ValidationException validation && validation.getMessageKey() != null) {
+            // A translated check message (#7611): the key and the parameters ride next to the text
+            // resolved for the request's language, so a client can render the message again in another.
+            body.put("messageKey", validation.getMessageKey());
+            body.put("messageParams", validation.getMessageParams());
+        }
         try {
             // Same channel as writeResponse: the output stream, written and flushed here rather than
             // left to the container's commit.
@@ -310,6 +316,10 @@ public class ControllerInvoker {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("code", warning.code());
             entry.put("message", warning.message());
+            if (warning.messageKey() != null) {
+                entry.put("messageKey", warning.messageKey());
+                entry.put("messageParams", warning.params());
+            }
             warnings.add(entry);
         }
         body.put("warnings", warnings);

@@ -135,15 +135,21 @@ class GeneratesPromptHarmoniaIT extends UserInterfaceIntegrationTest {
         // Authenticate the browser session first - a bare openPath lands on the sign-in form.
         ide.openHomePage();
 
-        // The SalesInvoice master page; selecting the row is what arms the per-record actions.
+        // The SalesInvoice list; selecting the row opens its record sheet, which offers the
+        // per-record actions.
         browser.openPath("/services/web/" + PROJECT + "/gen/allocations/index.html#/SalesInvoice");
         // The cell, not the row: the framework's text condition is a FULL match of the element's
         // text, and a <tr>'s text is every cell concatenated.
         browser.clickOnElementContainingText("td", "INV-001");
 
+        // A contributed action lives in the sheet's overflow menu - never its one filled button.
+        com.codeborne.selenide.Selenide.$("[x-h-sheet] button[aria-label='More actions']")
+                                       .shouldBe(com.codeborne.selenide.Condition.visible)
+                                       .click();
+
         // A prompted action must open the INPUT dialog (not the plain confirm): the two declared
         // controls, typed from the target's detail registration. The title is the action's label.
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Allocate Payment");
+        browser.clickOnElementContainingText(HtmlElementType.LI, "Allocate Payment");
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER2, "Allocate Payment");
 
         // The payment combobox rendered (its trigger shows the placeholder) - the one visible

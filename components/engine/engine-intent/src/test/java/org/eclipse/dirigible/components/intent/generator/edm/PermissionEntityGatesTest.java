@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
 import org.junit.jupiter.api.Test;
@@ -94,9 +95,47 @@ class PermissionEntityGatesTest {
         assertEquals("SalesAdmin", order.get("roleWrite"));
     }
 
+    /**
+     * {@code .settings} {@code access.extraRoles} appends the deployment's roles to every gate without
+     * displacing the gate's own (dirigible #7652): a multitenant app's tenant members hold
+     * {@code Owner} / {@code User}, and the convention roles must stay declared beside them.
+     */
+    @Test
+    void theDeploymentsExtraRolesAreAppendedToAConventionGateWhichStaysDeclared() {
+        Map<String, Object> customer = entity(YAML, "Customer", EXTRA_ROLES);
+        assertEquals("sales.Customer.CustomerReadOnly,Owner,User,Auditor", customer.get("roleRead"));
+        assertEquals("sales.Customer.CustomerFullAccess,Owner,User", customer.get("roleWrite"),
+                "a read-only extra must not reach the write gate");
+        assertEquals("true", customer.get("generateDefaultRoles"), "the extras must not suppress the convention roles");
+    }
+
+    @Test
+    void theDeploymentsExtraRolesAreAppendedToAnAuthoredGate() {
+        Map<String, Object> order = entity(YAML, "Order", EXTRA_ROLES);
+        assertEquals("SalesAdmin,SalesViewer,Owner,User,Auditor", order.get("roleRead"));
+        assertEquals("SalesAdmin,Owner,User", order.get("roleWrite"));
+        assertEquals("false", order.get("generateDefaultRoles"));
+        Map<String, Object> item = entity(YAML, "OrderItem", EXTRA_ROLES);
+        assertEquals("SalesAdmin,Owner,User", item.get("roleWrite"), "a composition child inherits the master's gate, extras included");
+    }
+
+    @Test
+    void anExtraRoleTheGateAlreadyNamesIsNotRepeated() {
+        Map<String, Object> order = entity(YAML.replace("role: SalesAdmin,", "role: Owner,"), "Order", EXTRA_ROLES);
+        assertEquals("Owner,User", order.get("roleWrite"));
+        assertEquals("Owner,SalesViewer,User,Auditor", order.get("roleRead"));
+    }
+
+    private static final IntentSettings EXTRA_ROLES =
+            IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\", \" User \", \"\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
+
     private static Map<String, Object> entity(String yaml, String name) {
+        return entity(yaml, name, new IntentSettings());
+    }
+
+    private static Map<String, Object> entity(String yaml, String name, IntentSettings settings) {
         IntentModel model = IntentParser.parse(yaml);
-        Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(model, "sales");
+        Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(model, "sales", settings);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) json.get("model")).get("entities");
         return entities.stream()

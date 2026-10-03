@@ -120,8 +120,19 @@ public class CheckIntent {
      * item-by-item stays unconstrained.
      */
     private Integer status;
-    /** The user-facing message when the check fails. */
+    /**
+     * The user-facing message when the check fails, in the module's default language. Other languages
+     * translate it in the module's catalogs ({@code i18n/<locale>/<model>.model.json}) under
+     * {@code checks.<key>} - never inline (issue #7611).
+     */
     private String message;
+    /**
+     * An optional stable name for the check's message in the module's translation catalogs (issue
+     * #7611): the catalog key is {@code checks.<Entity>_<id>} instead of the positional
+     * {@code checks.<Entity>_<kind>_<index>}, so reordering the entity's checks does not orphan the
+     * translations already written for it.
+     */
+    private String id;
     /**
      * What a failing check does to the write (issue #7466). {@code error} (the default) refuses it -
      * every kind above. {@code warn} is the soft tier: the write stays legitimate and possible, but the
@@ -352,5 +363,13 @@ public class CheckIntent {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
     }
 }

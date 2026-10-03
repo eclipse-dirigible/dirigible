@@ -28,9 +28,9 @@ import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
@@ -108,8 +108,11 @@ public class LocalRegistryWatcher implements DisposableBean {
      */
     private static final long CLOSE_TIMEOUT_SECONDS = 2;
 
-    /** The key to path map. */
-    private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
+    /**
+     * The key to path map. Concurrent: the watch loop registers a folder created at runtime and drops
+     * an invalid key while {@link #initialize()} and readers on other threads use the same map.
+     */
+    private final Map<WatchKey, Path> keyToPathMap = new ConcurrentHashMap<>();
 
     /** The ignored folders. */
     private Set<String> ignoredFolders = Collections.emptySet();

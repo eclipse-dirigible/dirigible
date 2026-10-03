@@ -28,6 +28,7 @@ import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
+import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.defaultRole;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.isTrue;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.putNumber;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.str;
@@ -97,6 +98,7 @@ final class ModelParameterProcessor {
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
             resolveDeleteRestrictors(entities, parameters);
+            resolveAgreeGuards(entities, parameters);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -130,7 +132,7 @@ final class ModelParameterProcessor {
         }
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
-        resolveUniqueConstraintLiterals(entity);
+        resolveUniqueConstraintLiterals(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
 
@@ -290,9 +292,12 @@ final class ModelParameterProcessor {
         List<Object> forbidWhenGuards = new ArrayList<>();
         List<Object> deleteChecks = new ArrayList<>();
         List<Object> warningChecks = new ArrayList<>();
+        int index = -1;
         for (Map<String, Object> check : checks) {
+            index++;
             String kind = str(check, "kind");
             resolveMessageLiteral(check);
+            resolveMessageCatalog(check, ModelTranslations.checkMessageKey(entity, check, index), parameters);
             resolveCheckJavaExpressions(check);
             resolveCheckPathLoads(check, parameters);
             if ("warn".equals(str(check, "severity"))) {
@@ -379,6 +384,32 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Derives the arguments a generated refusal or warning hands {@code CheckMessages} (issue #7611):
+     * the message's fully qualified catalog key ({@code <project>:<catalog prefix>.checks.<key>} - the
+     * same key the generated en-US catalog writes the message under and a language catalog translates)
+     * and the default-language text. The generated code resolves them for the request's language when
+     * the check fires, so one declaration reaches every reader in their own language.
+     *
+     * <p>
+     * {@code messageArgsJava} is the two arguments joined, ready to be written into the call; a
+     * template appends the placeholder values (`{count}`, `{match}`) after it.
+     *
+     * @param check the check
+     * @param messageKey the check's catalog key
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveMessageCatalog(Map<String, Object> check, String messageKey, Map<String, Object> parameters) {
+        String message = str(check, "message");
+        if (message == null) {
+            return;
+        }
+        String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+        check.put("messageCatalogKey", catalogKey);
+        check.put("messageCatalogKeyJavaLiteral", JavaLiterals.escape(catalogKey));
+        check.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(message) + "\"");
+    }
+
+    /**
      * Derives the Java twins of a check's NEUTRAL halves - the literal a {@code compare} tests against
      * and the condition a {@code requiredWhen} / {@code forbidWhen} is gated by (issue #7405).
      *
@@ -430,10 +461,17 @@ final class ModelParameterProcessor {
      * controllers write into Java string literals when they translate a constraint violation.
      *
      * @param entity the entity
+     * @param parameters the generation parameters
      */
-    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity) {
+    private static void resolveUniqueConstraintLiterals(Map<String, Object> entity, Map<String, Object> parameters) {
         for (Map<String, Object> constraint : asMaps(entity.get("uniqueConstraints"))) {
             resolveMessageLiteral(constraint);
+            // The message's translation key (#7611), so a collision is answered in the reader's language.
+            String uniqueKey = ModelTranslations.uniqueMessageKey(entity, constraint);
+            if (uniqueKey != null) {
+                constraint.put("messageCatalogKeyJavaLiteral",
+                        JavaLiterals.escape(ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + uniqueKey)));
+            }
             String name = str(constraint, "name");
             if (name != null) {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
@@ -579,6 +617,18 @@ final class ModelParameterProcessor {
         // class). Escaped once here, the same way widgetPatternJs is, so every template can write
         // '${property.widgetLabelJs}' instead of '${property.widgetLabel}' without re-deriving it.
         property.put("widgetLabelJs", JsLiterals.escape(str(property, "widgetLabel")));
+        // A picker rule naming its message's catalog key (#7611) gets the fully qualified key the
+        // shared runtime's T() resolves - the namespace is this project and the catalog prefix this
+        // model file's, neither of which the model itself may embed.
+        String pickable = str(property, "widgetPickable");
+        if (pickable != null && pickable.contains("\"messageKey\"")) {
+            Map<String, Object> rule = ModelJson.parseObject(pickable);
+            if (rule.get("messageKey") instanceof String messageKey) {
+                rule.put("messageCatalogKey",
+                        ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey));
+                property.put("widgetPickable", JavaScriptJson.compact(rule));
+            }
+        }
         // The authored description is the property's @Documentation argument in the generated entity -
         // a Java string literal, so a quote in it ({@code Customer's "trade" name}) would end that
         // literal and fail the compile of the whole generated module (#7295). The raw value stays for
@@ -1314,6 +1364,38 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Resolves each entity's {@code agreeGuards} (the parent side of a junction's
+     * {@code checks: agree}, #7589) into the junction's generated repository, so the DAO can ask
+     * whether a junction row still references the record before it lets the agreed property change -
+     * same-model only, exactly like {@link #resolveDeleteRestrictors}. The message gets its
+     * Java-literal twin here, as a check's does.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveAgreeGuards(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> guards = asMaps(entity.get("agreeGuards"));
+            if (guards.isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> resolved = new ArrayList<>();
+            for (Map<String, Object> guard : guards) {
+                Map<String, Object> referencing = findEntity(entities, str(guard, "referencingEntity"));
+                if (referencing == null) {
+                    continue; // the junction was not generated - drop rather than emit a broken reference
+                }
+                String referencingPerspective = NamingHelper.sanitizeJavaIdentifier(str(referencing, "perspectiveName"));
+                guard.put("repositoryClass", "gen." + str(parameters, "javaGenFolderName") + ".data." + referencingPerspective + "."
+                        + str(referencing, "name") + "Repository");
+                resolveMessageLiteral(guard);
+                resolved.add(guard);
+            }
+            entity.put("agreeGuards", resolved);
+        }
+    }
+
+    /**
      * Propagates the personal scope from a composition parent to its direct children - one hop only,
      * which is what the generated surfaces support. A deeper child simply has no personal surface.
      *
@@ -1934,8 +2016,9 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Collects the default read and write roles the model asks to be generated. A projection owns no
-     * table, and a report or filter is read-only, so neither contributes a write role.
+     * Collects the default read and write roles the model asks to be generated - each gate's own role,
+     * its first (see {@link ModelValues#defaultRole}). A projection owns no table, and a report or
+     * filter is read-only, so neither contributes a write role.
      *
      * @param entities every entity in the model
      * @param parameters the generation parameters
@@ -1953,11 +2036,13 @@ final class ModelParameterProcessor {
             }
             Map<String, Object> rolePair = new LinkedHashMap<>();
             rolePair.put("entityName", entity.get("name"));
-            if (truthy(entity, "roleRead")) {
-                rolePair.put("roleRead", entity.get("roleRead"));
+            String roleRead = defaultRole(entity, "roleRead");
+            if (roleRead != null) {
+                rolePair.put("roleRead", roleRead);
             }
-            if (!"REPORT".equals(type) && !"FILTER".equals(type) && truthy(entity, "roleWrite")) {
-                rolePair.put("roleWrite", entity.get("roleWrite"));
+            String roleWrite = defaultRole(entity, "roleWrite");
+            if (!"REPORT".equals(type) && !"FILTER".equals(type) && roleWrite != null) {
+                rolePair.put("roleWrite", roleWrite);
             }
             roles.add(rolePair);
         }

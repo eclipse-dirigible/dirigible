@@ -2,6 +2,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
+## The parent side of a junction's `checks: agree` (#7589): the properties a junction row relies on.
+#set($hasAgreeGuards = $agreeGuards && $agreeGuards.size() > 0)
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
@@ -262,7 +264,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
             }
 #else
             if (!guardWithin) {
-                throw new ValidationException("${guard.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${guard.messageArgsJava});
             }
 #end
         }
@@ -291,7 +293,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired)
+#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired || $hasAgreeGuards)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($deleteRestrictors && $deleteRestrictors.size() > 0)
@@ -508,6 +510,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
+#if($hasAgreeGuards)
+        requireAgreementKept(entity);
+#end
 #rollupGuardCheck()
 #gatedRollupGuardCheck()
 #aggregateGuardCheck()
@@ -640,6 +645,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         // are declared, so a workflow setter or glue action gets the same answer a user form gets.
         enforceLifecycle(entity);
 #end
+#if($hasAgreeGuards)
+        // A system write re-points a parent exactly as a user edit does - a workflow re-opening a
+        // document may change its customer - so the junction rows relying on it are asked here too.
+        requireAgreementKept(entity);
+#end
 #if($hasLabel)
         // Workflow writes change label inputs too (e.g. the stamped document number) - keep the
         // stored display name current on the system path as well.
@@ -677,7 +687,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         return updated;
     }
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true" || $documentItem || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0))
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $history == "true" || $documentItem || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0) || $hasAgreeGuards)
 
     /**
      * Targeted single-column write with this entity's semantics preserved: routed through
@@ -731,7 +741,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         String groupingPrevious = null;
         boolean groupingMoved = false;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $documentItem || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0))
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $documentItem || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0) || $hasAgreeGuards)
         ${name}Entity entity = findOne(id).orElse(null);
 #if($documentItem)
         // The document this line belongs to as it stands BEFORE the write - a targeted write may also
@@ -740,7 +750,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         Object documentBefore = entity == null ? null : entity.${documentItem.fkProperty};
 #end
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0))
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel || $lifecycleEdges || $hasGatedRollupGuards || ($groupingKeys && $groupingKeys.size() > 0) || $hasAgreeGuards)
         if (entity != null) {
 #if($documentChecks && $documentChecks.size() > 0)
             // What this write is ABOUT, read before the label recompute below may add a column of its
@@ -758,6 +768,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #foreach($k in $groupingKeys)
             Object groupingPrevious${k.key} = entity.${k.key};
 #end
+#end
+#if($hasAgreeGuards)
+            // The agreed values as they stand BEFORE the targeted write - a workflow setter re-pointing
+            // the record arrives here, and the incoming values are applied to this very row below.
+            java.util.Map<String, Object> agreedBefore = agreedValues(entity);
 #end
             values = new java.util.LinkedHashMap<>(values);
             for (java.util.Map.Entry<String, Object> value : values.entrySet()) {
@@ -783,6 +798,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #if($lifecycleEdges)
             enforceLifecycleMove(lifecyclePrevious, entity.${lifecycleStatusProperty});
+#end
+#if($hasAgreeGuards)
+            requireAgreementKept(id, agreedBefore, entity);
 #end
 #if($hasGatedRollupGuards)
 #gatedRollupGuardCheck()
@@ -1138,7 +1156,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #elseif($check.kind == "forbidWhen")
             // The reject-twin of requiredWhen (intent `checks: forbidWhen`), gated on the status at
@@ -1151,7 +1169,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field
@@ -1165,7 +1183,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                     && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #else
             if (entity.${check.field} != null && entity.${check.than} != null
@@ -1174,7 +1192,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                     && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #end
 #elseif($check.kind == "itemsSumEqual")
@@ -1190,12 +1208,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (sum${check.overA}.compareTo(sum${check.overB}) != 0) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #else
             if (new ${check.itemsEntity}Repository().findAll(
                     Criteria.create().eq("${check.itemsFk}", entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end)).size() < ${check.count}) {
-                throw new ValidationException("${check.messageJavaLiteral}");
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
 #end
         }
@@ -1240,10 +1258,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                                                                                                                          .eq("${field}", entity.${field})#end#end)) {
                 if (!java.util.Objects.equals(other.${pkPropertyName}, entity.${pkPropertyName})) {
 #if($check.matchProperty)
-                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
-                            "${check.messageJavaLiteral}".replace("{match}", String.valueOf(other.${check.matchProperty}))));
+                    warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}, "match",
+                            other.${check.matchProperty}));
 #else
-                    warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                    warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
 #end
                     break;
                 }
@@ -1266,8 +1284,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (breaking > 0) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}",
-                        "${check.messageJavaLiteral}".replace("{count}", String.valueOf(breaking))));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}, "count", breaking));
             }
         }
 #elseif($check.kind == "requiredWhen")
@@ -1281,7 +1298,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
             Object requiredValue = ${check.valueExpression};
             if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "forbidWhen")
@@ -1294,7 +1311,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             if (${check.guardJavaExpression}) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "agree")
@@ -1313,7 +1330,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
             if (agreeLeft != null && agreeRight != null && !agreeLeft.equals(agreeRight)) {
 #end
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #elseif($check.kind == "compare")
@@ -1326,7 +1343,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                 && !(entity.${check.field}.compareTo(${check.literalJavaExpression}) ${check.op} 0)) {
 #end
-            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
         }
 #else
         if (entity.${check.field} != null && entity.${check.than} != null
@@ -1335,7 +1352,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #else
                 && !(entity.${check.field}.compareTo(entity.${check.than}) ${check.op} 0)) {
 #end
-            warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+            warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
         }
 #end
 #elseif($check.kind == "exactlyOne")
@@ -1348,7 +1365,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             }
 #end
             if (assigned != 1) {
-                warnings.add(new org.eclipse.dirigible.sdk.db.Warning("${check.codeJavaLiteral}", "${check.messageJavaLiteral}"));
+                warnings.add(org.eclipse.dirigible.sdk.db.CheckMessages.warning("${check.codeJavaLiteral}", ${check.messageArgsJava}));
             }
         }
 #end
@@ -1519,6 +1536,55 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             // answers it rather than making them go and look.
             throw new DeleteRestrictionException("This ${entityLabel} is referenced by " + ${restrictor.referencingEntity}Referencing
                     + " ${restrictor.referencingLabel} record(s) and cannot be deleted");
+        }
+#end
+    }
+#end
+#if($hasAgreeGuards)
+
+    /**
+     * Refuses a change of a property a junction row relies on (intent {@code checks: agree} on the
+     * junction, #7589) while such a row still references this ${name}. The junction's check runs when
+     * the junction row is written; without this, changing the property here afterwards would leave
+     * the row standing in exactly the pairing the check refuses - so the refusal is the check's own.
+     * The stored row is read through the BASE find: on a multilingual entity the overridden read
+     * overlays a translation, and a translated value compared with the stored one reads as a change.
+     */
+    private void requireAgreementKept(${name}Entity entity) {
+        if (entity.${pkPropertyName} == null) {
+            return; // no stored row - nothing references it yet
+        }
+        ${name}Entity stored = super.findById(entity.${pkPropertyName});
+        if (stored != null) {
+            requireAgreementKept(entity.${pkPropertyName}, agreedValues(stored), entity);
+        }
+    }
+
+    /** The values of every property a junction's agree check relies on, by property name. */
+    private static java.util.Map<String, Object> agreedValues(${name}Entity entity) {
+        java.util.Map<String, Object> values = new java.util.HashMap<>();
+#foreach($guard in $agreeGuards)
+        values.put("${guard.property}", entity.${guard.property});
+#end
+        return values;
+    }
+
+    /**
+     * Refuses the write when it changes an agreed property and a junction row references this
+     * ${name} through the guarded relation. Only a CHANGE asks the question, so an ordinary save that
+     * carries the stored values back costs no query.
+     *
+     * <p>
+     * A read-then-act guard, like every other reference check the platform generates: a junction row
+     * inserted between this lookup and the write is not seen.
+     */
+    private static void requireAgreementKept(Object id, java.util.Map<String, Object> before, ${name}Entity after) {
+#foreach($guard in $agreeGuards)
+        if (!java.util.Objects.equals(before.get("${guard.property}"), after.${guard.property})
+                && !new ${guard.repositoryClass}()
+                        .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${guard.fkProperty}", id))
+                        .isEmpty()) {
+            throw new ValidationException("${guard.messageJavaLiteral}");
         }
 #end
     }

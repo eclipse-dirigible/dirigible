@@ -230,6 +230,36 @@ shared API service: one confirm dialog listing all the warnings, then the repeat
 caller (a process step, a job) is never stopped, and each confirmation is logged with the user who
 gave it.
 
+### Translating check messages (#7611)
+
+A check's `message:` (and a picker rule's) is one plain string, in the module's default language.
+Every message is written into the model's en-US catalog (`i18n/en-US/<model>.model.json`) under
+`<model prefix>.checks.<key>`, so a language catalog (`i18n/bg-BG/<model>.model.json`) translates it
+like a label - the model never carries a per-language map:
+
+```yaml
+languages: [en, bg]
+entities:
+  - name: Invoice
+    checks:
+      - id: zeroLines        # the catalog key becomes Invoice_zeroLines (else Invoice_itemsCompare_0)
+        kind: itemsCompare
+        field: price
+        op: gt
+        value: 0
+        message: "{count} line(s) at price zero"
+```
+
+```json
+// i18n/bg-BG/app.model.json
+{ "app-model": { "checks": { "Invoice_zeroLines": "{{count}} ред(а) с нулева цена" } } }
+```
+
+The generated code (`org.eclipse.dirigible.sdk.db.CheckMessages`) resolves a message for the
+request's `Accept-Language`: that language's catalog, else the default text - with `{count}` /
+`{match}` filled in after translation. The 400 body of a refusal and every warning of a 428 carry
+`messageKey` and `messageParams` next to the resolved `message`.
+
 ## immutableWhen / immutable - user-write immutability
 
 ```yaml
@@ -364,7 +394,9 @@ A cross-model source declares its phases in its own model, so the name cannot be
 - { name: Account, kind: manyToOne, to: Account, model: accounts, leafOnly: true }
 ```
 
-The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
+The list renders as a tree-table - the list's own columns, the first one indented under an expand
+chevron - and as the flat table while no record has a parent, for a search or a filter, or when the
+user picks Table on the toolbar toggle. The server rejects cycles and leaf-only references to a
 node with children.
 
 ## label - the stored display name

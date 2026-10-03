@@ -11,14 +11,16 @@ package org.eclipse.dirigible.sdk.utils;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
 import java.math.RoundingMode;
 import java.util.Map;
 
 /**
  * Evaluator for calculated-field formulas in generated entity repositories. A single neutral
  * arithmetic expression - authored once on a model property - is evaluated here on the server and
- * by the identical {@code harmoniaCalcEval} mirror in the generated UI, so a document's line totals
- * preview on the client exactly as the server will persist them.
+ * by the {@code harmoniaCalcEval} mirror in the generated UI, which previews a document's line
+ * totals on the client as the server will persist them.
  * <p>
  * Grammar (a closed arithmetic language - no member access, method calls, statements or
  * assignment):
@@ -45,13 +47,23 @@ import java.util.Map;
  * {@code businessDaysBetween(FromDate, ToDate)} computes working days between two date fields, and
  * {@code daysBetween(FromDate, ToDate) + 1} is the inclusive span.
  * <p>
- * Semantics contract (kept identical to the JS mirror): a {@code null}, missing or non-numeric
- * identifier reads as {@code 0}; division by zero yields {@code 0}; rounding is half-up with ties
- * away from zero ({@link RoundingMode#HALF_UP}). Arithmetic is performed in {@code double} -
- * matching the client's JavaScript number semantics so both sides agree to the last digit - and
- * only the final result is rounded to the property's scale and returned as a {@link BigDecimal}.
+ * Semantics contract (shared with the JS mirror): a {@code null}, missing or non-numeric identifier
+ * reads as {@code 0}; division by zero yields {@code 0}; rounding is half-up with ties away from
+ * zero ({@link RoundingMode#HALF_UP}). Arithmetic is performed in <b>decimal</b> (#7578): addition,
+ * subtraction and multiplication are exact, a quotient carries {@link MathContext#DECIMAL128} (34
+ * significant digits), and only the final result is rounded to the property's scale. A
+ * {@code decimal(18, 2)} column holds 18 significant digits and a {@code double} about 15, so a
+ * double evaluation turned the largest value such a column holds into a longer one that overflowed
+ * it on the insert, and below that ceiling silently changed the low cents. The JS mirror previews
+ * in its own number type, so a preview at the very edge of a column's precision may differ in its
+ * last digits from what is persisted; the persisted value is this one.
  */
 public final class Calc {
+
+    /**
+     * The precision a quotient carries - enough that a division and its re-multiplication round back.
+     */
+    private static final MathContext QUOTIENT = MathContext.DECIMAL128;
 
     private Calc() {}
 
@@ -65,19 +77,8 @@ public final class Calc {
      *         blank expression
      */
     public static BigDecimal eval(String expression, Object entity, int scale) {
-        double result = new Parser(expression, entity).evaluate();
-        return BigDecimal.valueOf(roundHalfUp(result, scale))
-                         .setScale(scale, RoundingMode.HALF_UP);
-    }
-
-    /** Half-up rounding with ties away from zero - the exact rule the JS mirror applies. */
-    private static double roundHalfUp(double value, int decimals) {
-        if (!Double.isFinite(value)) {
-            return 0d;
-        }
-        double factor = Math.pow(10, decimals);
-        double sign = value < 0 ? -1d : 1d;
-        return sign * Math.floor(Math.abs(value) * factor + 0.5d) / factor;
+        return new Parser(expression, entity).evaluate()
+                                             .setScale(scale, RoundingMode.HALF_UP);
     }
 
     /**
@@ -95,7 +96,7 @@ public final class Calc {
             this.entity = entity;
         }
 
-        private double evaluate() {
+        private BigDecimal evaluate() {
             return parseExpr();
         }
 
@@ -110,44 +111,44 @@ public final class Calc {
             return pos < source.length() ? source.charAt(pos) : '\0';
         }
 
-        private double parseExpr() {
-            double value = parseTerm();
+        private BigDecimal parseExpr() {
+            BigDecimal value = parseTerm();
             for (;;) {
                 char c = peek();
                 if (c == '+') {
                     pos++;
-                    value += parseTerm();
+                    value = value.add(parseTerm());
                 } else if (c == '-') {
                     pos++;
-                    value -= parseTerm();
+                    value = value.subtract(parseTerm());
                 } else {
                     return value;
                 }
             }
         }
 
-        private double parseTerm() {
-            double value = parseFactor();
+        private BigDecimal parseTerm() {
+            BigDecimal value = parseFactor();
             for (;;) {
                 char c = peek();
                 if (c == '*') {
                     pos++;
-                    value *= parseFactor();
+                    value = value.multiply(parseFactor());
                 } else if (c == '/') {
                     pos++;
-                    double divisor = parseFactor();
-                    value = divisor == 0d ? 0d : value / divisor;
+                    BigDecimal divisor = parseFactor();
+                    value = divisor.signum() == 0 ? BigDecimal.ZERO : value.divide(divisor, QUOTIENT);
                 } else {
                     return value;
                 }
             }
         }
 
-        private double parseFactor() {
+        private BigDecimal parseFactor() {
             char c = peek();
             if (c == '-') {
                 pos++;
-                return -parseFactor();
+                return parseFactor().negate();
             }
             if (c == '+') {
                 pos++;
@@ -155,7 +156,7 @@ public final class Calc {
             }
             if (c == '(') {
                 pos++;
-                double value = parseExpr();
+                BigDecimal value = parseExpr();
                 skipWhitespace();
                 if (pos < source.length() && source.charAt(pos) == ')') {
                     pos++;
@@ -168,20 +169,16 @@ public final class Calc {
             return parseIdentifierOrFunction();
         }
 
-        private double parseNumber() {
+        private BigDecimal parseNumber() {
             skipWhitespace();
             int start = pos;
             while (pos < source.length() && (Character.isDigit(source.charAt(pos)) || source.charAt(pos) == '.')) {
                 pos++;
             }
-            try {
-                return Double.parseDouble(source.substring(start, pos));
-            } catch (NumberFormatException e) {
-                return 0d;
-            }
+            return decimal(source.substring(start, pos));
         }
 
-        private double parseIdentifierOrFunction() {
+        private BigDecimal parseIdentifierOrFunction() {
             skipWhitespace();
             int start = pos;
             while (pos < source.length() && (Character.isLetterOrDigit(source.charAt(pos)) || source.charAt(pos) == '_')) {
@@ -191,12 +188,12 @@ public final class Calc {
             if (name.isEmpty()) {
                 // Unrecognized character - skip it so a malformed expression yields 0 rather than looping.
                 pos++;
-                return 0d;
+                return BigDecimal.ZERO;
             }
             if (peek() == '(') {
                 pos++;
-                double first = peek() == ')' ? 0d : parseExpr();
-                double second = 0d;
+                BigDecimal first = peek() == ')' ? BigDecimal.ZERO : parseExpr();
+                BigDecimal second = BigDecimal.ZERO;
                 boolean hasSecond = false;
                 while (peek() == ',') {
                     pos++;
@@ -212,29 +209,38 @@ public final class Calc {
             return readField(name);
         }
 
-        private double applyFunction(String name, double a, double b, boolean hasSecond) {
+        private BigDecimal applyFunction(String name, BigDecimal a, BigDecimal b, boolean hasSecond) {
             switch (name) {
                 case "round":
-                    return roundHalfUp(a, hasSecond ? (int) b : 0);
+                    return a.setScale(hasSecond ? b.intValue() : 0, RoundingMode.HALF_UP);
                 case "abs":
-                    return Math.abs(a);
+                    return a.abs();
                 case "min":
-                    return Math.min(a, b);
+                    return a.min(b);
                 case "max":
-                    return Math.max(a, b);
+                    return a.max(b);
                 case "ceil":
-                    return Math.ceil(a);
+                    return a.setScale(0, RoundingMode.CEILING);
                 case "floor":
-                    return Math.floor(a);
+                    return a.setScale(0, RoundingMode.FLOOR);
                 case "daysBetween":
-                    return Math.floor(b) - Math.floor(a);
+                    return BigDecimal.valueOf(epochDay(b) - epochDay(a));
                 case "businessDaysBetween":
-                    return businessDaysBetween((long) Math.floor(a), (long) Math.floor(b));
+                    return BigDecimal.valueOf(businessDaysBetween(epochDay(a), epochDay(b)));
                 case "monthsBetween":
-                    return monthsBetween((long) Math.floor(a), (long) Math.floor(b));
+                    return BigDecimal.valueOf(monthsBetween(epochDay(a), epochDay(b)));
                 default:
-                    return 0d;
+                    return BigDecimal.ZERO;
             }
+        }
+
+        /**
+         * A date function's operand as a whole epoch day - the floor, as the date arithmetic always took
+         * it.
+         */
+        private static long epochDay(BigDecimal value) {
+            return value.setScale(0, RoundingMode.FLOOR)
+                        .longValue();
         }
 
         /**
@@ -243,9 +249,9 @@ public final class Calc {
          * (1970-01-01) was a Thursday, so {@code floorMod(epochDay + 3, 7)} is the weekday with Monday = 0
          * - the JS mirror derives the same index from {@code getUTCDay}.
          */
-        private static double businessDaysBetween(long from, long to) {
+        private static long businessDaysBetween(long from, long to) {
             if (to < from) {
-                return 0d;
+                return 0L;
             }
             long days = to - from + 1;
             long fullWeeks = days / 7;
@@ -261,10 +267,10 @@ public final class Calc {
         }
 
         /** Whole calendar months between the two epoch days ({@code b - a} in year*12+month terms). */
-        private static double monthsBetween(long from, long to) {
+        private static long monthsBetween(long from, long to) {
             java.time.LocalDate a = java.time.LocalDate.ofEpochDay(from);
             java.time.LocalDate b = java.time.LocalDate.ofEpochDay(to);
-            return (b.getYear() - a.getYear()) * 12 + (b.getMonthValue() - a.getMonthValue());
+            return (b.getYear() - a.getYear()) * 12L + (b.getMonthValue() - a.getMonthValue());
         }
 
         /**
@@ -273,9 +279,9 @@ public final class Calc {
          * record that has no compiled type. Null / missing / non-numeric reads as 0. A date-typed value
          * reads as its epoch day so the date functions can consume it.
          */
-        private double readField(String name) {
+        private BigDecimal readField(String name) {
             if (entity == null) {
-                return 0d;
+                return BigDecimal.ZERO;
             }
             try {
                 Object value;
@@ -287,23 +293,50 @@ public final class Calc {
                     value = field.get(entity);
                 }
                 if (value == null) {
-                    return 0d;
+                    return BigDecimal.ZERO;
                 }
-                if (value instanceof Number) {
-                    return ((Number) value).doubleValue();
+                if (value instanceof Number number) {
+                    return decimal(number);
                 }
-                Double epochDay = toEpochDay(value);
+                Long epochDay = toEpochDay(value);
                 if (epochDay != null) {
-                    return epochDay;
+                    return BigDecimal.valueOf(epochDay);
                 }
-                String text = value.toString()
-                                   .trim();
-                if (text.isEmpty()) {
-                    return 0d;
-                }
-                return Double.parseDouble(text);
-            } catch (NoSuchFieldException | IllegalAccessException | NumberFormatException e) {
-                return 0d;
+                return decimal(value.toString()
+                                    .trim());
+            } catch (NoSuchFieldException | IllegalAccessException e) {
+                return BigDecimal.ZERO;
+            }
+        }
+
+        /**
+         * A number as the decimal it stands for: a {@link BigDecimal} as it is - every digit of a money
+         * column - and a floating-point value through its shortest decimal form, so {@code 0.1} reads as
+         * {@code 0.1} rather than its binary expansion. A non-finite double reads as 0.
+         */
+        private static BigDecimal decimal(Number number) {
+            if (number instanceof BigDecimal decimal) {
+                return decimal;
+            }
+            if (number instanceof BigInteger integer) {
+                return new BigDecimal(integer);
+            }
+            if (number instanceof Double || number instanceof Float) {
+                double value = number.doubleValue();
+                return Double.isFinite(value) ? BigDecimal.valueOf(value) : BigDecimal.ZERO;
+            }
+            return BigDecimal.valueOf(number.longValue());
+        }
+
+        /** A numeric literal or text, or 0 when it is empty or not a number. */
+        private static BigDecimal decimal(String text) {
+            if (text.isEmpty()) {
+                return BigDecimal.ZERO;
+            }
+            try {
+                return new BigDecimal(text);
+            } catch (NumberFormatException e) {
+                return BigDecimal.ZERO;
             }
         }
 
@@ -312,32 +345,32 @@ public final class Calc {
          * {@code yyyy-MM-dd} prefix covers the string forms the HTML date/datetime inputs and the JSON
          * serializations produce - matching the JS mirror's coercion.
          */
-        private static Double toEpochDay(Object value) {
+        private static Long toEpochDay(Object value) {
             if (value instanceof java.time.LocalDate localDate) {
-                return (double) localDate.toEpochDay();
+                return localDate.toEpochDay();
             }
             if (value instanceof java.time.LocalDateTime localDateTime) {
-                return (double) localDateTime.toLocalDate()
-                                             .toEpochDay();
+                return localDateTime.toLocalDate()
+                                    .toEpochDay();
             }
             if (value instanceof java.time.Instant instant) {
-                return (double) instant.atZone(java.time.ZoneOffset.UTC)
-                                       .toLocalDate()
-                                       .toEpochDay();
+                return instant.atZone(java.time.ZoneOffset.UTC)
+                              .toLocalDate()
+                              .toEpochDay();
             }
             if (value instanceof java.util.Date date) {
                 // covers java.sql.Date / java.sql.Timestamp too
-                return (double) java.time.Instant.ofEpochMilli(date.getTime())
-                                                 .atZone(java.time.ZoneOffset.UTC)
-                                                 .toLocalDate()
-                                                 .toEpochDay();
+                return java.time.Instant.ofEpochMilli(date.getTime())
+                                        .atZone(java.time.ZoneOffset.UTC)
+                                        .toLocalDate()
+                                        .toEpochDay();
             }
             if (value instanceof String text) {
                 java.util.regex.Matcher m = ISO_DATE_PREFIX.matcher(text.trim());
                 if (m.find()) {
                     try {
-                        return (double) java.time.LocalDate.parse(m.group())
-                                                           .toEpochDay();
+                        return java.time.LocalDate.parse(m.group())
+                                                  .toEpochDay();
                     } catch (java.time.format.DateTimeParseException e) {
                         return null;
                     }

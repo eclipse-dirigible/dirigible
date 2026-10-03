@@ -64,11 +64,20 @@ function basePage() {
         const option = { value: row[key], text: row[text] };
         if (rule && !this.meetsPickable(row, rule.when)) {
           option.disabled = true;
-          option.description = rule.message;
+          option.description = this.pickableMessage(rule);
           option.hidden = !!rule.hide;
         }
         return option;
       });
+    },
+
+    /**
+     * The message a marked row carries, in the UI language (issue #7611). The rule names its catalog
+     * key (`messageCatalogKey`, the module catalog's `checks.<key>`), so a language catalog translates
+     * it like a label; `message` is the default-language text it falls back to.
+     */
+    pickableMessage(rule) {
+      return rule.messageCatalogKey && typeof window.T === 'function' ? window.T(rule.messageCatalogKey, rule.message) : rule.message;
     },
 
     /**

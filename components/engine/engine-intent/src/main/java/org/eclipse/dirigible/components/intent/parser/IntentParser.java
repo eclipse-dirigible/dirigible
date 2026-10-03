@@ -332,6 +332,7 @@ public final class IntentParser {
         rejectEmptyVisibleTo(tree);
         rejectLifecycleOn(tree);
         rejectCheckOn(tree);
+        rejectMessageMaps(tree);
         moveGeneratesItemLines(tree);
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
@@ -4454,8 +4455,12 @@ public final class IntentParser {
                 validateImmutableInPeriod(entity, byName, issues);
             }
             if (entity.getChecks() != null) {
+                Set<String> checkIds = new java.util.HashSet<>();
                 for (CheckIntent check : entity.getChecks()) {
                     validateCheck(entity, check, byName, model.getEntities(), model.getAggregates(), issues);
+                    String checkSubject =
+                            "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
+                    validateCheckId(checkSubject, check, checkIds, issues);
                 }
             }
             if (!entity.getUnique()
@@ -6535,6 +6540,49 @@ public final class IntentParser {
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * A check's or a picker rule's {@code message:} is ONE text, in the module's default language
+     * (issue #7611). Translations live in the module's catalogs
+     * ({@code i18n/<locale>/<model>.model.json}, under {@code checks.<key>}) exactly like a label's -
+     * never as a per-language map inside the model: that would make every check an N-language block of
+     * UI copy, put a translator's edits behind a regen, and leave two sources of truth for one key.
+     */
+    private static void rejectMessageMaps(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity)) {
+                continue;
+            }
+            if (entity.get("checks") instanceof List<?> checks) {
+                for (Object checkNode : checks) {
+                    if (checkNode instanceof Map<?, ?> check && check.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] check [" + check.get("kind") + "]"));
+                    }
+                }
+            }
+            if (entity.get("relations") instanceof List<?> relations) {
+                for (Object relationNode : relations) {
+                    if (relationNode instanceof Map<?, ?> relation && relation.get("pickable") instanceof Map<?, ?> pickable
+                            && pickable.get("message") instanceof Map<?, ?>) {
+                        issues.add(messageMapIssue("entity [" + entity.get("name") + "] relation [" + relation.get("name") + "] pickable"));
+                    }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    private static String messageMapIssue(String subject) {
+        return subject + " message is a map - a message is one text in the module's default language;"
+                + " translate it in the module's catalog `i18n/<locale>/<model>.model.json` under `checks.<key>`"
+                + " (the key the generated en-US catalog writes it under), like a label";
     }
 
     private static void rejectRemovedNumberKeys(Object tree) {
@@ -11435,6 +11483,27 @@ public final class IntentParser {
                             + UnknownKeyValidator.suggestion(key, allowed));
                 }
             }
+        }
+    }
+
+    /** The shape of a check's {@code id:} - it becomes part of a translation catalog key (#7611). */
+    private static final java.util.regex.Pattern CHECK_ID = java.util.regex.Pattern.compile("[A-Za-z][A-Za-z0-9_]*");
+
+    /**
+     * A check's optional {@code id:} (issue #7611): an identifier, unique within its entity, since it
+     * names the check's message in the translation catalogs.
+     */
+    private static void validateCheckId(String subject, CheckIntent check, Set<String> seen, List<String> issues) {
+        if (check.getId() == null) {
+            return;
+        }
+        String id = check.getId()
+                         .trim();
+        if (!CHECK_ID.matcher(id)
+                     .matches()) {
+            issues.add(subject + " id [" + check.getId() + "] must be an identifier (letters, digits, underscore; a letter first)");
+        } else if (!seen.add(id)) {
+            issues.add(subject + " id [" + id + "] is declared by another check of the same entity - a check id names one message");
         }
     }
 
