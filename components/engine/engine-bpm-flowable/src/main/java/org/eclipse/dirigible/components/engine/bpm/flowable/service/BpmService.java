@@ -396,6 +396,16 @@ public class BpmService {
         bpmProviderFlowable.removeVariable(executionId, variableName);
     }
 
+    /**
+     * Whether the task is still active in the current tenant - i.e. neither completed nor deleted.
+     *
+     * @param taskId the task id
+     * @return true while the task exists
+     */
+    public boolean isTaskActive(String taskId) {
+        return bpmProviderFlowable.isTaskActive(taskId);
+    }
+
     public List<IdentityLink> getTaskIdentityLinks(String taskId) {
         return bpmProviderFlowable.getTaskService()
                                   .getTaskIdentityLinks(taskId);

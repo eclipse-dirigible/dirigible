@@ -67,13 +67,41 @@ public class BpmInboxEndpoint extends BaseEndpoint {
      * on every poll (issue #7141).
      *
      * @param tasks the tasks, with their process variables loaded
-     * @return the DTOs
+     * @return the DTOs, without the tasks completed while the list was being built
      */
     private List<TaskDTO> mapToDTOs(List<Task> tasks) {
         Map<String, Optional<ProcessLabelKeys>> labelKeys = new HashMap<>();
-        return tasks.stream()
-                    .map(task -> mapToDTO(task, labelKeys))
-                    .collect(Collectors.toList());
+        List<TaskDTO> dtos = new ArrayList<>(tasks.size());
+        for (Task task : tasks) {
+            mapListedTask(task, labelKeys).ifPresent(dtos::add);
+        }
+        return dtos;
+    }
+
+    /**
+     * Maps one listed task, omitting it when it was completed after the listing query found it (issue
+     * #7575). The row's per-task reads are statements of their own, so another session completing the
+     * task in between makes them fail - its identity links are "not found", and when it was its
+     * process's last task the process instance is gone too - and that one failure used to fail the
+     * whole list with a 500, for every caller loading it at that moment.
+     * <p>
+     * Only a task confirmed gone is omitted: a read that failed while the task still exists is a real
+     * failure and propagates as before.
+     *
+     * @param task the listed task
+     * @param labelKeys the task-label catalogs resolved so far
+     * @return the DTO, or empty when the task no longer exists
+     */
+    private Optional<TaskDTO> mapListedTask(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys) {
+        try {
+            return Optional.of(mapToDTO(task, labelKeys));
+        } catch (RuntimeException ex) {
+            if (bpmService.isTaskActive(task.getId())) {
+                throw ex;
+            }
+            logger.debug("Task [{}] was completed while the task list was being built - omitted from the list", task.getId(), ex);
+            return Optional.empty();
+        }
     }
 
     private static PrincipalType extractPrincipalType(String type) {
