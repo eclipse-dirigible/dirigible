@@ -1298,8 +1298,8 @@ final class ModelParameterProcessor {
      * Resolves each entity's {@code agreeGuards} (the parent side of a junction's
      * {@code checks: agree}, #7589) into the junction's generated repository, so the DAO can ask
      * whether a junction row still references the record before it lets the agreed property change -
-     * same-model only, exactly like {@link #inheritMasterLock} resolves a composition parent's coordinates. The message gets its
-     * Java-literal twin here, as a check's does.
+     * same-model only, exactly like {@link #inheritMasterLock} resolves a composition parent's
+     * coordinates. The message gets its Java-literal twin here, as a check's does.
      *
      * @param entities every entity in the model
      * @param parameters the generation parameters
