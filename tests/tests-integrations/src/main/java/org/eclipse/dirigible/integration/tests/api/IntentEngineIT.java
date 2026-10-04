@@ -4493,10 +4493,18 @@ class IntentEngineIT extends IntegrationTest {
                         "Calc.eval(\"Net * VatRate / 100\""),
                 "the default must be applied before the create-time calculation that reads it: " + repository);
 
-        // An existing row is never re-defaulted: the defaults belong to save() alone, so a value the
-        // user deliberately cleared stays cleared through update().
-        assertEquals(1, occurrencesOf(repository, "entity.VatRate = new java.math.BigDecimal(\"20\")"),
+        // An existing row is never re-defaulted: the defaults belong to the create path alone, so a value
+        // the user deliberately cleared stays cleared through update(). The create path is save() and
+        // the checks' candidate row (#7544), which applies them too since an expression may read them.
+        String vatRateDefault = "entity.VatRate = new java.math.BigDecimal(\"20\")";
+        assertTrue(methodOf(repository, "public OrderItemEntity save(").contains(vatRateDefault),
+                "save() must apply the default: " + repository);
+        assertTrue(methodOf(repository, "public OrderItemEntity calculatedForCreate(").contains(vatRateDefault),
+                "the checks' create-time candidate row must apply the default save() applies: " + repository);
+        assertFalse(methodOf(repository, "public OrderItemEntity update(").contains(vatRateDefault),
                 "the default must be applied on create only, never re-applied by update(): " + repository);
+        assertFalse(methodOf(repository, "public OrderItemEntity calculatedForUpdate(").contains(vatRateDefault),
+                "the checks' update-time candidate row must not re-apply the default either: " + repository);
     }
 
     @Test
@@ -5350,6 +5358,17 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(first >= 0, "anchor not found in the generated code: [" + anchor + "]");
         assertEquals(first, code.lastIndexOf(anchor), "anchor [" + anchor + "] occurs more than once - pick a more specific one");
         return first;
+    }
+
+    /**
+     * One generated member method, from its signature to its closing brace - the first brace at the
+     * member indentation, since every nested block is indented deeper.
+     */
+    private static String methodOf(String code, String signature) {
+        int start = onlyIndexOf(code, signature);
+        int end = code.indexOf("\n    }\n", start);
+        assertTrue(end >= 0, "no closing brace after [" + signature + "] in the generated code");
+        return code.substring(start, end);
     }
 
     /**
