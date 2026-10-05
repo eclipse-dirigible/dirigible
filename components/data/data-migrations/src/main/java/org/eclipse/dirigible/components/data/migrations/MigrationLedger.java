@@ -103,7 +103,7 @@ class MigrationLedger {
                                    .build();
             try (PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.executeUpdate();
-                LOGGER.info("Created the migrations ledger using sql [{}]", sql);
+                LOGGER.info("Created the migrations ledger [{}]", TABLE_NAME);
             } catch (SQLException ex) {
                 // Another node or tenant pass may have created it in the meantime; tolerate it.
                 if (SqlFactory.getNative(connection)
