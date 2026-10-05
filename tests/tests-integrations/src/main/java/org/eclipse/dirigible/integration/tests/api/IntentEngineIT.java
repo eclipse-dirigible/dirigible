@@ -3025,6 +3025,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onInvoice.replaceAll("\\s+", "")
                             .contains(".orderByAsc(\"Date\").orderByAsc(\"Id\");"),
                 "the customer's payments should be drawn by date, then by key");
+        // The delegate is an async step that runs after the invoice became payable, so the invoice can be
+        // retired (voided) before it runs: it must apply the same payable-status test as the payment
+        // side, or it settles a VOIDED invoice (#7668).
+        assertTrue(onInvoice.contains("Integer s = invoice.Status;") && onInvoice.contains("s == 3 || s == 4 || s == 6"),
+                "the onInvoice delegate should only settle an invoice still in a payable status");
 
         // What an invoice can still take is re-summed from its allocation ROWS - the rows the capacity
         // guard counts - never read off the paid roll-up column, which lags them (#7559). Sized from the

@@ -4137,6 +4137,8 @@ Generates two client-Java glue classes (bind them with a `rollups` sum entry tha
   invoice; wire it as a **`delegate:` service task** on the process step where the invoice becomes
   payable (e.g. right after Issue), e.g. `args: { delegate: gen.events.AutoAllocateOnInvoice, next: … }`
   (the bare `gen.events.<ClassName>` shorthand resolves to this module's generated events package).
+  The step is async, so it re-reads the invoice's `status` and settles nothing unless it is still one of
+  the `payableStatuses` - an invoice voided before the step runs keeps its balance.
 
 **Rules:** `junction` / `invoice` / `payment` are declared entities; the junction must have a to-one
 relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` and every

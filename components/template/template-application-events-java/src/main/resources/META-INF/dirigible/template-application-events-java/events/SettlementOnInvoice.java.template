@@ -19,7 +19,10 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Re
  * ${junctionEntity} rows until the invoice is settled or the balance runs out. Wired as a
  * {@code delegate:} service task after the invoice becomes payable (e.g. right after Issue).
  * Oldest first is a total order: the ${paymentEntity} key breaks every tie of the authored order, so
- * same-day payments are drawn in creation order.
+ * same-day payments are drawn in creation order. Only an invoice still in a payable status is settled,
+ * so an invoice retired before this step runs keeps its balance. The step does not know about
+ * allocations removed by hand after the invoice became payable: if one is deleted before it runs, it
+ * re-spends the payment's unallocated balance onto the same invoice.
  *
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
@@ -37,6 +40,15 @@ public class ${name}OnInvoice implements JavaDelegate {
         if (invoice == null) {
             return;
         }
+#if($invoiceStatus != "")
+        // This delegate runs as an async step, some time after the flow made the invoice payable: the
+        // status is re-read from the store, never assumed. An invoice retired in that window (voided,
+        // cancelled) is not settled - the payment-side handlers skip it by the same test (#7668).
+        Integer s = invoice.${invoiceStatus};
+        if (s == null || !(${payableCondition})) {
+            return;
+        }
+#end
         BigDecimal remaining = open(invoice);
         if (remaining.signum() <= 0) {
             return;
