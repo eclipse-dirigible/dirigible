@@ -66,6 +66,13 @@ public interface SynchronizersOrder {
     /** The component. */
     int COMPONENT = 250;
 
+    /**
+     * The data migration ({@code .migration}). After every synchronizer that evolves structure (schema,
+     * table, view, entity), so a migration finds the columns it backfills, and before the CSVIM seed,
+     * so a seed lands on migrated data.
+     */
+    int MIGRATION = 260;
+
     /** The bpmn. */
     int BPMN = 300;
 

@@ -53,6 +53,7 @@
         <module>data/data-store</module>
         <module>data/data-store-java</module>
         <module>data/data-csvim</module>
+        <module>data/data-migrations</module>
         <module>data/data-export</module>
         <module>data/data-import</module>
         <module>data/data-anonymize</module>
@@ -644,6 +645,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-data-csvim</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-data-migrations</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
