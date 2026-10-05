@@ -152,7 +152,7 @@ jobs:
       # (including two full clone -> generate -> validate app lifecycles). The heavy Selenide
       # suite (@Tag "ui") runs nightly and on master push - see nightly.yml and build.yml.
       - name: Smoke integration tests (H2)
-        run: mvn clean install -P integration-tests -Dit.groups="!ui | smoke"
+        run: mvn clean install -P integration-tests -Dit.groups="(!ui | smoke) & !upgrade"
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.

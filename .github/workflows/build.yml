@@ -190,7 +190,7 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui & !slow"
+            groups: "!ui & !slow & !upgrade"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples
@@ -293,7 +293,7 @@ jobs:
       matrix:
         shard:
           - name: api
-            groups: "!ui & !slow"
+            groups: "!ui & !slow & !upgrade"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples

@@ -1,0 +1,39 @@
+# The application UpgradeFromPreviousReleaseIT generates and publishes on the PREVIOUS release, then
+# boots the release under test on. Each part leaves state behind that an upgrade must carry over:
+# rows in every entity, a process instance parked on a user task, a job that has fired.
+name: upgrade
+entities:
+  - name: Customer
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, length: 100 }
+  - name: Ticket
+    fields:
+      - { name: id,      type: integer, primaryKey: true, generated: true }
+      - { name: subject, type: string, length: 100 }
+    relations:
+      - { name: Customer, kind: manyToOne, to: Customer }
+  - name: TicketDigest
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    relations:
+      - { name: Ticket, kind: manyToOne, to: Ticket }
+processes:
+  # Started by every new ticket and left waiting on its review, so a running instance (and its task)
+  # spans the upgrade.
+  - name: TicketReview
+    trigger: { onCreate: Ticket }
+    steps:
+      - { name: review, kind: userTask, args: { assignee: agent, next: done } }
+      - { name: done,   kind: end }
+schedules:
+  # Every five seconds, one digest per ticket that has none yet: a job whose firing leaves rows, on
+  # either side of the upgrade.
+  - name: ticket-digest
+    cron: "0/5 * * * * ?"
+    entity: Ticket
+    generate:
+      to: TicketDigest
+      unique: [Ticket]
+      map:
+        Ticket: id
