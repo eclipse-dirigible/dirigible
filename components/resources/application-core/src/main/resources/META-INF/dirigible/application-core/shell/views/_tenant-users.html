@@ -15,9 +15,9 @@
   Settings > Users - the ONE copy of the section, mounted through x-html on the shared tenantUsers
   store (shell/js/stores/tenantUsers.js) by the application shell's Settings and by every generated
   application shell. Every binding goes through $store.tenantUsers. Stable ids and attributes for the
-  browser tests: tenant-users-page, tenant-users-invite, tenant-users-email, tenant-users-roles,
-  tenant-users-invite-button, tenant-users-table (rows tr[data-user], badges [data-role][data-state],
-  [data-pending], [data-failure]), tenant-users-edit-dialog, tenant-users-edit-save,
+  browser tests: tenant-users-page, tenant-users-invite-open, tenant-users-invite-dialog, tenant-users-email,
+  tenant-users-roles (tiles: tenant-users-invite-role-<role>), tenant-users-invite-button, tenant-users-table (rows tr[data-user], badges [data-role][data-state],
+  [data-pending], [data-failure]), tenant-users-edit-dialog (tiles: tenant-users-edit-role-<role>), tenant-users-edit-save,
   tenant-users-remove-dialog, tenant-users-remove-confirm.
 -->
 <div id="tenant-users-page" class="vbox gap-4 p-4">
@@ -30,32 +30,11 @@
             :aria-label="$store.tenantUsers.t('shell.tenantUsers.refresh', 'Refresh')">
       <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
     </button>
+    <button x-h-button data-variant="primary" type="button" id="tenant-users-invite-open" @click="$store.tenantUsers.openInvite()">
+      <svg role="presentation" x-h-lucide data-lucide="user-plus"></svg>
+      <span x-text="$store.tenantUsers.t('shell.tenantUsers.inviteOpen', 'Invite people')"></span>
+    </button>
   </div>
-
-  <form id="tenant-users-invite" class="hbox items-end gap-2 flex-wrap" @submit.prevent="$store.tenantUsers.inviteUser()">
-    <div class="vbox gap-1 flex-1 min-w-0">
-      <label x-h-label for="tenant-users-email" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></label>
-      <input x-h-input id="tenant-users-email" type="email" autocomplete="off" x-model="$store.tenantUsers.invite.email"
-             :placeholder="$store.tenantUsers.t('shell.tenantUsers.emailPlaceholder', 'name@example.com')" />
-    </div>
-    <div class="vbox gap-1">
-      <label x-h-label for="tenant-users-roles" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></label>
-      <div x-h-select id="tenant-users-roles">
-        <input x-h-select-input data-id="tenant-users-roles-trigger" x-model="$store.tenantUsers.invite.roles"
-               :placeholder="$store.tenantUsers.t('shell.tenantUsers.rolesPlaceholder', 'Choose roles')" />
-        <div x-h-select-content>
-          <div x-h-select-list>
-            <template x-for="role in $store.tenantUsers.roles" :key="role">
-              <div x-h-select-option="role" :data-value="role"></div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
-    <button x-h-button data-variant="primary" type="submit" id="tenant-users-invite-button"
-            :disabled="$store.tenantUsers.busy || $store.tenantUsers.invite.roles.length === 0 || !$store.tenantUsers.invite.email.trim()"
-            x-text="$store.tenantUsers.t('shell.tenantUsers.invite', 'Invite')"></button>
-  </form>
 
   <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
     <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
@@ -65,7 +44,7 @@
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="users"></svg></div>
       <div x-h-info-page-title x-text="$store.tenantUsers.t('shell.tenantUsers.empty', 'Nobody has been invited yet')"></div>
-      <div x-h-info-page-description x-text="$store.tenantUsers.t('shell.tenantUsers.emptyHint', 'Invite the first person above.')"></div>
+      <div x-h-info-page-description x-text="$store.tenantUsers.t('shell.tenantUsers.emptyHint', 'Use Invite people to add the first person.')"></div>
     </div>
   </div>
 
@@ -182,6 +161,50 @@
     </table>
   </div>
 
+  <div x-h-dialog-overlay :data-open="$store.tenantUsers.inviteOpen" @click.self="$store.tenantUsers.closeInvite()"
+       @keydown.escape.window="$store.tenantUsers.inviteOpen && $store.tenantUsers.closeInvite()">
+    <form x-h-dialog id="tenant-users-invite-dialog" @submit.prevent="$store.tenantUsers.inviteUser()">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.tenantUsers.t('shell.tenantUsers.inviteTitle', 'Invite a person')"></h2>
+        <p x-h-dialog-description
+           x-text="$store.tenantUsers.t('shell.tenantUsers.inviteDescription', 'Choose the roles the person gets in this tenant. Someone without an account receives an email to set a password.')"></p>
+      </div>
+      <div x-h-dialog-content class="vbox gap-4">
+        <div class="vbox gap-1">
+          <label x-h-label for="tenant-users-email" x-text="$store.tenantUsers.t('shell.tenantUsers.email', 'Email')"></label>
+          <input x-h-input id="tenant-users-email" type="email" autocomplete="off" x-model="$store.tenantUsers.invite.email"
+                 :placeholder="$store.tenantUsers.t('shell.tenantUsers.emailPlaceholder', 'name@example.com')" />
+        </div>
+        <div class="vbox gap-2">
+          <span x-h-label id="tenant-users-roles-label" x-text="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')"></span>
+          <div x-h-tile-group id="tenant-users-roles" role="group" aria-labelledby="tenant-users-roles-label" class="vbox gap-2">
+            <template x-for="role in $store.tenantUsers.roles" :key="role">
+              <label x-h-tile :data-role="role">
+                <span x-h-checkbox>
+                  <input type="checkbox" :id="'tenant-users-invite-role-' + role" :value="role" x-model="$store.tenantUsers.invite.roles" />
+                </span>
+                <div x-h-tile-content>
+                  <div x-h-tile-title x-text="role"></div>
+                  <p x-h-tile-description x-show="$store.tenantUsers.roleDescription(role)" x-text="$store.tenantUsers.roleDescription(role)"></p>
+                </div>
+              </label>
+            </template>
+          </div>
+        </div>
+        <div x-show="$store.tenantUsers.error" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.tenantUsers.error"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.tenantUsers.closeInvite()"
+                x-text="$store.tenantUsers.t('shell.tenantUsers.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" type="submit" id="tenant-users-invite-button"
+                :disabled="$store.tenantUsers.busy || $store.tenantUsers.invite.roles.length === 0 || !$store.tenantUsers.invite.email.trim()"
+                x-text="$store.tenantUsers.t('shell.tenantUsers.invite', 'Invite')"></button>
+      </div>
+    </form>
+  </div>
+
   <div x-h-dialog-overlay :data-open="!!$store.tenantUsers.edit" @click.self="$store.tenantUsers.closeEdit()"
        @keydown.escape.window="$store.tenantUsers.edit && $store.tenantUsers.closeEdit()">
     <div x-h-dialog id="tenant-users-edit-dialog">
@@ -190,14 +213,19 @@
         <p x-h-dialog-description x-text="$store.tenantUsers.edit?.email || ''"></p>
       </div>
       <div x-h-dialog-content class="vbox gap-3">
-        <template x-for="role in $store.tenantUsers.roles" :key="role">
-          <div x-h-field data-orientation="horizontal">
-            <span x-h-checkbox>
-              <input type="checkbox" :id="'tenant-users-edit-role-' + role" :value="role" x-model="$store.tenantUsers.editRoles" />
-            </span>
-            <label x-h-label :for="'tenant-users-edit-role-' + role" x-text="role"></label>
-          </div>
-        </template>
+        <div x-h-tile-group id="tenant-users-edit-roles" role="group" :aria-label="$store.tenantUsers.t('shell.tenantUsers.roles', 'Roles')" class="vbox gap-2">
+          <template x-for="role in $store.tenantUsers.roles" :key="role">
+            <label x-h-tile :data-role="role">
+              <span x-h-checkbox>
+                <input type="checkbox" :id="'tenant-users-edit-role-' + role" :value="role" x-model="$store.tenantUsers.editRoles" />
+              </span>
+              <div x-h-tile-content>
+                <div x-h-tile-title x-text="role"></div>
+                <p x-h-tile-description x-show="$store.tenantUsers.roleDescription(role)" x-text="$store.tenantUsers.roleDescription(role)"></p>
+              </div>
+            </label>
+          </template>
+        </div>
         <div class="hbox items-center gap-1 flex-wrap" data-diff>
           <template x-for="role in $store.tenantUsers.rolesAdded" :key="'added:' + role">
             <span x-h-badge data-variant="positive" x-text="'+ ' + role"></span>
@@ -212,7 +240,7 @@
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>
         </div>
         <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.edit) && $store.tenantUsers.rolesRemoved.length > 0" x-cloak x-h-alert data-variant="warning" role="alert">
-          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfDemotion', 'These are your own roles. Removing one takes effect at your next sign-in or token refresh.')"></div>
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfDemotion', 'These are your own roles. Removing one takes effect at your next sign-in.')"></div>
         </div>
       </div>
       <div x-h-dialog-footer>
@@ -230,11 +258,11 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="$store.tenantUsers.t('shell.tenantUsers.removeTitle', 'Remove user')"></h2>
         <p x-h-dialog-description
-           x-text="$store.tenantUsers.t('shell.tenantUsers.removeQuestion', 'Remove {{email}} from {{tenant}}? They lose access at their next sign-in or token refresh.', { email: $store.tenantUsers.removeTarget?.email || '', tenant: $store.tenantUsers.context?.tenantId || '' })"></p>
+           x-text="$store.tenantUsers.t('shell.tenantUsers.removeQuestion', 'Remove {{email}} from {{tenant}}? They lose access at their next sign-in.', { email: $store.tenantUsers.removeTarget?.email || '', tenant: $store.tenantUsers.context?.tenantId || '' })"></p>
       </div>
       <div x-h-dialog-content class="vbox gap-3">
         <div x-show="$store.tenantUsers.isSelf($store.tenantUsers.removeTarget)" x-cloak x-h-alert data-variant="warning" role="alert">
-          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfRemoval', 'This is you. You lose access to this tenant at your next sign-in or token refresh.')"></div>
+          <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.selfRemoval', 'This is you. You lose access to this tenant at your next sign-in.')"></div>
         </div>
         <div x-show="$store.tenantUsers.removeLeavesNoOwner" x-cloak x-h-alert data-variant="warning" role="alert">
           <div x-h-alert-description x-text="$store.tenantUsers.t('shell.tenantUsers.noOwnerLeft', 'The tenant would be left without an owner. The provisioning system decides, and will refuse it.')"></div>

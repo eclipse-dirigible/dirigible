@@ -44,8 +44,10 @@ document.addEventListener('alpine:init', () => {
     busy: false,
     /** The last refusal, in the user's words; empty when there is none. */
     error: '',
-    /** The invitation being typed. */
+    /** The invitation being typed, in the invite dialog. */
     invite: { email: '', roles: [] },
+    /** Whether the invite dialog is open. */
+    inviteOpen: false,
     /** The user the edit dialog changes; null when closed. */
     edit: null,
     /** The roles ticked in the edit dialog - always an array, so the checkboxes can bind it while the dialog is closed. */
@@ -148,6 +150,7 @@ document.addEventListener('alpine:init', () => {
         this.announce(this.t('shell.tenantUsers.invited', 'Invitation sent to {{email}}', { email: email }));
         this.invite.email = '';
         this.invite.roles = this.defaultRoles();
+        this.inviteOpen = false;
       });
     },
 
@@ -209,6 +212,26 @@ document.addEventListener('alpine:init', () => {
 
     // ---- the dialogs ----
 
+    /** Opens the invite dialog on an empty form with the default roles. */
+    openInvite() {
+      this.error = '';
+      this.invite.email = '';
+      this.invite.roles = this.defaultRoles();
+      this.showInvite();
+    },
+
+    closeInvite() {
+      this.inviteOpen = false;
+    },
+
+    showInvite() {
+      this.inviteOpen = true;
+      setTimeout(() => {
+        const input = document.getElementById('tenant-users-email');
+        if (input) input.focus();
+      }, 50);
+    },
+
     openEdit(user) {
       this.error = '';
       this.edit = user;
@@ -228,13 +251,22 @@ document.addEventListener('alpine:init', () => {
       this.removeTarget = null;
     },
 
-    /** Fills the invite form from a failed row, so the owner can send the invitation again. */
+    /** Opens the invite dialog filled from a failed row, so the owner can send the invitation again. */
     inviteAgain(user) {
+      this.error = '';
       this.invite.email = user.email;
       const roles = this.heldRoles(user);
       this.invite.roles = roles.length ? roles : this.defaultRoles();
-      const input = document.getElementById('tenant-users-email');
-      if (input) input.focus();
+      this.showInvite();
+    },
+
+    /** What a role lets a person do, for the role cards; empty for a role the platform does not describe. */
+    roleDescription(role) {
+      const known = {
+        Owner: 'Full access to the application, and manages its users.',
+        User: 'Full access to the application.',
+      };
+      return known[role] ? this.t('shell.tenantUsers.roleDescription.' + role, known[role]) : '';
     },
 
     /** The roles ticked in the edit dialog that the user does not hold. */

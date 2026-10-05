@@ -37,12 +37,12 @@ import com.codeborne.selenide.SelenideElement;
 import com.fasterxml.jackson.databind.JsonNode;
 
 /**
- * Settings > Users, in a browser, against a real Keycloak: an owner invites a person with two
- * roles, follows the change while the provisioning system works on it, edits the person's roles in
- * one save, reads why a change was not applied, removes the person, and is refused - locally - when
- * they would leave the tenant without an owner. The provisioning system is played by the test: it
- * reads the change requests off the queue and pushes the snapshots back through the users snapshot
- * endpoint.
+ * Settings > Users, in a browser, against a real Keycloak: an owner invites a person with two roles
+ * through the invite dialog's role cards, follows the change while the provisioning system works on
+ * it, edits the person's roles in one save, reads why a change was not applied, removes the person,
+ * and is refused - locally - when they would leave the tenant without an owner. The provisioning
+ * system is played by the test: it reads the change requests off the queue and pushes the snapshots
+ * back through the users snapshot endpoint.
  */
 class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
 
@@ -96,13 +96,24 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
         row(OWNER).$("[data-role='Owner']")
                   .shouldHave(Condition.attribute("data-state", "GRANTED"));
 
-        // 2. an invite with two roles is one request, and the row reads "Sending..." until the list shows
-        // it
+        // 2. an invite with two roles is one request: the dialog offers every role as a card, User
+        // ticked by default, and the row reads "Sending..." until the list shows it
+        Selenide.$(By.id("tenant-users-invite-open"))
+                .click();
+        Selenide.$(By.id("tenant-users-invite-dialog"))
+                .shouldBe(Condition.visible, WAIT);
+        Selenide.$("#tenant-users-invite-dialog label[data-role='Owner']")
+                .shouldHave(Condition.text("manages its users"));
+        Selenide.$(By.id("tenant-users-invite-role-User"))
+                .shouldBe(Condition.checked);
         Selenide.$(By.id("tenant-users-email"))
                 .setValue("Ann.Invited@Example.com");
-        Selenide.executeJavaScript("Alpine.store('tenantUsers').invite.roles = ['Owner', 'User'];");
+        Selenide.$("#tenant-users-invite-dialog label[data-role='Owner']")
+                .click();
         Selenide.$(By.id("tenant-users-invite-button"))
                 .click();
+        Selenide.$(By.id("tenant-users-invite-dialog"))
+                .shouldNotBe(Condition.visible, WAIT);
         row(ANN).shouldBe(Condition.visible, WAIT)
                 .shouldHave(Condition.text("Sending…"));
         JsonNode invite = receive(QUEUE, 10_000);
@@ -137,7 +148,7 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
         openMenu(ANN, "edit");
         Selenide.$(By.id("tenant-users-edit-dialog"))
                 .shouldBe(Condition.visible, WAIT);
-        Selenide.$("label[for='tenant-users-edit-role-Owner']")
+        Selenide.$("#tenant-users-edit-dialog label[data-role='Owner']")
                 .click();
         Selenide.$("#tenant-users-edit-dialog [data-diff]")
                 .shouldHave(Condition.text("− Owner"));
@@ -180,7 +191,7 @@ class TenantUsersSettingsIT extends KeycloakUserInterfaceIntegrationTest {
         openMenu(OWNER, "edit");
         Selenide.$(By.id("tenant-users-edit-dialog"))
                 .shouldBe(Condition.visible, WAIT);
-        Selenide.$("label[for='tenant-users-edit-role-Owner']")
+        Selenide.$("#tenant-users-edit-dialog label[data-role='Owner']")
                 .click();
         Selenide.$("#tenant-users-edit-dialog [role='alert']")
                 .shouldHave(Condition.text("without an owner"), WAIT);
