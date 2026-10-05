@@ -92,13 +92,14 @@
               <tr x-h-table-row>
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) @click="cycleSort('${property.name}')">
-                  <div class="hbox items-center justify-between">
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
+                  <!-- A real button sorts, so the header is reachable and operable from the keyboard (#7645). -->
+                  <button type="button" class="hbox w-full cursor-pointer items-center justify-between" @click="cycleSort('${property.name}')">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
-                  </div>
+                  </button>
                 </th>
 #end
 #end

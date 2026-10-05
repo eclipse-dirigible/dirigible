@@ -184,6 +184,11 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
+    // The header's aria-sort: the sort state a screen reader announces with the column (#7645).
+    ariaSort(col) {
+      if (this.sortColumn !== col) return 'none';
+      return this.sortDirection === 'asc' ? 'ascending' : 'descending';
+    },
     isSortedAsc(col)  { return this.sortColumn === col && this.sortDirection === 'asc'; },
     isSortedDesc(col) { return this.sortColumn === col && this.sortDirection === 'desc'; },
     isUnsorted(col)   { return this.sortColumn !== col; },

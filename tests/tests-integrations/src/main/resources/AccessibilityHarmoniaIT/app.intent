@@ -1,0 +1,50 @@
+# The application AccessibilityHarmoniaIT generates and scans with axe-core. Each part is there for
+# one of the page kinds a generated application consists of: Customer renders the manage list and
+# form, Invoice the document page and its read-only preview (with the status step indicator and the
+# line items), the review process puts a task into the Inbox.
+name: accessibility
+entities:
+  - name: Customer
+    fields:
+      - { name: id,    type: integer, primaryKey: true, generated: true }
+      - { name: name,  type: string, length: 100, required: true }
+      - { name: email, type: string, length: 100 }
+      - { name: since, type: date }
+      - { name: vip,   type: boolean }
+  - name: Invoice
+    function: Document
+    fields:
+      - { name: id,     type: integer, primaryKey: true, generated: true }
+      - { name: number, type: string, length: 20, function: DocumentTitle }
+      - { name: date,   type: date }
+      - { name: note,   type: string, length: 200 }
+    relations:
+      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+      - { name: Status,   kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+  - name: InvoiceItem
+    function: DocumentItem
+    fields:
+      - { name: id,       type: integer, primaryKey: true, generated: true }
+      - { name: product,  type: string, length: 100 }
+      - { name: quantity, type: decimal }
+    relations:
+      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+  - name: InvoiceStatus
+    kind: setting
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, length: 40 }
+processes:
+  # Left waiting on its review, so the Inbox has a task to show.
+  - name: InvoiceReview
+    trigger: { onCreate: Invoice }
+    steps:
+      - { name: review, kind: userTask, args: { assignee: reviewer, next: done } }
+      - { name: done,   kind: end }
+seeds:
+  - name: invoice-statuses
+    entity: InvoiceStatus
+    rows:
+      - { id: 1, name: Draft }
+      - { id: 2, name: Issued }
+      - { id: 3, name: Paid }

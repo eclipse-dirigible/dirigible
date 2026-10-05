@@ -260,6 +260,7 @@
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.18.2</selenide.version>
+        <axe-core-selenium.version>4.13.0</axe-core-selenium.version>
         <rest-assured.version>6.0.1</rest-assured.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
@@ -1022,6 +1023,19 @@
                 <artifactId>selenium-java</artifactId>
                 <version>4.46.0</version>
                 <scope>test</scope>
+            </dependency>
+            <!-- axe-core accessibility scans on the browser the Selenide ITs drive (#7645); Selenide brings
+                 the Selenium it runs on, so the binding's own (older) selenium-java stays out -->
+            <dependency>
+                <groupId>com.deque.html.axe-core</groupId>
+                <artifactId>selenium</artifactId>
+                <version>${axe-core-selenium.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.seleniumhq.selenium</groupId>
+                        <artifactId>selenium-java</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>commons-collections</groupId>

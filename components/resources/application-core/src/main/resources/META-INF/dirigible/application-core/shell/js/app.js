@@ -373,6 +373,9 @@ App.listColumns = {
       resize(width + (event.key === 'ArrowRight' ? step : -step));
     });
     th.appendChild(grip);
+    // aria-valuenow is required on a focusable separator from the start, not only once it has
+    // been focused (#7645); focus and every resize keep it current.
+    announce();
   },
 
   // Is the element's text wider than its content box? scrollWidth alone rounds a sub-pixel overflow

@@ -25,6 +25,12 @@
     "directory": "npm/test"
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.45"
+    "@playwright/test": ">=1.45",
+    "@axe-core/playwright": ">=4.10"
+  },
+  "peerDependenciesMeta": {
+    "@axe-core/playwright": {
+      "optional": true
+    }
   }
 }

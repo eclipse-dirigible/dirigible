@@ -126,7 +126,8 @@
       <svg role="presentation" x-h-lucide data-lucide="flag" class="text-primary shrink-0"></svg>
       <div class="text-sm">
         <span class="font-semibold text-foreground" x-text="$store.processTasks.processName($store.processTasks.getTasks(form)[0])"></span>
-        <span class="text-muted-foreground" x-text="' — ' + T('$projectName:${tprefix}.messages.workflowStep', 'your step')"></span>
+        <!-- Foreground, not muted: on the primary-tinted strip muted text falls under 4.5:1 (#7645). -->
+        <span class="text-foreground" x-text="' — ' + T('$projectName:${tprefix}.messages.workflowStep', 'your step')"></span>
       </div>
       <div class="flex-1"></div>
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
@@ -683,7 +684,8 @@
           <nav x-h-step-indicator="activeStep()" data-orientation="vertical">
             <template x-for="(step, i) in statusSteps()" :key="step.value">
               <div x-h-step-indicator-item="i + 1">
-                <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
+                <!-- Harmonia marks the active step visually only; aria-current announces it (#7645). -->
+                <button x-h-step-indicator-trigger data-non-interactive="true" type="button" :aria-current="i + 1 === activeStep() ? 'step' : null">
                   <span x-h-step-indicator-marker x-text="i + 1"></span>
                   <span x-h-step-indicator-content>
                     <span x-h-step-indicator-title x-text="step.text"></span>

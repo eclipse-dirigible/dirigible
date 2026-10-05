@@ -59,10 +59,14 @@
     }
   },
   "peerDependencies": {
-    "@playwright/test": ">=1.45"
+    "@playwright/test": ">=1.45",
+    "@axe-core/playwright": ">=4.10"
   },
   "peerDependenciesMeta": {
     "@playwright/test": {
+      "optional": true
+    },
+    "@axe-core/playwright": {
       "optional": true
     }
   }

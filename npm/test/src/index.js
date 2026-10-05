@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { test } from './fixtures.js';
+import { a11yFlow } from './flows/a11y.js';
 import { crudFlow } from './flows/crud.js';
 import { listFlow } from './flows/list.js';
 import { multilingualFlow } from './flows/multilingual.js';
@@ -20,6 +21,7 @@ export function runTest(manifestRef, opts = {}) {
       myFlow(manifest, entity, opts);
       multilingualFlow(manifest, entity, opts);
       shellFlow(manifest, entity, opts);
+      a11yFlow(manifest, entity, opts);
     });
   }
 }

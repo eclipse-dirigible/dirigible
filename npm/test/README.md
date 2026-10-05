@@ -41,10 +41,12 @@ runTest(fileURLToPath(new URL('../<project>/<name>.test', import.meta.url)));
 ```
 BASE_URL=http://localhost:8080 npm test        # defaults: admin/admin, installed Chrome
 APPTEST_SHELL=1 npm test                       # also assert the shared-shell menu item
+APPTEST_A11Y=strict npm test                   # fail on serious/critical accessibility violations
 ```
 
 Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_PASSWORD`
-(default `admin`/`admin`), `APPTEST_SHELL` (opt-in shared-shell flow).
+(default `admin`/`admin`), `APPTEST_SHELL` (opt-in shared-shell flow), `APPTEST_A11Y` (`report`
+default, `strict`, `off` - the accessibility flow).
 
 ## Flows per entity
 
@@ -69,6 +71,13 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
   calendar on the Personal shell) is deliberately not asserted yet — it tracks the personal-template
   parity fixes.
 - **shell** (opt-in) — the shared application shell's nav item opens the module SPA in its iframe.
+- **a11y** — axe-core scans the list page and the create form against WCAG 2.1 A/AA and attaches
+  each page's result (`axe-<Entity>-<page>.json`) to the test report. `APPTEST_A11Y=report`
+  (default) only reports - a module's first release; `strict` also fails on a `serious` or
+  `critical` violation; `off` skips it. Needs `@axe-core/playwright` in the harness
+  `devDependencies` (the flow skips itself without it). Contrast against Harmonia's own
+  `--primary` is not counted in strict mode: the default palette misses 4.5:1 there, which the
+  component library fixes; every other contrast failure is.
 
 Test records carry an `APPTEST-` prefix and are removed in teardown; seed data is never mutated.
 A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
