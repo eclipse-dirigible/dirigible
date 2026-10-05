@@ -209,11 +209,17 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             logger.debug("Skipping synchronization since it is not needed...");
             return;
         }
+        // The checks above are only the cheap skip; this is the claim. The scheduled job and a
+        // forceProcessSynchronizers() caller can both pass them, and two passes at once share the
+        // definitions/artefacts working set and insert the same artefacts twice (#7655).
+        if (!processing.compareAndSet(false, true)) {
+            logger.debug("Skipping synchronization since another one has just claimed it...");
+            return;
+        }
         logger.info("Executing synchronization...");
 
         org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
                                                                          .passStarted();
-        processing.set(true);
         synchronizationWatcher.reset();
         // Sampled before the walk, compared at cleanup: a publish that came and went while this pass
         // ran is as dangerous as one still in flight.
