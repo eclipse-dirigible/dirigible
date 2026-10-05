@@ -45,13 +45,14 @@ class SnowflakeSecurityConfig {
             HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         LOGGER.info("Configure snowflake security configurations");
         http.cors(Customizer.withDefaults())
-            .csrf(csrf -> csrf.disable()) // if enabled, some functionalities will not work - like creating a project
+            // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
+            // sets the frame options
+            .csrf(csrf -> csrf.disable())
             .logout(logout -> logout.deleteCookies("JSESSIONID")
                                     // consider redirect to reserved path "/sfc-endpoint/logout" and snowflakeLogoutHandler removal
                                     .addLogoutHandler(snowflakeLogoutHandler)
                                     .logoutSuccessUrl("/")
                                     .invalidateHttpSession(true))
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             .sessionManagement(c -> c.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
             .addFilterBefore(tenantContextInitFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterAt(snowflakeAuthFilter, UsernamePasswordAuthenticationFilter.class);

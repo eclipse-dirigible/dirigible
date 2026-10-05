@@ -94,10 +94,11 @@ public class KeycloakSecurityConfiguration {
         BearerUnauthorizedEntryPoint bearerEntryPoint = new BearerUnauthorizedEntryPoint();
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
+            // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
+            // sets the frame options
             .csrf(csrf -> csrf.disable())
             .addFilterBefore(tenantContextInitFilter, OAuth2LoginAuthenticationFilter.class)
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper), AuthorizationFilter.class)
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.sameOrigin()))
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(bearerEntryPoint, new ProgrammaticRequestMatcher()))
             .oauth2Client(oauth2Client -> oauth2Client.authorizationCodeGrant(
                     grant -> grant.authorizationRequestResolver(authorizationRequestResolver)))

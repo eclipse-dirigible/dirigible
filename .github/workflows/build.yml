@@ -504,6 +504,12 @@ jobs:
 
       - name: Run OWASP ZAP Full Scan
         uses: zaproxy/action-full-scan@v0.12.0
+        env:
+          # scan as the default basic user, so ZAP reaches the REST surface behind the login too, not only
+          # the public pages (#7644); report-only until one release has shown zero High alerts
+          ZAP_AUTH_HEADER: Authorization
+          ZAP_AUTH_HEADER_VALUE: Basic YWRtaW46YWRtaW4=
+          ZAP_AUTH_HEADER_SITE: localhost
         with:
           target: 'http://localhost:8080'
           cmd_options: '-T 10' # https://www.zaproxy.org/docs/docker/full-scan/

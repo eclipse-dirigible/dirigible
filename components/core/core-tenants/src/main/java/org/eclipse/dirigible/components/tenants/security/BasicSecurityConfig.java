@@ -46,11 +46,12 @@ public class BasicSecurityConfig {
             HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
         http.cors(Customizer.withDefaults())
             .httpBasic(Customizer.withDefaults())
-            .csrf(csrf -> csrf.disable())// if enabled, some functionalities will not work - like creating a project
+            // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
+            // sets the frame options
+            .csrf(csrf -> csrf.disable())
             .addFilterBefore(tenantContextInitFilter, UsernamePasswordAuthenticationFilter.class)
             .formLogin(Customizer.withDefaults())
             .logout(logout -> logout.deleteCookies("JSESSIONID"))
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             // A programmatic (fetch/XHR) request whose session expired must get a PLAIN 401 - the
             // default Basic entry point's `WWW-Authenticate: Basic` challenge makes the BROWSER pop
             // its native login dialog before any script sees the response (the generated apps poll

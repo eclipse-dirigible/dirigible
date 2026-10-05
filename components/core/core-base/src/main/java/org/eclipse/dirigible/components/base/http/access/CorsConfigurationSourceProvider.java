@@ -36,8 +36,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  * Unconfigured, the chains that always answered cross-origin requests (basic, snowflake) keep their
  * historical shape - every origin, the usual headers and methods - with one change: cookies are no
  * longer accepted cross-site. A wildcard origin combined with credentials lets any page a logged in
- * user happens to visit call the platform in that user's name, and CSRF tokens are disabled on
- * every chain, so nothing else would stop such a call.
+ * user happens to visit call the platform in that user's name and read the answer; a configured
+ * origin is also exempt from the {@link CrossSiteRequestFilter}, so it is trusted with the session.
  *
  * <p>
  * Configured, the listed origins get exactly what the configuration grants, and the OAuth2 login
@@ -235,8 +235,9 @@ public class CorsConfigurationSourceProvider {
 
     private static void warnAboutRisks(List<String> origins, boolean allowCredentials, long maxAge) {
         if (allowCredentials) {
-            LOGGER.warn("Cross-origin requests from {} may carry the session cookie. CSRF tokens are disabled on every security chain, so"
-                    + " these origins are trusted with the sessions of logged in users.", origins);
+            LOGGER.warn("Cross-origin requests from {} may carry the session cookie. No CSRF token is asked for and the"
+                    + " cross-site request filter lets them through, so these origins are trusted with the sessions of logged in users.",
+                    origins);
         }
         List<String> insecureOrigins = origins.stream()
                                               .filter(origin -> !isTransportSecure(origin))

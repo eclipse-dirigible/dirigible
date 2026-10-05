@@ -56,9 +56,10 @@ public class OAuth2SecurityConfiguration {
         http//
             .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
+            // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
+            // sets the frame options
             .csrf(csrf -> csrf.disable())
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService), AuthorizationFilter.class)
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(bearerEntryPoint, new ProgrammaticRequestMatcher()))
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(Customizer.withDefaults())

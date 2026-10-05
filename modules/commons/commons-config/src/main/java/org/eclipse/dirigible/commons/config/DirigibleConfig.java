@@ -260,6 +260,51 @@ public enum DirigibleConfig {
     CORS_MAX_AGE("DIRIGIBLE_CORS_MAX_AGE", "3600"),
 
     /**
+     * Whether a state-changing request (POST, PUT, PATCH, DELETE) that a browser sends from another
+     * site with the user's ambient credentials - the session cookie, or HTTP authentication the browser
+     * remembered - is refused with 403. That is a cross-site request forgery: a page the logged in user
+     * visits posts a form to a generated endpoint. The browser's own {@code Sec-Fetch-Site} header
+     * decides, {@code Origin} where it is missing; a bearer token, a request without either header (a
+     * server-side client) and an origin configured in {@link #CORS_ALLOWED_ORIGINS} by host are let
+     * through.
+     */
+    SECURITY_CROSS_SITE_PROTECTION("DIRIGIBLE_SECURITY_CROSS_SITE_PROTECTION", Boolean.TRUE.toString()),
+
+    /**
+     * The {@code X-Frame-Options} every chain answers with: {@code SAMEORIGIN} (the IDE and the
+     * generated shells frame their own pages), {@code DENY}, or {@code DISABLED} for a deployment whose
+     * pages are framed by another site.
+     */
+    SECURITY_FRAME_OPTIONS("DIRIGIBLE_SECURITY_FRAME_OPTIONS", "SAMEORIGIN"),
+
+    /**
+     * When {@code Strict-Transport-Security} is sent: {@code auto} on requests the platform sees as
+     * secure (behind a TLS-terminating proxy only with {@code server.forward-headers-strategy}),
+     * {@code always} on every response - for a deployment reached only over https whose proxy does not
+     * forward the scheme - or {@code off}.
+     */
+    SECURITY_HSTS("DIRIGIBLE_SECURITY_HSTS", "auto"),
+
+    /** The {@code Referrer-Policy} every chain answers with; blank sends none. */
+    SECURITY_REFERRER_POLICY("DIRIGIBLE_SECURITY_REFERRER_POLICY", "strict-origin-when-cross-origin"),
+
+    /**
+     * A {@code Content-Security-Policy} every chain answers with; unset sends none. Sent as
+     * {@code Content-Security-Policy-Report-Only} while
+     * {@link #SECURITY_CONTENT_SECURITY_POLICY_REPORT_ONLY} holds, so a policy can be tried against the
+     * IDE and the generated applications before it is enforced.
+     */
+    SECURITY_CONTENT_SECURITY_POLICY("DIRIGIBLE_SECURITY_CONTENT_SECURITY_POLICY", null),
+
+    /**
+     * Whether {@link #SECURITY_CONTENT_SECURITY_POLICY} only reports violations instead of blocking.
+     */
+    SECURITY_CONTENT_SECURITY_POLICY_REPORT_ONLY("DIRIGIBLE_SECURITY_CONTENT_SECURITY_POLICY_REPORT_ONLY", Boolean.TRUE.toString()),
+
+    /** A {@code Permissions-Policy} every chain answers with; unset sends none. */
+    SECURITY_PERMISSIONS_POLICY("DIRIGIBLE_SECURITY_PERMISSIONS_POLICY", null),
+
+    /**
      * Comma-separated kinds of bearer tokens the OAuth2 login profiles (cognito, keycloak) accept:
      * {@code id} - an ID token identifies a user by the principal claim and grants the roles of the
      * user's groups - and {@code access} - an access token of a machine client is identified by
