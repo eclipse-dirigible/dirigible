@@ -5,9 +5,9 @@ name: Nightly Integration Tests
 # PRs run the fast "smoke-tests" job (see pull-request.yml). Runs on a nightly schedule and on
 # demand; the same full suite also runs on every push to master (see build.yml). Like build.yml, the
 # suite is sharded into four tag-selected slices (api / ui / samples / slow) that run in parallel,
-# so the wall-clock time is the slowest shard ("api", ~57 min on h2 and ~62 on PostgreSQL), not the
-# whole suite. build.yml carries the description of what each shard selects and the measured shard
-# times behind the job timeout; keep the two matrices identical.
+# "api" itself as two hash partitions (api-1 / api-2), so the wall-clock time is the slowest shard,
+# not the whole suite. build.yml carries the description of what each shard selects and the
+# measured shard times behind the job timeout; keep the two matrices identical.
 on:
   schedule:
     - cron: '0 2 * * *'
@@ -24,8 +24,12 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: api
+          - name: api-1
             groups: "!ui & !slow & !upgrade"
+            partition: "1/2"
+          - name: api-2
+            groups: "!ui & !slow & !upgrade"
+            partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples
@@ -69,7 +73,7 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}' -Dit.partition='${{ matrix.shard.partition }}'
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.
@@ -183,8 +187,12 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: api
+          - name: api-1
             groups: "!ui & !slow & !upgrade"
+            partition: "1/2"
+          - name: api-2
+            groups: "!ui & !slow & !upgrade"
+            partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples
@@ -268,7 +276,7 @@ jobs:
             echo "::error::The datasource configuration did not reach this step - the suite would run on H2 (see #7249)"
             exit 1
           fi
-          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}' -Dit.partition='${{ matrix.shard.partition }}'
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.

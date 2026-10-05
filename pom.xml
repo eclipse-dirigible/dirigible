@@ -290,6 +290,10 @@
              plus the few explicitly-smoke UI journeys. -->
         <it.groups></it.groups>
         <it.excludedGroups></it.excludedGroups>
+        <!-- Integration-test partition, "k/n" (e.g. 1/2): keeps one of n hash partitions of the
+             classes the tag expression selected (ClassPartitionFilter in tests-integrations). Empty by
+             default - every selected class runs. CI splits the "api" shard with it. -->
+        <it.partition></it.partition>
     </properties>
 
     <build>

@@ -162,7 +162,8 @@ jobs:
 
   # The full IT suite is split ("sharded") into four disjoint slices selected by JUnit 5 tags, so
   # the wall-clock time of a run is the slowest shard instead of the whole suite (~2h30 serial):
-  #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui") bar the long poles
+  #   api     - every HTTP-level IT (untagged, i.e. everything not tagged "ui") bar the long poles,
+  #             run as two jobs (api-1, api-2) - see the partition note below
   #   ui      - the browser-driven ITs except the sample-project, camel and long-pole families
   #   samples - the sample-project clone/publish ITs ("sample") + the camel journeys still driven
   #             through the browser ("camel"), which is now only the two template starters - the
@@ -181,24 +182,34 @@ jobs:
   # samples 13 / 13. "api" is the critical path and the "slow" tag cannot rebalance it: its 83
   # classes cost a near-uniform ~40 s each, almost all of it the Spring context each class boots
   # (@DirtiesContext AFTER_EACH_TEST_METHOD), so the shard grows by ~40 s per IT class added and
-  # has no long pole to move out. #7283 raised the budget rather than split it; splitting "api"
-  # needs a partition mechanism, not a tag.
+  # has no long pole to move out. #7283 raised the budget rather than split it, and by October 2026
+  # the shard (~133 classes, ~83 min of test time) was cancelled at the 90-minute cap on every run.
+  # So "api" is split by a partition, not by a tag: -Dit.partition=k/n keeps the classes whose
+  # top-level class name hashes into partition k of n (ClassPartitionFilter in tests-integrations, a
+  # JUnit PostDiscoveryFilter applied after the tag filter). The partitions are disjoint and complete
+  # by construction - a new IT lands in exactly one of them without being tagged - and, the class
+  # costs being near-uniform, about even (on the 2026-10-05 h2 shard log: 64 classes / 38.5 min
+  # against 69 / 44.7). Add a third partition (1/3, 2/3, 3/3) when one of them nears the cap again.
   integration-tests-h2:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         shard:
-          - name: api
+          - name: api-1
             groups: "!ui & !slow & !upgrade"
+            partition: "1/2"
+          - name: api-2
+            groups: "!ui & !slow & !upgrade"
+            partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples
             groups: "ui & !slow & (sample | camel)"
           - name: slow
             groups: "slow"
-    # The slowest green shard ("api") takes ~57 min on h2 and ~62 on PostgreSQL; a heap-exhausted
-    # JVM used to thrash for 4h+ before anyone noticed. Cap the job above the healthy time so hangs
+    # The slowest green shard ("api", before its split) took ~57 min on h2 and ~62 on PostgreSQL; a
+    # heap-exhausted JVM used to thrash for 4h+ before anyone noticed. Cap the job above the healthy time so hangs
     # fail fast instead of burning runners - but far enough above it that a routine run is never
     # cancelled: at 60 the PostgreSQL "api" shard was killed two classes short of finishing, which
     # reads as infrastructure rather than as a test result (#7283). A single method can no longer
@@ -240,7 +251,7 @@ jobs:
         run: ttyd --version
 
       - name: Integration tests
-        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+        run: mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}' -Dit.partition='${{ matrix.shard.partition }}'
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.
@@ -292,8 +303,12 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - name: api
+          - name: api-1
             groups: "!ui & !slow & !upgrade"
+            partition: "1/2"
+          - name: api-2
+            groups: "!ui & !slow & !upgrade"
+            partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
           - name: samples
@@ -377,7 +392,7 @@ jobs:
             echo "::error::The datasource configuration did not reach this step - the suite would run on H2 (see #7249)"
             exit 1
           fi
-          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}'
+          mvn clean install -P integration-tests -Dit.groups='${{ matrix.shard.groups }}' -Dit.partition='${{ matrix.shard.partition }}'
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.
