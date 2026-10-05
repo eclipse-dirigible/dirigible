@@ -174,4 +174,16 @@ public class MySQLSqlDialect extends
         return new MySQLInsertBuilder(this);
     }
 
+    /**
+     * {@code NULL} is relaxed only by restating the column's whole type here ({@code MODIFY COLUMN}),
+     * which the caller does not have.
+     *
+     * @param table the table
+     * @param column the column
+     * @return {@code null}
+     */
+    @Override
+    public String dropNotNull(String table, String column) {
+        return null;
+    }
 }

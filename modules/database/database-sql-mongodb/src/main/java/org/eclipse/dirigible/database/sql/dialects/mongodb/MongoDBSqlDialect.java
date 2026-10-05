@@ -191,4 +191,29 @@ public class MongoDBSqlDialect extends
     public Map<String, List<String>> uniqueConstraints(Connection connection, String table) {
         return null;
     }
+
+    /**
+     * A collection has no columns to rename.
+     *
+     * @param table the table
+     * @param from the current column name
+     * @param to the new column name
+     * @return {@code null}
+     */
+    @Override
+    public String renameColumn(String table, String from, String to) {
+        return null;
+    }
+
+    /**
+     * A collection has no column constraints.
+     *
+     * @param table the table
+     * @param column the column
+     * @return {@code null}
+     */
+    @Override
+    public String dropNotNull(String table, String column) {
+        return null;
+    }
 }

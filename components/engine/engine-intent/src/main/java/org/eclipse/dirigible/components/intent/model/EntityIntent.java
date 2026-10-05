@@ -130,6 +130,13 @@ public class EntityIntent {
      */
     private List<String> list = new ArrayList<>();
     /**
+     * Optional names of fields and to-one relations this entity no longer has, whose columns a publish
+     * removes from the live table, data included (#7635) - the explicit contract step of a schema
+     * change. A field that is simply deleted from the intent keeps its column and its values, so a
+     * mistaken removal or a rename costs nothing; listing it here is how the data is let go.
+     */
+    private List<String> dropped = new ArrayList<>();
+    /**
      * Optional UI view type for this entity. {@code calendar} / {@code range} render its records as
      * events on a Harmonia calendar (see {@link #calendar}) - an ADDITIONAL page: the entity keeps the
      * list / manage / document layout inferred from structure (and everything it brings - the document
@@ -368,6 +375,14 @@ public class EntityIntent {
 
     public void setSlots(SlotsIntent slots) {
         this.slots = slots;
+    }
+
+    public List<String> getDropped() {
+        return dropped;
+    }
+
+    public void setDropped(List<String> dropped) {
+        this.dropped = dropped == null ? new ArrayList<>() : dropped;
     }
 
     public List<String> getOrder() {

@@ -460,6 +460,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (entity.isHistorized()) {
                 entityMap.put("history", "true");
             }
+            // dropped (#7635): the columns of former fields and relations a publish removes, data
+            // included. A field simply deleted from the intent keeps its column and its values; this
+            // list is the explicit contract step. Comma-separated, so it survives the scalar-only .edm.
+            if (!entity.getDropped()
+                       .isEmpty()) {
+                entityMap.put("dataDropped", entity.getDropped()
+                                                   .stream()
+                                                   .map(dropped -> IntentNaming.upperSnake(name) + "_"
+                                                           + IntentNaming.upperSnake(dropped.trim()))
+                                                   .collect(Collectors.joining(",")));
+            }
             // A file-child: mark it so the generated controller emits the download (and, when editable,
             // upload/delete) verbs and the Harmonia master/document view renders it as a Files panel
             // (a composition detail already, so the master-detail wiring is unchanged). A Snapshot is
@@ -1373,6 +1384,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("description", field.getDescription() == null ? "" : field.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
+        // The column this one was (#7635): the schema template carries it as the column's renamedFrom,
+        // and the publish renames the live column in place, values included. Emitted only when
+        // authored, so a model that does not rename anything generates byte-identically.
+        if (notBlank(field.getRenamedFrom())) {
+            p.put("dataRenamedFrom", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(field.getRenamedFrom()
+                                                                                                              .trim()));
+        }
         p.put("dataType", dataType);
         p.put("dataNullable", field.isRequired() || field.isPrimaryKey() ? "false" : "true");
         // Read-only in generated forms (rendered in the read-only details block, not an editable input):

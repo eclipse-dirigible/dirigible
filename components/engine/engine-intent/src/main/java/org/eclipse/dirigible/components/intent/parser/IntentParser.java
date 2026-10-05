@@ -4239,6 +4239,7 @@ public final class IntentParser {
             if (!entityNames.add(name)) {
                 issues.add("duplicate entity [" + name + "]");
             }
+            validateSchemaEvolution(entity, issues);
             Set<String> fieldNames = new HashSet<>();
             int idCount = 0;
             for (FieldIntent field : entity.getFields()) {
@@ -6998,6 +6999,71 @@ public final class IntentParser {
      * @param field the field carrying the marker
      * @param issues the collected issues, appended to
      */
+    /**
+     * The expand/contract declarations of an entity's table (#7635): {@code dropped:} names the former
+     * fields and relations whose columns a publish removes, a field's {@code renamedFrom:} the former
+     * name whose column it takes over. Both are compared by the COLUMN the name maps to, because that
+     * is what would collide in the table: a dropped name or a rename source that is still a field or a
+     * relation would drop or move a column the entity still declares, and two fields renamed from one
+     * name would both claim its data.
+     *
+     * @param entity the entity
+     * @param issues the issue list to append to
+     */
+    private static void validateSchemaEvolution(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "]";
+        Map<String, String> declared = new HashMap<>();
+        for (FieldIntent field : entity.getFields()) {
+            if (!isBlank(field.getName())) {
+                declared.put(IntentNaming.upperSnake(field.getName()), field.getName());
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!isBlank(relation.getName())) {
+                declared.put(IntentNaming.upperSnake(relation.getName()), relation.getName());
+            }
+        }
+        Set<String> dropped = new HashSet<>();
+        for (String name : entity.getDropped()) {
+            if (isBlank(name)) {
+                issues.add(subject + " lists an empty name under `dropped`");
+                continue;
+            }
+            String column = IntentNaming.upperSnake(name.trim());
+            if (declared.containsKey(column)) {
+                issues.add(subject + " lists [" + name + "] under `dropped` but still declares [" + declared.get(column)
+                        + "] - a dropped column is one the entity no longer has");
+            } else if (!dropped.add(column)) {
+                issues.add(subject + " lists [" + name + "] under `dropped` twice");
+            }
+        }
+        Map<String, String> renameSources = new HashMap<>();
+        for (FieldIntent field : entity.getFields()) {
+            String renamedFrom = field.getRenamedFrom();
+            if (renamedFrom == null || isBlank(field.getName())) {
+                continue;
+            }
+            String fieldSubject = subject + " field [" + field.getName() + "]";
+            if (isBlank(renamedFrom)) {
+                issues.add(fieldSubject + " declares an empty `renamedFrom`");
+                continue;
+            }
+            String column = IntentNaming.upperSnake(renamedFrom.trim());
+            if (column.equals(IntentNaming.upperSnake(field.getName()))) {
+                issues.add(fieldSubject + " is `renamedFrom` its own name");
+            } else if (declared.containsKey(column)) {
+                issues.add(fieldSubject + " is `renamedFrom` [" + renamedFrom + "], which the entity still declares as ["
+                        + declared.get(column) + "] - a rename takes over a column no field owns any more");
+            } else if (dropped.contains(column)) {
+                issues.add(fieldSubject + " is `renamedFrom` [" + renamedFrom + "], which is also listed under `dropped`"
+                        + " - the rename would keep the data the drop removes");
+            } else if (renameSources.putIfAbsent(column, field.getName()) != null) {
+                issues.add(fieldSubject + " is `renamedFrom` [" + renamedFrom + "], as is field [" + renameSources.get(column)
+                        + "] - only one field can take over its column");
+            }
+        }
+    }
+
     private static void validateTranslatable(EntityIntent entity, String subject, FieldIntent field, List<String> issues) {
         if (field.isTranslatable()) {
             return;

@@ -78,6 +78,15 @@ public class TableColumn {
     @Expose
     @SerializedName(value = "autoincrement", alternate = {"identity"})
     private boolean autoincrement;
+
+    /**
+     * The name this column had before (#7635): a live column of that name is renamed to this one, with
+     * its data, instead of this one being added beside it and that one left undeclared.
+     */
+    @Column(name = "COLUMN_RENAMED_FROM", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String renamedFrom;
+
     /** The table. */
     @ManyToOne(fetch = FetchType.EAGER, optional = false)
     @JoinColumn(name = "TABLE_ID", nullable = false)
@@ -366,11 +375,30 @@ public class TableColumn {
      *
      * @return the string
      */
+    /**
+     * Gets the name this column had before.
+     *
+     * @return the former name, or null when the column was not renamed
+     */
+    public String getRenamedFrom() {
+        return renamedFrom;
+    }
+
+    /**
+     * Sets the name this column had before.
+     *
+     * @param renamedFrom the former name
+     */
+    public void setRenamedFrom(String renamedFrom) {
+        this.renamedFrom = renamedFrom;
+    }
+
     @Override
     public String toString() {
         return "TableColumn [id=" + id + ", name=" + name + ", type=" + type + ", length=" + length + ", nullable=" + nullable
                 + ", primaryKey=" + primaryKey + ", defaultValue=" + defaultValue + ", precision=" + precision + ", scale=" + scale
-                + ", unique=" + unique + ", autoincrement=" + autoincrement + ", table=" + (null == table ? null : table.getName()) + "]";
+                + ", unique=" + unique + ", autoincrement=" + autoincrement + ", renamedFrom=" + renamedFrom + ", table="
+                + (null == table ? null : table.getName()) + "]";
     }
 
 }

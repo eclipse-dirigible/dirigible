@@ -2417,6 +2417,43 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void aRenamedFieldAndTheDroppedNamesCarryTheirFormerColumns() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Invoice
+                    dropped: [oldNote, legacyCode]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issueDate, type: date, renamedFrom: invoiceDate }
+                """;
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing")), "Invoice");
+
+        // #7635: the former COLUMN names, derived exactly as the current ones are, because the schema
+        // template hands them to the table alter path, which matches live columns by name
+        assertEquals("INVOICE_INVOICE_DATE", propertyByName(invoice, "IssueDate").get("dataRenamedFrom"));
+        assertEquals("INVOICE_OLD_NOTE,INVOICE_LEGACY_CODE", invoice.get("dataDropped"));
+    }
+
+    @Test
+    void anEntityWithoutSchemaChangesCarriesNeitherAttribute() {
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issueDate, type: date }
+                """;
+        Map<String, Object> invoice =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing")), "Invoice");
+
+        assertNull(invoice.get("dataDropped"), "a model that drops nothing must generate byte-identically");
+        assertNull(propertyByName(invoice, "IssueDate").get("dataRenamedFrom"));
+    }
+
+    @Test
     void aKeyFieldOfAMultilingualEntityCarriesTheNonTranslatableMarker() {
         String yaml = """
                 name: uoms

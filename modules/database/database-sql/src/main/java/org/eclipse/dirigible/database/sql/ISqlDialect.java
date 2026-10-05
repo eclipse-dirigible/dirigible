@@ -155,6 +155,30 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
     Map<String, List<String>> uniqueConstraints(Connection connection, String table) throws SQLException;
 
     /**
+     * The statement that renames a column in place - its data, type and constraints travel with it. The
+     * table alter path issues it for a column the model declares as {@code renamedFrom} another.
+     *
+     * @param table the (unquoted) table name
+     * @param from the (unquoted) current column name
+     * @param to the (unquoted) new column name
+     * @return the statement, or {@code null} when this database has no in-place column rename - the
+     *         caller then adds the new column, copies the values over and keeps the old one
+     */
+    String renameColumn(String table, String from, String to);
+
+    /**
+     * The statement that lets a column hold {@code NULL}. A column the model no longer declares is kept
+     * rather than dropped, and the application no longer writes it, so a {@code NOT NULL} on it would
+     * refuse every insert.
+     *
+     * @param table the (unquoted) table name
+     * @param column the (unquoted) column name
+     * @return the statement, or {@code null} when this database cannot relax the constraint without
+     *         restating the column's whole type
+     */
+    String dropNotNull(String table, String column);
+
+    /**
      * Check existence of a user (or role - the two are the same object on most databases).
      *
      * @param connection the current connection

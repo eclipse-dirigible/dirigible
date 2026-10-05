@@ -11,7 +11,10 @@ package org.eclipse.dirigible.components.base.readiness;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -58,6 +61,7 @@ public final class PlatformReadiness {
     private volatile Instant since = Instant.now();
     private volatile ArtefactCensus artefacts = ArtefactCensus.NONE;
     private volatile CompiledModulesCensus compiledModules = null;
+    private final Map<String, Set<String>> orphanColumns = new ConcurrentHashMap<>();
 
     private PlatformReadiness() {}
 
@@ -128,6 +132,34 @@ public final class PlatformReadiness {
     }
 
     /**
+     * Records the columns a table keeps in the database although its published definition no longer
+     * declares them (#7635) - kept with their data instead of dropped. Each reconciliation of the table
+     * replaces its previous record, so a column that is declared again, or dropped, stops counting.
+     *
+     * @param table the table, qualified by its catalog and schema - one tenant's copy is not another's
+     * @param columns the undeclared columns, empty when the table has none
+     */
+    public void recordOrphanColumns(String table, Set<String> columns) {
+        if (columns.isEmpty()) {
+            orphanColumns.remove(table);
+        } else {
+            orphanColumns.put(table, Set.copyOf(columns));
+        }
+    }
+
+    /**
+     * The undeclared columns kept across every table, as the last reconciliation of each left them.
+     *
+     * @return the orphan column count
+     */
+    public int getOrphanColumns() {
+        return orphanColumns.values()
+                            .stream()
+                            .mapToInt(Set::size)
+                            .sum();
+    }
+
+    /**
      * Records what the last AOT compiled-module discovery found (#7533). It runs on the application
      * ready event, independently of the synchronization passes, so the listeners are notified with the
      * unchanged state - a consumer waiting for a {@link #isCleanBoot() clean boot} re-evaluates.
@@ -185,6 +217,7 @@ public final class PlatformReadiness {
         since = Instant.now();
         artefacts = ArtefactCensus.NONE;
         compiledModules = null;
+        orphanColumns.clear();
         listeners.clear();
     }
 

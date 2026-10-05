@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.readiness.PlatformReadiness.State;
 import org.junit.jupiter.api.BeforeEach;
@@ -89,5 +90,18 @@ class PlatformReadinessTest {
         readiness.recordCompiledModules(new CompiledModulesCensus(0, 0, 0));
 
         assertEquals(List.of(State.INITIALIZING), notified, "a consumer waiting for a clean boot must re-evaluate");
+    }
+
+    @Test
+    void orphanColumnsAreCountedPerTableAndAReconciliationReplacesItsTablesRecord() {
+        readiness.recordOrphanColumns("DB.TENANT_A.INVOICE", Set.of("OLD_NOTE", "LEGACY_CODE"));
+        readiness.recordOrphanColumns("DB.TENANT_B.INVOICE", Set.of("OLD_NOTE"));
+        assertEquals(3, readiness.getOrphanColumns(), "one tenant's copy of a table does not overwrite another's");
+
+        readiness.recordOrphanColumns("DB.TENANT_A.INVOICE", Set.of());
+        assertEquals(1, readiness.getOrphanColumns(), "a table reconciled without orphans stops counting");
+
+        readiness.reset();
+        assertEquals(0, readiness.getOrphanColumns());
     }
 }

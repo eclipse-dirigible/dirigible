@@ -124,6 +124,11 @@
             {
                 "name": "${tablePrefix}${model.dataName}",
                 "type": "TABLE",
+## The columns of former fields a publish removes, data included (#7635). A column the model simply
+## stops declaring is kept with its values; this list is the explicit contract step.
+#if($model.dataDropped)
+                "dropped": [#foreach ($droppedColumn in $model.dataDropped.split(","))"${droppedColumn}"#if($foreach.hasNext), #end#end],
+#end
                 "columns": [
 #foreach ($property in $model.properties)
                     {
@@ -156,6 +161,10 @@
 #end
 #if($property.dataUnique)
                         "unique": true,
+#end
+## The column this one was (#7635): the publish renames it in place, values included.
+#if($property.dataRenamedFrom)
+                        "renamedFrom": "${property.dataRenamedFrom}",
 #end
                         "name": "${property.dataName}"
 #if($foreach.hasNext)

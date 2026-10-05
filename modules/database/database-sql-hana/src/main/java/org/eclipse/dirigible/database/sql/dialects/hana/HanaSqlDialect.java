@@ -393,5 +393,32 @@ public class HanaSqlDialect extends
         return "FUZZY SEARCH INDEX ON";
     }
 
-}
+    /**
+     * HANA names the column through its table: {@code RENAME COLUMN
+     *
+    <table>
+     * .<column> TO <name>}.
+     *
+     * @param table the table
+     * @param from the current column name
+     * @param to the new column name
+     * @return the statement
+     */
+    @Override
+    public String renameColumn(String table, String from, String to) {
+        return "RENAME COLUMN " + quoteIdentifier(table) + "." + quoteIdentifier(from) + " TO " + quoteIdentifier(to);
+    }
 
+    /**
+     * {@code NULL} is relaxed only by restating the column's whole type here ({@code ALTER (...)}),
+     * which the caller does not have.
+     *
+     * @param table the table
+     * @param column the column
+     * @return {@code null}
+     */
+    @Override
+    public String dropNotNull(String table, String column) {
+        return null;
+    }
+}

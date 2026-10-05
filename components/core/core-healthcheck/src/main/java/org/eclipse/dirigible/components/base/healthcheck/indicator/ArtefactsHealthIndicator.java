@@ -18,9 +18,11 @@ import org.springframework.stereotype.Component;
 /**
  * The {@code artefacts} health component (#7533): the lifecycle census of every registered artefact
  * as the last synchronization pass left it - how many there are, how many are failed, and of which
- * type. A failed artefact is a quality signal, not an outage, so it never turns the component DOWN;
- * a gate reads {@code failed}, and {@code DIRIGIBLE_READINESS_REQUIRE_CLEAN_BOOT} is the opt-in
- * that makes it withhold readiness. UNKNOWN until the first pass has depleted.
+ * type, plus how many database columns are kept although their table's definition no longer
+ * declares them ({@code orphanColumns}, #7635). A failed artefact is a quality signal, not an
+ * outage, so it never turns the component DOWN; a gate reads {@code failed}, and
+ * {@code DIRIGIBLE_READINESS_REQUIRE_CLEAN_BOOT} is the opt-in that makes it withhold readiness.
+ * UNKNOWN until the first pass has depleted.
  */
 @Component
 class ArtefactsHealthIndicator implements HealthIndicator {
@@ -35,6 +37,7 @@ class ArtefactsHealthIndicator implements HealthIndicator {
                       .withDetail("total", census.total())
                       .withDetail("failed", census.failed())
                       .withDetail("failedByType", census.failedByType())
+                      .withDetail("orphanColumns", readiness.getOrphanColumns())
                       .build();
     }
 }

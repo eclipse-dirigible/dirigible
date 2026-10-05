@@ -167,6 +167,13 @@ public class FieldIntent {
      */
     private Boolean translatable;
     /**
+     * Optional name this field had before (#7635). A publish renames the live column in place, so the
+     * values follow the new name instead of staying behind in the old column while the new one starts
+     * empty. Harmless to keep once the rename is done: it acts only while the old column exists and the
+     * new one does not.
+     */
+    private String renamedFrom;
+    /**
      * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
      * 12 = full). Emitted as the property's {@code widgetSize}; the Harmonia form maps it to
      * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
@@ -414,6 +421,14 @@ public class FieldIntent {
     /** Whether this field is a list-table column - defaults to true when {@code major} is unset. */
     public boolean isMajor() {
         return major == null || major;
+    }
+
+    public String getRenamedFrom() {
+        return renamedFrom;
+    }
+
+    public void setRenamedFrom(String renamedFrom) {
+        this.renamedFrom = renamedFrom;
     }
 
     public Boolean getTranslatable() {

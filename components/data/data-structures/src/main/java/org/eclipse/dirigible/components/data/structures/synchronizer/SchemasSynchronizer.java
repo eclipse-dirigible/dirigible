@@ -309,6 +309,35 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                     format("Error in parsing columns of table [{0}] in schema [{1}]", table.getName(), location));
         }
         setUniqueConstraints(location, structure, table);
+        table.setDropped(droppedColumns(structure));
+    }
+
+    /**
+     * The table's {@code dropped} list (#7635) - the columns a re-publish removes from the live table.
+     * Written as a JSON array or as one comma-separated string.
+     *
+     * @param structure the table structure
+     * @return the dropped column names, or null when the structure declares none
+     */
+    private static String[] droppedColumns(JsonObject structure) {
+        JsonElement element = structure.get("dropped");
+        if (element == null || element.isJsonNull()) {
+            return null;
+        }
+        List<String> names = new ArrayList<>();
+        if (element.isJsonArray()) {
+            for (JsonElement name : element.getAsJsonArray()) {
+                names.add(name.getAsString());
+            }
+        } else {
+            names.addAll(List.of(element.getAsString()
+                                        .split(",")));
+        }
+        String[] dropped = names.stream()
+                                .map(String::trim)
+                                .filter(name -> !name.isEmpty())
+                                .toArray(String[]::new);
+        return dropped.length == 0 ? null : dropped;
     }
 
     /**
@@ -440,6 +469,9 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
 
         String precisionValue = getJsonElementValue(column, "precision", null);
         columnModel.setPrecision(precisionValue);
+
+        String renamedFromValue = getJsonElementValue(column, "renamedFrom", null);
+        columnModel.setRenamedFrom(renamedFromValue == null || renamedFromValue.isBlank() ? null : renamedFromValue.trim());
     }
 
     private static String getJsonElementValue(JsonObject jsonObject, String memberName, String defaultValue) {

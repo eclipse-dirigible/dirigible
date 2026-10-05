@@ -371,6 +371,43 @@ public class DefaultSqlDialect<SELECT extends SelectBuilder, INSERT extends Inse
     }
 
     /**
+     * The SQL standard form, which H2, PostgreSQL, MySQL 8, MariaDB 10.5 and Snowflake all accept.
+     *
+     * @param table the table
+     * @param from the current column name
+     * @param to the new column name
+     * @return the statement
+     */
+    @Override
+    public String renameColumn(String table, String from, String to) {
+        return "ALTER TABLE " + quoteIdentifier(table) + " RENAME COLUMN " + quoteIdentifier(from) + " TO " + quoteIdentifier(to);
+    }
+
+    /**
+     * The form H2, PostgreSQL and Snowflake accept.
+     *
+     * @param table the table
+     * @param column the column
+     * @return the statement
+     */
+    @Override
+    public String dropNotNull(String table, String column) {
+        return "ALTER TABLE " + quoteIdentifier(table) + " ALTER COLUMN " + quoteIdentifier(column) + " DROP NOT NULL";
+    }
+
+    /**
+     * Quotes a bare identifier with this dialect's escape symbol, doubling an embedded one so the name
+     * cannot end the quoted identifier early.
+     *
+     * @param identifier the identifier
+     * @return the quoted identifier
+     */
+    protected String quoteIdentifier(String identifier) {
+        String escape = String.valueOf(getEscapeSymbol());
+        return escape + identifier.replace(escape, escape + escape) + escape;
+    }
+
+    /**
      * Collects a (constraint name, column name) result ordered by constraint and position into the
      * {@link #uniqueConstraints} shape. Shared by the dialects' catalog queries.
      *

@@ -251,4 +251,30 @@ public class MSSQLSqlDialect extends
     public MSSQLSelectBuilder select() {
         return new MSSQLSelectBuilder(this);
     }
+
+    /**
+     * SQL Server renames through the {@code sp_rename} procedure, not a statement of the alter path.
+     *
+     * @param table the table
+     * @param from the current column name
+     * @param to the new column name
+     * @return {@code null}
+     */
+    @Override
+    public String renameColumn(String table, String from, String to) {
+        return null;
+    }
+
+    /**
+     * {@code NULL} is relaxed only by restating the column's whole type here ({@code ALTER COLUMN}),
+     * which the caller does not have.
+     *
+     * @param table the table
+     * @param column the column
+     * @return {@code null}
+     */
+    @Override
+    public String dropNotNull(String table, String column) {
+        return null;
+    }
 }

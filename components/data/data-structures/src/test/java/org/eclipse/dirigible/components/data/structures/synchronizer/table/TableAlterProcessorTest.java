@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.structures.synchronizer.table;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -27,14 +28,101 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.readiness.PlatformReadiness;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
  * The ALTER phase of a re-publish over an existing database, driven against a real H2 instance.
  */
 class TableAlterProcessorTest {
+
+    @AfterEach
+    void resetState() {
+        Configuration.remove(DirigibleConfig.DATABASE_DROP_UNDECLARED_COLUMNS.getKey());
+        PlatformReadiness.getInstance()
+                         .reset();
+    }
+
+    /**
+     * #7635: a column the definition no longer declares - a removed or renamed field - is kept with its
+     * data, counted as an orphan, and relaxed to nullable so the inserts that no longer set it pass.
+     */
+    @Test
+    void anUndeclaredColumnIsKeptWithItsData() throws SQLException {
+        try (Connection connection = connect("alter_undeclared_kept")) {
+            createTable(connection, "\"A\" VARCHAR(20), \"B\" VARCHAR(20) NOT NULL");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'a', 'b')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertEquals("b", value(connection, "B"), "the undeclared column keeps its data");
+            assertEquals(1, PlatformReadiness.getInstance()
+                                             .getOrphanColumns());
+            assertDoesNotThrow(() -> insert(connection, "INSERT INTO \"T_NOTES\" (\"ID\", \"A\") VALUES (2, 'a')"),
+                    "the kept column no longer refuses an insert that does not set it");
+        }
+    }
+
+    @Test
+    void aColumnListedAsDroppedIsDropped() throws SQLException {
+        try (Connection connection = connect("alter_undeclared_dropped")) {
+            createTable(connection, "\"A\" VARCHAR(20), \"B\" VARCHAR(20)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'a', 'b')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+            tableModel.setDropped(new String[] {"B"});
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertFalse(hasColumn(connection, "B"));
+            assertEquals(0, PlatformReadiness.getInstance()
+                                             .getOrphanColumns());
+        }
+    }
+
+    @Test
+    void theOperatorOptInDropsEveryUndeclaredColumn() throws SQLException {
+        try (Connection connection = connect("alter_undeclared_opt_in")) {
+            createTable(connection, "\"A\" VARCHAR(20), \"B\" VARCHAR(20)");
+            Configuration.set(DirigibleConfig.DATABASE_DROP_UNDECLARED_COLUMNS.getKey(), "true");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertFalse(hasColumn(connection, "B"));
+        }
+    }
+
+    @Test
+    void aRenamedColumnIsRenamedInPlaceWithItsData() throws SQLException {
+        try (Connection connection = connect("alter_renamed")) {
+            createTable(connection, "\"INVOICE_DATE\" VARCHAR(20) NOT NULL");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, '2026-10-05')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("ISSUE_DATE", "VARCHAR", "20", false, false, null, null, null, false, false, tableModel).setRenamedFrom(
+                    "INVOICE_DATE");
+
+            TableAlterProcessor.execute(connection, tableModel);
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel), "a second run has nothing to rename");
+
+            assertEquals("2026-10-05", value(connection, "ISSUE_DATE"));
+            assertFalse(hasColumn(connection, "INVOICE_DATE"));
+            assertEquals(0, PlatformReadiness.getInstance()
+                                             .getOrphanColumns());
+        }
+    }
 
     /**
      * A table whose columns the database reports in another - but equivalent - representation than the
@@ -182,6 +270,27 @@ class TableAlterProcessorTest {
     private static void createTable(Connection connection, String columns) throws SQLException {
         try (Statement statement = connection.createStatement()) {
             statement.execute("CREATE TABLE \"T_NOTES\" (\"ID\" INTEGER, " + columns + ")");
+        }
+    }
+
+    private static void insert(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
+    private static String value(Connection connection, String column) throws SQLException {
+        try (Statement statement = connection.createStatement();
+                ResultSet rs = statement.executeQuery("SELECT \"" + column + "\" FROM \"T_NOTES\" WHERE \"ID\" = 1")) {
+            assertTrue(rs.next(), "Missing row 1");
+            return rs.getString(1);
+        }
+    }
+
+    private static boolean hasColumn(Connection connection, String column) throws SQLException {
+        try (ResultSet columns = connection.getMetaData()
+                                           .getColumns(null, connection.getSchema(), "T_NOTES", column)) {
+            return columns.next();
         }
     }
 

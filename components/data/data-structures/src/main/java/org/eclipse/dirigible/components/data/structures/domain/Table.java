@@ -10,12 +10,14 @@
 package org.eclipse.dirigible.components.data.structures.domain;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -27,6 +29,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
+import org.eclipse.dirigible.components.base.converters.ArrayOfStringsToCsvConverter;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
 
@@ -75,6 +78,16 @@ public class Table extends Artefact {
     @Nullable
     @Expose
     private TableConstraints constraints;
+
+    /**
+     * The columns this table no longer has (#7635): a live column the definition does not declare is
+     * kept, with its data, unless it is named here - the explicit contract step of a schema change.
+     */
+    @Column(name = "TABLE_DROPPED_COLUMNS", columnDefinition = "VARCHAR", nullable = true, length = 2000)
+    @Nullable
+    @Convert(converter = ArrayOfStringsToCsvConverter.class)
+    @Expose
+    private String[] dropped;
 
     /** The schema reference. */
     @ManyToOne(fetch = FetchType.EAGER, optional = true)
@@ -283,12 +296,30 @@ public class Table extends Artefact {
      *
      * @return the string
      */
+    /**
+     * Gets the columns this table no longer has.
+     *
+     * @return the dropped column names, or null when none are declared
+     */
+    public String[] getDropped() {
+        return dropped;
+    }
+
+    /**
+     * Sets the columns this table no longer has.
+     *
+     * @param dropped the dropped column names
+     */
+    public void setDropped(String[] dropped) {
+        this.dropped = dropped;
+    }
+
     @Override
     public String toString() {
         return "Table [id=" + id + ", schemaName=" + schema + ", columns=" + columns + ", indexes=" + indexes + ", constraints="
-                + constraints + ", location=" + location + ", name=" + name + ", type=" + type + ", description=" + description + ", key="
-                + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy + ", createdAt=" + createdAt + ", updatedBy="
-                + updatedBy + ", updatedAt=" + updatedAt + "]";
+                + constraints + ", dropped=" + Arrays.toString(dropped) + ", location=" + location + ", name=" + name + ", type=" + type
+                + ", description=" + description + ", key=" + key + ", dependencies=" + dependencies + ", createdBy=" + createdBy
+                + ", createdAt=" + createdAt + ", updatedBy=" + updatedBy + ", updatedAt=" + updatedAt + "]";
     }
 
     /**

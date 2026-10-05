@@ -1082,6 +1082,28 @@ Generation REFUSES a rule `match:` column and an arrival lookup `by:` field that
 this marker; and it refuses the marker itself where it cannot mean anything (a non-multilingual entity,
 a non-string field).
 
+**Renaming or removing a field of a live application (`renamedFrom:` / `dropped:`).** A publish never
+drops a column on its own: a field deleted from the intent keeps its column and its values in every
+tenant (the column is logged as undeclared and counted), so a mistaken removal costs nothing. Two
+declarations make the change explicit. When you RENAME a field, keep its data with `renamedFrom:
+<old name>` on the field - the publish renames the column in place; without it the old values stay
+behind in the old column and the new field starts empty. When the user really wants a field's data
+gone, list the former name under the entity's `dropped:` - that publish removes the column, values
+included. Both name fields or to-one relations by their authored names, and both are refused when the
+name is still declared on the entity:
+
+```yaml
+entities:
+  - name: Invoice
+    dropped: [legacyCode]                                   # this column and its data are removed
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: issueDate, type: date, renamedFrom: invoiceDate }   # the values move with the name
+```
+
+Propose `renamedFrom:` whenever you rename a field of an entity that may already hold rows; propose
+`dropped:` only when the user asks for the data to go, never as part of a rename.
+
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
 verbatim into that entity's generated repository, so a calculated-field action (or any custom class)
 can be referenced from the calculated fields by simple name. Pair it with `calculatedActionOnCreate`:

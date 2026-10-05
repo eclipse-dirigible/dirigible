@@ -138,6 +138,13 @@ public enum DirigibleConfig {
     /** The system data source name. */
     SYSTEM_DATA_SOURCE_NAME("DIRIGIBLE_DATABASE_DATASOURCE_NAME_SYSTEM", "SystemDB"),
 
+    /**
+     * Drop a live column the published table definition no longer declares (#7635). Off by default: an
+     * undeclared column is kept, with its data, and only a table's own {@code dropped} list removes
+     * one. Meant for development instances, where a regenerated model is the only owner of the data.
+     */
+    DATABASE_DROP_UNDECLARED_COLUMNS("DIRIGIBLE_DATABASE_DROP_UNDECLARED_COLUMNS", Boolean.FALSE.toString()),
+
     /** The synchronizer frequency. */
     SYNCHRONIZER_FREQUENCY("DIRIGIBLE_SYNCHRONIZER_FREQUENCY", "10"),
 

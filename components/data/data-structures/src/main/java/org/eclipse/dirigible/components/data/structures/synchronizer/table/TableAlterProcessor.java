@@ -22,12 +22,17 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeSet;
+
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.readiness.PlatformReadiness;
 
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
 import org.eclipse.dirigible.components.database.DatabaseNameNormalizer;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.DataTypeUtils;
+import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.SqlException;
 import org.eclipse.dirigible.database.sql.SqlFactory;
@@ -60,21 +65,32 @@ public class TableAlterProcessor {
         logger.info("Processing Alter Table: " + tableName);
 
         Map<String, String> columnDefinitions = new HashMap<>();
+        // the live columns' names as the database spells them, and the ones it holds NOT NULL - both
+        // keyed by the canonical (upper-case) name every comparison below uses
+        Map<String, String> liveNames = new HashMap<>();
+        Set<String> notNullColumns = new HashSet<>();
         DatabaseMetaData dmd = connection.getMetaData();
         String schema = connection.getSchema();
         ResultSet rsColumns = dmd.getColumns(null, schema, DatabaseNameNormalizer.normalizeTableName(tableName), null);
         while (rsColumns.next()) {
             int columnType = rsColumns.getInt(5);
-            String columnName = rsColumns.getString(4)
-                                         .toUpperCase();
+            String liveName = rsColumns.getString(4);
+            String columnName = liveName.toUpperCase();
             try {
                 String typeName = DataTypeUtils.getDatabaseTypeName(columnType);
-                columnDefinitions.put(DatabaseNameNormalizer.normalizeColumnName(columnName), typeName);
+                String canonicalName = DatabaseNameNormalizer.normalizeColumnName(columnName);
+                columnDefinitions.put(canonicalName, typeName);
+                liveNames.put(canonicalName, liveName);
+                if (rsColumns.getInt(11) == DatabaseMetaData.columnNoNulls) {
+                    notNullColumns.add(canonicalName);
+                }
             } catch (SqlException ex) {
                 String errorMessage = "Missing type for column [" + columnName + "] and type [" + columnType + "]";
                 throw new SqlException(errorMessage, ex);
             }
         }
+
+        renameColumns(connection, tableModel, columnDefinitions, liveNames, notNullColumns);
 
         List<String> modelColumnNames = new ArrayList<>();
 
@@ -117,6 +133,15 @@ public class TableAlterProcessor {
 
             String nameOriginalCanonical = name.toUpperCase();
             if (!columnDefinitions.containsKey(nameOriginalCanonical)) {
+                // a rename this database cannot do in place: the new column is added and the values are
+                // copied over, while the old column stays (undeclared, so kept) - the NOT NULL the model
+                // declares cannot be added to a column that starts out empty
+                String copyFrom = renamedLiveColumn(columnModel, liveNames);
+                if (copyFrom != null && !isNullable) {
+                    logger.warn("Column [{}] of table [{}] is renamed from [{}] by adding it - it is created nullable,"
+                            + " this database cannot rename a column in place", name, tableName, copyFrom);
+                    isNullable = true;
+                }
 
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
                                                                 .alter()
@@ -135,6 +160,9 @@ public class TableAlterProcessor {
                 }
 
                 executeAlterBuilder(connection, alterTableBuilder);
+                if (copyFrom != null) {
+                    copyColumn(connection, tableName, copyFrom, name);
+                }
 
             } else {
                 String typeFromMetadata = columnDefinitions.get(nameOriginalCanonical);
@@ -158,28 +186,211 @@ public class TableAlterProcessor {
             }
         }
 
-        // DROP iteration
-        for (String columnName : columnDefinitions.keySet()) {
-            if (!modelColumnNames.contains(columnName.toUpperCase())) {
-                AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
-                                                                .alter()
-                                                                .table(tableName);
-                alterTableBuilder.drop()
-                                 .column("\"" + columnName + "\"", DataType.BOOLEAN);
-                executeAlterBuilder(connection, alterTableBuilder);
+        reconcileUndeclaredColumns(connection, tableName, tableModel, modelColumnNames, liveNames, notNullColumns);
+        reconcileUniqueConstraints(connection, tableName, tableModel);
+    }
+
+    /**
+     * Renames in place every live column the model declares a column {@code renamedFrom} (#7635), so
+     * the values move with the name instead of the old column being left behind and the new one added
+     * empty. A rename runs only while the old name is live and the new one is not, so a second run
+     * issues nothing. On a database without an in-place rename the column is left to the ADD pass,
+     * which copies the values over (see {@link #renamedLiveColumn}). The live-column maps are updated
+     * to what the database holds afterwards.
+     *
+     * @param connection the connection
+     * @param tableModel the model
+     * @param columnDefinitions the live column types, by canonical name
+     * @param liveNames the live column names as the database spells them, by canonical name
+     * @param notNullColumns the canonical names of the live NOT NULL columns
+     * @throws SQLException when the database refuses the rename - the data must not be split across two
+     *         columns, so the table fails rather than falling through to the ADD
+     */
+    private static void renameColumns(Connection connection, Table tableModel, Map<String, String> columnDefinitions,
+            Map<String, String> liveNames, Set<String> notNullColumns) throws SQLException {
+        ISqlDialect dialect = SqlFactory.deriveDialect(connection);
+        String table = DatabaseNameNormalizer.normalizeTableName(tableModel.getName());
+        for (TableColumn columnModel : tableModel.getColumns()) {
+            String from = renamedLiveColumn(columnModel, liveNames);
+            if (from == null) {
+                continue;
+            }
+            String to = DatabaseNameNormalizer.normalizeColumnName(columnModel.getName());
+            String sql = dialect.renameColumn(table, from, to);
+            if (sql == null) {
+                continue;
+            }
+            logger.info("Renaming column [{}] of table [{}] to [{}], declared by [{}]", from, table, to, tableModel.getLocation());
+            executeStatement(connection, sql);
+            String fromKey = canonical(from);
+            String toKey = canonical(to);
+            columnDefinitions.put(toKey, columnDefinitions.remove(fromKey));
+            liveNames.remove(fromKey);
+            liveNames.put(toKey, to);
+            if (notNullColumns.remove(fromKey)) {
+                notNullColumns.add(toKey);
             }
         }
-        reconcileUniqueConstraints(connection, tableName, tableModel);
+    }
+
+    /**
+     * The live column a model column is renamed from - only while the rename is still to be done: the
+     * old name is live and the new one is not.
+     *
+     * @param columnModel the model column
+     * @param liveNames the live column names as the database spells them, by canonical name
+     * @return the live name of the old column, or null when there is nothing to rename
+     */
+    private static String renamedLiveColumn(TableColumn columnModel, Map<String, String> liveNames) {
+        String renamedFrom = columnModel.getRenamedFrom();
+        if (renamedFrom == null || renamedFrom.isBlank()) {
+            return null;
+        }
+        String toKey = canonical(DatabaseNameNormalizer.normalizeColumnName(columnModel.getName()));
+        String fromKey = canonical(DatabaseNameNormalizer.normalizeColumnName(renamedFrom.trim()));
+        if (fromKey.equals(toKey) || liveNames.containsKey(toKey)) {
+            return null;
+        }
+        return liveNames.get(fromKey);
+    }
+
+    /**
+     * Copies the values of a renamed column into the column that replaces it, on a database that cannot
+     * rename in place.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the builders want it (quoted)
+     * @param from the live name of the old column
+     * @param to the new column
+     * @throws SQLException when the copy fails
+     */
+    private static void copyColumn(Connection connection, String quotedTableName, String from, String to) throws SQLException {
+        String escape = String.valueOf(SqlFactory.deriveDialect(connection)
+                                                 .getEscapeSymbol());
+        String sql = SqlFactory.getNative(connection)
+                               .update()
+                               .table(quotedTableName)
+                               .set("\"" + to + "\"", escape + from + escape)
+                               .build();
+        logger.info("Copying the values of column [{}] of table [{}] into its successor [{}]", from, quotedTableName, to);
+        executeStatement(connection, sql);
+    }
+
+    /**
+     * Settles every live column the model does not declare (#7635). A column is dropped only when the
+     * table lists it as {@code dropped}, or when the operator opted into
+     * {@link DirigibleConfig#DATABASE_DROP_UNDECLARED_COLUMNS}; any other is KEPT with its data - a
+     * renamed or removed field must never cost the rows their values, in any tenant - logged at WARN
+     * with the artefact that owns the table, and counted in the {@code artefacts} health component. A
+     * kept column the database holds NOT NULL is relaxed to nullable, because the application no longer
+     * writes it and every insert would be refused otherwise.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the builders want it (quoted)
+     * @param tableModel the model
+     * @param modelColumnNames the canonical names of the declared columns
+     * @param liveNames the live column names as the database spells them, by canonical name
+     * @param notNullColumns the canonical names of the live NOT NULL columns
+     * @throws SQLException when a declared drop fails
+     */
+    private static void reconcileUndeclaredColumns(Connection connection, String quotedTableName, Table tableModel,
+            List<String> modelColumnNames, Map<String, String> liveNames, Set<String> notNullColumns) throws SQLException {
+        String table = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
+        Set<String> declaredDrops = new HashSet<>();
+        if (tableModel.getDropped() != null) {
+            for (String dropped : tableModel.getDropped()) {
+                String droppedKey = canonical(DatabaseNameNormalizer.normalizeColumnName(dropped.trim()));
+                if (modelColumnNames.contains(droppedKey)) {
+                    logger.warn("Column [{}] of table [{}] is both declared and listed as dropped by [{}] - it is kept", dropped, table,
+                            tableModel.getLocation());
+                } else {
+                    declaredDrops.add(droppedKey);
+                }
+            }
+        }
+        boolean dropUndeclared = DirigibleConfig.DATABASE_DROP_UNDECLARED_COLUMNS.getBooleanValue();
+        Set<String> orphans = new TreeSet<>();
+        for (Map.Entry<String, String> live : liveNames.entrySet()) {
+            String key = live.getKey();
+            String column = live.getValue();
+            if (modelColumnNames.contains(key)) {
+                continue;
+            }
+            if (declaredDrops.contains(key) || dropUndeclared) {
+                logger.warn("Dropping column [{}] of table [{}] with its data - {}", column, table,
+                        declaredDrops.contains(key) ? "listed as dropped by [" + tableModel.getLocation() + "]"
+                                : DirigibleConfig.DATABASE_DROP_UNDECLARED_COLUMNS.getKey() + " is on");
+                AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
+                                                                .alter()
+                                                                .table(quotedTableName);
+                alterTableBuilder.drop()
+                                 .column("\"" + column + "\"", DataType.BOOLEAN);
+                executeAlterBuilder(connection, alterTableBuilder);
+                continue;
+            }
+            orphans.add(column);
+            logger.warn("Column [{}] of table [{}] is not declared by [{}] and is kept with its data - list it as dropped to remove it",
+                    column, table, tableModel.getLocation());
+            if (notNullColumns.contains(key)) {
+                relaxNotNull(connection, table, column);
+            }
+        }
+        PlatformReadiness.getInstance()
+                         .recordOrphanColumns(connection.getCatalog() + "." + connection.getSchema() + "." + table, orphans);
+    }
+
+    /**
+     * Lets a kept undeclared column hold NULL, fail-soft: a database that cannot express it, or refuses
+     * it (the column is part of the primary key), leaves the column as it is with the consequence
+     * logged, without failing the table.
+     *
+     * @param connection the connection
+     * @param table the (unquoted) table
+     * @param column the live column name
+     */
+    private static void relaxNotNull(Connection connection, String table, String column) {
+        String sql = SqlFactory.deriveDialect(connection)
+                               .dropNotNull(table, column);
+        if (sql == null) {
+            logger.warn("Column [{}] of table [{}] is NOT NULL and this database cannot relax it here - an insert that does not set it"
+                    + " is refused; declare the column again or list it as dropped", column, table);
+            return;
+        }
+        logger.info("Column [{}] of table [{}] is no longer written, so it is made nullable", column, table);
+        try {
+            executeStatement(connection, sql);
+        } catch (SQLException e) {
+            logger.error("Column [{}] of table [{}] could not be made nullable - an insert that does not set it is refused", column, table,
+                    e);
+        }
+    }
+
+    private static String canonical(String columnName) {
+        return columnName.toUpperCase();
+    }
+
+    /**
+     * Executes one statement of the alter path.
+     *
+     * @param connection the connection
+     * @param sql the statement
+     * @throws SQLException when the database refuses it
+     */
+    private static void executeStatement(Connection connection, String sql) throws SQLException {
+        logger.info(sql);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.executeUpdate();
+        }
     }
 
     /**
      * Brings the table's UNIQUE constraints in line with the model - the half of schema evolution the
      * column pass above never covered (#7019). A key the model declares (a {@code unique} column or a
      * composite {@code uniqueIndexes} entry) that the database lacks is ADDED; a UNIQUE the database
-     * enforces that the model no longer declares is DROPPED - the same policy the column pass applies
-     * to undeclared columns. Keys are compared as column SETS, so a differently named but equal key is
-     * left alone and a second run issues nothing. PRIMARY KEY and FOREIGN KEY constraints are never
-     * touched.
+     * enforces that the model no longer declares is DROPPED - a constraint holds no data, so unlike an
+     * undeclared column (#7635) it costs nothing to remove. Keys are compared as column SETS, so a
+     * differently named but equal key is left alone and a second run issues nothing. PRIMARY KEY and
+     * FOREIGN KEY constraints are never touched.
      *
      * <p>
      * Fails soft: a dialect without a catalog of unique constraints skips the step (no change from
