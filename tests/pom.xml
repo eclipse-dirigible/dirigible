@@ -18,6 +18,7 @@
 
     <modules>
         <module>tests-framework</module>
+        <module>tests-sdk</module>
         <module>tests-integrations</module>
     </modules>
 

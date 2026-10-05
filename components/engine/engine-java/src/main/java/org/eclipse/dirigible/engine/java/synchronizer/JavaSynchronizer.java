@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.engine.java.synchronizer;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +28,7 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.api.platform.ProblemsFacade;
 import org.eclipse.dirigible.engine.java.domain.JavaFile;
+import org.eclipse.dirigible.engine.java.runtime.ClientTestSources;
 import org.eclipse.dirigible.engine.java.runtime.CompileDiagnostic;
 import org.eclipse.dirigible.engine.java.runtime.JavaLoader;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceParser;
@@ -115,6 +118,17 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
     @Override
     public boolean isAccepted(String type) {
         return JavaFile.ARTEFACT_TYPE.equals(type);
+    }
+
+    /**
+     * Every {@code .java} file except a project's unit tests ({@code custom/test/**}): those are
+     * compiled by the module's own Maven build against JUnit, which the platform does not ship, so
+     * compiling them here could only fail, and report a compilation problem for a file that is not
+     * broken.
+     */
+    @Override
+    public boolean isAccepted(Path file, BasicFileAttributes attrs) {
+        return super.isAccepted(file, attrs) && !ClientTestSources.isTestSource(file);
     }
 
     @Override

@@ -241,6 +241,10 @@ done | sort > "$PAYLOAD/.compiled"
 
 Only write the marker when the `find` produced at least one class; a payload-only project skips it.
 
+The `test/` exclusions keep the project's unit tests - `custom/test/**`, which the platform never
+compiles - out of the module. Run them before packaging, with `mvn test` in the project
+([`dirigible-sdk-test`](../../../tests/tests-sdk/README.md) runs them in-process).
+
 ### 3. Compile and assemble
 
 ```bash

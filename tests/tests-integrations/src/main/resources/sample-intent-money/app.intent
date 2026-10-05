@@ -1,0 +1,17 @@
+name: money
+description: The reference project of the in-process unit-test slice (dirigible #7643) - a money field calculated by a hand-written custom/ action, with its unit tests under custom/test
+
+entities:
+  # One invoice line. Its VAT is the money path under test: calculated on the server by the
+  # hand-written LineVatAction on every create and update, never accepted from the caller.
+  - name: InvoiceLine
+    imports: |
+      import custom.LineVatAction;
+    fields:
+      - { name: id,          type: integer, primaryKey: true, generated: true }
+      - { name: description, type: string,  required: true, length: 200 }
+      - { name: quantity,    type: decimal, required: true, precision: 18, scale: 3 }
+      - { name: unitPrice,   type: decimal, required: true, precision: 18, scale: 2 }
+      - { name: vatRate,     type: decimal, required: true, precision: 5,  scale: 2 }
+      - { name: vatAmount,   type: decimal, precision: 18, scale: 2, readOnly: true,
+          calculatedActionOnCreate: LineVatAction, calculatedActionOnUpdate: LineVatAction }
