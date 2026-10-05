@@ -223,7 +223,10 @@ class GluePostingsTest {
                       - { debit: "Amount" }
                 """;
         List<Map<String, Object>> postings = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml));
-        assertEquals(1, postings.size());
+        // The create handler, and its follower on the source's edit (#7634).
+        assertEquals(2, postings.size());
+        assertEquals("PaymentPostingOnUpdate", postings.get(1)
+                                                       .get("className"));
         Map<String, Object> p = postings.get(0);
         assertEquals("PaymentPosting", p.get("className"));
         assertEquals(true, p.get("isCreate"));

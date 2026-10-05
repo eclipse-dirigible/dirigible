@@ -38,6 +38,21 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   negative amounts - red storno) with the storno link stamped; its idempotency guard counts only
  *   documents CARRYING the storno link, while the reversed sibling's guard counts only documents
  *   WITHOUT it.
+#if($followsSource)
+ * - FOLLOWER (#7634): this is the create posting's twin on the source's EDIT. A source with no status
+ *   lifecycle raises its posting's moment once, at the insert, so without it an edit left the post
+ *   with the insert's figures. An edit re-derives the post exactly as above - rewritten while the
+ *   ${targetEntity} still holds the status it was created in, logged once someone has acted on it -
+ *   and a source with NO post is left alone: the first post is the create handler's, and two handlers
+ *   each finding nothing posted for a create and an edit committed together would post twice.
+#end
+#if($mirrorsOriginal)
+ * - DELETED SOURCE (#7634): the source no longer exists, so it is read off the -deleted payload (the
+ *   whole row as it was deleted), and the reversal MIRRORS the original's stored lines - every
+ *   amount negated - instead of re-deriving them: a source edited after its entry was posted is a
+ *   logged divergence the original still carries, and negating anything else would leave the ledger
+ *   off by the difference. No determination rule is read; the original already resolved it.
+#end
  */
 @Component("${javaGenFolderName}_${className}Posting")
 public class ${className}Posting implements MessageHandler {
@@ -61,9 +76,15 @@ public class ${className}Posting implements MessageHandler {
         if (payload == null || payload.${sourceKeyField} == null) {
             return;
         }
+#if($fromPayload)
+        // The source is deleted, so it cannot be re-loaded: the -deleted payload is the whole row as it
+        // was deleted (the repository announces the stored row, not the caller's snapshot).
+        gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source = payload;
+#else
         // Re-load: the event payload lacks later-step data (e.g. the number stamped after Issue).
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
+#end
 #if($guardProperty != "")
         if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
             return;
@@ -73,7 +94,7 @@ public class ${className}Posting implements MessageHandler {
             return;
         }
 #end
-#if($hasRule)
+#if($hasRule && !$mirrorsOriginal)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.
         // The match value is the AUTHORED literal of rule.match, not a value read off the source, so it
@@ -113,6 +134,7 @@ public class ${className}Posting implements MessageHandler {
         // never leave a post carrying the previous issue's content.
         java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> derivedItems =
                 new java.util.ArrayList<>();
+#if(!$mirrorsOriginal)
 #foreach($row in $itemRows)
 #if($row.guard != "")
         if (${row.guard}) {
@@ -127,6 +149,7 @@ public class ${className}Posting implements MessageHandler {
         }
 #if($row.guard != "")
         }
+#end
 #end
 #end
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
@@ -149,6 +172,20 @@ public class ${className}Posting implements MessageHandler {
         if (original == null) {
             return; // nothing was posted for this source - nothing to reverse
         }
+#if($mirrorsOriginal)
+        // The storno of a deleted source: the original's own lines, every amount negated (same side).
+        for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity originalItem :
+                itemsRepository.findAll(Criteria.create().eq("${itemsFk}", original.${targetPk}))) {
+#foreach($row in $mirrorRows)
+            gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item =
+                    new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity();
+#foreach($a in $row.assigns)
+            item.${a.targetProp} = ${a.expr};
+#end
+            derivedItems.add(item);
+#end
+        }
+#end
 #elseif($stornoFilterProperty != "")
         // A sibling reversal posting back-references the same source (with its storno link set) -
         // only rows WITHOUT the link are THIS posting's own documents.
@@ -226,12 +263,16 @@ public class ${className}Posting implements MessageHandler {
             }
 #end
         } else {
+#if($followsSource)
+            return; // nothing posted for this source yet - the first post is the create handler's
+#else
             target = new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
             target.${backRefProperty} = source.${sourceKeyField};
 #if($stornoProperty != "")
             target.${stornoProperty} = original.${targetPk};
 #end
             currentItems = java.util.List.of();
+#end
         }
 #foreach($a in $headerAssignments)
         target.${a.targetProp} = ${a.value};

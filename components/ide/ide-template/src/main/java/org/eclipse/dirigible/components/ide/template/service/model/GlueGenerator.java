@@ -908,6 +908,15 @@ class GlueGenerator {
         // before the amendment half carries neither key and needs neither helper.
         context.put("comparesAgainstDefaults", truthy(item, "comparesAgainstDefaults"));
         context.put("comparesUnlessDerivedIsEmpty", truthy(item, "comparesUnlessDerivedIsEmpty"));
+        // The source-following half (issue #7634): the create posting's twin on the source's edit,
+        // which never writes a first post, and the reversal of a DELETED source, read off the
+        // -deleted payload and mirroring the original's stored lines. A .glue written before it
+        // carries none of the keys and binds what that shape emitted: a re-loading handler that
+        // derives its lines and may create the post.
+        context.put("followsSource", truthy(item, "followsSource"));
+        context.put("fromPayload", truthy(item, "fromPayload"));
+        context.put("mirrorsOriginal", truthy(item, "mirrorsOriginal"));
+        context.put("mirrorRows", rows(item.get("mirrorRows")));
         List<Map<String, Object>> headerAssignments = headerAssignments(item.get("headerAssignments"));
         context.put("headerAssignments", headerAssignments);
         context.put("hoistsHeaderValues", headerAssignments.stream()

@@ -5307,7 +5307,7 @@ public final class IntentParser {
     }
 
     /** The values {@code whenTargetDeleted} accepts. */
-    private static final Set<String> TARGET_DELETE_RULES = Set.of("restrict", "nullify", "cascade");
+    private static final Set<String> TARGET_DELETE_RULES = Set.of("restrict", "nullify", "cascade", "keep");
 
     /**
      * {@code whenTargetDeleted} on a to-one association = what a DELETE of the TARGET does to the
@@ -5318,7 +5318,10 @@ public final class IntentParser {
      * already answers "what happens to my children when I, the master, am deleted" through
      * {@link #validateWhenMasterDeleted}, and this key is the opposite direction: what happens to ME
      * when the entity I POINT AT is deleted. {@code nullify} needs a column that may be empty, so it is
-     * refused on a required relation.
+     * refused on a required relation. {@code keep} (#7634) leaves the reference in place - a historical
+     * link that outlives its target by design, such as a journal entry's link to the payment it booked,
+     * which the entry's red storno still follows after the payment is deleted. It is refused on a
+     * same-model relation, whose column is a database foreign key that refuses the delete itself.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
@@ -5334,7 +5337,7 @@ public final class IntentParser {
         if (!TARGET_DELETE_RULES.contains(value)) {
             issues.add(subject + " whenTargetDeleted [" + whenTargetDeleted
                     + "] must be `restrict` (refuse the target's delete while this relation references it, the default), `nullify`"
-                    + " (clear this relation) or `cascade` (delete this record with it)");
+                    + " (clear this relation), `cascade` (delete this record with it) or `keep` (leave it pointing at the deleted record)");
             return;
         }
         if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
@@ -5349,6 +5352,10 @@ public final class IntentParser {
         }
         if ("nullify".equals(value) && relation.isRequired()) {
             issues.add(subject + " is required, so whenTargetDeleted: nullify cannot clear it - use `restrict` or `cascade`");
+        }
+        if ("keep".equals(value) && !relation.isCrossModel()) {
+            issues.add(subject + " declares whenTargetDeleted: keep, but a same-model relation is a database foreign key that refuses the"
+                    + " target's delete itself - keep is for a cross-model (`model:`) reference");
         }
     }
 
@@ -8618,6 +8625,48 @@ public final class IntentParser {
      * selector; item rows assign fields/relations of the items entity from {@code rule(<column>)}
      * references or source expressions, with an optional {@code when} row guard.
      */
+    /**
+     * A reversal bound to {@code onDelete} (#7634) red-stornos the entry its sibling posted for a
+     * source that is then DELETED. Two things must hold for it to ever run. It must watch the sibling's
+     * own source - a delete of anything else has no original to find. And the back-reference the
+     * original carries must survive that delete: the reversal finds the original through it, AFTER the
+     * delete committed, so a {@code restrict} (the default) refuses the delete outright, a
+     * {@code nullify} clears the link before the reversal can follow it and a {@code cascade} deletes
+     * the original with it. Only {@code whenTargetDeleted: keep} leaves it in place, and only on a
+     * cross-model relation, whose column is not a database foreign key.
+     *
+     * @param posting the reversal
+     * @param sibling the posting it reverses
+     * @param byName the model's entities by name
+     * @param subject the message prefix naming the reversal
+     * @param issues the issue list to add to
+     */
+    private static void validateDeleteReversal(PostingIntent posting, PostingIntent sibling, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        Object deleted = posting.getEvent()
+                                .get("onDelete");
+        Object siblingSource = sibling.getEvent() == null ? null : EventBinding.entity(sibling.getEvent());
+        Object alias = posting.getEvent()
+                              .get("model");
+        Object siblingAlias = sibling.getEvent() == null ? null
+                : sibling.getEvent()
+                         .get("model");
+        if (siblingSource != null && (!String.valueOf(siblingSource)
+                                             .equals(String.valueOf(deleted))
+                || !java.util.Objects.equals(alias, siblingAlias))) {
+            issues.add(subject + " onDelete [" + deleted + "] must name the source of [" + sibling.getName() + "] (" + siblingSource
+                    + ") - only its delete leaves an entry of that posting to reverse");
+        }
+        EntityIntent reversed = sibling.getCreates() == null ? null : byName.get(sibling.getCreates());
+        RelationIntent backReference =
+                reversed == null || sibling.getBackReference() == null ? null : toOneRelationByName(reversed, sibling.getBackReference());
+        if (backReference != null && (!backReference.isCrossModel() || !"keep".equals(backReference.getTargetDeleteRule()))) {
+            issues.add(subject + " reverses a deleted source, so [" + reversed.getName() + "." + backReference.getName()
+                    + "] must be a cross-model relation declaring `whenTargetDeleted: keep` - the reversal finds the original through it"
+                    + " after the delete, which `restrict` (the default) refuses, `nullify` clears and `cascade` deletes it with");
+        }
+    }
+
     private static void validatePostings(IntentModel model, Set<String> usesAliases, List<String> issues) {
         java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
         for (EntityIntent entity : model.getEntities()) {
@@ -8648,14 +8697,27 @@ public final class IntentParser {
             Object onPhase = posting.getEvent() == null ? null
                     : posting.getEvent()
                              .get(EventBinding.ON_PHASE);
-            int triggers = (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1);
+            // ...or `onDelete` (#7634), on a reversal only: a deleted source has nothing left to post,
+            // only the entry posted for it to red-storno.
+            Object onDelete = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get("onDelete");
+            int triggers =
+                    (onTransition == null ? 0 : 1) + (onCreate == null ? 0 : 1) + (onPhase == null ? 0 : 1) + (onDelete == null ? 0 : 1);
             if (triggers == 0) {
                 issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`,"
                         + " `event: { onCreate: <SourceEntity>, ... }` or `event: { onPhase: <SourceEntity>, phase: <name> }`");
             } else if (triggers > 1) {
-                issues.add(subject + " event declares more than one of onTransition/onCreate/onPhase - exactly one trigger is allowed");
+                issues.add(subject
+                        + " event declares more than one of onTransition/onCreate/onPhase/onDelete - exactly one trigger is allowed");
             } else {
-                String source = String.valueOf(onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase);
+                String source = String.valueOf(
+                        onTransition != null ? onTransition : onCreate != null ? onCreate : onPhase != null ? onPhase : onDelete);
+                if (onDelete != null && (posting.getReverses() == null || posting.getReverses()
+                                                                                 .isBlank())) {
+                    issues.add(subject + " binds onDelete, which only a reversal (`reverses:`) may - a deleted source has nothing to post,"
+                            + " only the entry posted for it to red-storno");
+                }
                 Object alias = posting.getEvent()
                                       .get("model");
                 if (alias != null && !usesAliases.contains(String.valueOf(alias))) {
@@ -8696,6 +8758,9 @@ public final class IntentParser {
                     issues.add(subject + " reverses unknown posting [" + posting.getReverses() + "] - it must name a sibling"
                             + " posting in this block");
                     continue;
+                }
+                if (onDelete != null) {
+                    validateDeleteReversal(posting, sibling, byName, subject, issues);
                 }
                 if (posting.getCreates() != null || posting.getBackReference() != null || posting.getRule() != null
                         || posting.getMap() != null || (posting.getItems() != null && !posting.getItems()

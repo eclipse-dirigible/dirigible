@@ -45,7 +45,10 @@ public class PostingIntent {
      * a source with no status lifecycle) names the source entity, {@code model} its owning intent model
      * alias (absent = same model), {@code when} the guard as {@code <Property> == <seed id>} -
      * mandatory for {@code onTransition}, optional for {@code onCreate} - evaluated against the
-     * RE-LOADED source, not the raw payload.
+     * RE-LOADED source, not the raw payload. An {@code onCreate} posting also follows the source's
+     * edits (#7634). A {@link #reverses reversal} may bind {@code onDelete} of the sibling's source
+     * instead: the deleted row is read off the delete event, and the original's stored lines are
+     * mirrored negated.
      */
     private Map<String, Object> event;
     /** The local document entity this posting creates (must own a composition items child). */

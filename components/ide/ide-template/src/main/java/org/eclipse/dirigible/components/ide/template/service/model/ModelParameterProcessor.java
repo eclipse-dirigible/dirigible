@@ -964,7 +964,8 @@ final class ModelParameterProcessor {
         // another model may - so this entity's repository contributes the rule the target's delete
         // applies, keyed by the target's generated entity class, which is what that delete names itself
         // by. Same-model and cross-model alike: this is the package the target is generated into.
-        if (truthy(property, "whenTargetDeleted")) {
+        // `keep` (#7634) contributes nothing: the reference outlives its target.
+        if (truthy(property, "whenTargetDeleted") && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
             property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
             entity.put("hasTargetDeleteRules", Boolean.TRUE);
         }

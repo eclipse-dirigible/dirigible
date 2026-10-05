@@ -198,7 +198,7 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
-- **`whenTargetDeleted: restrict | nullify | cascade` on a plain (non-composition) `manyToOne`/
+- **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
     referencing records and their count ("This Employee is referenced by 2 Expense Claim record(s)
@@ -206,6 +206,10 @@ not as an apology.
   - `nullify` deletes the target and clears this relation. It is refused on a `required` relation.
   - `cascade` deletes this record together with the target, through its own repository, so its
     events, history and own rules apply.
+  - `keep` deletes the target and leaves this relation pointing at it (#7634) - a historical link
+    that outlives its target by design, such as a journal entry's link to the payment it booked,
+    which the entry's red storno (`reverses:` on `onDelete`) still follows. Cross-model (`model:`)
+    relations only: a same-model relation is a database foreign key that refuses the delete itself.
 
   Every restriction is checked before anything is released, so a refused delete changes nothing. It
   works across models too (a `model:` relation): the owning module needs no change, because the
@@ -703,6 +707,12 @@ field may declare:
   `{ kind: compare, field: issueDelayDays, op: le, value: 5, severity: warn, message: "..." }`. Only
   the neutral expressions are evaluated for the checks; a `calculatedAction*` runs on the write
   itself, so a check on an action-calculated field still reads the value it was sent.
+  **A check reads a system-owned field from the stored row (#7633).** On an update, a `readOnly`
+  field, a roll-up target, an aggregate and an audit column are what the stored row says - never the
+  payload's value - for the checks exactly as for the write. So "a receipt whose entries are posted
+  is final" is `{ kind: forbidWhen, when: ["postedEntries != null", "postedEntries != 0"] }` over a
+  `readOnly` counter a roll-up maintains, and a PUT that omits the counter, or sends 0 for it, is
+  refused like one that echoes the stored value.
   **Translating check messages (#7611).** A check message is translated exactly like a label: write
   it ONCE, in the module's default language, and it reaches every reader in their own. The generator
   writes each message into the module's en-US catalog (`i18n/en-US/<model>.model.json`) under
@@ -801,6 +811,12 @@ field may declare:
   seed id or as the seeded status name), someone has acted on it, so the divergence is logged and left
   to a reversing entry. A created document with no `function: EntityStatus` relation is always
   rewritable - and so is one whose `init:` names no seeded status at all, which Generate reports.
+  **An `onCreate` posting follows its source's edits (#7634).** A source with no status lifecycle
+  raises its posting's moment only once, at the insert, so the posting also listens to the source's
+  edit and re-derives the post through the same comparison: an edited payment rewrites its DRAFT
+  entry in place, and once the entry has left its `init:` status the divergence is logged, as for an
+  amended re-issue. The edit never writes a FIRST post - a source the create skipped (no rule row,
+  a false `when`) stays on the unposted worklist. Nothing to declare.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
@@ -817,6 +833,20 @@ field may declare:
   carrying the link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
   reversal lands as a normal new document (DRAFT status init, numbering, checks), dated by its own
   `map`-inherited header - corrections post into the open period.
+  **A deleted source is reversed too (#7634)** - the correcting entry for a source with no void status,
+  a booked payment. Bind the reversal to the source's delete:
+  ```yaml
+    - name: paymentStorno
+      event: { onDelete: Payment, model: payments }   # the sibling's own source
+      reverses: paymentPosting
+      storno: Storno
+  ```
+  The sibling's `backReference` must declare `whenTargetDeleted: keep` (and so be cross-model): the
+  reversal finds the original through it AFTER the delete, which `restrict` (the default) refuses,
+  `nullify` clears and `cascade` deletes it with - all refused at parse. The deleted row is read off
+  the delete event, and the reversal MIRRORS the original's stored lines, every amount negated,
+  instead of re-deriving them: a payment edited after its entry was posted left a logged divergence,
+  and only negating what was posted nets the original to zero. `onDelete` binds a reversal only.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
@@ -4349,7 +4379,7 @@ or a seeded name.
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
-| relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target); plain to-one relations, same-model or cross-model |
+| relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
 | entity event | `onCreate`, `onUpdate`, `onDelete`, `onTransition` (the STATUS channel - a workflow setter / `transitions:` button / `generates` completion hook publishes it, and `onUpdate` never sees those) |

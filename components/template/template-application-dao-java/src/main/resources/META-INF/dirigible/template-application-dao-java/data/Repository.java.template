@@ -1321,18 +1321,22 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     }
 
     /**
-     * The record this update would store, as far as its calculated fields go - the row the controller's
-     * checks read before the write (#7544). Built as update() builds it: the system-owned fields taken
-     * from the stored row, the document totals recomputed, then the update-time expressions - so an
-     * expression such as Balance = Total - Paid reads the stored Paid, never the payload's. Only the
+     * The record this update would store, as far as its calculated and system-owned fields go - the row
+     * the controller's checks read before the write (#7544). Built as update() builds it: the
+     * system-owned fields taken from the stored row, the document totals recomputed, then the
+     * update-time expressions - so an expression such as Balance = Total - Paid reads the stored Paid,
+     * never the payload's. The same holds for a check that reads a system-owned field directly (#7633):
+     * a forbidWhen over a readOnly counter a roll-up maintains judges the stored counter, so a payload
+     * that omits the column, or carries a harmless value for it, cannot walk past the refusal. Only the
      * neutral expressions are evaluated (an action runs on the write path alone), and the submitted
      * record itself is not touched.
      *
      * @param submitted the record about to be updated, carrying its id
-     * @return a copy carrying the computed values, or the record itself when nothing is calculated
+     * @return a copy carrying the stored and computed values, or the record itself when the entity has
+     *         nothing calculated and nothing system-owned
      */
     public ${name}Entity calculatedForUpdate(${name}Entity submitted) {
-#if($haveCalculatedExpressionOnUpdate)
+#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
         ${name}Entity entity = copyOf(submitted);
 #if($preservedOnUpdate.size() > 0)
         ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
@@ -1355,7 +1359,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return submitted;
 #end
     }
-#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate)
+#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
 
     private static ${name}Entity copyOf(${name}Entity source) {
         ${name}Entity copy = new ${name}Entity();

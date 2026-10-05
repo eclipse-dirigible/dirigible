@@ -99,7 +99,7 @@ final class UnknownKeyValidator {
             Map.entry("IntegrationIntent#event.onStepCompleted", Set.of("process", "step")),
             Map.entry("OutboundIntent#event", GLUE_EVENT_KEYS), Map.entry("OutboundIntent#event.onStepReached", Set.of("process", "step")),
             Map.entry("OutboundIntent#event.onStepCompleted", Set.of("process", "step")),
-            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "onPhase", "phase", "when", "model")),
+            Map.entry("PostingIntent#event", Set.of("onTransition", "onCreate", "onPhase", "onDelete", "phase", "when", "model")),
             Map.entry("PostingIntent#rule", Set.of("entity", "match")),
             // Both axes plus the cardinality (#6800). Spelled out rather than reusing GLUE_EVENT_KEYS:
             // a create-from binds onTransition (which no other consumer has) and never onUpdate/onDelete.

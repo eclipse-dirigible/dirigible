@@ -111,6 +111,33 @@ class WhenTargetDeletedIntentTest {
         assertEquals("cascade", ruleOf(yaml));
     }
 
+    /**
+     * keep (#7634) leaves a cross-model reference pointing at a deleted record - the historical link a
+     * journal entry's red storno still follows after the payment it booked is gone.
+     */
+    @Test
+    void keepIsAcceptedCrossModel() {
+        String yaml = """
+                name: expenses
+                uses:
+                  - { model: hr, project: hr-app }
+                entities:
+                  - name: Expense
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: employee, kind: manyToOne, model: hr, to: Employee, whenTargetDeleted: keep }
+                """;
+        assertEquals("keep", ruleOf(yaml));
+    }
+
+    /** A same-model reference is a database foreign key, which refuses the target's delete itself. */
+    @Test
+    void keepIsRejectedSameModel() {
+        assertIssue(YAML.replace("whenTargetDeleted: restrict", "whenTargetDeleted: keep"),
+                "declares whenTargetDeleted: keep, but a same-model relation is a database foreign key");
+    }
+
     @Test
     void restrictOnAOneToOneIsAccepted() {
         assertDoesNotThrow(() -> IntentParser.parse(YAML.replace("kind: manyToOne", "kind: oneToOne")));
