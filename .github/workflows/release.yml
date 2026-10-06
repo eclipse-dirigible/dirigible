@@ -89,6 +89,55 @@ jobs:
             exit 1
           fi
 
+  # Records the performance baseline of the generated surface (#7646) on the code being released:
+  # PerformanceBaselineIT writes tests/PERF_BASELINE.json instead of gating against it, and
+  # release-artifacts commits the file with the development version, so the nightly measures the
+  # next release's changes against this one's numbers.
+  perf-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '24'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript@5.9.3 esbuild
+
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+
+      - name: Record the performance baseline
+        run: mvn clean install -P integration-tests -Dit.groups=perf -Dperf.baseline.record=true
+
+      - name: Upload the performance baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-baseline
+          path: tests/PERF_BASELINE.json
+          if-no-files-found: error
+
   release-docker-images:
     needs: upgrade-test
     runs-on: ${{ matrix.runner }}
@@ -197,6 +246,7 @@ jobs:
           docker buildx imagetools inspect dirigiblelabs/dirigible:${{ github.event.inputs.releaseVersion }}
 
   release-artifacts:
+    needs: perf-baseline
     runs-on: ubuntu-latest
     steps:
 
@@ -267,12 +317,19 @@ jobs:
       - name: "Maven: Set Snapshot Version"
         run: mvn versions:set -DnewVersion=${{ github.event.inputs.snapshotVersion }}
 
+      - name: Download the performance baseline
+        uses: actions/download-artifact@v4
+        with:
+          name: perf-baseline
+          path: tests
+
       - name: "Git: Commit Snapshot Version"
         # tests/UPGRADE_FROM names the release the upgrade test starts from: from here on, the one
-        # this run has just released.
+        # this run has just released. tests/PERF_BASELINE.json is what this release measured, which
+        # the nightly gates the next one against.
         run: |
           echo "${{ github.event.inputs.releaseVersion }}" > tests/UPGRADE_FROM
-          git add '**pom.xml' tests/UPGRADE_FROM
+          git add '**pom.xml' tests/UPGRADE_FROM tests/PERF_BASELINE.json
           git commit -m "version set to ${{ github.event.inputs.snapshotVersion }} for development"
 
       #---------------Publish to Maven Central-----------------#

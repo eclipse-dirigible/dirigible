@@ -101,7 +101,13 @@ public class PDFFacade {
             FOUserAgent foUserAgent = fopFactory.newFOUserAgent();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-            Fop fop = fopFactory.newFop(MimeConstants.MIME_PDF, foUserAgent, baos);
+            Fop fop;
+            // A new Fop reads the renderer settings out of the factory's configuration, a Xerces DOM
+            // that is not safe to read from two threads: two documents printed at the same moment
+            // failed inside FOP (#7646). Only the construction is serialized - the rendering is not.
+            synchronized (fopFactory) {
+                fop = fopFactory.newFop(MimeConstants.MIME_PDF, foUserAgent, baos);
+            }
 
             TransformerFactory factory = TransformerFactory.newInstance();
             Transformer transformer = factory.newTransformer(templateSource);

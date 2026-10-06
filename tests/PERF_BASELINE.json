@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-10-06T06:48:21.906487Z",
+  "note": "Statement counts only, from a local run of PerformanceBaselineIT (#7646): they do not depend on the machine. The release workflow replaces this file with a full recording, latencies included.",
+  "steps": {
+    "listPage": {
+      "statements": 8
+    },
+    "search": {
+      "statements": 8
+    },
+    "create": {
+      "statements": 12
+    },
+    "transition": {
+      "statements": 14
+    },
+    "print": {
+      "statements": 7
+    },
+    "inbox": {
+      "statements": 9008
+    }
+  }
+}
