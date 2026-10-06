@@ -223,21 +223,28 @@ function detailPanel(def, masterId, master) {
     // `def.forbidWhen` is a list of guards (each a list of ANDed terms); any guard that fully holds
     // hides Add/edit/delete. A term reads `master[property]`, comparing as strings so a numeric status
     // FK matches its seed id; a missing master value never equals a real id, so `==` shows and `!=` hides.
-    isForbidden() {
+    // A guard scoped by `verbs:` (#7710) arrives as { verbs, terms } and hides only the affordances of
+    // its verbs - `verb` is the one asked about ('create' = Add, 'update' = row edit, 'delete' = row
+    // delete); asked without one, any guard counts.
+    isForbidden(verb) {
       const guards = this.def && this.def.forbidWhen;
       if (!Array.isArray(guards) || !guards.length) return false;
       const m = this.master;
       if (!m || typeof m !== "object") return false;
-      return guards.some(
-        (terms) =>
+      return guards.some((guard) => {
+        const scoped = guard && !Array.isArray(guard) && Array.isArray(guard.verbs);
+        if (scoped && verb && !guard.verbs.includes(verb)) return false;
+        const terms = scoped ? guard.terms : guard;
+        return (
           Array.isArray(terms) &&
           terms.length &&
           terms.every((t) => {
             const cur = m[t.property];
             const eq = String(cur === undefined || cur === null ? "" : cur) === String(t.value);
             return t.equal ? eq : !eq;
-          }),
-      );
+          })
+        );
+      });
     },
     addRow() {
       const q = "?" + this.masterQuery() + "&embedded=1&dialog=1";

@@ -112,6 +112,17 @@ public class CheckIntent {
      * customer). A status name resolves to its seed id, as in every other guard.
      */
     private Object when;
+    /**
+     * Optional, {@code forbidWhen} only (issue #7710): the verbs the refusal covers - {@code create},
+     * {@code update}, {@code delete}. Omitted = all three, the #7372 reading ("no line may change on a
+     * sent quotation"). A rule about ADDING only - "no further allocation onto a PAID invoice" - says
+     * {@code verbs: [create, update]}, so the allocation stays removable and its delete runs the
+     * roll-up's relinquish like any other. {@code create} and {@code update} are one pair: the
+     * generated controllers and the repository read the same check on both, so a scope names both or
+     * neither. Spelled {@code verbs}, never {@code on}, which YAML 1.1 reads as the boolean
+     * {@code true}.
+     */
+    private List<String> verbs;
 
     /**
      * Optional, {@code requiredWhen} only (issue #7560): a condition over the document's LINES - the
@@ -215,6 +226,25 @@ public class CheckIntent {
 
     public void setWhen(Object when) {
         this.when = when;
+    }
+
+    public List<String> getVerbs() {
+        return verbs;
+    }
+
+    public void setVerbs(List<String> verbs) {
+        this.verbs = verbs;
+    }
+
+    /**
+     * Whether this check covers the given verb - always, unless a {@code forbidWhen} scoped itself with
+     * {@link #verbs} (issue #7710).
+     *
+     * @param verb {@code create}, {@code update} or {@code delete}
+     * @return true when the check applies to that verb
+     */
+    public boolean coversVerb(String verb) {
+        return verbs == null || verbs.contains(verb);
     }
 
     public Object getWhenAnyItem() {

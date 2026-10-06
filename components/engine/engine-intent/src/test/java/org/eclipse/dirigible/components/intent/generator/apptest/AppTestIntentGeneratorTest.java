@@ -582,6 +582,17 @@ class AppTestIntentGeneratorTest {
                                   .get("value"));
         assertEquals("A credit note can only correct an issued invoice", forbidden.get(0)
                                                                                   .get("message"));
+        // Unscoped, it covers create, update and delete (#7372) and the manifest says nothing more.
+        assertNull(forbidden.get(0)
+                            .get("verbs"));
+
+        // #7710: a scoped rule states its verbs, so a flow expects the delete to succeed.
+        Map<String, Object> scopedNote = entity(AppTestIntentGenerator.buildManifest("billing", "billing",
+                IntentParser.parse(intent.replace("message: \"A credit note", "verbs: [create, update], message: \"A credit note")),
+                edmEntities), "CreditNote");
+        Map<String, Object> scopedInvoice = ((List<Map<String, Object>>) scopedNote.get("relations")).get(0);
+        assertEquals(List.of("create", "update"), ((List<Map<String, Object>>) scopedInvoice.get("forbiddenTarget")).get(0)
+                                                                                                                    .get("verbs"));
     }
 
     /** An uncurated, unguarded relation carries none of the three - the manifest stays as it was. */

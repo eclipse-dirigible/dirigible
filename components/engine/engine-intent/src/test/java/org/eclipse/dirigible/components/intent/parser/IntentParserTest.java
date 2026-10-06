@@ -1372,6 +1372,29 @@ class IntentParserTest {
         String requiredDotted = yaml.replace("kind: forbidWhen, when: \"SalesInvoice.Status == PAID\",",
                 "kind: requiredWhen, field: amount, when: \"SalesInvoice.Amount == 5\",");
         assertForbidIssue(requiredDotted, "[SalesInvoice] has no field or to-one relation [Amount]");
+
+        // A verb scope (#7710): "no new allocation onto a PAID invoice" leaves the delete alone.
+        String scoped =
+                yaml.replace("when: \"SalesInvoice.Status == PAID\",", "when: \"SalesInvoice.Status == PAID\", verbs: [create, update],");
+        assertEquals(List.of("create", "update"), IntentParser.parse(scoped)
+                                                              .getEntities()
+                                                              .get(2)
+                                                              .getChecks()
+                                                              .get(0)
+                                                              .getVerbs());
+        IntentParser.parse(scoped.replace("verbs: [create, update]", "verbs: [delete]"));
+        // Refused, each because it would not mean what it says: a rule covering nothing, a verb that does
+        // not exist, half of the create/update pair the generated checks read as one, a scope on a kind
+        // that never reaches the delete, and the YAML-unsafe `on` spelling the issue first proposed.
+        assertForbidIssue(scoped.replace("verbs: [create, update]", "verbs: []"), "has an empty `verbs`");
+        assertForbidIssue(scoped.replace("verbs: [create, update]", "verbs: [create, remove]"), "unknown verb [remove]");
+        assertForbidIssue(scoped.replace("verbs: [create, update]", "verbs: [create, delete]"), "names only one of create and update");
+        assertForbidIssue(scoped.replace("verbs: [create, update]", "verbs: [create, update], severity: warn"),
+                "carries both `severity: warn` and `verbs`");
+        assertForbidIssue(requiredDotted.replace("when: \"SalesInvoice.Amount == 5\",", "when: \"amount == 5\", verbs: [delete],"),
+                "carries `verbs` - only a forbidWhen is scoped by verb");
+        assertForbidIssue(scoped.replace("verbs: [create, update]", "on: [create, update]"),
+                "a forbidWhen's verb scope is spelled `verbs`");
     }
 
     @Test

@@ -681,14 +681,54 @@ class ModelParameterProcessorTest {
         // template emits so the master-detail panel hides the child's Add/edit/delete affordance.
         List<Object> guards = ModelValues.asList(entity.get("forbidWhenGuards"));
         assertEquals(1, guards.size());
-        assertEquals("Status", ModelValues.asMaps(guards.get(0))
+        assertEquals("Status", ModelValues.asMaps(ModelValues.asMap(guards.get(0))
+                                                             .get("terms"))
                                           .get(0)
                                           .get("property"));
+        assertNull(ModelValues.asMap(guards.get(0))
+                              .get("verbs"),
+                "an unscoped forbidWhen hides all three affordances");
         // ...and BOTH reach the delete list, whatever the gate says about the write half (#7372): a
         // delete is nobody's transition, so there is no repository-side write for a gated check to sit
         // on, and the removal of a guarded row is the largest of the three changes the panel hides.
         assertEquals(2, ModelValues.asList(entity.get("deleteChecks"))
                                    .size());
+    }
+
+    /**
+     * A forbidWhen scoped by {@code verbs:} reaches only the verbs it names (#7710): "no new allocation
+     * onto a PAID invoice" ({@code [create, update]}) stays off the delete verb and its UI guard says
+     * so, and a {@code [delete]}-only rule stays out of validate() and the repository.
+     */
+    @Test
+    void aForbidWhenScopedByVerbsReachesOnlyThoseVerbs() {
+        Map<String, Object> term = new LinkedHashMap<>();
+        term.put("property", "Status");
+        term.put("equal", Boolean.TRUE);
+        term.put("value", "7");
+        Map<String, Object> writesOnly = new LinkedHashMap<>();
+        writesOnly.put("kind", "forbidWhen");
+        writesOnly.put("verbs", List.of("create", "update"));
+        writesOnly.put("masterGuard", List.of(term));
+        Map<String, Object> gatedWritesOnly = new LinkedHashMap<>();
+        gatedWritesOnly.put("kind", "forbidWhen");
+        gatedWritesOnly.put("status", "7");
+        gatedWritesOnly.put("verbs", List.of("create", "update"));
+        Map<String, Object> deleteOnly = new LinkedHashMap<>();
+        deleteOnly.put("kind", "forbidWhen");
+        deleteOnly.put("verbs", List.of("delete"));
+        Map<String, Object> entity = entity("SalesInvoiceCustomerPayment", "Payments", property("Amount", "DECIMAL"));
+        entity.put("checks", List.of(writesOnly, gatedWritesOnly, deleteOnly));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(List.of(writesOnly), ModelValues.asList(entity.get("rowChecks")));
+        assertEquals(List.of(gatedWritesOnly), ModelValues.asList(entity.get("documentChecks")));
+        assertEquals(List.of(deleteOnly), ModelValues.asList(entity.get("deleteChecks")));
+        List<Object> guards = ModelValues.asList(entity.get("forbidWhenGuards"));
+        assertEquals(1, guards.size());
+        assertEquals(List.of("create", "update"), ModelValues.asMap(guards.get(0))
+                                                             .get("verbs"));
     }
 
     /**

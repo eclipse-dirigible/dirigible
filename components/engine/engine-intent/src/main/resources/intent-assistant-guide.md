@@ -653,6 +653,12 @@ field may declare:
     edit, row delete). That half is on the controllers whatever the gate says, because a delete is
     nobody's transition; the master's own cascade is untouched, since whether THAT delete is allowed is
     what `whenMasterDeleted:` declares.
+    **A rule about ADDING only says so with `verbs:`** (#7710): `verbs: [create, update]` refuses the
+    allocation onto a PAID invoice but leaves a wrong one removable (its delete runs the roll-up's
+    relinquish and the invoice reopens); `verbs: [delete]` is the other half - written freely, never
+    removed while the condition holds. Omitted = all three. `create` and `update` go together (name both
+    or neither); an empty scope, an unknown verb, `verbs` on a warning or on any other kind, and the
+    YAML-unsafe spelling `on:` are refused.
   - Both take the same OPTIONAL `status:` gate as `compare`, and the gate is what decides WHERE the rule
     runs: **without one** it holds on every user write (the controllers, 400); **with one** the
     repository enforces it when the record is persisted carrying that status - which is the only form
@@ -4453,6 +4459,7 @@ or a seeded name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
+- "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)

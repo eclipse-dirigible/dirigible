@@ -82,8 +82,10 @@ App.registerDetail('${masterEntity}', {
   // A forbidWhen over this child's master (intent `checks: forbidWhen`, dirigible #7275): the shared
   // detailPanel hides Add / row edit / delete while the condition holds against the master it already
   // holds - the server still rejects the write on every path (the 400 / ValidationException), this only
-  // stops offering a click it would refuse. One entry per forbidWhen; each is a list of ANDed terms.
-  forbidWhen: [#foreach($guard in $forbidWhenGuards)[#foreach($t in $guard){ property: '${t.property}', equal: ${t.equal}, value: '${t.value}' }, #end], #end],
+  // stops offering a click it would refuse. One entry per forbidWhen; each is a list of ANDed terms, or
+  // - for a forbidWhen scoped by `verbs:` (#7710) - { verbs, terms }, hiding only the affordances its
+  // verbs cover (Add = create, row edit = update, row delete = delete).
+  forbidWhen: [#foreach($guard in $forbidWhenGuards)#if($guard.verbs){ verbs: [#foreach($v in $guard.verbs)'${v}', #end], terms: #end[#foreach($t in $guard.terms){ property: '${t.property}', equal: ${t.equal}, value: '${t.value}' }, #end]#if($guard.verbs) }#end, #end],
 #end
 #if($visibleWhenTermsJs)
   // A status-gated panel (intent `visibleWhen:` on this composition child, dirigible #7502): whoever

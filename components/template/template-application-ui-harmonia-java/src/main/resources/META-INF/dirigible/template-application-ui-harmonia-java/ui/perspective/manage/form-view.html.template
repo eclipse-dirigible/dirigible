@@ -464,7 +464,7 @@
               <!-- Refresh (#7612): the rows a server-side chain writes behind the panel's back - the Snapshot
                    copy minted after Issue, an allocation a settlement recorded - without reloading the page. -->
               <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" :disabled="refreshing" @click="refresh()" :aria-label="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')" :title="T('$projectName:${tprefix}.defaults.refresh', 'Refresh')"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" :class="refreshing ? 'animate-spin' : ''"></svg></button>
-              <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden()" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+              <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="(!isPreview || def.locksWithMaster === false) && !def.files && !isForbidden('create')" @click="addRow()"><svg role="presentation" x-h-lucide data-lucide="plus"></svg><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
           <div class="vbox gap-4">
@@ -563,9 +563,9 @@
                             <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
                               <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                              <li x-h-menu-item x-show="!isForbidden()" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                              <li x-h-menu-separator x-show="!isForbidden()"></li>
-                              <li x-h-menu-item x-show="!isForbidden()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                              <li x-h-menu-item x-show="!isForbidden('update')" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                              <li x-h-menu-separator x-show="!isForbidden('update') && !isForbidden('delete')"></li>
+                              <li x-h-menu-item x-show="!isForbidden('delete')" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                             </ul>
                           </div>
                         </div>

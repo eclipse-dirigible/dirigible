@@ -5845,6 +5845,7 @@ public final class IntentParser {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
         validateSeverity(check, subject, issues);
+        validateVerbs(check, subject, issues);
         if ("duplicate".equals(kind)) {
             validateDuplicateCheck(entity, check, subject, issues);
             return;
@@ -5961,6 +5962,48 @@ public final class IntentParser {
         issues.add(subject
                 + " has unknown kind - expected exactlyOne, compare, agree, requiredWhen, forbidWhen, guard, itemsSumEqual, itemsMin,"
                 + " duplicate or itemsCompare");
+    }
+
+    /** The verbs a {@code forbidWhen} scope may name (#7710). */
+    private static final Set<String> FORBID_WHEN_VERBS = Set.of("create", "update", "delete");
+
+    /**
+     * {@code verbs:} (#7710) scopes a {@code forbidWhen} to the writes it is about - omitted, it covers
+     * create, update and delete (#7372). Refused, each because the declaration would not mean what it
+     * says: a scope on any other kind (only forbidWhen reaches the delete verb at all), an empty scope
+     * (a rule that refuses nothing), an unknown verb, a scope on a warning (a warning never reaches the
+     * delete verb, so it has nothing to narrow), and {@code create} without {@code update} or the other
+     * way round - the generated controllers, the process write-back and the repository read one check
+     * on both, so the pair is one scope.
+     */
+    private static void validateVerbs(CheckIntent check, String subject, List<String> issues) {
+        List<String> verbs = check.getVerbs();
+        if (verbs == null) {
+            return;
+        }
+        if (!"forbidWhen".equals(check.getKind())) {
+            issues.add(subject + " carries `verbs` - only a forbidWhen is scoped by verb; every other check is about the values a"
+                    + " create or update carries");
+            return;
+        }
+        if (verbs.isEmpty()) {
+            issues.add(subject + " has an empty `verbs` - a forbidWhen that covers no verb refuses nothing; drop the rule, or"
+                    + " name create, update and/or delete");
+            return;
+        }
+        for (String verb : verbs) {
+            if (!FORBID_WHEN_VERBS.contains(verb)) {
+                issues.add(subject + " has unknown verb [" + verb + "] in `verbs` - expected create, update or delete");
+            }
+        }
+        if (verbs.contains("create") != verbs.contains("update")) {
+            issues.add(subject + " names only one of create and update in `verbs` - the generated checks read the same rule on"
+                    + " both, so name both (`verbs: [create, update]`) or neither (`verbs: [delete]`)");
+        }
+        if (check.isWarning()) {
+            issues.add(subject + " carries both `severity: warn` and `verbs` - a warning is asked on a create or update only and"
+                    + " never reaches the delete verb, so there is nothing to scope");
+        }
     }
 
     /** The row-level kinds a {@code severity: warn} may soften - the ones the controllers enforce. */
@@ -6649,7 +6692,8 @@ public final class IntentParser {
                 if (checkNode instanceof Map<?, ?> check && (check.containsKey("on") || check.containsKey(Boolean.TRUE))) {
                     issues.add("entity [" + entity.get("name") + "] check [" + check.get("kind")
                             + "] declares `on` - YAML reads a bare `on` as the boolean true, so the key never arrives;"
-                            + " spell it `onProperty`");
+                            + ("forbidWhen".equals(check.get("kind")) ? " a forbidWhen's verb scope is spelled `verbs`"
+                                    : " spell it `onProperty`"));
                 }
             }
         }

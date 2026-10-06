@@ -2153,6 +2153,20 @@ class EdmIntentGeneratorTest {
                                       .get("equal"));
         assertEquals("7", masterGuard.get(0)
                                      .get("value"));
+        // Unscoped, it covers all three verbs (#7372) and says nothing - an unscoped module's .model is
+        // unchanged by #7710.
+        assertNull(check.get("verbs"));
+        // Scoped (#7710), the verbs ride along in canonical order; naming all three is the default again.
+        assertEquals(List.of("create", "update"),
+                forbidWhenVerbs(yaml.replace("message: \"Cannot", "verbs: [update, create], message: \"Cannot")));
+        assertNull(forbidWhenVerbs(yaml.replace("message: \"Cannot", "verbs: [delete, create, update], message: \"Cannot")));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object forbidWhenVerbs(String yaml) {
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        return ((List<Map<String, Object>>) entityByName(entities(model), "SalesInvoiceCustomerPayment").get("checks")).get(0)
+                                                                                                                       .get("verbs");
     }
 
     /**

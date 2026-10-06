@@ -2645,6 +2645,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // (a record-local or non-master term), the server 400/ValidationException still holds.
                 // A WARNING hides nothing (#7466): the write it asks about stays possible, so the panel
                 // must keep offering it - the confirmation is asked when the person saves.
+                // The verbs it covers (#7710), only when the author narrowed them: absent = create, update
+                // and delete (#7372), so every module that does not scope its rule keeps a byte-identical
+                // .model. Canonical order, so the attribute does not churn with the authored order.
+                if (check.getVerbs() != null && !(check.coversVerb("create") && check.coversVerb("update") && check.coversVerb("delete"))) {
+                    checkMap.put("verbs", java.util.stream.Stream.of("create", "update", "delete")
+                                                                 .filter(check::coversVerb)
+                                                                 .toList());
+                }
                 List<Map<String, Object>> masterGuard =
                         check.isWarning() ? null : forbidWhenMasterGuard(entity, byName, compositionParents, check.getWhen());
                 if (masterGuard != null) {

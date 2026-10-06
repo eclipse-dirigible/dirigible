@@ -395,7 +395,8 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     /**
      * The terms of this entity's {@code forbidWhen} checks that reach through the given relation (issue
      * #7667). A term reads {@code <Relation>.<Property> ==|!= <literal>} and refuses the write while it
-     * holds, so a runner building the target must land OUTSIDE every one of them.
+     * holds, so a runner building the target must land OUTSIDE every one of them. A rule scoped by
+     * {@code verbs:} carries them (#7710); one without covers create, update and delete.
      *
      * @param entity the record the checks are declared on
      * @param relation the to-one being described
@@ -425,6 +426,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 if (check.getMessage() != null && !check.getMessage()
                                                         .isBlank()) {
                     condition.put("message", check.getMessage());
+                }
+                // A scoped rule (#7710) states the verbs it refuses, so a flow expects the others - a
+                // delete of a row whose parent is PAID, for "no new allocation onto a PAID invoice" - to
+                // succeed. Absent = create, update and delete (#7372).
+                if (check.getVerbs() != null) {
+                    condition.put("verbs", java.util.stream.Stream.of("create", "update", "delete")
+                                                                  .filter(check::coversVerb)
+                                                                  .toList());
                 }
                 forbidden.add(condition);
             }
