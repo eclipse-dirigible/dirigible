@@ -98,6 +98,7 @@ final class ModelParameterProcessor {
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
+            resolveTargetAgreementRules(entities);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -1343,6 +1344,52 @@ final class ModelParameterProcessor {
         String statusProperty = str(entity, "immutableStatusProperty");
         return truthy(entity, "immutableAlways") || (statusProperty != null && !statusProperty.isEmpty())
                 || entity.get("periodLock") != null;
+    }
+
+    /**
+     * Resolves the cross-model parents of each junction's refusing {@code checks: agree} (#7701) into
+     * the {@code targetAgreementRules} its generated repository contributes as a
+     * {@code TargetAgreementRule}: keyed by the parent's generated entity class - what the parent's
+     * repository names itself by when it asks - next to the junction's foreign key, the parent's
+     * relied-on property and the check's message as a Java literal. The entity class is the twin of the
+     * repository the dropdown resolution already placed on the foreign key, so a parent owned by
+     * another model resolves into that model's package. A foreign key that resolved no repository is
+     * dropped rather than emitted as a broken reference.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveTargetAgreementRules(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> rules = new ArrayList<>();
+            for (Map<String, Object> check : asMaps(entity.get("checks"))) {
+                if (!"agree".equals(str(check, "kind")) || "warn".equals(str(check, "severity"))) {
+                    continue;
+                }
+                for (Map<String, Object> parent : asMaps(check.get("crossModelParents"))) {
+                    String repositoryClass = null;
+                    for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                        if (str(parent, "fkProperty") != null && str(parent, "fkProperty").equals(str(property, "name"))) {
+                            repositoryClass = str(property, "targetRepositoryClass");
+                        }
+                    }
+                    if (repositoryClass == null || !repositoryClass.endsWith("Repository")) {
+                        continue;
+                    }
+                    Map<String, Object> rule = new LinkedHashMap<>();
+                    rule.put("targetEntityClass",
+                            repositoryClass.substring(0, repositoryClass.length() - "Repository".length()) + "Entity");
+                    rule.put("fkProperty", str(parent, "fkProperty"));
+                    rule.put("property", str(parent, "property"));
+                    rule.put("message", str(check, "message"));
+                    resolveMessageLiteral(rule);
+                    rules.add(rule);
+                }
+            }
+            if (!rules.isEmpty()) {
+                entity.put("targetAgreementRules", rules);
+                entity.put("hasTargetAgreementRules", Boolean.TRUE);
+            }
+        }
     }
 
     /**

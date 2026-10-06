@@ -9,16 +9,21 @@
  */
 package org.eclipse.dirigible.components.data.store.java.repository;
 
+import java.lang.reflect.Field;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
+import org.eclipse.dirigible.sdk.db.TargetAgreementRule;
 import org.eclipse.dirigible.sdk.db.TargetDeleteRule;
+import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.extensions.Extensions;
 
 /**
@@ -112,6 +117,7 @@ public abstract class JavaRepository<T> {
      * @return the updated entity
      */
     public T update(T entity) {
+        requireTargetAgreement(entity);
         return store().update(entity);
     }
 
@@ -124,6 +130,7 @@ public abstract class JavaRepository<T> {
      * @return the updated entity
      */
     public T update(T entity, String eventTopic) {
+        requireTargetAgreement(entity);
         return store().update(entity, eventTopic);
     }
 
@@ -138,6 +145,7 @@ public abstract class JavaRepository<T> {
      * @return the updated entity
      */
     public T update(T entity, String eventTopic, List<DomainEvent> additionalEvents) {
+        requireTargetAgreement(entity);
         return store().update(entity, eventTopic, additionalEvents);
     }
 
@@ -155,6 +163,7 @@ public abstract class JavaRepository<T> {
      * @return the number of updated rows ({@code 0} when the id does not exist)
      */
     public int updateProperty(Object id, String property, Object value) {
+        requireTargetAgreement(id, Map.of(property, value == null ? NULL : value));
         return store().updateProperty(entityClass, id, property, value);
     }
 
@@ -175,6 +184,7 @@ public abstract class JavaRepository<T> {
         // Deliberately NOT delegating to the event-carrying overload: a generated repository overrides
         // both, and its recalculation path reaches the plain write through `super` precisely to bypass
         // the semantics it adds. Re-dispatching here would drag them back in.
+        requireTargetAgreement(id, values);
         return store().updateProperties(entityClass, id, values, null);
     }
 
@@ -196,6 +206,7 @@ public abstract class JavaRepository<T> {
      *         empty)
      */
     public int updateProperties(Object id, Map<String, Object> values, String eventTopic) {
+        requireTargetAgreement(id, values);
         return store().updateProperties(entityClass, id, values, eventTopic);
     }
 
@@ -213,6 +224,7 @@ public abstract class JavaRepository<T> {
      *         empty)
      */
     public int updateProperties(Object id, Map<String, Object> values, String eventTopic, List<DomainEvent> additionalEvents) {
+        requireTargetAgreement(id, values);
         return store().updateProperties(entityClass, id, values, eventTopic, additionalEvents);
     }
 
@@ -396,6 +408,140 @@ public abstract class JavaRepository<T> {
      */
     private static List<TargetDeleteRule> deleteRules() {
         return BeanProvider.isInitialzed() ? Extensions.find(TargetDeleteRule.class) : List.of();
+    }
+
+    /**
+     * Refuses a full-row update that changes a property a referencing record relies on (intent
+     * {@code checks: agree} on a junction owned by another model, dirigible #7701) - see
+     * {@link TargetAgreementRule}. The stored row is read only when some contribution relies on a
+     * property of this entity, and a contribution is asked only about a property the update actually
+     * changes, so an ordinary save that carries the stored values back costs no junction query. The
+     * stored row is read through the store, not through a subclass's read: a multilingual repository
+     * overlays a translation there, and a translated value compared with the stored one reads as a
+     * change.
+     *
+     * <p>
+     * A read-then-act guard, like every other reference check the platform generates: a referencing row
+     * inserted between this lookup and the write is not seen.
+     *
+     * @param entity the entity about to be written
+     * @throws ValidationException carrying the contribution's message when the update is refused
+     */
+    private void requireTargetAgreement(T entity) {
+        List<TargetAgreementRule> rules = agreementRules();
+        if (rules.isEmpty() || entity == null) {
+            return;
+        }
+        String target = entityClass.getName();
+        Object id = null;
+        T stored = null;
+        for (TargetAgreementRule rule : rules) {
+            for (String property : rule.agreedProperties(target)) {
+                if (stored == null) {
+                    id = store().idOf(entity);
+                    stored = id == null ? null : store().findById(entityClass, id);
+                    if (stored == null) {
+                        return; // no stored row - nothing references it yet
+                    }
+                }
+                Field field = fieldOf(property);
+                if (field != null && !same(read(field, stored), read(field, entity))) {
+                    refuseIfRelied(rule, target, id, property);
+                }
+            }
+        }
+    }
+
+    /**
+     * The targeted-write twin of {@link #requireTargetAgreement(Object)}: only the named columns
+     * change, so only those are compared with the stored row.
+     *
+     * @param id the primary key of the row about to be written
+     * @param values the properties the write sets
+     * @throws ValidationException carrying the contribution's message when the write is refused
+     */
+    private void requireTargetAgreement(Object id, Map<String, Object> values) {
+        List<TargetAgreementRule> rules = agreementRules();
+        if (rules.isEmpty() || id == null || values == null || values.isEmpty()) {
+            return;
+        }
+        String target = entityClass.getName();
+        T stored = null;
+        for (TargetAgreementRule rule : rules) {
+            for (String property : rule.agreedProperties(target)) {
+                if (!values.containsKey(property)) {
+                    continue;
+                }
+                if (stored == null) {
+                    stored = store().findById(entityClass, id);
+                    if (stored == null) {
+                        return; // no stored row - the write updates nothing
+                    }
+                }
+                Field field = fieldOf(property);
+                Object value = values.get(property);
+                if (field != null && !same(read(field, stored), value == NULL ? null : value)) {
+                    refuseIfRelied(rule, target, id, property);
+                }
+            }
+        }
+    }
+
+    private static void refuseIfRelied(TargetAgreementRule rule, String target, Object id, String property) {
+        String refusal = rule.refusal(target, id, property);
+        if (refusal != null) {
+            throw new ValidationException(refusal);
+        }
+    }
+
+    /** Stands for a {@code null} value in an immutable map - {@code Map.of} refuses null values. */
+    private static final Object NULL = new Object();
+
+    /**
+     * Two values of one property compared as the column holds them: numbers by value, so a decimal read
+     * back with another scale, or an id bound as a {@code Long} against an {@code Integer} field, is
+     * not a change.
+     */
+    private static boolean same(Object left, Object right) {
+        if (left instanceof Number && right instanceof Number) {
+            return new BigDecimal(left.toString()).compareTo(new BigDecimal(right.toString())) == 0;
+        }
+        if (left instanceof Number || right instanceof Number) {
+            return Objects.equals(Objects.toString(left, null), Objects.toString(right, null));
+        }
+        return Objects.equals(left, right);
+    }
+
+    /** The entity's field backing the property, or null when it has none. */
+    private Field fieldOf(String property) {
+        for (Class<?> type = entityClass; type != null && type != Object.class; type = type.getSuperclass()) {
+            try {
+                Field field = type.getDeclaredField(property);
+                field.trySetAccessible();
+                return field;
+            } catch (NoSuchFieldException e) {
+                // keep looking up the hierarchy
+            }
+        }
+        return null;
+    }
+
+    private static Object read(Field field, Object entity) {
+        try {
+            return field.get(entity);
+        } catch (IllegalAccessException e) {
+            throw new IllegalStateException("Cannot read " + field.getName() + " of " + entity.getClass()
+                                                                                              .getName(),
+                    e);
+        }
+    }
+
+    /**
+     * Every contributed agreement rule. Outside a running platform there is no bean container, so no
+     * contribution either.
+     */
+    private static List<TargetAgreementRule> agreementRules() {
+        return BeanProvider.isInitialzed() ? Extensions.find(TargetAgreementRule.class) : List.of();
     }
 
     /** This entity as a refusal names it - {@code ExpenseCategoryEntity} reads "Expense Category". */

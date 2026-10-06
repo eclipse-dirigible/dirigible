@@ -829,6 +829,48 @@ class ModelParameterProcessorTest {
         assertNull(approver.get("targetEntityClass"));
     }
 
+    /**
+     * The cross-model parent of a junction's {@code checks: agree} (#7701): the check names the
+     * junction's foreign key and the parent's relied-on property, and this pass resolves the parent's
+     * generated entity class in its OWNER model's package - what the parent's repository names itself
+     * by when it asks every {@code TargetAgreementRule} - plus the message's Java-literal twin. A
+     * warning contributes nothing, and a foreign key that resolved no repository is dropped.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCrossModelAgreeParentResolvesToATargetAgreementRule() {
+        Map<String, Object> payment = property("CustomerPayment", "INTEGER");
+        payment.put("relationshipEntityName", "CustomerPayment");
+        payment.put("relationshipEntityPerspectiveName", "CustomerPayment");
+        payment.put("widgetType", "DROPDOWN");
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("kind", "agree");
+        refusing.put("message", "The \"customer\" must match the invoice's");
+        refusing.put("crossModelParents", new java.util.ArrayList<>(List.of(Map.of("fkProperty", "CustomerPayment", "property", "Customer"),
+                Map.of("fkProperty", "Ghost", "property", "Customer"))));
+        Map<String, Object> warning = new LinkedHashMap<>(refusing);
+        warning.put("severity", "warn");
+        Map<String, Object> allocation = entity("InvoicePayment", "allocations", property("Id", "INTEGER"), payment);
+        allocation.put("checks", new java.util.ArrayList<>(List.of(refusing, warning)));
+        Map<String, Object> projection = entity("CustomerPayment", "CustomerPayment", property("Amount", "DECIMAL"));
+        projection.put("type", "PROJECTION");
+        projection.put("projectionReferencedModel", "/customer-payments/payments.model");
+
+        ModelParameterProcessor.process(model(allocation, projection), javaParameters());
+
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) allocation.get("targetAgreementRules");
+        assertEquals(1, rules.size(), "the warning and the unresolved foreign key must contribute nothing: " + rules);
+        assertEquals("gen.payments.data.customerpayment.CustomerPaymentEntity", rules.get(0)
+                                                                                     .get("targetEntityClass"));
+        assertEquals("CustomerPayment", rules.get(0)
+                                             .get("fkProperty"));
+        assertEquals("Customer", rules.get(0)
+                                      .get("property"));
+        assertEquals("The \\\"customer\\\" must match the invoice's", rules.get(0)
+                                                                           .get("messageJavaLiteral"));
+        assertEquals(Boolean.TRUE, allocation.get("hasTargetAgreementRules"));
+    }
+
     @Test
     void resolvesAProjectionOwnerFromTheOlderThreeSegmentReferenceToo() {
         Map<String, Object> foreignKey = property("Currency", "INTEGER");
