@@ -97,8 +97,8 @@ public class CrossSiteRequestFilter extends OncePerRequestFilter {
                 "Refused a cross-site [{}] on [{}] from origin [{}] ({} [{}]) carrying the user's session or browser credentials."
                         + " A page of another site cannot act in a logged in user's name; a trusted front end belongs in [{}], a"
                         + " server-side client authenticates without a browser.",
-                request.getMethod(), request.getRequestURI(), request.getHeader(HttpHeaders.ORIGIN), SEC_FETCH_SITE,
-                request.getHeader(SEC_FETCH_SITE), DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
+                forLog(request.getMethod()), forLog(request.getRequestURI()), forLog(request.getHeader(HttpHeaders.ORIGIN)), SEC_FETCH_SITE,
+                forLog(request.getHeader(SEC_FETCH_SITE)), DirigibleConfig.CORS_ALLOWED_ORIGINS.getKey());
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType(MediaType.TEXT_PLAIN_VALUE);
         response.getWriter()
@@ -149,6 +149,14 @@ public class CrossSiteRequestFilter extends OncePerRequestFilter {
             host = request.getServerName();
         }
         return hostOf("http://" + host.trim());
+    }
+
+    /**
+     * A request value as it may appear in the log: an anonymous client chooses these, so control
+     * characters, which could forge or garble log lines, are replaced.
+     */
+    static String forLog(String value) {
+        return value == null ? null : value.replaceAll("\\p{Cntrl}", "_");
     }
 
     /** The host of an origin or authority, without its port; null when it is none. */
