@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.migrations;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -108,13 +109,13 @@ class MigrationsSynchronizerTest {
     void aMigrationWaitingForAnEarlierVersionStaysUndepletedWithItsLifecycle() throws Exception {
         Migration migration = published(V2, "UPDATE ORDERS SET STATUS = 'OPEN';", ArtefactLifecycle.NEW);
         givenOutcome("tenant-a", new Outcome("tenant-a", Status.APPLIED, null));
-        givenOutcome("tenant-b", new Outcome("tenant-b", Status.WAITING, "waits for version [001]"));
+        givenOutcome("tenant-b", new Outcome("tenant-b", Status.WAITING, "waits for version [1]"));
 
         boolean depleted = synchronizer.completeImpl(wrap(migration), ArtefactPhase.CREATE);
 
         assertThat(depleted).isFalse();
         assertThat(migration.getLifecycle()).isEqualTo(ArtefactLifecycle.NEW);
-        assertThat(migration.getError()).contains("waits for version [001]");
+        assertThat(migration.getError()).contains("waits for version [1]");
         verifyNoInteractions(callback);
     }
 
@@ -170,6 +171,19 @@ class MigrationsSynchronizerTest {
         verify(callback).registerState(eq(synchronizer), any(TopologyWrapper.class), eq(ArtefactLifecycle.FAILED),
                 contains("no longer in the registry"), any(ParseException.class));
         verifyNoInteractions(executor);
+    }
+
+    @Test
+    void aVersionSpelledWithLeadingZerosIsClaimedByTheFileSpellingItWithout() throws Exception {
+        Migration first = published(V1, "UPDATE ORDERS SET STATUS = 'A';", ArtefactLifecycle.CREATED);
+        when(migrationService.findAllByProject("orders")).thenReturn(List.of(first));
+        String other = "/orders/migrations/V1__other.migration";
+
+        assertThatThrownBy(() -> synchronizer.parseImpl(other,
+                "UPDATE ORDERS SET STATUS = 'B';".getBytes(StandardCharsets.UTF_8))).isInstanceOf(ParseException.class)
+                                                                                    .hasMessageContaining("Version [1]")
+                                                                                    .hasMessageContaining(V1)
+                                                                                    .hasMessageContaining(other);
     }
 
     private Migration published(String location, String sql, ArtefactLifecycle lifecycle) throws ParseException {

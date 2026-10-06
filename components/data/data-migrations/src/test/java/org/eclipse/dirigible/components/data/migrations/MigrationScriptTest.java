@@ -35,6 +35,14 @@ class MigrationScriptTest {
     }
 
     @Test
+    void leadingZerosAreNotPartOfTheVersion() throws ParseException {
+        assertThat(parse("/orders/V001__backfill.migration", "UPDATE ORDERS SET TOTAL = 0;").version()).isEqualTo("1");
+        assertThat(parse("/orders/V1__backfill.migration", "UPDATE ORDERS SET TOTAL = 0;").version()).isEqualTo("1");
+        assertThat(parse("/orders/002.010__split.migration", "UPDATE ORDERS SET TOTAL = 0;").version()).isEqualTo("2.10");
+        assertThat(parse("/orders/0.00__seed.migration", "UPDATE ORDERS SET TOTAL = 0;").version()).isEqualTo("0.0");
+    }
+
+    @Test
     void withoutHeadersAMigrationAppliesToEachTenantAndIsNotIdempotent() throws ParseException {
         MigrationScript script = parse("/orders/001__backfill.migration", "-- recomputes the totals\nUPDATE ORDERS SET TOTAL = 0;");
 
@@ -67,6 +75,31 @@ class MigrationScriptTest {
         assertThatThrownBy(() -> parse("/orders/001__backfill.migration",
                 "-- idempotent: yes\nUPDATE ORDERS SET TOTAL = 0;")).isInstanceOf(ParseException.class)
                                                                     .hasMessageContaining("[idempotent: yes]");
+    }
+
+    @Test
+    void aHeaderLineThatDoesNotParseIsRejectedNotIgnored() {
+        for (String header : new String[] {"-- tenant: system -- once, on the system DB", "-- tenant = system",
+                "-- idempotent: true (safe to re-run)", "-- Tenant:"}) {
+            assertThatThrownBy(() -> parse("/orders/001__backfill.migration", header + "\nUPDATE ORDERS SET TOTAL = 0;")).as(header)
+                                                                                                                         .isInstanceOf(
+                                                                                                                                 ParseException.class)
+                                                                                                                         .hasMessageContaining(
+                                                                                                                                 "[" + header
+                                                                                                                                         + "]");
+        }
+    }
+
+    @Test
+    void aCommentThatOnlyMentionsAHeaderNameIsNotAHeader() throws ParseException {
+        MigrationScript script = parse("/orders/001__backfill.migration", """
+                -- tenant data is moved per schema
+                -- idempotent? no
+                UPDATE ORDERS SET TOTAL = 0;
+                """);
+
+        assertThat(script.scope()).isEqualTo(Scope.EACH);
+        assertThat(script.idempotent()).isFalse();
     }
 
     @Test
