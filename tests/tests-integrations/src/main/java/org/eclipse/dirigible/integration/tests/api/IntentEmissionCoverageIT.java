@@ -4746,6 +4746,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
 
+        // A required string's length check reads the value without a second null guard - the required
+        // check right above it has already refused a null (#7696) - and the two still answer in order:
+        // a missing name is refused by name, an overlong one by its length, neither as a 500.
+        String unitController = contentOf("gen/emission/api/settings/UnitController.java");
+        assertTrue(
+                unitController.contains("if (entity.Name.length() > 100) {")
+                        && !unitController.contains("entity.Name != null && entity.Name.length()"),
+                "a required string's length check must not repeat the required null check, got: " + unitController);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"UnitPrice\":1}")
+                                                 .when()
+                                                 .post(API + "/settings/UnitController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Name' property is required")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"" + "x".repeat(101) + "\"}")
+                                                 .when()
+                                                 .post(API + "/settings/UnitController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Name' exceeds the maximum length of 100")));
+
         // ... and a REPORT grouping by that nomenclature agrees with the list page it sits next to:
         // the same request language, the same value. A report is raw SQL over the base tables, so
         // before the language-table overlay reached the SELECT list this row read "Piece" while the

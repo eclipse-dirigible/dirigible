@@ -141,6 +141,29 @@ class PersonalSurfaceCreateValidationTemplateIT {
         }
     }
 
+    /**
+     * A length check guards against null only where nothing above it already refused a null (#7696):
+     * after a required check the guard is a comparison that is always true, which static analysis
+     * reports on every generated controller. An optional field keeps it, and so does a required one the
+     * platform fills itself (the number), whose required check is not emitted.
+     */
+    @Test
+    void aLengthCheckRepeatsNoNullCheckTheRequiredCheckAlreadyMade() throws Exception {
+        for (String template : List.of("EntityController.java.template", "EntityMyController.java.template",
+                "EntityPartnerController.java.template")) {
+            String rendered = render(template, context());
+
+            assertTrue(rendered.contains("The 'Title' property is required") && rendered.contains("if (entity.Title.length() > 60) {"),
+                    template + " must check a required string's length without a second null guard: " + rendered);
+            assertTrue(!rendered.contains("entity.Title != null && entity.Title.length()"),
+                    template + " must not repeat the required check's null test: " + rendered);
+            assertTrue(rendered.contains("if (entity.Note != null && entity.Note.length() > 40) {"),
+                    template + " must keep the null guard on an optional string: " + rendered);
+            assertTrue(rendered.contains("if (entity.Number != null && entity.Number.length() > 20) {"),
+                    template + " must keep the null guard where the required check is not emitted: " + rendered);
+        }
+    }
+
     private String render(String templateName, Map<String, Object> parameters) throws Exception {
         return render(REST_BASE, templateName, parameters);
     }
@@ -167,7 +190,7 @@ class PersonalSurfaceCreateValidationTemplateIT {
         parameters.put("tablePrefix", "VACATIONS_");
         parameters.put("dataName", "VACATION_REQUEST");
         parameters.put("pkPropertyName", "Id");
-        parameters.put("properties", List.of(primaryKey(), number(), fromDate(), note()));
+        parameters.put("properties", List.of(primaryKey(), number(), fromDate(), title(), note()));
         parameters.put("sensitiveProperties", List.of());
         parameters.put("rowChecks", List.of(rowCheck()));
         parameters.put("personalProperty", "Employee");
@@ -207,6 +230,7 @@ class PersonalSurfaceCreateValidationTemplateIT {
         property.put("numberSeries", "Vacation Request");
         property.put("numberPer", "");
         property.put("numberStampOnCreate", "true");
+        property.put("dataLength", 20);
         return property;
     }
 
@@ -220,6 +244,20 @@ class PersonalSurfaceCreateValidationTemplateIT {
         property.put("dataPrimaryKey", Boolean.FALSE);
         property.put("dataNotNull", Boolean.TRUE);
         property.put("isRequiredProperty", "true");
+        return property;
+    }
+
+    /** A required string with a length: refused when missing, then held to its length (#7696). */
+    private static Map<String, Object> title() {
+        Map<String, Object> property = new LinkedHashMap<>();
+        property.put("name", "Title");
+        property.put("dataName", "VACATION_REQUEST_TITLE");
+        property.put("dataType", "VARCHAR");
+        property.put("dataTypeJavaClass", "String");
+        property.put("dataPrimaryKey", Boolean.FALSE);
+        property.put("dataNotNull", Boolean.TRUE);
+        property.put("isRequiredProperty", "true");
+        property.put("dataLength", 60);
         return property;
     }
 
