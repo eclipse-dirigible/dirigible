@@ -1094,7 +1094,7 @@
             <dependency>
                 <groupId>org.webjars.npm</groupId>
                 <artifactId>strnum</artifactId>
-                <version>2.3.0</version>
+                <version>2.4.2</version>
             </dependency>
             <!-- The Harmonia stack (harmonia.version, alpinejs.version, lucide.version,
                  pinecone-router.version, i18next.version) is bumped as one. When Harmonia is updated,
