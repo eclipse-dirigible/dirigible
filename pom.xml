@@ -583,6 +583,9 @@
                                 <exclude>**/logback.xml</exclude>
                                 <exclude>**/logback-test.xml</exclude>
                                 <exclude>**/src/test/resources/**</exclude>
+                                <!-- Generated code committed as a fixture: kept byte-identical to what the
+                                     intent generates, so the CLI generate check can tell (#7642). -->
+                                <exclude>**/src/main/resources/sample-intent-*/gen/**</exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/font-awesome-4.7.0/**
                                 </exclude>

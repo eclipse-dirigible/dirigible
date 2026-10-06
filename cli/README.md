@@ -28,3 +28,41 @@ java -jar target/dirigible-cli-*-executable.jar start  \
   --dirigibleJarPath "$DIRIGIBLE_REPO_PATH/build/application/target/dirigible-application-13.0.0-SNAPSHOT-executable.jar" \
   --projectPath "<path_to_dirigible_project>"
 ```
+
+### Regenerate a project from its intent
+
+`generate` runs the IDE's Generate for every `*.intent` at the root of a project - the model files,
+the `.test` manifest and `gen/` - in-process, with no platform booted, no database and no web
+server. The projects its intent names in `uses:` are read from next to it, as in a workspace.
+
+```shell
+# regenerate in place (what changes or is added is written, what is no longer generated is deleted)
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>"
+
+# regenerate into another folder, leaving the project untouched
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --out "<folder>"
+
+# check: write nothing, print the unified diff of every COMMITTED file the regeneration changes or
+# drops, and exit 1 if there is one
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --check
+```
+
+The first line of the output names the platform version that generated. `--check` compares the files
+the project carries: a generated file the project does not commit is listed as a count, not as drift,
+so a project keeps under version control only the generated files it wants checked. Exit codes: `0`
+no drift (or regenerated), `1` drift, `2` the intent could not be generated.
+
+### Regeneration check in GitHub Actions
+
+`.github/actions/regen-check` wraps `generate --check` for a pull-request gate, against the
+`dirigible-cli` release a module repository pins:
+
+```yaml
+- uses: eclipse-dirigible/dirigible/.github/actions/regen-check@master
+  with:
+    platform-version: 15.0.0
+    projects: my-module another-module
+```
+
+`cli-jar` takes a locally built jar instead of a release; this repository checks its own
+`tests/tests-integrations/src/main/resources/sample-intent-*` that way on every pull request.

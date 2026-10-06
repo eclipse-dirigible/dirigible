@@ -64,6 +64,16 @@ jobs:
         if: runner.os == 'Linux'
         run: mvn test -P testcontainers
 
+      # The committed intent samples are what the intent generates on this very build (#7642): the CLI
+      # the build just produced runs `generate --check` over them. Last, because the action sets up
+      # its own JDK.
+      - name: Regeneration check of the intent samples
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/regen-check
+        with:
+          cli-jar: cli/target/dirigible-cli-*-executable.jar
+          projects: tests/tests-integrations/src/main/resources/sample-intent-*
+
   docker-build:
     runs-on: ${{ matrix.runner }}
     strategy:

@@ -1,0 +1,16 @@
+name: regen
+description: The project GenerateCommandsTest regenerates - an entity with a required, length-bound field and a lookup
+
+entities:
+  - name: Category
+    kind: setting
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string,  required: true, length: 100 }
+
+  - name: Ticket
+    fields:
+      - { name: id,      type: integer, primaryKey: true, generated: true }
+      - { name: subject, type: string,  required: true, length: 200 }
+    relations:
+      - { name: Category, kind: manyToOne, to: Category }
