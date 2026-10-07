@@ -575,7 +575,8 @@ field may declare:
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as a
   tree-table (#7613): the list's own columns, the first one indented under an expand chevron with the
   entity's `icon:`. It shows the flat table while no record has a parent yet, and for a search or a
-  filter; a Tree / Table toggle on the toolbar is remembered per user. The server rejects cycles. A
+  filter; a Tree / Table toggle on the toolbar is remembered per user. Each record offers **Add
+  child** (#7724), the create form with the parent preset and locked. The server rejects cycles. A
   self-FK alone does NOT imply a hierarchy - declare it.
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
