@@ -182,6 +182,16 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## String input normalization (intent field `normalize:`, #7726): a pasted `+359 898 123 456` is stored
+## as `+359898123456`. Applied on every write the repository makes from a caller's record - a REST
+## create or update, a client-Java writer, a workflow - so what is stored never depends on which of them
+## wrote it. The generated controllers apply the same step before their checks, so a `pattern:` reads the
+## normalized value too.
+#macro(normalizeInput)
+#if($hasNormalize)
+        normalize(entity);
+#end
+#end
 ## Authored field defaults (intent `defaultValue:`, a to-one relation's `init:`): apply the default to a
 ## column the write left empty, BEFORE anything the repository computes from it. The default is also the
 ## column's DB DEFAULT, but the database supplies it at INSERT - which is after the create-time
@@ -413,6 +423,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public ${name}Entity save(${name}Entity entity) {
 #applyDefaults()
 #normalizeSubsets()
+#normalizeInput()
 #if($lifecycleInitialStatus)
         enforceLifecycleStart(entity.${lifecycleStatusProperty});
 #end
@@ -522,6 +533,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public ${name}Entity update(${name}Entity entity) {
 #normalizeSubsets()
+#normalizeInput()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
@@ -658,6 +670,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
 #normalizeSubsets()
+#normalizeInput()
 #if($lifecycleEdges)
         // A system write is still a status write: the state machine is the ONE place the legal moves
         // are declared, so a workflow setter or glue action gets the same answer a user form gets.
@@ -1359,6 +1372,23 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return submitted;
 #end
     }
+#if($hasNormalize)
+
+    /**
+     * Brings the string fields that declare {@code normalize:} (#7726) to their stored form: trimmed,
+     * stripped of the declared characters, case-folded - as declared. Idempotent, and public so the
+     * generated controllers apply it before their checks read the record.
+     *
+     * @param entity the record about to be written, normalized in place
+     */
+    public static void normalize(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.normalizeTrim || $property.normalizeStrip || $property.normalizeCase)
+        entity.${property.name} = org.eclipse.dirigible.sdk.db.Normalize.apply(entity.${property.name}, #if($property.normalizeTrim == "true")true#{else}false#end, #if($property.normalizeStrip)"${property.normalizeStripJava}"#{else}null#end, #if($property.normalizeCase)"${property.normalizeCase}"#{else}null#end);
+#end
+#end
+    }
+#end
 #if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
 
     private static ${name}Entity copyOf(${name}Entity source) {

@@ -204,6 +204,21 @@ public class FieldIntent {
     private String pattern;
 
     /**
+     * Optional normalization of a {@code string} / {@code text} value before it is validated and stored
+     * (#7726): {@code trim}, {@code strip: <chars>}, {@code upper}, {@code lower}. A pasted phone
+     * {@code +359 898 123 456} under {@code normalize: [strip: " -()"]} is stored as
+     * {@code +359898123456}, so a {@code pattern:} can demand the canonical form without refusing the
+     * way people actually type it. The generated repository applies it on every create and update, the
+     * controllers before their checks, and the generated form on blur. The transforms run in one fixed
+     * order (trim, strip, case) whatever order they are listed in.
+     *
+     * <p>
+     * Each entry is a transform name or a single-key mapping ({@code strip: " -"}); a scalar
+     * {@code normalize: upper} is wrapped into a one-entry list before the typed mapping.
+     */
+    private List<Object> normalize;
+
+    /**
      * Optional Depends-On declaration: this scalar field is <b>auto-populated</b> from a property of a
      * sibling to-one relation's target when that relation's selection changes (e.g. {@code price}
      * copied from the chosen {@code Product}). Requires {@code valueFrom}; {@code filterBy} is not
@@ -421,6 +436,49 @@ public class FieldIntent {
     /** Whether this field is a list-table column - defaults to true when {@code major} is unset. */
     public boolean isMajor() {
         return major == null || major;
+    }
+
+    public List<Object> getNormalize() {
+        return normalize;
+    }
+
+    public void setNormalize(List<Object> normalize) {
+        this.normalize = normalize;
+    }
+
+    /** Whether {@code normalize:} lists {@code trim}. */
+    public boolean normalizeTrim() {
+        return normalizeEntry("trim") != null;
+    }
+
+    /** The characters {@code normalize: [strip: ...]} removes, or null when it lists none. */
+    public String normalizeStrip() {
+        Object strip = normalizeEntry("strip");
+        return strip instanceof String chars && !chars.isEmpty() ? chars : null;
+    }
+
+    /** {@code upper} or {@code lower} when {@code normalize:} folds the case, otherwise null. */
+    public String normalizeCase() {
+        return normalizeEntry("upper") != null ? "upper" : normalizeEntry("lower") != null ? "lower" : null;
+    }
+
+    /**
+     * The value a {@code normalize:} entry carries: the argument of a mapping entry, the name itself
+     * for a bare one, null when the transform is not listed.
+     */
+    private Object normalizeEntry(String transform) {
+        if (normalize == null) {
+            return null;
+        }
+        for (Object entry : normalize) {
+            if (entry instanceof String name && transform.equals(name.trim())) {
+                return name;
+            }
+            if (entry instanceof Map<?, ?> map && map.size() == 1 && map.containsKey(transform)) {
+                return map.get(transform);
+            }
+        }
+        return null;
     }
 
     public String getRenamedFrom() {

@@ -252,7 +252,7 @@
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end /></div>
 #elseif($property.widgetType == "TEXTAREA")
-        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end></textarea>
+        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
         <div x-h-date-picker>
@@ -286,9 +286,9 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>
@@ -817,7 +817,7 @@
                 </div>
               </template>
               <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" :aria-invalid="draftFieldError === col.name" />
+                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="draftFieldError === col.name" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    save path already ignores it - rendering an input only faked editability. Live

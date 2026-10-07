@@ -151,7 +151,7 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
+        <input x-h-input type="text" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
       </div>
 #end
@@ -453,7 +453,7 @@
                 <div x-h-month-picker><input type="text" :aria-invalid="itemFieldError === col.name" /><button x-h-month-picker-trigger aria-label="Choose month"></button><div x-h-month-picker-popup x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" :aria-invalid="itemFieldError === col.name" />
+                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="itemFieldError === col.name" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    server recomputes it on save, so rendering an input only faked editability. -->

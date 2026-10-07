@@ -571,6 +571,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # #6336: an input-format regex must survive Generate and be enforced server-side.
                   # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
+                  # #7726 normalize: a pasted phone loses its separators BEFORE the strict pattern reads it,
+                  # and an IBAN is trimmed, de-spaced and upper-cased (the order of the list is not the
+                  # order of the transforms: trim, strip, case).
+                  - { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\\+[1-9][0-9]{6,14}$' }
+                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
 
               # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
               # writable surface (power + my), a |format label token rendering "2026 July", and
@@ -2461,6 +2466,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(personForm.contains("pattern=\""), "a field pattern must reach the form input as an HTML pattern attribute");
         // On a document item the dialog is metadata-driven, so the regex travels as a JS literal in
         // the detail register (backslash-safe) rather than as markup.
+        // #7726 normalize: the repository brings the value to its stored form on every write, the
+        // controller does so before its checks read it, and the form applies the same on blur.
+        String personRepository = contentOf("gen/emission/data/person/PersonRepository.java");
+        assertTrue(
+                personRepository.contains("public static void normalize(PersonEntity entity)")
+                        && personRepository.contains("org.eclipse.dirigible.sdk.db.Normalize.apply(entity.Phone, false, \" -()\", null)")
+                        && personRepository.contains("org.eclipse.dirigible.sdk.db.Normalize.apply(entity.Iban, true, \" \", \"upper\")"),
+                "a field normalize must emit the repository's normalize step, got: " + personRepository);
+        assertTrue(personController.contains("PersonRepository.normalize(entity);"),
+                "the controller must normalize before its pattern check reads the value");
+        assertTrue(personForm.contains(
+                "@blur=\"form.Phone = ((v) => typeof v === 'string' ? v.split('').filter((c) => !' -()'.includes(c)).join('') : v)(form.Phone)\""),
+                "a field normalize must reach the form input as a blur handler, got: " + personForm);
         String linePatternRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
         assertTrue(linePatternRegister.contains("pattern: '^[A-Z]{3}-[0-9]{4}$'"),
                 "an item field pattern must reach the item-dialog column metadata, got: " + linePatternRegister);
@@ -5146,6 +5164,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/person/PersonController")
                                                  .then()
                                                  .statusCode(200));
+
+        // #7726 normalize: the pasted forms are accepted and stored without their separators, the
+        // pattern judging the normalized value; what still does not match after normalizing is refused.
+        int normalizedPerson = createRecord("/person/PersonController",
+                "{\"Name\":\"Pasted\",\"Email\":\"p3@example.com\",\"Phone\":\"+359 898-123 (456)\",\"Iban\":\" bg80 bnbg 9661 1020 3456 78 \"}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/person/PersonController/" + normalizedPerson)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Phone", equalTo("+359898123456"))
+                                                 .body("Iban", equalTo("BG80BNBG96611020345678")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Letters\",\"Email\":\"p4@example.com\",\"Phone\":\"+359 898 12a\"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")

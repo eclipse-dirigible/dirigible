@@ -442,6 +442,15 @@ field may declare:
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.
+- `normalize` (on a `string`/`text` field) - **what the value becomes before it is validated and stored** (#7726):
+  `- { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\+[1-9][0-9]{6,14}$' }`
+  stores a pasted `+359 898 123 456` or `+359-898-123-456` as `+359898123456` instead of refusing it. Transforms:
+  `trim`, `strip: "<characters>"` (removed wherever they occur), `upper`, `lower` - a list, or one bare transform
+  (`normalize: upper`). They run in a fixed order whatever order they are listed in: trim, strip, case. The generated
+  repository applies it on every create and update (REST, client Java, workflow), the controllers before `pattern`
+  and `checks`, and the form on blur. Pair it with a strict `pattern` - normalize what people type, then demand the
+  canonical form. An IBAN is `normalize: [strip: " ", upper]`. A transform listed twice, both case folds, or `strip`
+  without its characters is refused.
 - `ageing(<date field>, [30, 60, 90])` (a report **dimension**) - **the receivables-ageing bucket**: groups rows by how
   long ago the date fell, yielding `0-30` / `31-60` / `61-90` / `90+` (a null date becomes `n/a`).
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
