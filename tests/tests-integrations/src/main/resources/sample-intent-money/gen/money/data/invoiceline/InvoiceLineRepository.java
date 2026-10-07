@@ -27,8 +27,9 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
 
     @Override
     public InvoiceLineEntity save(InvoiceLineEntity entity) {
+        trimText(entity);
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
-        if (entity.Description == null) {
+        if (entity.Description == null || entity.Description.isBlank()) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -50,6 +51,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
 
     @Override
     public InvoiceLineEntity update(InvoiceLineEntity entity) {
+        trimText(entity);
         // System-owned fields survive a partial payload: a caller's update carries only the fields
         // its form edits, and a value it leaves null must not erase what the write path computed -
         // the roll-up/aggregate targets (an invoice's Paid, a timesheet's total hours) and the
@@ -79,7 +81,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
             }
         }
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
-        if (entity.Description == null) {
+        if (entity.Description == null || entity.Description.isBlank()) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -104,7 +106,8 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public InvoiceLineEntity updateWithoutEvent(InvoiceLineEntity entity) {
-        if (entity.Description == null) {
+        trimText(entity);
+        if (entity.Description == null || entity.Description.isBlank()) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -188,6 +191,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      * @return a copy carrying the computed values, or the record itself when nothing is calculated
      */
     public InvoiceLineEntity calculatedForCreate(InvoiceLineEntity submitted) {
+        trimText(submitted);
         return submitted;
     }
 
@@ -207,12 +211,27 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      *         nothing calculated and nothing system-owned
      */
     public InvoiceLineEntity calculatedForUpdate(InvoiceLineEntity submitted) {
+        trimText(submitted);
         InvoiceLineEntity entity = copyOf(submitted);
         InvoiceLineEntity stored = entity.Id == null ? null : findById(entity.Id);
         if (stored != null) {
             entity.VatAmount = stored.VatAmount;
         }
         return entity;
+    }
+
+    /**
+     * Trims the text fields of a record about to be written (#7719) - leading and trailing whitespace
+     * is never meaningful in a business field, and a value of spaces alone is no value. Applied by
+     * every write path and by the controllers' pre-write reads, so a check, a required field and the
+     * stored row all see the same value. The primary key is not touched.
+     *
+     * @param entity the record, changed in place
+     */
+    public static void trimText(InvoiceLineEntity entity) {
+        if (entity.Description != null) {
+            entity.Description = entity.Description.strip();
+        }
     }
 
     private static InvoiceLineEntity copyOf(InvoiceLineEntity source) {
