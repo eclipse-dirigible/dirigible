@@ -2887,6 +2887,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 pageStatusSteps(billDocumentPage, "BillDocumentPage", "Status",
                         "[{ value: 3, text: 'Анулирана' }, { value: 2, text: 'Публикувана' }, { value: 1, text: 'Чернова' }]", 1),
                 "the document page's stepper must follow the lifecycle, not the label order of its options");
+        // A row created through a picker's inline "New" is selected and listed even when the picker's
+        // reloaded list is narrowed past it, and a failed save of the record that picked it says the
+        // row was already saved (#7725) - two independent commits shown as one failure got the row
+        // entered twice. Run on the generated page: the header picker (Person) and an item picker
+        // narrowed by a `where:` filter (the Unit column of the line dialog).
+        assertEquals("42|42:Ada|Person 'Ada' was saved; this record was not.|42",
+                pageInlineCreate(billDocumentPage, "BillDocumentPage", "header"),
+                "the header picker must select and list the inline-created row, and its failed save must say it was saved");
+        assertEquals("43|43,1|Unit 'Pallet' was saved; this record was not.|43",
+                pageInlineCreate(billDocumentPage, "BillDocumentPage", "item"),
+                "the line dialog must select and list the inline-created row, and its failed save must say it was saved");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
         // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
         // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
@@ -7683,6 +7694,70 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                             + " page.form = { " + statusProperty + ": " + current + " };"
                             + " return '[' + page.statusSteps().map(o => o.value).join(',') + '] active ' + page.activeStep(); })()")
                           .asString();
+        }
+    }
+
+    /**
+     * Run a generated document page's inline create (#7725) over the shipped shell runtime (basePage,
+     * baseFormPage, apiError) with a stubbed REST client: the "New" dialog reports id 42 (header
+     * {@code Person}) or 43 (line {@code Unit}), the picker's reloaded list does not carry it, and the
+     * save that follows is refused with a 400. Answers
+     * {@code selected|listed|saved-sentence|selected-after-the-failure}.
+     */
+    private static String pageInlineCreate(String pageScript, String componentName, String surface) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var window = this; var pages = {}; var __related = {};"
+                    + " var document = { addEventListener: (event, callback) => callback(), getElementById: () => null };"
+                    + " var Alpine = { data: (name, factory) => { pages[name] = factory; },"
+                    + "   store: () => ({ create: (url, title, onCreated) => { __related.onCreated = onCreated; } }) };"
+                    + " var T = (key, fallback, options) => String(fallback).replace(/\\{\\{(\\w+)\\}\\}/g, (m, n) => options && options[n] != null ? options[n] : m);"
+                    + " var requestAnimationFrame = (f) => f(); var FormValidation = { validate: () => ({ errors: {}, valid: true }) };"
+                    + " window.HarmoniaFormat = { toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js", "var __refused = { isApiError: true, httpStatus: 400, errorType: 'BadRequest', errorMessage: 'refused' };"
+                    + " App.utils = { relatedCreateUrl: () => 'create-url' };" + " App.services.api = {"
+                    + "   getAll: (url) => Promise.resolve(url === '/units' ? [{ Id: 1, Name: 'Kg' }, { Id: 43, Name: 'Pallet' }] : []),"
+                    + "   get: (url) => Promise.resolve(/\\/42$/.test(url) ? { Id: 42, Name: 'Ada' } : url === '/units/43' ? { Id: 43, Name: 'Pallet' } : {}),"
+                    + "   post: (url) => url === '/units/search' ? Promise.resolve([{ Id: 1, Name: 'Kg' }]) : Promise.reject(__refused),"
+                    + "   put: () => Promise.reject(__refused) };");
+            context.eval("js", pageScript);
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); page.$nextTick = (f) => f && f(); page.refreshIcons = () => {};"
+                            + " page.id = 7; page.mode = 'edit'; page.form = { Person: '' };");
+            if ("header".equals(surface)) {
+                context.eval("js", "page.addRelated('Person', 'app-url', 'Person'); __related.onCreated(42);");
+                context.eval("js",
+                        "var __before = page.form.Person + '|' + page.optionsPerson.map(o => o.value + ':' + o.text).join(','); page.save();");
+                return context.eval("js",
+                        "__before + '|' + page.savedAlongside(page.inlineCreated).split(' It ')[0] + '|' + page.form.Person")
+                              .asString();
+            }
+            context.eval("js", "page.itemsEnabled = true; page.isDirty = () => false; page.itemRestricted = [];"
+                    + " page.itemsDef = { apiPath: '/lines', masterEntityId: 'Bill', primaryKey: 'Id', editColumns: [{ name: 'Unit',"
+                    + "   widget: 'DROPDOWN', label: 'Unit', tkey: 'unit', filter: { by: 'Active', value: true },"
+                    + "   lookup: { url: '/units', key: 'Id', text: 'Name', entity: 'Unit' } }] };"
+                    + " page.openRowDialog(null); page.addRelatedItem(page.editColumns[0]); __related.onCreated(43);");
+            context.eval("js",
+                    "var __before = page.draft.Unit + '|' + page.dialogOptionsFor('Unit').map(o => o.value).join(','); page.saveDraft();");
+            return context.eval("js",
+                    "__before + '|' + page.savedAlongside(page.draftInlineCreated).split(' It ')[0] + '|' + page.draft.Unit")
+                          .asString();
+        }
+    }
+
+    private static String shellScript(String script) {
+        String resource = "/META-INF/dirigible/application-core/shell/js/" + script;
+        try (java.io.InputStream in = IntentEmissionCoverageIT.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new IllegalStateException("Missing classpath resource: " + resource);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to read " + resource, ex);
         }
     }
 

@@ -167,6 +167,8 @@
         <div x-h-alert-description>
           <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>
           <span x-show="errors.__summary" x-text="errors.__summary"></span>
+          <!-- A row created from a picker's "New" commits on its own: say it is saved (#7725). -->
+          <div x-show="savedAlongside(inlineCreated)" x-text="savedAlongside(inlineCreated)"></div>
         </div>
       </div>
 
@@ -737,7 +739,7 @@
         <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
-        <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="draftError"></div></div>
+        <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description><div x-text="draftError"></div><div x-show="savedAlongside(draftInlineCreated)" x-text="savedAlongside(draftInlineCreated)"></div></div></div>
         <p x-h-text.muted x-show="draftMode === 'fill'" x-text="T('$projectName:${tprefix}.messages.fillMonthHint', 'One line is created for every working day (Mon-Fri) of the picked month; days that already have a line are skipped.')"></p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <template x-for="col in editColumns" :key="col.name">

@@ -307,7 +307,9 @@
       "title": "Applications"
     },
     "related": {
-      "addNew": "Add new"
+      "addNew": "Add new",
+      "savedOne": "{{saved}} was saved; this record was not. It stays selected - correct this record and save again instead of creating it anew.",
+      "savedMany": "{{saved}} were saved; this record was not. They stay selected - correct this record and save again instead of creating them anew."
     },
     "switch": {
       "title": "Switch to",

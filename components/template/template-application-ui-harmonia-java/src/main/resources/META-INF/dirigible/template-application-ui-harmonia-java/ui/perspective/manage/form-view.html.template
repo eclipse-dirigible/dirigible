@@ -245,6 +245,8 @@
       <div x-h-alert-description>
         <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>
         <span x-show="errors.__summary" x-text="errors.__summary"></span>
+        <!-- A row created from a picker's "New" commits on its own: say it is saved (#7725). -->
+        <div x-show="savedAlongside(inlineCreated)" x-text="savedAlongside(inlineCreated)"></div>
       </div>
     </div>
 
