@@ -332,6 +332,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # postings source-FK-copy counterparty (#6533): a plain nomenclature copied by FK id.
               - name: Party
+                orderBy: [name]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
@@ -340,6 +341,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # schema gains the composite constraint over (PARTY, CODE) and a colliding write is
               # answered with the authored message rather than a server error.
               - name: PartyCode
+                # entity-level orderBy (#7727): the list reads newest code first instead of in
+                # insertion order, and the Party picker below keeps ITS target's declared order.
+                orderBy: [{ field: code, dir: desc }]
                 unique:
                   - { fields: [party, code], message: 'This "code" is already registered for the party' }
                 fields:
@@ -2725,6 +2729,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
         assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
                 "the generated controller must carry the authored conflict message");
+        // entity-level orderBy (#7727): the declared row order has to reach BOTH query shapes of the
+        // list endpoint - the paged read and the filtered search - because an unordered page is free
+        // to be a different slice on every call, so ordering it after the fact orders the wrong rows.
+        assertTrue(partyCodeController.contains("repository.findAll(actualLimit, actualOffset, \"e.Code desc\")"),
+                "the paged list must ask the database for the declared order: " + partyCodeController);
+        assertTrue(partyCodeController.contains("hql.append(\" order by e.Code desc\")"),
+                "a filtered list must read in the same order as the unfiltered one");
+        // ...and a picker whose target declares one keeps it rather than re-sorting by display text.
+        String partyCodeForm = contentOf("gen/emission/js/components/pages/PartyCode/PartyCodeFormPage.js");
+        assertTrue(partyCodeForm.contains("this.sortOptions(") && partyCodeForm.contains(", 'true')"),
+                "the Party picker must be told its target is already ordered by the server, so it keeps that order "
+                        + "instead of re-sorting by display text: " + partyCodeForm);
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
         // schema as its own table and the REST layer as its own (detail) controller. Asserting the
@@ -5494,6 +5510,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/partycode/PartyCodeController")
                                                  .then()
                                                  .statusCode(200));
+
+        // entity-level orderBy (#7727): the list the UI reads comes back in the declared order - the
+        // whole point being that the ORDER BY is the database's, so paging stays coherent. Asserted
+        // over the live endpoint because a token assertion says nothing about what the query returns.
+        restAssuredExecutor.execute(() -> {
+            List<String> codes = given().when()
+                                        .get(API + "/partycode/PartyCodeController")
+                                        .then()
+                                        .statusCode(200)
+                                        .extract()
+                                        .path("Code");
+            List<String> descending = new java.util.ArrayList<>(codes);
+            descending.sort(java.util.Comparator.reverseOrder());
+            assertEquals(descending, codes, "the list must read in the entity's declared orderBy, got: " + codes);
+        });
 
         // ...and immutableWhen now enforces: user writes and deletes on the POSTED record are 409.
         restAssuredExecutor.execute(() -> given().contentType("application/json")

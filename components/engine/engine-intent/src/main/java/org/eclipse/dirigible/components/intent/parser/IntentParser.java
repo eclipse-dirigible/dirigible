@@ -70,6 +70,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
@@ -337,6 +338,7 @@ public final class IntentParser {
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
+        normalizeOrderBy(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -399,6 +401,7 @@ public final class IntentParser {
         validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateLists(model, issues);
+        validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
@@ -1001,6 +1004,57 @@ public final class IntentParser {
                 if (!known.contains(key)) {
                     issues.add("entity [" + entity.getName() + "] list references [" + token
                             + "] which is not a field or to-one relation of the entity");
+                }
+            }
+        }
+    }
+
+    /**
+     * Each entity's optional {@code orderBy} (issue #7727) names the properties its rows are sorted by
+     * - fields and to-one relations, matched case-insensitively against the authored names - each
+     * optionally with {@code dir: asc|desc}. Every name must resolve, no name may repeat (a second term
+     * over the same property can never break a tie the first one did not), and a direction other than
+     * asc/desc is a typo rather than a default worth guessing at.
+     */
+    private static void validateOrderBy(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<OrderByIntent> orderBy = entity.getOrderBy();
+            if (orderBy == null || orderBy.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            Set<String> known = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    known.add(field.getName()
+                                   .toLowerCase(Locale.ROOT));
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind())
+                        || "subset".equals(relation.getKind()))) {
+                    known.add(relation.getName()
+                                      .toLowerCase(Locale.ROOT));
+                }
+            }
+            Set<String> seen = new HashSet<>();
+            for (OrderByIntent term : orderBy) {
+                String field = term == null ? null : term.getField();
+                if (field == null || field.isBlank()) {
+                    issues.add("entity [" + entity.getName() + "] orderBy has an entry without a field");
+                    continue;
+                }
+                String key = field.trim()
+                                  .toLowerCase(Locale.ROOT);
+                if (!seen.add(key)) {
+                    issues.add("entity [" + entity.getName() + "] orderBy names [" + field + "] more than once");
+                }
+                if (!known.contains(key)) {
+                    issues.add("entity [" + entity.getName() + "] orderBy references [" + field
+                            + "] which is not a field or to-one relation of the entity");
+                }
+                String dir = term.getDir();
+                if (dir != null && !"asc".equalsIgnoreCase(dir.trim()) && !"desc".equalsIgnoreCase(dir.trim())) {
+                    issues.add("entity [" + entity.getName() + "] orderBy [" + field + "] has dir [" + dir + "] - it is asc or desc");
                 }
             }
         }
@@ -6657,6 +6711,41 @@ public final class IntentParser {
             } else if (declared instanceof String field) {
                 writable.put("order", new ArrayList<>(List.of(field)));
             }
+        }
+    }
+
+    /**
+     * An entity's {@code orderBy:} (issue #7727) names its properties either bare
+     * ({@code orderBy: [number]}) or with a direction ({@code orderBy: [{ field: date, dir: desc }]}),
+     * and a single property may be written without the list ({@code orderBy: number}). All three map to
+     * the one typed list of {@code { field, dir }}, so the scalar and the string entries are expanded
+     * on the raw tree here - before the unknown-key walk and the typed mapping, for the reason
+     * {@link #expandUniqueShorthand} is: Gson maps a string onto an object with an exception rather
+     * than with a message an author can act on.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeOrderBy(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("orderBy")) {
+                continue;
+            }
+            Map<Object, Object> writable = (Map<Object, Object>) entity;
+            Object declared = entity.get("orderBy");
+            if (declared == null) {
+                writable.remove("orderBy");
+                continue;
+            }
+            List<?> terms = declared instanceof List<?> list ? list : List.of(declared);
+            List<Object> expanded = new ArrayList<>(terms.size());
+            for (Object term : terms) {
+                expanded.add(term instanceof String field ? new LinkedHashMap<>(Map.of("field", field)) : term);
+            }
+            writable.put("orderBy", expanded);
         }
     }
 

@@ -56,6 +56,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -652,6 +653,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
                 putInheritedPersonalReadOnly(fkProperty, relation, composition);
+                // The target declares a row order (#7727), so this picker lists its options in it
+                // rather than re-sorting them by display text - the default since #7464.
+                if (target != null && !target.getOrderBy()
+                                             .isEmpty()) {
+                    fkProperty.put("widgetOptionsOrdered", "true");
+                }
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, targetPerspective));
             }
@@ -664,6 +671,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
             applyListColumns(entityMap, properties, entity.getList());
+            // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
+            // scalar the generation pipeline turns into the list endpoint's ORDER BY.
+            applyOrderBy(entityMap, entity.getOrderBy());
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -1271,6 +1281,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             property.put("widgetIsMajor", listed.contains(property) ? "true" : "false");
         }
         entityMap.put("listOrder", String.join(",", listOrder));
+    }
+
+    /**
+     * Emit an entity's default row order (intent {@code orderBy:}, issue #7727) as the {@code orderBy}
+     * attribute - {@code "<Property> asc,<Property> desc"} in the authored sequence, property names in
+     * model (PascalCase) notation. A scalar, like {@code listOrder}, so it survives the {@code .edm}
+     * twin; {@code ModelParameterProcessor} turns it into the ORDER BY the generated list endpoint
+     * runs, which is what also orders a {@code hierarchy:} tree's siblings and every picker's options.
+     *
+     * @param entityMap the entity being emitted
+     * @param orderBy the authored terms; empty leaves no attribute, so nothing orders
+     */
+    private static void applyOrderBy(Map<String, Object> entityMap, List<OrderByIntent> orderBy) {
+        if (orderBy == null || orderBy.isEmpty()) {
+            return;
+        }
+        List<String> terms = new ArrayList<>(orderBy.size());
+        for (OrderByIntent term : orderBy) {
+            terms.add(IntentNaming.pascalCase(term.getField()) + " " + term.direction());
+        }
+        entityMap.put("orderBy", String.join(",", terms));
     }
 
     /**
