@@ -120,6 +120,10 @@ function harmoniaCalcEval(expr, vars, scale) {
 }
 
 #end
+## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
+## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
+#macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
+#macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}FormPage', () => ({
     ...baseFormPage(),
@@ -367,7 +371,7 @@ document.addEventListener('alpine:init', () => {
         // row by id - the filter still governs what may be newly picked (mirrors the items dialog,
         // which keeps the full set for label resolution alongside the filtered chooser set). A
         // MULTISELECT holds SEVERAL keys, each of which may have fallen outside the filter.
-        await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
+        await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', #if($property.widgetDropDownDocumentNumber)true#{else}false#end);
 #end
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
@@ -425,18 +429,18 @@ document.addEventListener('alpine:init', () => {
 #end
 #if($property.widgetLeafOnly && $property.widgetHierarchyProperty)
         // leafOnly hierarchy picker: depth-indented, childless nodes only (server re-validates).
-        this.options${property.name} = this.hierarchizeOptions(rows${property.name}, {
+        this.options${property.name} = this.hierarchizeOptions(#labelRows($property "rows${property.name}"), {
           key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}',
           parent: '${property.widgetHierarchyProperty}', leafOnly: true
         });
 #elseif($property.widgetPickable)
         // Picker rule (intent `pickable:`): a target row failing it is listed disabled with the rule's
         // message, or hidden - the server's own checks remain the gate.
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows${property.name}, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(#labelRows($property "rows${property.name}"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
 #else
         this.options${property.name} = this.sortOptions((rows${property.name} || []).map(e => ({
           value: e.${property.widgetDropDownKey},
-          text: e.${property.widgetDropDownValue}
+          text: #labelOf($property "e")
         })));
 #end
       } catch (e) {
@@ -476,7 +480,7 @@ document.addEventListener('alpine:init', () => {
     // edit. The filter still governs what the user can newly pick. A MULTISELECT's model is an ARRAY
     // of keys, so every stored key is checked - one that fell outside the filter would otherwise
     // vanish from the trigger's label list while the record still stores it.
-    async ensureFilteredCurrent(prop, url, key, text) {
+    async ensureFilteredCurrent(prop, url, key, text, draftNumber) {
       const current = this.form[prop];
       const values = (Array.isArray(current) ? current : [current]).filter(v => v != null && v !== '');
       if (!values.length) return;
@@ -491,7 +495,7 @@ document.addEventListener('alpine:init', () => {
           return null;
         })));
       for (const row of rows) {
-        if (row && row[key] != null) opts.unshift({ value: row[key], text: row[text] });
+        if (row && row[key] != null) opts.unshift({ value: row[key], text: draftNumber ? window.HarmoniaFormat.documentNumber(row[text]) : row[text] });
       }
     },
 
@@ -599,7 +603,7 @@ document.addEventListener('alpine:init', () => {
             { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
 #if($property.widgetPickable)
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
         if (adjust) {
           // Only a row the picker rule lets the user pick is auto-selected.
           const pickable = this.options${property.name}.filter(o => !o.disabled);
@@ -608,7 +612,7 @@ document.addEventListener('alpine:init', () => {
 #else
         this.options${property.name} = this.sortOptions((rows || []).map(e => ({
           value: e.${property.widgetDropDownKey},
-          text: e.${property.widgetDropDownValue}
+          text: #labelOf($property "e")
         })));
         if (adjust) {
           this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
@@ -1047,7 +1051,7 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
-      this.pushSummary(parts, this.form.${property.name}, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")true#{else}false#end, #if($property.widgetType == "DROPDOWN")this.options${property.name}#{else}null#end);
+      this.pushSummary(parts, #if($property.numberStampOnIssue)window.HarmoniaFormat.documentNumber(this.form.${property.name})#{else}this.form.${property.name}#end, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")true#{else}false#end, #if($property.widgetType == "DROPDOWN")this.options${property.name}#{else}null#end);
 #if($property.roleRead)
       }
 #end

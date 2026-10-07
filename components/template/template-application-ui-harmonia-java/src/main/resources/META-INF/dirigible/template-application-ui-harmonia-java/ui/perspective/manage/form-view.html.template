@@ -18,7 +18,7 @@
 ## shared basePage.fieldDisplay text is non-empty and the caller may see the field (issue #7522).
 ## The value itself is printed by the record page's own fieldText helpers (issue #7491).
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
-#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '$!{property.widgetType}', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
+#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
 #macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
@@ -696,6 +696,9 @@
 #elseif($property.widgetType == "CHECKBOX")
               <!-- The translated state, as the preview shows it - fieldText would print true/false (#7522). -->
               <span class="text-sm wrap-anywhere" x-text="checkboxText(form.${property.name})"></span>
+#elseif($property.numberStampOnIssue)
+              <!-- A number: { stampOn: issue } field reads as the draft marker until it is stamped (#7722). -->
+              <span class="text-sm wrap-anywhere" x-text="window.HarmoniaFormat.documentNumber(form.${property.name}) || '—'"></span>
 #else
               <!-- Through the same formatter every other surface uses: these are the audit columns, so
                    most of them ARE dates, and printed raw they read as the backend's serialization

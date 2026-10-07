@@ -69,6 +69,20 @@ class TaskSubjectSupportTest {
                                                                            .get("subjectFields"));
     }
 
+    /**
+     * A number stamped on issue holds a UUID placeholder until then, so the reader is told to render it
+     * as the draft marker rather than as text (issue #7722).
+     */
+    @Test
+    void aNumberStampedOnIssueIsADocumentNumberKind() {
+        String yaml = DOCUMENT.replace("{ name: number, type: string, documentTitle: true }",
+                "{ name: number, type: string, documentTitle: true, number: { series: Sales Invoice, stampOn: issue } }");
+        List<Map<String, Object>> triggers = GlueIntentGenerator.buildTriggersForTest(IntentParser.parse(yaml));
+
+        assertEquals("Number:docnumber,Customer:relation,Total:number", triggers.get(0)
+                                                                                .get("subjectFields"));
+    }
+
     /** The status badge is never the counterparty - it says nothing about WHICH record this is. */
     @Test
     void theStatusRelationIsNotTheParty() {

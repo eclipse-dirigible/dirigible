@@ -63,6 +63,8 @@ document.addEventListener('alpine:init', () => {
     display(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '—';
+      // A number: { stampOn: issue } column shows its draft marker until the number is stamped (#7722).
+      if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
       return String(v);
@@ -88,7 +90,7 @@ document.addEventListener('alpine:init', () => {
     columns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{partnerProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
 #end
 #end
     ],

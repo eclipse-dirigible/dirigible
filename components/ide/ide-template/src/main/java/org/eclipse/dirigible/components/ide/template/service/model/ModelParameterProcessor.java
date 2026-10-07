@@ -1798,6 +1798,7 @@ final class ModelParameterProcessor {
                     str(property, "relationshipEntityName")));
             lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
             lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+            putDocumentNumberLabel(lookup, property);
             column.put("lookup", lookup);
         } else if ("MULTISELECT".equals(widgetType) && truthy(property, "widgetOptionsEntityName")) {
             // A subset column holds a KEY LIST ("1,3"), so the panel resolves EACH key through the
@@ -1817,6 +1818,7 @@ final class ModelParameterProcessor {
                 lookup.put("url", javaControllerUrl(sourceProject, sourceGenFolder, perspective, optionsEntity));
                 lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
                 lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+                putDocumentNumberLabel(lookup, property);
                 column.put("multi", Boolean.TRUE);
                 column.put("lookup", lookup);
             }
@@ -1835,7 +1837,26 @@ final class ModelParameterProcessor {
             // own lists render the column too.
             column.put("sensitive", Boolean.TRUE);
         }
+        if (isTrue(property, "numberStampOnIssue")) {
+            // A number: { stampOn: issue } column holds a UUID placeholder until its document is
+            // issued; the register shows the draft marker instead (issue #7722).
+            column.put("documentNumber", Boolean.TRUE);
+        }
         return column;
+    }
+
+    /**
+     * Mark a register column's lookup whose label is a {@code number: { stampOn: issue }} field, so the
+     * register resolves an unissued document to the draft marker rather than its UUID placeholder
+     * (issue #7722).
+     *
+     * @param lookup the column's lookup descriptor
+     * @param property the source property's metadata
+     */
+    private static void putDocumentNumberLabel(Map<String, Object> lookup, Map<String, Object> property) {
+        if (isTrue(property, "widgetDropDownDocumentNumber")) {
+            lookup.put("documentNumber", Boolean.TRUE);
+        }
     }
 
     /**

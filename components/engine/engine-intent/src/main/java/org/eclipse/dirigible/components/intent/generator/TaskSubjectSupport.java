@@ -74,7 +74,8 @@ public final class TaskSubjectSupport {
                 break;
             }
             if (isListColumn(field)) {
-                add(encoded, taken, IntentNaming.pascalCase(field.getName()) + ":" + kindOf(field.getType()));
+                add(encoded, taken,
+                        IntentNaming.pascalCase(field.getName()) + ":" + (isDraftNumber(field) ? "docnumber" : kindOf(field.getType())));
             }
         }
         return String.join(",", encoded);
@@ -90,10 +91,28 @@ public final class TaskSubjectSupport {
         }
     }
 
-    /** What the record is called - the same property a to-one relation to it would label it by. */
+    /**
+     * What the record is called - the same property a to-one relation to it would label it by. A
+     * {@code number: { stampOn: issue }} label is kind {@code docnumber}: until the document is issued
+     * it holds a UUID placeholder, which the reader shows as the draft marker (issue #7722).
+     */
     private static String labelField(EntityIntent entity) {
         String label = IntentEntities.labelFieldOf(entity);
-        return label.isBlank() ? "" : label + ":text";
+        if (label.isBlank()) {
+            return "";
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null && label.equals(IntentNaming.pascalCase(field.getName())) && isDraftNumber(field)) {
+                return label + ":docnumber";
+            }
+        }
+        return label + ":text";
+    }
+
+    /** Whether the field is a {@code number: { stampOn: issue }} field. */
+    private static boolean isDraftNumber(FieldIntent field) {
+        return field.getNumber() != null && "issue".equalsIgnoreCase(field.getNumber()
+                                                                          .getStampOn());
     }
 
     /**

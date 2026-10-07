@@ -265,6 +265,8 @@ document.addEventListener('alpine:init', () => {
         return label === null || label === undefined || label === '' ? '' : String(label);
       }
       if (!window.HarmoniaFormat) return String(value);
+      // A number: { stampOn: issue } reads as the draft marker until it is stamped (#7722).
+      if (field.kind === 'docnumber') return String(HarmoniaFormat.documentNumber(value));
       if (field.kind === 'number') return HarmoniaFormat.number(value, null, '');
       if (field.kind === 'integer') return HarmoniaFormat.number(value, '0', '');
       if (field.kind === 'date') return HarmoniaFormat.value(value, true);

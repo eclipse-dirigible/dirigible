@@ -9,6 +9,10 @@
  * (loading | error | empty | no-results | default) on the fetch entity client,
  * with search, tri-state column sort and client-side pagination.
  */
+## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
+## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
+#macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
+#macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}ListPage', () => ({
     ...basePage(),
@@ -89,7 +93,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
-        (opt${property.name} || []).forEach(e => { map${property.name}[e.${property.widgetDropDownKey}] = e.${property.widgetDropDownValue}; });
+        (opt${property.name} || []).forEach(e => { map${property.name}[e.${property.widgetDropDownKey}] = #labelOf($property "e"); });
         all['${property.name}'] = map${property.name};
       } catch (e) {
         console.error('[${name}ListPage] failed to load lookup for ${property.name}', e);
@@ -217,7 +221,7 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
 #end
 #end
     ],
@@ -225,6 +229,7 @@ document.addEventListener('alpine:init', () => {
       const v = row[col.name];
       if (v == null || v === '') return '';
       if (col.multi) return this.multiLookupText(col.name, v);
+      if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
     },
     exportCsv() {

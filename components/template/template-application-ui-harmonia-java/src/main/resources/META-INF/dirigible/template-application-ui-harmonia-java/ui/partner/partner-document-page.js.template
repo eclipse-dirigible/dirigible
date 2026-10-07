@@ -15,6 +15,10 @@
 #foreach($property in $properties)
 #if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
 #end
+## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
+## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
+#macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
+#macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}PartnerDocumentPage', () => ({
     ...basePage(),
@@ -191,9 +195,9 @@ document.addEventListener('alpine:init', () => {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
 #if($property.widgetPickable)
         // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
-        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
 #else
-        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} })));
+        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })));
 #end
       } catch (e) { loaded['${property.name}'] = []; }
 #end
@@ -445,7 +449,7 @@ document.addEventListener('alpine:init', () => {
         if (col.lookup && col.lookup.url) {
           try {
             const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
-            loaded[col.name] = this.sortOptions(this.pickableOptions(rows, col.lookup.key, col.lookup.text, col.pickable));
+            loaded[col.name] = this.sortOptions(this.pickableOptions((col.lookup.documentNumber ? this.documentNumberLabels(rows, col.lookup.text) : rows), col.lookup.key, col.lookup.text, col.pickable));
           } catch (e) { loaded[col.name] = []; }
         }
       }

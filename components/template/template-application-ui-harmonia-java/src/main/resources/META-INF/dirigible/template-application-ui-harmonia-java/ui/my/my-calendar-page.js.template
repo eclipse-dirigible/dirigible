@@ -18,6 +18,10 @@
 #set($titleRelation = $property)
 #end
 #end
+## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
+## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
+#macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
+#macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}MyCalendarPage', () => ({
     ...basePage(),
@@ -44,7 +48,7 @@ document.addEventListener('alpine:init', () => {
       try {
         const rows = await App.services.api.getAll('${titleRelation.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map = {};
-        (rows || []).forEach((r) => { map[r.${titleRelation.widgetDropDownKey}] = r.${titleRelation.widgetDropDownValue}; });
+        (rows || []).forEach((r) => { map[r.${titleRelation.widgetDropDownKey}] = #labelOf($titleRelation "r"); });
         this.titleLookup = map;
         this.calCfg = { view: this.calCfg.view, events: this.buildEvents() };
       } catch (e) { /* fail-soft: the raw value stays the title fallback */ }
