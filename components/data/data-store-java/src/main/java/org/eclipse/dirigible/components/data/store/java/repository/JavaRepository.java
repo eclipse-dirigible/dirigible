@@ -273,6 +273,20 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * The same page in a declared order - the generated list endpoint's default row order
+     * ({@code orderBy:}, dirigible #7727). Ordering in the database is what keeps paging coherent: an
+     * unordered query is free to return a different slice on every call.
+     *
+     * @param limit max rows to return; non-positive means unlimited
+     * @param offset rows to skip; non-positive means none
+     * @param orderBy the {@code order by} fragment over the alias {@code e}, without the keywords
+     * @return the requested page
+     */
+    public List<T> findAll(int limit, int offset, String orderBy) {
+        return store().findAll(entityClass, limit, offset, orderBy);
+    }
+
+    /**
      * Find every entity matching a typed {@link Criteria} — the type-safe alternative to
      * {@link #query(String, Map)}. Conditions are combined with {@code AND}; values are bound as
      * parameters.
