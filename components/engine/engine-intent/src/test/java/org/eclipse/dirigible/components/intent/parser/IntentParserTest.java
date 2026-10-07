@@ -20,6 +20,7 @@ import java.util.List;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.junit.jupiter.api.Test;
@@ -3612,5 +3613,87 @@ class IntentParserTest {
         assertTrue(issues.stream()
                          .anyMatch(i -> i.contains("field [total] declares defaultValue: now")),
                 "expected the decimal field refused, got: " + issues);
+    }
+
+    /**
+     * {@code orderBy:} (#7727) takes a bare property name, the full {@code { field, dir }} form and a
+     * single property without the list; every name must resolve, no name may repeat, and a direction
+     * other than asc/desc is a typo rather than a default worth guessing at.
+     */
+    @Test
+    void orderByParsesItsThreeShapesAndRefusesWhatCannotOrderAnything() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: number
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: Entry
+                    orderBy: [{ field: date, dir: DESC }, number, account]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals(List.of("number"), model.getEntities()
+                                             .get(0)
+                                             .getOrderBy()
+                                             .stream()
+                                             .map(OrderByIntent::getField)
+                                             .toList(),
+                "a single property needs no list");
+        List<OrderByIntent> entry = model.getEntities()
+                                         .get(1)
+                                         .getOrderBy();
+        assertEquals(List.of("date", "number", "account"), entry.stream()
+                                                                .map(OrderByIntent::getField)
+                                                                .toList());
+        assertEquals("desc", entry.get(0)
+                                  .direction(),
+                "the direction is case-insensitive");
+        assertEquals("asc", entry.get(1)
+                                 .direction(),
+                "a term without one is ascending");
+
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [code]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """).stream()
+                    .anyMatch(i -> i.contains("orderBy references [code]")),
+                "a name the entity does not declare orders nothing");
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [number, number]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                """).stream()
+                    .anyMatch(i -> i.contains("more than once")),
+                "a repeated term can never break a tie the first one did not");
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [{ field: number, dir: descending }]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                """).stream()
+                    .anyMatch(i -> i.contains("it is asc or desc")));
+    }
+
+    private static List<String> issuesOf(String yaml) {
+        return assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml)).getIssues();
     }
 }

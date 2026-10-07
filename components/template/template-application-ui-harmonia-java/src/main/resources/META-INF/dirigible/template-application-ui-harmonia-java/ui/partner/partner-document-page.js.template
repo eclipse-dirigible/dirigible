@@ -195,9 +195,9 @@ document.addEventListener('alpine:init', () => {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
 #if($property.widgetPickable)
         // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
-        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
 #else
-        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })));
+        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })), '$!{property.widgetOptionsOrdered}');
 #end
       } catch (e) { loaded['${property.name}'] = []; }
 #end
@@ -449,7 +449,7 @@ document.addEventListener('alpine:init', () => {
         if (col.lookup && col.lookup.url) {
           try {
             const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
-            loaded[col.name] = this.sortOptions(this.pickableOptions((col.lookup.documentNumber ? this.documentNumberLabels(rows, col.lookup.text) : rows), col.lookup.key, col.lookup.text, col.pickable));
+            loaded[col.name] = this.sortOptions(this.pickableOptions((col.lookup.documentNumber ? this.documentNumberLabels(rows, col.lookup.text) : rows), col.lookup.key, col.lookup.text, col.pickable), col.ordered);
           } catch (e) { loaded[col.name] = []; }
         }
       }

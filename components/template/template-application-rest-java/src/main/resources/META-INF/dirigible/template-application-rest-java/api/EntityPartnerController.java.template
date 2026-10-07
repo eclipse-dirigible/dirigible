@@ -150,7 +150,7 @@ public class ${name}PartnerController {
         if (me == null) {
             return List.of();
         }
-        List<${name}Entity> result = repository.findAll(Criteria.create().eq("${partnerProperty}", me));
+        List<${name}Entity> result = repository.findAll(Criteria.create().eq("${partnerProperty}", me)#if($orderByCriteria)${orderByCriteria}#end);
         result.forEach(this::scrub);
         return result;
     }

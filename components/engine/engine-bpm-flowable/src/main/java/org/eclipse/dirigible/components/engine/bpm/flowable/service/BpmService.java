@@ -411,6 +411,18 @@ public class BpmService {
                                   .getTaskIdentityLinks(taskId);
     }
 
+    /**
+     * The identity links of a task a listing just returned - the same read without the existence check
+     * that listing already made (issue #7232).
+     *
+     * @param taskId the id of a task the caller just listed
+     * @return its identity links
+     */
+    public List<IdentityLink> getListedTaskIdentityLinks(String taskId) {
+        return bpmProviderFlowable.getTaskService()
+                                  .getListedTaskIdentityLinks(taskId);
+    }
+
     public Map<String, Object> getTaskVariables(String taskId) {
         return bpmProviderFlowable.getTaskService()
                                   .getTaskVariables(taskId);

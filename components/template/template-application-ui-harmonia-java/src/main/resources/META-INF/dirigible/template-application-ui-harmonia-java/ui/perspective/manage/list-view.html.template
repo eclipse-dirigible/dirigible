@@ -22,6 +22,15 @@
                 </template>
               </select>
             </template>
+            <!-- A boolean column is a Yes/No choice, not a text box: there is nothing sensible to type
+                 into it, and the search needs a real true/false for its EQ (issue #7720). -->
+            <template x-if="editedFilterColumn &amp;&amp; editedFilterColumn.type === 'boolean'">
+              <select x-model="filterDraft" class="w-full text-sm rounded-md border border-border px-2 py-1">
+                <option value="" x-text="T('$projectName:${tprefix}.defaults.all', 'All')"></option>
+                <option value="true" x-text="T('$projectName:${tprefix}.defaults.yes', 'Yes')"></option>
+                <option value="false" x-text="T('$projectName:${tprefix}.defaults.no', 'No')"></option>
+              </select>
+            </template>
             <!-- A date column filters through the same Harmonia picker the forms use, configured from
                  the instance Date pattern, so the shape it shows and accepts is the one the cells
                  print. A native <input type="date"> renders in the BROWSER's locale instead, which is
@@ -34,7 +43,7 @@
                 <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft"></div>
               </div>
             </template>
-            <template x-if="editedFilterColumn &amp;&amp; editedFilterColumn.type !== 'fk' &amp;&amp; editedFilterColumn.type !== 'date'">
+            <template x-if="editedFilterColumn &amp;&amp; editedFilterColumn.type !== 'fk' &amp;&amp; editedFilterColumn.type !== 'date' &amp;&amp; editedFilterColumn.type !== 'boolean'">
               <input x-h-input type="text" class="w-full" x-model="filterDraft" @keydown.enter="${dismiss}applyFilterDraft()"
                      :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter')" />
             </template>

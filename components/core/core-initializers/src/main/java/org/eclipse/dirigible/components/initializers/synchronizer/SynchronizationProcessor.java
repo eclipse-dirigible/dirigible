@@ -536,6 +536,22 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      *
      * @return true when a retry pass should run now
      */
+    /**
+     * Whether a FAILED artefact is still waiting for the retry that may heal it (issue #7364). The
+     * answer a test framework needs and {@link #isSynchronizationNeeded()} deliberately does not give:
+     * a pass that left an artefact FAILED reports itself finished, so a journey asserting right after
+     * it observes the window between the failure and the retry - a controller whose compile unit failed
+     * has no route, and the GET is a 404 seconds before the retry installs it.
+     * <p>
+     * It stays true for an artefact that keeps failing, since each pass re-arms the retry. A caller
+     * waiting on it must bound its wait rather than require a false.
+     *
+     * @return whether a retry of the FAILED artefacts is armed
+     */
+    public boolean isFailedRetryPending() {
+        return failedRetryDueAt.get() >= 0;
+    }
+
     private boolean isFailedRetryDue() {
         long dueAt = failedRetryDueAt.get();
         return dueAt >= 0 && System.currentTimeMillis() >= dueAt && initialized.get() && prepared.get() && !processing.get();

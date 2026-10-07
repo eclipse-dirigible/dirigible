@@ -135,6 +135,7 @@ final class ModelParameterProcessor {
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
+        resolveOrderBy(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
@@ -610,6 +611,50 @@ final class ModelParameterProcessor {
             names.add(str(property, "name"));
         }
         entity.put("dataOrderBySort", String.join(",", names));
+    }
+
+    /**
+     * Derives {@code orderByHql}, the default row order of the generated list endpoint - the intent's
+     * {@code orderBy:} (dirigible #7727), or, for a hand-modeled entity, the per-property
+     * {@code dataOrderBy} the entity editor writes. Both say the same thing, so they resolve to one
+     * clause: {@code e.Number asc, e.Date desc}, the list and search queries append it verbatim. An
+     * entity declaring neither leaves no key, so those queries are emitted exactly as before and the
+     * rows come in whatever order the database returns them.
+     *
+     * @param entity the entity
+     */
+    private static void resolveOrderBy(Map<String, Object> entity) {
+        List<String> terms = new ArrayList<>();
+        String declared = str(entity, "orderBy");
+        if (declared != null && !declared.isBlank()) {
+            for (String term : declared.split(",")) {
+                String[] parts = term.trim()
+                                     .split("\\s+");
+                if (parts.length > 0 && !parts[0].isBlank()) {
+                    terms.add("e." + parts[0] + " " + (parts.length > 1 && "desc".equalsIgnoreCase(parts[1]) ? "desc" : "asc"));
+                }
+            }
+        } else {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                String direction = str(property, "dataOrderBy");
+                if (direction != null && !direction.isBlank()) {
+                    terms.add("e." + str(property, "name") + " " + ("DESC".equalsIgnoreCase(direction.trim()) ? "desc" : "asc"));
+                }
+            }
+        }
+        if (terms.isEmpty()) {
+            return;
+        }
+        entity.put("orderByHql", String.join(", ", terms));
+        // ...and the same order as a Criteria chain, for the scoped surfaces, which list through one.
+        StringBuilder chain = new StringBuilder();
+        for (String term : terms) {
+            String property = term.substring("e.".length(), term.lastIndexOf(' '));
+            chain.append(term.endsWith(" desc") ? ".orderByDesc(\"" : ".orderByAsc(\"")
+                 .append(property)
+                 .append("\")");
+        }
+        entity.put("orderByCriteria", chain.toString());
     }
 
     /**
