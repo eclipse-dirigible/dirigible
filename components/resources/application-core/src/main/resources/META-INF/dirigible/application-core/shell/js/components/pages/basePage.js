@@ -36,9 +36,15 @@ function basePage() {
      * pass through here. Collation is locale-aware: the app's current language (localStorage, the same
      * flag i18n and Accept-Language read) drives it, so a Bulgarian label list sorts in Bulgarian
      * order, falling back to the runtime locale; numeric:true keeps "Item 2" before "Item 10".
+     *
+     * `serverOrdered` is the opt-out: a target entity declaring `orderBy:` has already been listed in
+     * that order by its controller, and that order is the answer to this picker too.
      */
-    sortOptions(options) {
+    sortOptions(options, serverOrdered) {
       const list = options || [];
+      // The target declares its own row order (intent `orderBy:`, issue #7727), so the controller
+      // already listed its rows in it - re-sorting them by label would override what the model says.
+      if (serverOrdered) return list;
       let locale;
       try {
         locale = window.localStorage.getItem('codbex.harmonia.language') || undefined;

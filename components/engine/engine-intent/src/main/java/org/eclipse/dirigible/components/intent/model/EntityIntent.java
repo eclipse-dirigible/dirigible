@@ -130,6 +130,17 @@ public class EntityIntent {
      */
     private List<String> list = new ArrayList<>();
     /**
+     * Optional default ROW order (issue #7727): the property names - fields and to-one relations,
+     * case-insensitive - the entity's rows are sorted by, each optionally with a direction
+     * ({@code orderBy: [number]}, {@code orderBy: [{ field: date, dir: desc }, number]}). Applied as
+     * the {@code ORDER BY} of the list endpoint (server side, so paging stays correct), hence also as
+     * the sibling order of a {@code hierarchy:} tree, and as the option order of every to-one picker
+     * targeting this entity - which overrides the display-text sort pickers otherwise default to. A
+     * header click still re-sorts the list; this is only the default. Absent or empty &rarr; rows come
+     * in whatever order the database returns them.
+     */
+    private List<OrderByIntent> orderBy = new ArrayList<>();
+    /**
      * Optional names of fields and to-one relations this entity no longer has, whose columns a publish
      * removes from the live table, data included (#7635) - the explicit contract step of a schema
      * change. A field that is simply deleted from the intent keeps its column and its values, so a
@@ -399,6 +410,14 @@ public class EntityIntent {
 
     public void setList(List<String> list) {
         this.list = list == null ? new ArrayList<>() : list;
+    }
+
+    public List<OrderByIntent> getOrderBy() {
+        return orderBy;
+    }
+
+    public void setOrderBy(List<OrderByIntent> orderBy) {
+        this.orderBy = orderBy == null ? new ArrayList<>() : orderBy;
     }
 
     public void setName(String name) {
