@@ -105,6 +105,9 @@ class I18nKeyCoverageIT {
     void everyGeneratedPageKeyIsInTheTemplateCatalog() {
         Map<String, String> catalog = flatten(json(TEMPLATE_CATALOG));
         Map<String, Set<String>> used = usedKeys(GENERATED_KEY);
+        // A key built at run time ('...t.' + entity - the app's own entity names) is not a key.
+        used.keySet()
+            .removeIf(key -> key.isEmpty() || key.endsWith("."));
         assertTrue(used.size() > 50, "only " + used.size() + " generated-page keys found - a source pattern stopped matching");
         List<String> missing = new ArrayList<>();
         used.forEach((key, files) -> {
