@@ -26,6 +26,15 @@ document.addEventListener('alpine:init', () => {
     title: 'Add new',
     _onCreated: null,
 
+    // The dialog's embedded page is its one scroll container (issue #7723): while it is open the page
+    // behind the overlay - its document and the shell's #app - must not scroll as well, or the user
+    // sees two scrollbars and a wheel past the end of the form scrolls the page underneath. Keyed on
+    // `open` itself, because the dialog is also closed by assigning it (the X button) rather than
+    // through close().
+    init() {
+      Alpine.effect(() => lockPageScroll(this.open));
+    },
+
     create(createUrl, title, onCreated) {
       if (!createUrl) return;
       this.src = createUrl;
@@ -50,6 +59,24 @@ document.addEventListener('alpine:init', () => {
     },
   });
 });
+
+// The page's scroll containers' own overflow while the dialog holds them, null when it does not.
+let lockedScroll = null;
+
+// Stop (true) or restore (false) the scrolling of the page behind the dialog. Each container gets
+// back the inline overflow it had, so a page that set its own keeps it; overflow:hidden keeps the
+// scroll position, so the user returns to where they were.
+function lockPageScroll(lock) {
+  if (lock && !lockedScroll) {
+    lockedScroll = [document.documentElement, document.getElementById('app')]
+      .filter(Boolean)
+      .map((element) => ({ element, overflow: element.style.overflow }));
+    lockedScroll.forEach(({ element }) => { element.style.overflow = 'hidden'; });
+  } else if (!lock && lockedScroll) {
+    lockedScroll.forEach(({ element, overflow }) => { element.style.overflow = overflow; });
+    lockedScroll = null;
+  }
+}
 
 // The embedded form posts a message to its parent: 'harmonia.entity.created' (with id) when a
 // create saves, 'harmonia.entity.updated' when a detail-panel dialog's edit saves, or
