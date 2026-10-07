@@ -432,12 +432,12 @@ document.addEventListener('alpine:init', () => {
 #elseif($property.widgetPickable)
         // Picker rule (intent `pickable:`): a target row failing it is listed disabled with the rule's
         // message, or hidden - the server's own checks remain the gate.
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows${property.name}, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(rows${property.name}, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
 #else
         this.options${property.name} = this.sortOptions((rows${property.name} || []).map(e => ({
           value: e.${property.widgetDropDownKey},
           text: e.${property.widgetDropDownValue}
-        })));
+        })), '$!{property.widgetOptionsOrdered}');
 #end
       } catch (e) {
         console.error('[${name}FormPage] failed to load options for ${property.name}', e);
@@ -599,7 +599,7 @@ document.addEventListener('alpine:init', () => {
             { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
 #if($property.widgetPickable)
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
         if (adjust) {
           // Only a row the picker rule lets the user pick is auto-selected.
           const pickable = this.options${property.name}.filter(o => !o.disabled);
@@ -609,7 +609,7 @@ document.addEventListener('alpine:init', () => {
         this.options${property.name} = this.sortOptions((rows || []).map(e => ({
           value: e.${property.widgetDropDownKey},
           text: e.${property.widgetDropDownValue}
-        })));
+        })), '$!{property.widgetOptionsOrdered}');
         if (adjust) {
           this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
         }

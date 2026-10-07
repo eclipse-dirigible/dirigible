@@ -62,18 +62,25 @@ public class BpmInboxEndpoint extends BaseEndpoint {
      * typically a handful of definitions, and every task of one shares its catalog.
      * <p>
      * The tasks must come from a query that loaded their process variables
-     * ({@code findTasksWithProcessVariables}): every row's subject is derived from them, and reading
-     * them off the task is what keeps a listing at one statement instead of one variable query per task
-     * on every poll (issue #7141).
+     * ({@code findTasksWithProcessVariables}): every row's subject is derived from them, so no task
+     * costs a variable read of its own on a poll (issue #7141).
+     * <p>
+     * What a row still costs is ONE statement - its identity links, which Flowable can only be asked
+     * for per task. The process instance is read once per INSTANCE rather than once per task (issue
+     * #7232): an inbox is a handful of processes with many tasks each, and that read was two statements
+     * of its own (the instance query and its activity ids). Together with the label catalogs, resolved
+     * once per definition, a listing of a hundred tasks over a few instances is a hundred-and-a-few
+     * statements rather than three hundred.
      *
      * @param tasks the tasks, with their process variables loaded
      * @return the DTOs, without the tasks completed while the list was being built
      */
     private List<TaskDTO> mapToDTOs(List<Task> tasks) {
         Map<String, Optional<ProcessLabelKeys>> labelKeys = new HashMap<>();
+        Map<String, ProcessInstanceData> instances = new HashMap<>();
         List<TaskDTO> dtos = new ArrayList<>(tasks.size());
         for (Task task : tasks) {
-            mapListedTask(task, labelKeys).ifPresent(dtos::add);
+            mapListedTask(task, labelKeys, instances).ifPresent(dtos::add);
         }
         return dtos;
     }
@@ -90,11 +97,13 @@ public class BpmInboxEndpoint extends BaseEndpoint {
      *
      * @param task the listed task
      * @param labelKeys the task-label catalogs resolved so far
+     * @param instances the process instances resolved so far
      * @return the DTO, or empty when the task no longer exists
      */
-    private Optional<TaskDTO> mapListedTask(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys) {
+    private Optional<TaskDTO> mapListedTask(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys,
+            Map<String, ProcessInstanceData> instances) {
         try {
-            return Optional.of(mapToDTO(task, labelKeys));
+            return Optional.of(mapToDTO(task, labelKeys, instances));
         } catch (RuntimeException ex) {
             if (bpmService.isTaskActive(task.getId())) {
                 throw ex;
@@ -114,8 +123,8 @@ public class BpmInboxEndpoint extends BaseEndpoint {
         return principalType;
     }
 
-    private TaskDTO mapToDTO(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys) {
-        List<IdentityLink> identityLinks = bpmService.getTaskIdentityLinks(task.getId());
+    private TaskDTO mapToDTO(Task task, Map<String, Optional<ProcessLabelKeys>> labelKeys, Map<String, ProcessInstanceData> instances) {
+        List<IdentityLink> identityLinks = bpmService.getListedTaskIdentityLinks(task.getId());
 
         TaskDTO dto = new TaskDTO();
         dto.setId(task.getId());
@@ -132,7 +141,11 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                                             .map(IdentityLinkInfo::getGroupId)
                                             .filter(Objects::nonNull)
                                             .collect(Collectors.joining(",")));
-        ProcessInstanceData processInstance = bpmService.getProcessInstanceById(task.getProcessInstanceId());
+        // Once per INSTANCE, not once per task (issue #7232). Many tasks of a listing share one
+        // process instance - an approval flow raises several - and this read is two statements of its
+        // own, so it was the larger half of the per-row cost. A read that throws leaves no entry, so
+        // the next task of that instance asks again and the completed-task path below still sees it.
+        ProcessInstanceData processInstance = instances.computeIfAbsent(task.getProcessInstanceId(), bpmService::getProcessInstanceById);
         dto.setProcessInstanceBusinessKey(processInstance.getBusinessKey());
         dto.setProcessDefinitionId(processInstance.getProcessDefinitionId());
         dto.setProcessDefinitionName(processInstance.getProcessDefinitionName());

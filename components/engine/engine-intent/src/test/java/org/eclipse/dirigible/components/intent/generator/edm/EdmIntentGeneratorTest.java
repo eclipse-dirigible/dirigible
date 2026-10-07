@@ -2709,6 +2709,65 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code orderBy:} (#7727) is the entity's default ROW order: the terms ride the entity as one
+     * scalar, in the authored sequence and in the model's own property names, and every picker
+     * targeting it is told to keep the order its controller lists the rows in rather than re-sorting
+     * them by display text (#7464's default).
+     */
+    @Test
+    void orderByEmitsTheDefaultRowOrderAndTellsEveryPickerToKeepIt() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [number]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: name, type: string }
+                  - name: Entry
+                    orderBy: [{ field: date, dir: desc }, number]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account }
+                      - { name: counter, kind: manyToOne, to: Entry }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales"));
+
+        assertEquals("Number asc", entityByName(entities, "Account").get("orderBy"), "a bare property name is ascending");
+        Map<String, Object> entry = entityByName(entities, "Entry");
+        assertEquals("Date desc,Number asc", entry.get("orderBy"), "the authored sequence, in the model's property names");
+        assertEquals("true", propertyByName(entry, "Account").get("widgetOptionsOrdered"),
+                "the picker of a target declaring an order keeps it");
+        assertEquals("true", propertyByName(entry, "Counter").get("widgetOptionsOrdered"));
+    }
+
+    /** An entity that declares none leaves no attribute, so its list and its pickers read as before. */
+    @Test
+    void noOrderByLeavesNoAttributeAndNoPickerFlag() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Entry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account }
+                """;
+        List<Map<String, Object>> entities = entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales"));
+
+        assertNull(entityByName(entities, "Account").get("orderBy"));
+        assertNull(propertyByName(entityByName(entities, "Entry"), "Account").get("widgetOptionsOrdered"));
+    }
+
+    /**
      * {@code list:} (#7614) is the list's exact column set and order: the named properties turn major
      * and every other one stops being major, their sequence rides the entity as {@code listOrder}, and
      * the property sequence - the form's - still follows {@code order:}.

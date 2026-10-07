@@ -464,9 +464,27 @@ public class JavaEntityStore {
      * @return the requested page
      */
     public <T> List<T> findAll(Class<T> type, int limit, int offset) {
+        return findAll(type, limit, offset, null);
+    }
+
+    /**
+     * The same page, in a declared order. The order is an HQL fragment over the alias {@code e} (
+     * {@code e.Number asc, e.Date desc}) - the generated list endpoint's default row order, which has
+     * to be applied by the database rather than by the caller, or paging would hand out a different
+     * slice of an undefined order on every call.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param limit max rows to return; non-positive means unlimited
+     * @param offset rows to skip; non-positive means none
+     * @param orderBy the {@code order by} fragment, without the keywords; blank means unordered
+     * @return the requested page
+     */
+    public <T> List<T> findAll(Class<T> type, int limit, int offset, String orderBy) {
         RegisteredEntity meta = resolve(type);
         return read(session -> {
-            Query<Map> query = session.createQuery("from " + meta.entityName(), Map.class);
+            String from = "from " + meta.entityName() + " e";
+            Query<Map> query = session.createQuery(orderBy == null || orderBy.isBlank() ? from : from + " order by " + orderBy, Map.class);
             if (limit > 0) {
                 query.setMaxResults(limit);
             }

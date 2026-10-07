@@ -50,8 +50,10 @@ default, `strict`, `off` - the accessibility flow).
 
 ## Flows per entity
 
-- **list** — the shell breadcrumb naming the list by its plural label, a column header per major field,
-  and (when `expectSeedData`) a row.
+- **list** — the shell breadcrumb naming the list by its plural label, the declared columns, and
+  (when `expectSeedData`) a row. An entity whose manifest carries `list` renders exactly those
+  columns, in order, and a field left off it must have no header at all; without `list` the columns
+  are the fields whose `major` is not `false`.
 - **crud** — UI create → filter → row appears; edit via the row menu → save (a `document` saves in
   place, so the walk leaves through Back to list); delete via the row menu → confirm → gone. A walk
   that fails halfway still removes its test row over REST. An entity without a `route` (a composition
@@ -89,6 +91,11 @@ whose shape none of the sample candidates has (an IBAN, say) is left empty; a re
 marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
 their targets agree; a composite `uniqueKeys` entry is given a relation combination no live row
 carries, and the rest and crud flows skip with the key named when every combination tried is taken.
+A relation carrying `pickable` is sampled only from the rows its rule admits — the chooser offers no
+other, so a record built from one would never save — and one carrying `forbiddenTarget` only from
+rows the record's own `forbidWhen` does not refuse, which is what the REST flow needs, having no
+picker to read. When no row is left, a required relation fails naming the rule's own message rather
+than "no rows".
 
 ## Custom UI hooks
 

@@ -55,7 +55,7 @@ class BpmInboxEndpointSubjectTest {
         when(task.getProcessVariables()).thenReturn(processVariables);
         ProcessInstanceData instance = new ProcessInstanceData();
         when(bpmService.getProcessInstanceById("instance-" + id)).thenReturn(instance);
-        when(bpmService.getTaskIdentityLinks(id)).thenReturn(List.of());
+        when(bpmService.getListedTaskIdentityLinks(id)).thenReturn(List.of());
         return task;
     }
 
