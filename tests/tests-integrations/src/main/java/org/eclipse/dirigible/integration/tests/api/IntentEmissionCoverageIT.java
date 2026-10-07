@@ -620,6 +620,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # for a caller the server serves it to, on the power and the personal form alike.
                   - { name: reviewedOn, type: date, readOnly: true, visibleTo: [Payroll] }
                   - { name: approved, type: boolean, readOnly: true }
+                  # #7718: a `true` default opens checked on the power AND the personal create form.
+                  - { name: billable, type: boolean, defaultValue: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -856,6 +858,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: recordedAt, type: timestamp, defaultValue: now }
                   - { name: note,       type: string, length: 100 }
                   - { name: comment,    type: string, length: 100 }
+                  # #7718: every other authored default - text, a `true` checkbox, a number, a relation's
+                  # `init:` - opens the create page already holding the value the server would fill.
+                  - { name: channel,    type: string, length: 20, defaultValue: web }
+                  - { name: rush,       type: boolean, defaultValue: true }
+                  - { name: copies,     type: integer, defaultValue: 2 }
+                relations:
+                  - { name: Unit, kind: manyToOne, to: Unit, init: 1 }
               - name: ReorderItem
                 function: DocumentItem
                 fields:
@@ -872,6 +881,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: subject, type: string, length: 200 }
                   - { name: secret,  type: decimal, sensitive: true }
+                  # #7718: the partner create form shows the default too.
+                  - { name: priority, type: integer, defaultValue: 3 }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
@@ -2256,7 +2267,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          equalTo(List.of(today.getYear(), today.getMonthValue(), today.getDayOfMonth())))
                                                  .body("Period", equalTo(java.time.YearMonth.from(today)
                                                                                             .toString()))
-                                                 .body("RecordedAt", notNullValue()));
+                                                 .body("RecordedAt", notNullValue())
+                                                 // #7718: the very values the create page now opens with.
+                                                 .body("Channel", equalTo("web"))
+                                                 .body("Rush", equalTo(true))
+                                                 .body("Copies", equalTo(2))
+                                                 .body("Unit", equalTo(1)));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Reference\":\"R-given\",\"OrderedOn\":\"2020-01-15\",\"Period\":\"2020-01\"}")
                                                  .when()
@@ -3399,6 +3415,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // ...and the column gets no DEFAULT: `now` is not SQL.
         String reorderSchema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertFalse(reorderSchema.contains("\"defaultValue\": \"now\""), "now must never reach the DDL as a column DEFAULT");
+
+        // #7718: every other authored default opens the create page holding the value the server fills
+        // (assertNowDefaultRuntime proves those are the same values) - in the shape its input binds: a
+        // real boolean, a real number, text, and a relation's `init:` as the option's string data-value...
+        assertTrue(
+                reorderDoc.contains("if ('Channel' in this.form) this.form.Channel = 'web';")
+                        && reorderDoc.contains("if ('Rush' in this.form) this.form.Rush = true;")
+                        && reorderDoc.contains("if ('Copies' in this.form) this.form.Copies = 2;")
+                        && reorderDoc.contains("if ('Unit' in this.form) this.form.Unit = '1';"),
+                "a declared default must be prefilled when a new document opens, got: " + reorderDoc);
+        assertTrue(reorderDoc.indexOf("this.form.Unit = '1';") < reorderDoc.indexOf("const v = this.queryParam(key);",
+                reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
+        // ...in the create branch only: the form literal stays blank, since loadRecord copies just the
+        // keys a record carries and a literal default would surface on an edit of a row holding none...
+        assertTrue(reorderDoc.contains("Rush: false,") && reorderDoc.contains("Unit: '',"),
+                "the form literal must stay blank, the default is seeded on create only, got: " + reorderDoc);
+        // ...on the plain form, the personal one and the partner one alike...
+        String claimFormDefaults = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
+        String claimMyFormDefaults = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        String partnerFormDefaults = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
+        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+                "a true default must open checked on the create form, got: " + claimFormDefaults);
+        assertTrue(claimMyFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+                "...and on the personal create form, got: " + claimMyFormDefaults);
+        assertTrue(partnerFormDefaults.contains("if ('Priority' in this.form) this.form.Priority = 3;"),
+                "...and on the partner create form, got: " + partnerFormDefaults);
+        // ...while the document status is the lifecycle's to stamp: its `init:` may name a status.
+        String entryFormDefaults = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
+        assertFalse(entryFormDefaults.contains("this.form.Status = "), "the status must not be seeded on the create form");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
