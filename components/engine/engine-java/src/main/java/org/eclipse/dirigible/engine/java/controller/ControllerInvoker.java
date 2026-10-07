@@ -20,6 +20,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.db.ConfirmationRequiredException;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 import org.eclipse.dirigible.sdk.db.ValidationException;
@@ -157,6 +158,15 @@ public class ControllerInvoker {
                 LOGGER.debug("Controller [{}#{}] refused the delete: {}", match.entry()
                                                                                .fqn(),
                         method.getName(), cause.getMessage());
+                throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
+            }
+            if (cause instanceof ConcurrentWriteException) {
+                // Another writer changed the same rows while this write was in progress, and the write was
+                // rolled back whole - a conflict with current state the caller can repeat, as for a
+                // restricted delete, not a server fault (dirigible #7716).
+                LOGGER.debug("Controller [{}#{}] collided with a concurrent write: {}", match.entry()
+                                                                                             .fqn(),
+                        method.getName(), cause.getMessage(), cause);
                 throw new ResponseStatusException(HttpStatus.CONFLICT, cause.getMessage(), cause);
             }
             LOGGER.error("Controller [{}#{}] threw: {}", match.entry()

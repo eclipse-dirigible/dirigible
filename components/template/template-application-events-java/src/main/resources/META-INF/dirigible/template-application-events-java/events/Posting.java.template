@@ -320,6 +320,16 @@ public class ${className}Posting implements MessageHandler {
             for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
                 itemsRepository.delete(stale);
             }
+            // A rewrite writes the header WHOLE, from a row this handler read before any of this - so the
+            // row is locked first, after its lines (the order a delete of the document takes them in).
+            // A system write landing in between, the process id the document's own trigger stamps, then
+            // waits for this commit instead of being reverted by it: update() takes those system-owned
+            // columns from the stored row, and that row cannot move any more (dirigible #7716).
+            if (refresh && !targetRepository.lockForUpdate(target.${targetPk})) {
+                LOG.info("Posting ${name}: ${targetEntity} [{}] was deleted while ${sourceEntity} [{}] was being re-posted - nothing"
+                        + " to rewrite", target.${targetPk}, source.${sourceKeyField});
+                return;
+            }
             gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
                     refresh ? targetRepository.update(target) : targetRepository.save(target);
             for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
