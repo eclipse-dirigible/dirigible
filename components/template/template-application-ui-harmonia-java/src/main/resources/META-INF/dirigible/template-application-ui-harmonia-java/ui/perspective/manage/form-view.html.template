@@ -237,7 +237,7 @@
     <!-- The header form holds the editable fields only. The Save button lives in the footer below
          (outside this form, beneath the detail panels) so the footer can sit at the very bottom; it
          calls save() directly, while @submit.prevent keeps Enter-to-save working inside a field. -->
-    <form @submit.prevent="save()" class="vbox gap-4 w-full">
+    <form @submit.prevent="save()" @focusout="validateOnBlur($event)" class="vbox gap-4 w-full">
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
       <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>

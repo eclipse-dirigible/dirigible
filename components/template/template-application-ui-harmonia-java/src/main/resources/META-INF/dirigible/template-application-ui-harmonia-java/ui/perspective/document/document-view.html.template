@@ -160,7 +160,7 @@
          (issue #7501). mutable is false only together with isPreview (an immutable /edit route is
          forced into preview by documentPage.js.template), so a plain preview of a still-mutable
          record is unaffected and keeps this form, disabled by the fieldset below. -->
-    <form @submit.prevent="save()" class="vbox gap-4 w-full"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end>
+    <form @submit.prevent="save()" @focusout="validateOnBlur($event)" class="vbox gap-4 w-full"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end>
       <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
         <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>
         <div x-h-alert-title x-text="T('$projectName:${tprefix}.messages.error.saving', 'Could not save')"></div>

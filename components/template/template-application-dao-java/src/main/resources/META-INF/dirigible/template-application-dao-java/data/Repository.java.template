@@ -41,6 +41,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue)
         #set($haveRequired = "true")
     #end
+    #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
+        #set($haveText = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -209,6 +212,15 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## Text input is trimmed on every write, before anything reads it (#7719): leading and trailing
+## whitespace is never meaningful in a business field, and keeping it let a single space satisfy a
+## required field and two spellings of one name differ by a trailing blank. The primary key is left
+## alone - it names the row, and an update must address the row it was read as.
+#macro(trimText)
+#if($haveText)
+        trimText(entity);
+#end
+#end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
 ## letting the statement reach the database and come back as a driver-specific constraint violation - an
 ## HTTP 500 carrying a message about a physical column nobody outside the schema has heard of, from which
@@ -223,8 +235,10 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## reject every create that leaves the opening status to the model.
 #macro(requiredCheck)
 #foreach($property in $properties)
+## A text value that is blank is as missing as a null one (#7719): the write has trimmed it already, so
+## a whitespace-only value arrives here empty.
 #if(!$property.dataPrimaryKey && $property.dataNotNull && !$property.dataDefaultValue && !$property.numberStampOnCreate)
-        if (entity.${property.name} == null) {
+        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || entity.${property.name}.isBlank()#end) {
             throw new ValidationException("${name}.${property.name} is required");
         }
 #end
@@ -411,6 +425,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#trimText()
 #applyDefaults()
 #normalizeSubsets()
 #if($lifecycleInitialStatus)
@@ -521,6 +536,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#trimText()
 #normalizeSubsets()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
@@ -657,6 +673,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#trimText()
 #normalizeSubsets()
 #if($lifecycleEdges)
         // A system write is still a status write: the state machine is the ONE place the legal moves
@@ -1306,6 +1323,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * @return a copy carrying the computed values, or the record itself when nothing is calculated
      */
     public ${name}Entity calculatedForCreate(${name}Entity submitted) {
+#if($haveText)
+        trimText(submitted);
+#end
 #if($haveCalculatedExpressionOnCreate)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
@@ -1336,6 +1356,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      *         nothing calculated and nothing system-owned
      */
     public ${name}Entity calculatedForUpdate(${name}Entity submitted) {
+#if($haveText)
+        trimText(submitted);
+#end
 #if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
         ${name}Entity entity = copyOf(submitted);
 #if($preservedOnUpdate.size() > 0)
@@ -1359,6 +1382,26 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return submitted;
 #end
     }
+#if($haveText)
+
+    /**
+     * Trims the text fields of a record about to be written (#7719) - leading and trailing whitespace
+     * is never meaningful in a business field, and a value of spaces alone is no value. Applied by
+     * every write path and by the controllers' pre-write reads, so a check, a required field and the
+     * stored row all see the same value. The primary key is not touched.
+     *
+     * @param entity the record, changed in place
+     */
+    public static void trimText(${name}Entity entity) {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
+        if (entity.${property.name} != null) {
+            entity.${property.name} = entity.${property.name}.strip();
+        }
+#end
+#end
+    }
+#end
 #if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
 
     private static ${name}Entity copyOf(${name}Entity source) {

@@ -4761,6 +4761,38 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400)
                                                  .body("message", equalTo("The 'Name' property is required")));
+        // Spaces alone are no value either (#7719): a required string blank after trimming is refused
+        // with the same message as a missing one, and a value is stored without its surrounding
+        // whitespace - on create and on update - so " Acme " and "Acme" are one name.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"   \",\"UnitPrice\":1}")
+                                                 .when()
+                                                 .post(API + "/settings/UnitController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Name' property is required")));
+        AtomicInteger trimmedCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> trimmedCampaign.set(given().contentType("application/json")
+                                                                     .body("{\"Name\":\"  Padded  \"}")
+                                                                     .when()
+                                                                     .post(API + "/campaign/CampaignController")
+                                                                     .then()
+                                                                     .statusCode(200)
+                                                                     .body("Name", equalTo("Padded"))
+                                                                     .extract()
+                                                                     .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\" Repadded \",\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Repadded")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Repadded")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Name\":\"" + "x".repeat(101) + "\"}")
                                                  .when()

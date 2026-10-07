@@ -311,6 +311,10 @@ composition is opt-in.
 **Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated` and `length`, a
 field may declare:
 
+(Every write trims a text field's leading and trailing whitespace before it is checked or stored, and
+a `required` text field is refused when it is blank after that trim - spaces alone are no value,
+#7719. Nothing to declare.)
+
 - `defaultValue: <value>` - the field's default, in four places at once: the **repository's create**
   (a create that leaves the field empty gets the default assigned BEFORE the create-time calculations,
   guards and checks run, so a `calculatedOnCreate` that reads the field sees the default and not a
