@@ -1,0 +1,101 @@
+# The application PerformanceBaselineIT generates, publishes, fills and measures (#7646). Each part
+# is one shape of the generated surface that is a template change away from an N+1:
+#   - SalesOrder is the main entity (10 000 rows) with 100 000 SalesOrderItem lines;
+#   - its create runs three checks over the SAME to-one hop and feeds a roll-up - the #7526 shape,
+#     where every check re-ran the hop lookup;
+#   - moving it to Confirmed fires a posting into the journal;
+#   - being a document master, it gets the standard .print template;
+#   - every Approval parks a user task, which is what the Inbox lists.
+name: perf
+entities:
+  - name: DocStatus
+    kind: setting
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+
+  - name: Customer
+    fields:
+      - { name: id,         type: integer, primaryKey: true, generated: true }
+      - { name: name,       type: string, length: 100 }
+      - { name: email,      type: string, length: 100 }
+      - { name: phone,      type: string, length: 30 }
+      - { name: orderCount, type: integer }
+
+  - name: SalesOrder
+    checks:
+      # Gated at the status a new order is created in, so every create runs them in the repository,
+      # each reading the customer one hop away through the per-call map of loaded hops (#7526).
+      - { kind: requiredWhen, field: Customer.email, when: "sentMethod == 1", status: 1,
+          message: "An order sent by e-mail needs a customer e-mail address" }
+      - { kind: requiredWhen, field: Customer.name, when: "sentMethod == 1", status: 1,
+          message: "An order sent by e-mail needs a named customer" }
+      - { kind: requiredWhen, field: Customer.phone, when: "sentMethod == 1", status: 1,
+          message: "An order sent by e-mail needs a customer phone for the courier" }
+    fields:
+      - { name: id,         type: integer, primaryKey: true, generated: true }
+      - { name: reference,  type: string, length: 50 }
+      - { name: sentMethod, type: integer }
+      - { name: orderDate,  type: date }
+      - { name: amount,     type: decimal, precision: 18, scale: 2 }
+    relations:
+      - { name: Customer, kind: manyToOne, to: Customer, required: true }
+      - { name: Status,   kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
+
+  - name: SalesOrderItem
+    fields:
+      - { name: id,       type: integer, primaryKey: true, generated: true }
+      - { name: product,  type: string, length: 100 }
+      - { name: quantity, type: integer }
+      - { name: price,    type: decimal, precision: 18, scale: 2 }
+    relations:
+      - { name: SalesOrder, kind: manyToOne, to: SalesOrder, composition: true, required: true }
+
+  - name: JournalEntry
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+    relations:
+      - { name: Status,     kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
+      - { name: SalesOrder, kind: manyToOne, to: SalesOrder }
+
+  - name: JournalLine
+    fields:
+      - { name: id,     type: integer, primaryKey: true, generated: true }
+      - { name: debit,  type: decimal, precision: 18, scale: 2 }
+      - { name: credit, type: decimal, precision: 18, scale: 2 }
+    relations:
+      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+
+  - name: Approval
+    fields:
+      - { name: id,      type: integer, primaryKey: true, generated: true }
+      - { name: subject, type: string, length: 100 }
+
+transitions:
+  - { name: ConfirmOrder, forEntity: SalesOrder, from: [1], setStatus: 2, label: Confirm }
+
+rollups:
+  - { name: customerOrderCount, entity: SalesOrder, via: Customer, field: orderCount }
+
+postings:
+  - name: orderPosting
+    event: { onTransition: SalesOrder, when: "Status == 2" }
+    creates: JournalEntry
+    backReference: SalesOrder
+    items:
+      - { debit: "Amount" }
+      - { credit: "Amount" }
+
+processes:
+  - name: ApprovalReview
+    trigger: { onCreate: Approval }
+    steps:
+      - { name: review, kind: userTask, args: { assignee: reviewer, next: done } }
+      - { name: done,   kind: end }
+
+seeds:
+  - name: doc-statuses
+    entity: DocStatus
+    rows:
+      - { id: 1, name: Draft }
+      - { id: 2, name: Confirmed }

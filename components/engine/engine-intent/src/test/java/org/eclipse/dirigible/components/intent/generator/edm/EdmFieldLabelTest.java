@@ -77,14 +77,59 @@ class EdmFieldLabelTest {
         assertFalse(xml.contains("widgetCountryLabels"), "a structured value is never a property attribute");
     }
 
+    /**
+     * A to-one relation's caption rides on the FK property the picker is rendered from (#7650), which
+     * is the same property the catalog key and every surface already read their label off.
+     */
+    private static final String INVOICING = """
+            name: invoicing
+            entities:
+              - name: Company
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - name: issuer
+                    kind: manyToOne
+                    to: Company
+                    label: Issuing company
+                    countryLabels:
+                      bg: Издател
+                  - { name: payer, kind: manyToOne, to: Company }
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aRelationsLabelReachesItsForeignKeyProperty() {
+        Map<String, Object> property = property(INVOICING, "invoicing", "Issuer");
+
+        assertEquals("Issuing company", property.get("widgetLabel"));
+        assertEquals("Издател", ((Map<String, Object>) property.get("widgetCountryLabels")).get("BG"),
+                "the runtime compares against the configured country in upper case");
+    }
+
+    @Test
+    void aRelationWithoutALabelCarriesNoneAtAll() {
+        assertNull(property(INVOICING, "invoicing", "Payer").get("widgetLabel"),
+                "an unlabelled relation must render exactly as it did before");
+        assertNull(property(INVOICING, "invoicing", "Payer").get("widgetCountryLabels"));
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> variants(String yaml, String propertyName) {
         return (Map<String, Object>) property(yaml, propertyName).get("widgetCountryLabels");
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> property(String yaml, String propertyName) {
-        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "payroll");
+        return property(yaml, "payroll", propertyName);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> property(String yaml, String module, String propertyName) {
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), module);
         List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) model.get("model")).get("entities");
         return entities.stream()
                        .flatMap(entity -> ((List<Map<String, Object>>) entity.get("properties")).stream())

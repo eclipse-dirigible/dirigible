@@ -56,6 +56,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -652,6 +653,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
                 putInheritedPersonalReadOnly(fkProperty, relation, composition);
+                // The target declares a row order (#7727), so this picker lists its options in it
+                // rather than re-sorting them by display text - the default since #7464.
+                if (target != null && !target.getOrderBy()
+                                             .isEmpty()) {
+                    fkProperty.put("widgetOptionsOrdered", "true");
+                }
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, targetPerspective));
             }
@@ -664,6 +671,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
             applyListColumns(entityMap, properties, entity.getList());
+            // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
+            // scalar the generation pipeline turns into the list endpoint's ORDER BY.
+            applyOrderBy(entityMap, entity.getOrderBy());
             if (Boolean.TRUE.equals(entity.getImmutable())) {
                 // Append-only (intent `immutable: true`): every record is read-only for user writes from
                 // the moment it is created - e.g. the snapshot stored when a document is sent.
@@ -1274,6 +1284,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Emit an entity's default row order (intent {@code orderBy:}, issue #7727) as the {@code orderBy}
+     * attribute - {@code "<Property> asc,<Property> desc"} in the authored sequence, property names in
+     * model (PascalCase) notation. A scalar, like {@code listOrder}, so it survives the {@code .edm}
+     * twin; {@code ModelParameterProcessor} turns it into the ORDER BY the generated list endpoint
+     * runs, which is what also orders a {@code hierarchy:} tree's siblings and every picker's options.
+     *
+     * @param entityMap the entity being emitted
+     * @param orderBy the authored terms; empty leaves no attribute, so nothing orders
+     */
+    private static void applyOrderBy(Map<String, Object> entityMap, List<OrderByIntent> orderBy) {
+        if (orderBy == null || orderBy.isEmpty()) {
+            return;
+        }
+        List<String> terms = new ArrayList<>(orderBy.size());
+        for (OrderByIntent term : orderBy) {
+            terms.add(IntentNaming.pascalCase(term.getField()) + " " + term.direction());
+        }
+        entityMap.put("orderBy", String.join(",", terms));
+    }
+
+    /**
      * An entity's properties in its list column order: the ones its {@code listOrder} names first, in
      * that sequence, then the rest in control order. Without a {@code listOrder} the list is returned
      * as it is. Used where another entity's list columns are reproduced (a related register).
@@ -1342,10 +1373,34 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * @param field the authored field
      * @return the variants by country code, empty when none are declared
      */
+    /**
+     * The authored caption of the control a RELATION renders (#7650) - the picker, its list column and
+     * its details row - plus its country variants, written exactly as a field's are (#6424) so every
+     * generated surface and the en-US catalog read one attribute whatever the property came from.
+     * Absent, the pipeline derives the humanized relation name as before.
+     *
+     * @param property the property map being built
+     * @param relation the relation it was built from
+     */
+    private static void putRelationLabel(Map<String, Object> property, RelationIntent relation) {
+        if (notBlank(relation.getLabel())) {
+            property.put("widgetLabel", relation.getLabel()
+                                                .trim());
+        }
+        Map<String, String> variants = countryLabels(relation.getCountryLabels());
+        if (!variants.isEmpty()) {
+            property.put("widgetCountryLabels", variants);
+        }
+    }
+
     private static Map<String, String> countryLabels(FieldIntent field) {
+        return countryLabels(field.getCountryLabels());
+    }
+
+    /** The canonical country-variant map - keys upper-cased, blank variants dropped. */
+    private static Map<String, String> countryLabels(Map<String, String> authored) {
         Map<String, String> canonical = new LinkedHashMap<>();
-        for (Map.Entry<String, String> variant : field.getCountryLabels()
-                                                      .entrySet()) {
+        for (Map.Entry<String, String> variant : (authored == null ? Map.<String, String>of() : authored).entrySet()) {
             if (variant.getKey() == null || !notBlank(variant.getValue())) {
                 continue;
             }
@@ -1685,6 +1740,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         boolean oneToOne = "oneToOne".equals(relation.getKind());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", IntentNaming.pascalCase(relation.getName()));
+        putRelationLabel(p, relation);
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
@@ -1767,6 +1823,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String targetPerspective) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", IntentNaming.pascalCase(relation.getName()));
+        putRelationLabel(p, relation);
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
         p.put("tooltip", "");
         p.put("dataName", IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName()));
@@ -1809,6 +1866,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         boolean oneToOne = "oneToOne".equals(relation.getKind());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", IntentNaming.pascalCase(relation.getName()));
+        putRelationLabel(p, relation);
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
@@ -2588,8 +2646,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue; // the parser already reported it
                 }
                 ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
-                ResolvePathSupport.Path left = walker.resolve(relations.get(0) + "." + check.getOnProperty());
-                ResolvePathSupport.Path right = walker.resolve(relations.get(1) + "." + check.getOnProperty());
+                // ...and a side may be the record's OWN to-one carrying the shared target directly
+                // (#7631), which the same walker resolves from the bare relation name.
+                ResolvePathSupport.Path[] sides =
+                        CheckSupport.agreeSides(walker, entity, relations.get(0), relations.get(1), check.getOnProperty());
+                ResolvePathSupport.Path left = sides[0];
+                ResolvePathSupport.Path right = sides[1];
                 if (!left.resolved() || !right.resolved()) {
                     continue; // the parser already reported it
                 }
@@ -2609,6 +2671,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // A check with no authored message still has to say something the person who pressed
                 // Save can act on, and only the declaration knows what disagreed.
                 checkMap.put("message", agreeMessage(check));
+                List<Map<String, Object>> crossModelParents = crossModelAgreeParents(entity, check);
+                if (!crossModelParents.isEmpty()) {
+                    checkMap.put("crossModelParents", crossModelParents);
+                }
                 checkMaps.add(checkMap);
                 continue;
             }
@@ -3266,8 +3332,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * <p>
      * A warning ({@code severity: warn}) carries no guard: it never refuses the junction's own write,
      * so it must not refuse the parent's either. A cross-model target carries none either - its
-     * repository is generated by the model that owns it, which never reads this one's declarations.
-     * Facts only: the junction's generated coordinates are resolved by {@code ModelParameterProcessor}.
+     * repository is generated by the model that owns it, which never reads this one's declarations; the
+     * junction's check names it in {@code crossModelParents} instead, and the junction's own repository
+     * contributes the guard (#7701, see {@link #crossModelAgreeParents}). Facts only: the junction's
+     * generated coordinates are resolved by {@code ModelParameterProcessor}.
      *
      * @param entities the authored entities
      * @param builtByName every built entity map, by name
@@ -3304,6 +3372,36 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
+    }
+
+    /**
+     * The parents of a refusing {@code agree} check that another model owns (#7701) - the ones
+     * {@link #buildAgreeGuards} cannot guard, because their repository is generated by that model. For
+     * each, the junction's own repository contributes the guard instead (see
+     * {@code TargetAgreementRule}): the foreign key it references the parent through and the parent's
+     * property its rows rely on. A warning carries none, as it carries no same-model guard.
+     *
+     * @param entity the junction
+     * @param check its agree check
+     * @return one entry per cross-model parent; empty when there is none
+     */
+    private static List<Map<String, Object>> crossModelAgreeParents(EntityIntent entity,
+            org.eclipse.dirigible.components.intent.model.CheckIntent check) {
+        List<Map<String, Object>> parents = new ArrayList<>();
+        if (check.isWarning()) {
+            return parents;
+        }
+        for (String relationName : check.getRelations()) {
+            RelationIntent relation = toOneNamed(entity, relationName);
+            if (relation == null || !relation.isCrossModel()) {
+                continue;
+            }
+            Map<String, Object> parent = new LinkedHashMap<>();
+            parent.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
+            parent.put("property", IntentNaming.pascalCase(check.getOnProperty()));
+            parents.add(parent);
+        }
+        return parents;
     }
 
     /**

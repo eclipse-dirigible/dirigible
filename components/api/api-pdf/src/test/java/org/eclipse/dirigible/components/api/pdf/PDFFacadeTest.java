@@ -12,10 +12,18 @@ package org.eclipse.dirigible.components.api.pdf;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.commons.io.IOUtils;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -32,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @SpringBootTest
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class PDFFacadeTest {
 
     /** A 1x1 red PNG - the smallest image that proves the bytes reached the renderer. */
@@ -145,6 +154,39 @@ public class PDFFacadeTest {
 
         assertNotNull(pdf);
         assertTrue(pdf.length > 0);
+    }
+
+    /**
+     * Concurrent renders all succeed. The shared factory's configuration is a Xerces DOM, which every
+     * new {@code Fop} walks for the renderer's settings, and that DOM is not safe to read from two
+     * threads: two users printing at the same moment failed with
+     * {@code IllegalArgumentException: type: -1} from {@code DeferredDocumentImpl} (found by
+     * PerformanceBaselineIT, #7646). Ordered first: the race is on the factory's first renders, and the
+     * factory is shared by the whole JVM, so a render of another test before it would hide it.
+     *
+     * @throws Exception when a render fails
+     */
+    @Test
+    @Order(1)
+    public void generatePdfConcurrentlyTest() throws Exception {
+        String template = IOUtils.toString(getClass().getClassLoader()
+                                                     .getResourceAsStream("template.xsl"),
+                Charset.defaultCharset());
+        String data = IOUtils.toString(getClass().getClassLoader()
+                                                 .getResourceAsStream("data.xml"),
+                Charset.defaultCharset());
+        ExecutorService users = Executors.newFixedThreadPool(16);
+        try {
+            List<Future<byte[]>> renders = new ArrayList<>();
+            for (int i = 0; i < 200; i++) {
+                renders.add(users.submit(() -> PDFFacade.generate(template, data)));
+            }
+            for (Future<byte[]> render : renders) {
+                assertTrue(render.get().length > 0);
+            }
+        } finally {
+            users.shutdownNow();
+        }
     }
 
     @SpringBootApplication

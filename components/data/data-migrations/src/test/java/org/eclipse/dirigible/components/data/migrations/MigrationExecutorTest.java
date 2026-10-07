@@ -74,12 +74,28 @@ class MigrationExecutorTest {
         assertThat(entries).singleElement()
                            .satisfies(entry -> {
                                assertThat(entry.project()).isEqualTo("orders");
-                               assertThat(entry.version()).isEqualTo("001");
+                               assertThat(entry.version()).isEqualTo("1");
                                assertThat(entry.location()).isEqualTo(V1);
                                assertThat(entry.checksum()).isEqualTo(script.checksum());
                                assertThat(entry.tenant()).isEqualTo(TENANT);
                                assertThat(entry.appliedAt()).isNotNull();
                            });
+    }
+
+    @Test
+    void aRenameThatOnlyDropsLeadingZerosDoesNotRunTheMigrationAgain() throws Exception {
+        String renamed = "/orders/migrations/V1__backfill.migration";
+        String sql = "UPDATE ORDERS SET STATUS = 'OPEN' WHERE STATUS IS NULL;";
+        executor.apply(script(V1, sql), V1, TENANT, dataSource, List.of());
+        execute("UPDATE ORDERS SET STATUS = NULL WHERE ID = 1");
+
+        assertThat(executor.apply(script(renamed, sql), renamed, TENANT, dataSource, List.of())
+                           .status()).isEqualTo(Status.ALREADY_APPLIED);
+
+        assertThat(status(1)).isNull();
+        assertThat(ledger.findAll(dataSource)).singleElement()
+                                              .extracting(Entry::location)
+                                              .isEqualTo(V1);
     }
 
     @Test
@@ -137,7 +153,7 @@ class MigrationExecutorTest {
         Outcome waiting = executor.apply(second, V2, TENANT, dataSource, List.of(pendingFirst));
 
         assertThat(waiting.status()).isEqualTo(Status.WAITING);
-        assertThat(waiting.message()).contains("waits for version [001]");
+        assertThat(waiting.message()).contains("waits for version [1]");
         assertThat(status(1)).isNull();
 
         executor.apply(first, V1, TENANT, dataSource, List.of());
@@ -154,7 +170,7 @@ class MigrationExecutorTest {
         Outcome outcome = executor.apply(second, V2, TENANT, dataSource, List.of(artefact(V1, first, ArtefactLifecycle.FAILED)));
 
         assertThat(outcome.status()).isEqualTo(Status.FAILED);
-        assertThat(outcome.message()).contains("waits for version [001]", "which failed");
+        assertThat(outcome.message()).contains("waits for version [1]", "which failed");
         assertThat(status(2)).isEqualTo("CLOSED");
     }
 

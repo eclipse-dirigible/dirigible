@@ -1,0 +1,76 @@
+name: Dirigible regeneration check
+description: >
+  Fails when a project's committed generated files are not what its *.intent generates on the pinned
+  Eclipse Dirigible release - `dirigible-cli generate --check`, with no platform booted (#7642).
+
+inputs:
+  projects:
+    description: The project folders to check, separated by whitespace; shell globs are expanded.
+    required: true
+  platform-version:
+    description: >
+      The Eclipse Dirigible release the projects pin. Its dirigible-cli executable jar is downloaded
+      from Maven Central. Ignored when cli-jar is given.
+    required: false
+    default: ''
+  cli-jar:
+    description: A dirigible-cli executable jar to use instead of downloading one; a shell glob is allowed.
+    required: false
+    default: ''
+  java-version:
+    description: The Java version to run the CLI on (21 or later).
+    required: false
+    default: '21'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+
+    - name: Check the projects for regeneration drift
+      shell: bash
+      env:
+        PROJECTS: ${{ inputs.projects }}
+        PLATFORM_VERSION: ${{ inputs.platform-version }}
+        CLI_JAR: ${{ inputs.cli-jar }}
+      run: |
+        set -uo pipefail
+        if [ -n "$CLI_JAR" ]; then
+          jar=$(ls $CLI_JAR | head -n 1)
+        elif [ -n "$PLATFORM_VERSION" ]; then
+          jar="$RUNNER_TEMP/dirigible-cli-$PLATFORM_VERSION-executable.jar"
+          curl -fsSL -o "$jar" \
+            "https://repo1.maven.org/maven2/org/eclipse/dirigible/dirigible-cli/$PLATFORM_VERSION/dirigible-cli-$PLATFORM_VERSION-executable.jar"
+        else
+          echo "::error::Either platform-version or cli-jar is required"
+          exit 2
+        fi
+        if [ ! -f "$jar" ]; then
+          echo "::error::No dirigible-cli jar at [$jar]"
+          exit 2
+        fi
+        failed=0
+        checked=0
+        for project in $PROJECTS; do
+          checked=$((checked + 1))
+          echo "::group::$project"
+          java -jar "$jar" generate --project "$project" --check
+          status=$?
+          echo "::endgroup::"
+          if [ "$status" -eq 1 ]; then
+            echo "::error::$project drifts from what its intent generates - regenerate it with: dirigible-cli generate --project $project"
+            failed=1
+          elif [ "$status" -ne 0 ]; then
+            echo "::error::$project could not be generated (exit $status)"
+            failed=1
+          fi
+        done
+        if [ "$checked" -eq 0 ]; then
+          echo "::error::No project matched [$PROJECTS]"
+          exit 2
+        fi
+        exit $failed

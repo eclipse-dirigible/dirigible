@@ -70,6 +70,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleEdgeIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleIntent;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundIntent;
 import org.eclipse.dirigible.components.intent.model.OutboundTargetIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
@@ -337,6 +338,7 @@ public final class IntentParser {
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
+        normalizeOrderBy(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -399,6 +401,7 @@ public final class IntentParser {
         validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateLists(model, issues);
+        validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
@@ -1001,6 +1004,57 @@ public final class IntentParser {
                 if (!known.contains(key)) {
                     issues.add("entity [" + entity.getName() + "] list references [" + token
                             + "] which is not a field or to-one relation of the entity");
+                }
+            }
+        }
+    }
+
+    /**
+     * Each entity's optional {@code orderBy} (issue #7727) names the properties its rows are sorted by
+     * - fields and to-one relations, matched case-insensitively against the authored names - each
+     * optionally with {@code dir: asc|desc}. Every name must resolve, no name may repeat (a second term
+     * over the same property can never break a tie the first one did not), and a direction other than
+     * asc/desc is a typo rather than a default worth guessing at.
+     */
+    private static void validateOrderBy(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<OrderByIntent> orderBy = entity.getOrderBy();
+            if (orderBy == null || orderBy.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            Set<String> known = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    known.add(field.getName()
+                                   .toLowerCase(Locale.ROOT));
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind())
+                        || "subset".equals(relation.getKind()))) {
+                    known.add(relation.getName()
+                                      .toLowerCase(Locale.ROOT));
+                }
+            }
+            Set<String> seen = new HashSet<>();
+            for (OrderByIntent term : orderBy) {
+                String field = term == null ? null : term.getField();
+                if (field == null || field.isBlank()) {
+                    issues.add("entity [" + entity.getName() + "] orderBy has an entry without a field");
+                    continue;
+                }
+                String key = field.trim()
+                                  .toLowerCase(Locale.ROOT);
+                if (!seen.add(key)) {
+                    issues.add("entity [" + entity.getName() + "] orderBy names [" + field + "] more than once");
+                }
+                if (!known.contains(key)) {
+                    issues.add("entity [" + entity.getName() + "] orderBy references [" + field
+                            + "] which is not a field or to-one relation of the entity");
+                }
+                String dir = term.getDir();
+                if (dir != null && !"asc".equalsIgnoreCase(dir.trim()) && !"desc".equalsIgnoreCase(dir.trim())) {
+                    issues.add("entity [" + entity.getName() + "] orderBy [" + field + "] has dir [" + dir + "] - it is asc or desc");
                 }
             }
         }
@@ -4337,6 +4391,11 @@ public final class IntentParser {
                 // checks below (composition, cross-model, dependsOn, leafOnly, personal/partner).
                 if ("subset".equals(relation.getKind())) {
                     validateSubset(entity, relation, entityNames, byName, issues);
+                    if (relation.getLabel() != null || !relation.getCountryLabels()
+                                                                .isEmpty()) {
+                        validateLabels("entity [" + entity.getName() + "] relation [" + relation.getName() + "]", relation.getLabel(),
+                                relation.getCountryLabels(), issues);
+                    }
                     continue;
                 }
                 // ManyToManyExpander consumed every n:m before this ran, so a surviving manyToMany is one
@@ -4401,6 +4460,19 @@ public final class IntentParser {
                         issues.add(subject + " is an EntityStatus (a read-only badge) so it cannot declare dependsOn");
                     } else {
                         validateDependsOn(entity, subject, relation.getDependsOn(), relation, byName, issues);
+                    }
+                }
+                // The picker's caption (#7650) - a to-one FK property or a subset's multiselect column.
+                // A collection relation emits no property at all (the FK lives on the child), so a label
+                // authored there would be carried nowhere: refused rather than silently dropped.
+                if (relation.getLabel() != null || !relation.getCountryLabels()
+                                                            .isEmpty()) {
+                    String labelSubject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+                    if ("oneToMany".equals(relation.getKind())) {
+                        issues.add(labelSubject + " declares a `label`, but a collection relation renders no control of its own -"
+                                + " label the field or relation the generated page actually shows");
+                    } else {
+                        validateLabels(labelSubject, relation.getLabel(), relation.getCountryLabels(), issues);
                     }
                 }
                 if (relation.getWhere() != null) {
@@ -6119,6 +6191,26 @@ public final class IntentParser {
      * differs between the two sides is refused rather than compared across types, where the boxed
      * comparison is silently always-false.
      */
+    /**
+     * The entity one side of an {@code agree} ultimately points at, when both hops are local: the
+     * target of {@code <relation>.<onProperty>}, or - for a side reading the record's own to-one - that
+     * relation's own target. {@code null} when the side ends on a scalar or leaves this model, where
+     * nothing here can say.
+     */
+    private static String agreedTarget(EntityIntent entity, java.util.Map<String, EntityIntent> byName, String relation,
+            String onProperty) {
+        RelationIntent own = CheckSupport.toOne(entity, relation);
+        if (own == null) {
+            return null;
+        }
+        EntityIntent target = byName.get(own.getTo());
+        RelationIntent shared = target == null ? null : CheckSupport.toOne(target, onProperty);
+        if (shared != null) {
+            return shared.getTo(); // the hop's own to-one - the usual junction shape
+        }
+        return target == null || CheckSupport.field(target, onProperty) != null ? null : own.getTo();
+    }
+
     private static void validateAgreeCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             String subject, List<String> issues) {
         List<String> relations = check.getRelations();
@@ -6148,18 +6240,32 @@ public final class IntentParser {
         // reported by the walker in the vocabulary every other path failure uses.
         ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
         String[] terminals = new String[2];
+        String[] agreedOn = new String[2];
         for (int i = 0; i < 2; i++) {
-            String relation = relations.get(i);
-            if (relation == null || relation.isBlank()) {
+            if (relations.get(i) == null || relations.get(i)
+                                                     .isBlank()) {
                 issues.add(subject + " relations[" + i + "] is blank");
                 return;
             }
-            ResolvePathSupport.Path path = walker.resolve(relation + "." + on);
-            if (!path.resolved()) {
-                issues.add(subject + " " + path.failure());
+        }
+        ResolvePathSupport.Path[] sides = CheckSupport.agreeSides(walker, entity, relations.get(0), relations.get(1), on);
+        for (int i = 0; i < 2; i++) {
+            if (!sides[i].resolved()) {
+                issues.add(subject + " " + sides[i].failure());
                 return;
             }
-            terminals[i] = path.terminalType();
+            terminals[i] = sides[i].terminalType();
+            agreedOn[i] = agreedTarget(entity, byName, relations.get(i), on);
+        }
+        // Both sides must name the same third thing. A side reading the record's OWN to-one (#7631)
+        // compares a foreign key, and a key of the wrong nomenclature is the one mistake this widening
+        // makes reachable - comparing a Company id with a Customer id is the "two foreign keys mean
+        // nothing" refusal #7095 draws, one construct over.
+        if (agreedOn[0] != null && agreedOn[1] != null && !agreedOn[0].equals(agreedOn[1])) {
+            issues.add(subject + " compares a [" + agreedOn[0] + "] with a [" + agreedOn[1]
+                    + "] - both sides must point at the same entity, or the keys are from different nomenclatures and the"
+                    + " comparison is always false");
+            return;
         }
         for (int i = 0; i < 2; i++) {
             if (terminals[i] == null || ResolvePathSupport.RELATION_TERMINAL.equals(terminals[i])) {
@@ -6608,6 +6714,41 @@ public final class IntentParser {
         }
     }
 
+    /**
+     * An entity's {@code orderBy:} (issue #7727) names its properties either bare
+     * ({@code orderBy: [number]}) or with a direction ({@code orderBy: [{ field: date, dir: desc }]}),
+     * and a single property may be written without the list ({@code orderBy: number}). All three map to
+     * the one typed list of {@code { field, dir }}, so the scalar and the string entries are expanded
+     * on the raw tree here - before the unknown-key walk and the typed mapping, for the reason
+     * {@link #expandUniqueShorthand} is: Gson maps a string onto an object with an exception rather
+     * than with a message an author can act on.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeOrderBy(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("orderBy")) {
+                continue;
+            }
+            Map<Object, Object> writable = (Map<Object, Object>) entity;
+            Object declared = entity.get("orderBy");
+            if (declared == null) {
+                writable.remove("orderBy");
+                continue;
+            }
+            List<?> terms = declared instanceof List<?> list ? list : List.of(declared);
+            List<Object> expanded = new ArrayList<>(terms.size());
+            for (Object term : terms) {
+                expanded.add(term instanceof String field ? new LinkedHashMap<>(Map.of("field", field)) : term);
+            }
+            writable.put("orderBy", expanded);
+        }
+    }
+
     private static void expandUniqueShorthand(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;
@@ -6931,12 +7072,21 @@ public final class IntentParser {
      * match any tenant, so it is refused here rather than silently rendering the base label forever.
      */
     private static void validateLabels(String subject, FieldIntent field, List<String> issues) {
-        if (field.getLabel() != null && field.getLabel()
-                                             .isBlank()) {
-            issues.add(subject + " declares a blank `label` - remove it to keep the humanized field name");
+        validateLabels(subject, field.getLabel(), field.getCountryLabels(), issues);
+    }
+
+    /**
+     * The same rule for a RELATION's picker caption (#7650): a relation renders a control of its own -
+     * the picker, its list column and its details row - and the humanized relation name is as wrong
+     * there as a humanized field name is, for the same reason (the identifier was chosen for the model,
+     * and a picklist that cannot be named after what it picks reads as the identifier).
+     */
+    private static void validateLabels(String subject, String label, java.util.Map<String, String> countryLabels, List<String> issues) {
+        if (label != null && label.isBlank()) {
+            issues.add(subject + " declares a blank `label` - remove it to keep the humanized name");
         }
-        for (java.util.Map.Entry<String, String> variant : field.getCountryLabels()
-                                                                .entrySet()) {
+        for (java.util.Map.Entry<String, String> variant : (countryLabels == null ? java.util.Map.<String, String>of()
+                : countryLabels).entrySet()) {
             String country = variant.getKey() == null ? ""
                     : variant.getKey()
                              .trim()

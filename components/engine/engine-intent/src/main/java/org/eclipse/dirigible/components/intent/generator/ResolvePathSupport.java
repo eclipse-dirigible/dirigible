@@ -166,6 +166,19 @@ public final class ResolvePathSupport {
          * @return the resolved path, or a failure carrying the reason
          */
         public Path resolve(String authored) {
+            // A path that does not resolve must leave no hop behind: a caller that tries one shape and
+            // falls back to another (an `agree` side that is the record's own to-one, #7631) would
+            // otherwise emit a load for the record it never reads.
+            List<String> before = new ArrayList<>(steps.keySet());
+            Path path = walk(authored);
+            if (!path.resolved()) {
+                steps.keySet()
+                     .retainAll(before);
+            }
+            return path;
+        }
+
+        private Path walk(String authored) {
             if (authored == null || authored.isBlank()) {
                 return failed(authored, "is blank");
             }

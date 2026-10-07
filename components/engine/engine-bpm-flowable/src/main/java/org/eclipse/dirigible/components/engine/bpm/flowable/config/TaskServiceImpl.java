@@ -279,6 +279,11 @@ class TaskServiceImpl implements TaskService {
     }
 
     @Override
+    public List<IdentityLink> getListedTaskIdentityLinks(String taskId) {
+        return flowableTaskService.getIdentityLinksForTask(taskId);
+    }
+
+    @Override
     public void setTaskVariables(String taskId, Map<String, Object> variables) {
         flowableArtefactsValidator.validateTask(taskId);
 

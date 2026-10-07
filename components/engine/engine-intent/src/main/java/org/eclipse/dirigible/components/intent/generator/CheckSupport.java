@@ -413,6 +413,39 @@ public final class CheckSupport {
     }
 
     /**
+     * Both sides of an {@code agree} check, resolved (issue #7631).
+     *
+     * <p>
+     * Normally a side is the path {@code <relation>.<onProperty>} - the shared value read off the
+     * record the relation points at. But a record may carry the shared target DIRECTLY as its own
+     * to-one: an {@code OpeningBalance} has {@code Year -> FiscalYear} (which has {@code Company}) and
+     * its own {@code Company}, and "the opening balance opens the books of the company its fiscal year
+     * belongs to" is {@code Year.Company == Company}. That side is then the record's own foreign key,
+     * which the same walker resolves from the bare relation name.
+     *
+     * @param walker the walker both sides share, so a prefix they have in common loads once
+     * @param entity the record the check is declared on
+     * @param left the authored relation naming the first side
+     * @param right the authored relation naming the second side
+     * @param onProperty the shared property
+     * @return the two resolved paths, in the authored order - each the hop, or the record's own to-one
+     */
+    public static ResolvePathSupport.Path[] agreeSides(ResolvePathSupport.Walker walker, EntityIntent entity, String left, String right,
+            String onProperty) {
+        String[] names = {left, right};
+        ResolvePathSupport.Path[] sides = {walker.resolve(left + "." + onProperty), walker.resolve(right + "." + onProperty)};
+        for (int i = 0; i < 2; i++) {
+            // Only when the OTHER side found the shared property: a side that cannot reach it while
+            // nothing else can either is an onProperty that names nothing, and that must keep saying so
+            // rather than be read as two bare foreign keys.
+            if (!sides[i].resolved() && sides[1 - i].resolved() && toOne(entity, names[i]) != null) {
+                sides[i] = walker.resolve(names[i]);
+            }
+        }
+        return sides;
+    }
+
+    /**
      * The entity's field of that name, matched case-insensitively - the guard renders the property
      * through {@link IntentNaming#pascalCase}, so the case an author wrote it in never reaches the
      * generated code and must not decide whether the guard is understood at all.

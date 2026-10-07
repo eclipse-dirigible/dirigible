@@ -115,6 +115,51 @@ class ModelParameterProcessorTest {
         assertSame(due, listed.get(3));
     }
 
+    /**
+     * The entity's default row order (intent {@code orderBy:}, dirigible #7727) reaches the generated
+     * list endpoint twice, because the two paths query differently: as the HQL fragment the paged and
+     * filtered queries append, and as the Criteria chain the scoped (my / partner) surfaces list
+     * through. Both say the same thing, so they are derived from the one attribute.
+     */
+    @Test
+    void anOrderByReachesBothQueryShapes() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Number", "VARCHAR"), property("Date", "DATE"));
+        entity.put("orderBy", "Date desc,Number");
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals("e.Date desc, e.Number asc", entity.get("orderByHql"), "a term without a direction is ascending");
+        assertEquals(".orderByDesc(\"Date\").orderByAsc(\"Number\")", entity.get("orderByCriteria"));
+    }
+
+    /**
+     * A hand-modeled entity says the same thing through the entity editor's per-property
+     * {@code dataOrderBy}, so its list is ordered too - one clause, whichever way it was authored.
+     */
+    @Test
+    void theEntityEditorsOwnOrderingDrivesTheSameClause() {
+        Map<String, Object> number = property("Number", "VARCHAR");
+        Map<String, Object> date = property("Date", "DATE");
+        date.put("dataOrderBy", "DESC");
+        number.put("dataOrderBy", "ASC");
+
+        Map<String, Object> entity = entity("Invoice", "Invoices", number, date);
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals("e.Number asc, e.Date desc", entity.get("orderByHql"), "in the properties' own order");
+    }
+
+    /** An entity declaring neither leaves no clause, so its queries are emitted exactly as before. */
+    @Test
+    void noDeclaredOrderLeavesTheQueriesAlone() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Number", "VARCHAR"));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertNull(entity.get("orderByHql"));
+        assertNull(entity.get("orderByCriteria"));
+    }
+
     /** Without a {@code listOrder} the list follows the control order, as before #7614. */
     @Test
     @SuppressWarnings("unchecked")
@@ -867,6 +912,48 @@ class ModelParameterProcessorTest {
         assertEquals("gen.sales_order.data.claims.ExpenseCategoryEntity", category.get("targetEntityClass"));
         assertEquals(Boolean.TRUE, claim.get("hasTargetDeleteRules"));
         assertNull(approver.get("targetEntityClass"));
+    }
+
+    /**
+     * The cross-model parent of a junction's {@code checks: agree} (#7701): the check names the
+     * junction's foreign key and the parent's relied-on property, and this pass resolves the parent's
+     * generated entity class in its OWNER model's package - what the parent's repository names itself
+     * by when it asks every {@code TargetAgreementRule} - plus the message's Java-literal twin. A
+     * warning contributes nothing, and a foreign key that resolved no repository is dropped.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCrossModelAgreeParentResolvesToATargetAgreementRule() {
+        Map<String, Object> payment = property("CustomerPayment", "INTEGER");
+        payment.put("relationshipEntityName", "CustomerPayment");
+        payment.put("relationshipEntityPerspectiveName", "CustomerPayment");
+        payment.put("widgetType", "DROPDOWN");
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("kind", "agree");
+        refusing.put("message", "The \"customer\" must match the invoice's");
+        refusing.put("crossModelParents", new java.util.ArrayList<>(List.of(Map.of("fkProperty", "CustomerPayment", "property", "Customer"),
+                Map.of("fkProperty", "Ghost", "property", "Customer"))));
+        Map<String, Object> warning = new LinkedHashMap<>(refusing);
+        warning.put("severity", "warn");
+        Map<String, Object> allocation = entity("InvoicePayment", "allocations", property("Id", "INTEGER"), payment);
+        allocation.put("checks", new java.util.ArrayList<>(List.of(refusing, warning)));
+        Map<String, Object> projection = entity("CustomerPayment", "CustomerPayment", property("Amount", "DECIMAL"));
+        projection.put("type", "PROJECTION");
+        projection.put("projectionReferencedModel", "/customer-payments/payments.model");
+
+        ModelParameterProcessor.process(model(allocation, projection), javaParameters());
+
+        List<Map<String, Object>> rules = (List<Map<String, Object>>) allocation.get("targetAgreementRules");
+        assertEquals(1, rules.size(), "the warning and the unresolved foreign key must contribute nothing: " + rules);
+        assertEquals("gen.payments.data.customerpayment.CustomerPaymentEntity", rules.get(0)
+                                                                                     .get("targetEntityClass"));
+        assertEquals("CustomerPayment", rules.get(0)
+                                             .get("fkProperty"));
+        assertEquals("Customer", rules.get(0)
+                                      .get("property"));
+        assertEquals("The \\\"customer\\\" must match the invoice's", rules.get(0)
+                                                                           .get("messageJavaLiteral"));
+        assertEquals(Boolean.TRUE, allocation.get("hasTargetAgreementRules"));
     }
 
     @Test

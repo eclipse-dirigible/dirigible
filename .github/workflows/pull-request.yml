@@ -64,6 +64,16 @@ jobs:
         if: runner.os == 'Linux'
         run: mvn test -P testcontainers
 
+      # The committed intent samples are what the intent generates on this very build (#7642): the CLI
+      # the build just produced runs `generate --check` over them. Last, because the action sets up
+      # its own JDK.
+      - name: Regeneration check of the intent samples
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/regen-check
+        with:
+          cli-jar: cli/target/dirigible-cli-*-executable.jar
+          projects: tests/tests-integrations/src/main/resources/sample-intent-*
+
   docker-build:
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -152,7 +162,7 @@ jobs:
       # (including two full clone -> generate -> validate app lifecycles). The heavy Selenide
       # suite (@Tag "ui") runs nightly and on master push - see nightly.yml and build.yml.
       - name: Smoke integration tests (H2)
-        run: mvn clean install -P integration-tests -Dit.groups="(!ui | smoke) & !upgrade"
+        run: mvn clean install -P integration-tests -Dit.groups="(!ui | smoke) & !upgrade & !perf"
 
       # Guards #7215: a tag expression that discovers nothing leaves the reports directory absent
       # and the build green, so what ran is asserted by count instead of by the job's colour.

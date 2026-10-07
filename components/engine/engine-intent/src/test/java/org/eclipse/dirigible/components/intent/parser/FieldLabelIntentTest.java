@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.Map;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -39,6 +40,36 @@ class FieldLabelIntentTest {
                       BG: ЕГН
                       DE: Steuer-ID
                   - { name: name, type: string }
+            """;
+
+    /**
+     * A picker's caption is the same problem one construct over (#7650): the relation is named for the
+     * model, and the generated chooser, its list column and its details row all read as that identifier
+     * until the relation itself is labelled.
+     */
+    private static final String INVOICING = """
+            name: invoicing
+            entities:
+              - name: Company
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - name: issuer
+                    kind: manyToOne
+                    to: Company
+                    label: Issuing company
+                    countryLabels:
+                      BG: Издател
+                  - { name: lines, kind: oneToMany, to: InvoiceLine }
+              - name: InvoiceLine
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: invoice, kind: manyToOne, to: Invoice, composition: true }
             """;
 
     @Test
@@ -106,6 +137,49 @@ class FieldLabelIntentTest {
     @Test
     void aBlankLabelIsRejected() {
         assertIssue(PAYROLL.replace("label: National ID", "label: \"  \""), "declares a blank `label`");
+    }
+
+    @Test
+    void aToOneRelationCarriesItsAuthoredPickerCaption() {
+        RelationIntent relation = relation(IntentParser.parse(INVOICING), "issuer");
+
+        assertEquals("Issuing company", relation.getLabel());
+        assertEquals("Издател", relation.getCountryLabels()
+                                        .get("BG"));
+    }
+
+    @Test
+    void aRelationThatDeclaresNeitherIsUnaffected() {
+        RelationIntent relation = relation(IntentParser.parse(INVOICING), "lines");
+
+        assertNull(relation.getLabel());
+        assertTrue(relation.getCountryLabels()
+                           .isEmpty(),
+                "absent variants must be an empty map, not a null the generators trip over");
+    }
+
+    /** A collection renders no control of its own, so a caption authored there would go nowhere. */
+    @Test
+    void aLabelOnACollectionRelationIsRejected() {
+        assertIssue(
+                INVOICING.replace("  - { name: lines, kind: oneToMany, to: InvoiceLine }",
+                        "  - { name: lines, kind: oneToMany, to: InvoiceLine, label: Line items }"),
+                "a collection relation renders no control of its own");
+    }
+
+    @Test
+    void aRelationVariantIsHeldToTheSameCountryRule() {
+        assertIssue(INVOICING.replace("      BG: Издател", "      bulgaria: Издател"), "which is not an ISO 3166-1 alpha-2 country code");
+    }
+
+    private static RelationIntent relation(IntentModel model, String name) {
+        return model.getEntities()
+                    .stream()
+                    .flatMap(entity -> entity.getRelations()
+                                             .stream())
+                    .filter(relation -> name.equals(relation.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("no relation [" + name + "]"));
     }
 
     private static void assertIssue(String yaml, String expected) {

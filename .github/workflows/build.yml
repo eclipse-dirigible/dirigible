@@ -197,10 +197,10 @@ jobs:
       matrix:
         shard:
           - name: api-1
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "1/2"
           - name: api-2
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
@@ -304,10 +304,10 @@ jobs:
       matrix:
         shard:
           - name: api-1
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "1/2"
           - name: api-2
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"

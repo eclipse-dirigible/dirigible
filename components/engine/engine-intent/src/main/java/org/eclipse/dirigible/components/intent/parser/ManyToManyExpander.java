@@ -268,6 +268,10 @@ final class ManyToManyExpander {
         toTarget.setSize(relation.getSize());
         toTarget.setMajor(relation.isMajor());
         toTarget.setLeafOnly(relation.isLeafOnly());
+        // The caption belongs to the control the author sees, which after the expansion is the LINK's
+        // target picker - the declaring side becomes a navigation-only collection that renders none.
+        toTarget.setLabel(relation.getLabel());
+        toTarget.setCountryLabels(relation.getCountryLabels());
         link.getRelations()
             .add(toOwner);
         link.getRelations()
@@ -299,6 +303,8 @@ final class ManyToManyExpander {
         relation.setShow(null);
         relation.setSize(null);
         relation.setLeafOnly(false);
+        relation.setLabel(null);
+        relation.setCountryLabels(null);
     }
 
     private static boolean isBlank(String value) {

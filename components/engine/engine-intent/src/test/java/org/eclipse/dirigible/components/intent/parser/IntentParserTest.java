@@ -20,6 +20,7 @@ import java.util.List;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodIntent;
 import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.junit.jupiter.api.Test;
@@ -1031,6 +1032,58 @@ class IntentParserTest {
         assertCompareIssue(yaml.replace("onProperty: customer", "onProperty: reference"), "both sides must be the same kind of value");
         assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, whenNull: maybe,"), "unknown `whenNull`");
         assertCompareIssue(yaml.replace("onProperty: customer,", "onProperty: customer, status: 1,"), "cannot carry a `status` gate");
+    }
+
+    /**
+     * A side of an {@code agree} may be the record's OWN to-one (#7631): the fiscal year of an opening
+     * balance belongs to a company, and so does the balance itself, so what has to agree is
+     * {@code Year.Company == Company} - one hop on the left, none on the right. The widening makes one
+     * new mistake reachable, comparing two foreign keys of different nomenclatures, which is refused
+     * for the reason #7095 refuses it a construct over: the comparison is simply always false.
+     */
+    @Test
+    void anAgreeSideMayBeTheRecordsOwnToOne() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Year
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: company, kind: manyToOne, to: Company }
+                  - name: OpeningBalance
+                    checks:
+                      - { kind: agree, relations: [year, company], onProperty: company,
+                          message: "This balance opens the books of another company than its fiscal year" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: year,     kind: manyToOne, to: Year }
+                      - { name: company,  kind: manyToOne, to: Company }
+                      - { name: customer, kind: manyToOne, to: Customer }
+                """;
+        CheckIntent check = IntentParser.parse(yaml)
+                                        .getEntities()
+                                        .get(3)
+                                        .getChecks()
+                                        .get(0);
+
+        assertEquals(List.of("year", "company"), check.getRelations());
+        assertEquals("company", check.getOnProperty());
+
+        // The two keys must be drawn from the same nomenclature - a Company id and a Customer id are
+        // never equal, so comparing them is a rule that can only ever refuse.
+        assertCompareIssue(yaml.replace("relations: [year, company]", "relations: [year, customer]"),
+                "both sides must point at the same entity");
+        // And a property neither side can reach still says exactly that, rather than being read as a
+        // comparison of the two bare foreign keys.
+        assertCompareIssue(yaml.replace("onProperty: company,", "onProperty: supplier,"), "has no field or to-one relation [supplier]");
     }
 
     /**
@@ -3560,5 +3613,87 @@ class IntentParserTest {
         assertTrue(issues.stream()
                          .anyMatch(i -> i.contains("field [total] declares defaultValue: now")),
                 "expected the decimal field refused, got: " + issues);
+    }
+
+    /**
+     * {@code orderBy:} (#7727) takes a bare property name, the full {@code { field, dir }} form and a
+     * single property without the list; every name must resolve, no name may repeat, and a direction
+     * other than asc/desc is a typo rather than a default worth guessing at.
+     */
+    @Test
+    void orderByParsesItsThreeShapesAndRefusesWhatCannotOrderAnything() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: number
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: Entry
+                    orderBy: [{ field: date, dir: DESC }, number, account]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: account, kind: manyToOne, to: Account }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals(List.of("number"), model.getEntities()
+                                             .get(0)
+                                             .getOrderBy()
+                                             .stream()
+                                             .map(OrderByIntent::getField)
+                                             .toList(),
+                "a single property needs no list");
+        List<OrderByIntent> entry = model.getEntities()
+                                         .get(1)
+                                         .getOrderBy();
+        assertEquals(List.of("date", "number", "account"), entry.stream()
+                                                                .map(OrderByIntent::getField)
+                                                                .toList());
+        assertEquals("desc", entry.get(0)
+                                  .direction(),
+                "the direction is case-insensitive");
+        assertEquals("asc", entry.get(1)
+                                 .direction(),
+                "a term without one is ascending");
+
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [code]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """).stream()
+                    .anyMatch(i -> i.contains("orderBy references [code]")),
+                "a name the entity does not declare orders nothing");
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [number, number]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                """).stream()
+                    .anyMatch(i -> i.contains("more than once")),
+                "a repeated term can never break a tie the first one did not");
+        assertTrue(issuesOf("""
+                name: sales
+                entities:
+                  - name: Account
+                    orderBy: [{ field: number, dir: descending }]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                """).stream()
+                    .anyMatch(i -> i.contains("it is asc or desc")));
+    }
+
+    private static List<String> issuesOf(String yaml) {
+        return assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml)).getIssues();
     }
 }

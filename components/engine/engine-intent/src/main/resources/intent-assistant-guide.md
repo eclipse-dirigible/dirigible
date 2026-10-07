@@ -455,6 +455,13 @@ field may declare:
   still resolve. Not allowed on a composition parent (preset, never picked) or an `EntityStatus`.
   Canonical shape - a stock line's Product picker excluding services:
     `- { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }`
+- `label: <text>` / `countryLabels: { <ISO 3166-1 alpha-2>: <text> }` (on a to-one relation or a
+  `subset`, #7650) - **the picker's caption**, exactly as the field keys above: the relation is named
+  for the model, so the chooser, its list column and its details row all read as that identifier
+  until it is labelled. It rides on the relation's own FK property, so it is translated and
+  country-resolved like any field label. A collection relation (`oneToMany`) renders no control of
+  its own and is refused - label the field or relation the generated page actually shows.
+    `- { name: issuer, kind: manyToOne, to: Company, label: Issuing company }`
 - `pickable: { when: [<target property> != null, ...], else: mark|hide, message: <text> }` on a
   manyToOne/oneToOne (#7496) - **a picker rule over the TARGET's rows**: this is how "a customer
   with incomplete registration data cannot be picked onto an invoice" is declared, so the clerk
@@ -624,6 +631,13 @@ field may declare:
     mandatory); `whenNull: refuse` rejects the write instead. Reach for this instead of writing the
     rule as a `calculatedActionOnCreate`/`OnUpdate` guard class - it is the shape every
     allocation, transfer, timesheet and assignment entity carries.
+    A side may also be the record's OWN to-one carrying that third thing directly (#7631): an
+    opening balance has a fiscal `year` (which belongs to a company) and a `company` of its own, and
+    the rule that matters is `Year.Company == Company` - one hop on the left, none on the right.
+    Author it the same way, naming the own relation as a side:
+    `{ kind: agree, relations: [year, company], onProperty: company }`. Both sides must still end on
+    the same entity: comparing a Company key with a Customer key is refused, the two nomenclatures
+    making the comparison always false.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -1029,6 +1043,24 @@ Names match like `order:` (case-insensitive, no name twice) and must be a field,
 `oneToOne` / `subset` relation, or the `Name` a `label:` generates - a `oneToMany` / `manyToMany` has no
 column. Without `list:` the list shows the `major` properties (every one unless `major: false`) in
 control order, as before.
+
+**Default row order (`orderBy:` on an entity):** `list:` says WHICH columns a list shows, `order:` the
+sequence of the form's controls - neither says anything about the order of the ROWS, which without
+`orderBy:` is whatever the database returns (a chart of accounts reads "mixed"). Name the properties
+the rows sort by, each optionally with a direction:
+
+```yaml
+- name: Account
+  orderBy: [number]                            # ascending; a single property needs no list
+- name: SalesInvoice
+  orderBy: [{ field: date, dir: desc }, number]
+```
+
+Members are fields or to-one relations of the entity (a relation orders by its foreign key), matched
+like `order:`, no name twice, `dir` is `asc` (the default) or `desc`. It becomes the `ORDER BY` of the
+entity's list endpoint - so it is also the sibling order of a `hierarchy:` tree and the option order of
+every picker that targets the entity, which otherwise sorts its options by display text. A user's
+header click still re-sorts the list; `orderBy:` is only the default.
 
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns

@@ -21,6 +21,14 @@ same VAT over REST.
 
 ## Regenerating `gen/`
 
-After a change to `app.intent`, import the folder into a workspace, open `app.intent` and click
-**Generate**, then copy the generated `gen/**/*.java` back here and run `mvn test` in
-`tests/tests-sdk`.
+After a change to `app.intent`, regenerate into a scratch folder with the CLI (`cli/README.md`),
+copy the generated `gen/**/*.java` back here and run `mvn test` in `tests/tests-sdk`:
+
+```shell
+java -jar cli/target/dirigible-cli-*-executable.jar generate \
+  --project tests/tests-integrations/src/main/resources/sample-intent-money --out /tmp/money
+```
+
+The files are committed exactly as generated - the license plugin leaves `sample-intent-*/gen/`
+alone - and every pull request runs `generate --check` over this folder, so a template change that
+alters them fails until they are regenerated.

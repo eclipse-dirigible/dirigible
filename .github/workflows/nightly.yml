@@ -25,10 +25,10 @@ jobs:
       matrix:
         shard:
           - name: api-1
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "1/2"
           - name: api-2
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"
@@ -181,6 +181,71 @@ jobs:
             exit 1
           fi
 
+  # The performance baseline of the generated surface (#7646): PerformanceBaselineIT fills an intent
+  # application on a PostgreSQL of its own (Testcontainers) and measures p50 / p95 and the statements
+  # per request of its list, search, create, transition, print and inbox steps under 10 concurrent
+  # users. It fails a step whose p95 exceeds tests/PERF_BASELINE.json by more than 50 %, or whose
+  # requests execute more statements than the baseline's - the N+1 a template change reintroduces.
+  # The release workflow records the file; this job only gates. A job of its own, because the
+  # measurement needs a runner nothing else is loading, and the only selector of the `perf` tag the
+  # shards exclude.
+  perf-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache local Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven-
+
+      - name: Set up JDK Corretto 24
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '24'
+          architecture: x64
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript@5.9.3 esbuild
+
+      - name: Install ttyd (prebuilt)
+        run: |
+          sudo apt update
+          sudo apt install -y ttyd
+
+      - name: Measure against the performance baseline
+        run: mvn clean install -P integration-tests -Dit.groups=perf
+
+      - name: Upload integration test reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          retention-days: 3
+          name: failsafe-reports-perf-${{ github.run_attempt }}
+          path: |
+            tests/tests-integrations/target/failsafe-reports
+            tests/tests-integrations/target/surefire-reports
+          if-no-files-found: ignore
+
+      - name: Assert the performance baseline ran
+        run: |
+          ran=$(ls tests/tests-integrations/target/failsafe-reports/TEST-*PerformanceBaselineIT.xml 2>/dev/null | wc -l)
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::PerformanceBaselineIT did not run - the perf tag selected nothing (see #7215)"
+            exit 1
+          fi
+
   integration-tests-postgresql:
     runs-on: ubuntu-latest
     strategy:
@@ -188,10 +253,10 @@ jobs:
       matrix:
         shard:
           - name: api-1
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "1/2"
           - name: api-2
-            groups: "!ui & !slow & !upgrade"
+            groups: "!ui & !slow & !upgrade & !perf"
             partition: "2/2"
           - name: ui
             groups: "ui & !slow & !sample & !camel"

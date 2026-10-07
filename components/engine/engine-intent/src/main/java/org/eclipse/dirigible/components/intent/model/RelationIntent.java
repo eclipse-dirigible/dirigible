@@ -76,6 +76,27 @@ public class RelationIntent {
      * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
      * width). Use a small span (e.g. 4) to pack several short dropdowns onto one row.
      */
+    /**
+     * Optional display label for the PICKER this relation renders as, replacing the humanized relation
+     * name in every generated surface - the form control's caption, the list column header and the
+     * details row - and seeding its en-US catalog entry (issue #7650).
+     *
+     * <p>
+     * The same key a field carries (#6424), for the same reason: the humanized name is derived from an
+     * identifier the author chose for the MODEL, and a picklist relation that cannot be called after
+     * the thing it picks (because a stored column already owns that name) renders as the identifier -
+     * {@code VatGroundPick} as "Vat Ground Pick". The generated en-US catalog is rewritten on every
+     * Generate, so there is nowhere else to author the English caption.
+     */
+    private String label;
+
+    /**
+     * Optional label variants keyed by ISO 3166-1 alpha-2 <b>country</b> code (issue #7650), exactly as
+     * on a field (#6424): what a picker is called may follow the tenant's country rather than the
+     * reader's language, so the variant overrides {@link #label} in EVERY language.
+     */
+    private java.util.Map<String, String> countryLabels = new java.util.LinkedHashMap<>();
+
     private Integer size;
     /**
      * Whether this to-one relation shows as a column in the entity's list / document-items table
@@ -318,6 +339,22 @@ public class RelationIntent {
 
     public void setSize(Integer size) {
         this.size = size;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public java.util.Map<String, String> getCountryLabels() {
+        return countryLabels;
+    }
+
+    public void setCountryLabels(java.util.Map<String, String> countryLabels) {
+        this.countryLabels = countryLabels == null ? new java.util.LinkedHashMap<>() : countryLabels;
     }
 
     public boolean isMajor() {

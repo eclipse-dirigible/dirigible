@@ -98,6 +98,7 @@ final class ModelParameterProcessor {
             resolveRelatedRegisters(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
+            resolveTargetAgreementRules(entities);
         }
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
@@ -134,6 +135,7 @@ final class ModelParameterProcessor {
         resolveUniqueConstraintLiterals(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
+        resolveOrderBy(entity);
 
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
@@ -609,6 +611,50 @@ final class ModelParameterProcessor {
             names.add(str(property, "name"));
         }
         entity.put("dataOrderBySort", String.join(",", names));
+    }
+
+    /**
+     * Derives {@code orderByHql}, the default row order of the generated list endpoint - the intent's
+     * {@code orderBy:} (dirigible #7727), or, for a hand-modeled entity, the per-property
+     * {@code dataOrderBy} the entity editor writes. Both say the same thing, so they resolve to one
+     * clause: {@code e.Number asc, e.Date desc}, the list and search queries append it verbatim. An
+     * entity declaring neither leaves no key, so those queries are emitted exactly as before and the
+     * rows come in whatever order the database returns them.
+     *
+     * @param entity the entity
+     */
+    private static void resolveOrderBy(Map<String, Object> entity) {
+        List<String> terms = new ArrayList<>();
+        String declared = str(entity, "orderBy");
+        if (declared != null && !declared.isBlank()) {
+            for (String term : declared.split(",")) {
+                String[] parts = term.trim()
+                                     .split("\\s+");
+                if (parts.length > 0 && !parts[0].isBlank()) {
+                    terms.add("e." + parts[0] + " " + (parts.length > 1 && "desc".equalsIgnoreCase(parts[1]) ? "desc" : "asc"));
+                }
+            }
+        } else {
+            for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                String direction = str(property, "dataOrderBy");
+                if (direction != null && !direction.isBlank()) {
+                    terms.add("e." + str(property, "name") + " " + ("DESC".equalsIgnoreCase(direction.trim()) ? "desc" : "asc"));
+                }
+            }
+        }
+        if (terms.isEmpty()) {
+            return;
+        }
+        entity.put("orderByHql", String.join(", ", terms));
+        // ...and the same order as a Criteria chain, for the scoped surfaces, which list through one.
+        StringBuilder chain = new StringBuilder();
+        for (String term : terms) {
+            String property = term.substring("e.".length(), term.lastIndexOf(' '));
+            chain.append(term.endsWith(" desc") ? ".orderByDesc(\"" : ".orderByAsc(\"")
+                 .append(property)
+                 .append("\")");
+        }
+        entity.put("orderByCriteria", chain.toString());
     }
 
     /**
@@ -1357,6 +1403,52 @@ final class ModelParameterProcessor {
         String statusProperty = str(entity, "immutableStatusProperty");
         return truthy(entity, "immutableAlways") || (statusProperty != null && !statusProperty.isEmpty())
                 || entity.get("periodLock") != null;
+    }
+
+    /**
+     * Resolves the cross-model parents of each junction's refusing {@code checks: agree} (#7701) into
+     * the {@code targetAgreementRules} its generated repository contributes as a
+     * {@code TargetAgreementRule}: keyed by the parent's generated entity class - what the parent's
+     * repository names itself by when it asks - next to the junction's foreign key, the parent's
+     * relied-on property and the check's message as a Java literal. The entity class is the twin of the
+     * repository the dropdown resolution already placed on the foreign key, so a parent owned by
+     * another model resolves into that model's package. A foreign key that resolved no repository is
+     * dropped rather than emitted as a broken reference.
+     *
+     * @param entities every entity in the model
+     */
+    private static void resolveTargetAgreementRules(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> rules = new ArrayList<>();
+            for (Map<String, Object> check : asMaps(entity.get("checks"))) {
+                if (!"agree".equals(str(check, "kind")) || "warn".equals(str(check, "severity"))) {
+                    continue;
+                }
+                for (Map<String, Object> parent : asMaps(check.get("crossModelParents"))) {
+                    String repositoryClass = null;
+                    for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                        if (str(parent, "fkProperty") != null && str(parent, "fkProperty").equals(str(property, "name"))) {
+                            repositoryClass = str(property, "targetRepositoryClass");
+                        }
+                    }
+                    if (repositoryClass == null || !repositoryClass.endsWith("Repository")) {
+                        continue;
+                    }
+                    Map<String, Object> rule = new LinkedHashMap<>();
+                    rule.put("targetEntityClass",
+                            repositoryClass.substring(0, repositoryClass.length() - "Repository".length()) + "Entity");
+                    rule.put("fkProperty", str(parent, "fkProperty"));
+                    rule.put("property", str(parent, "property"));
+                    rule.put("message", str(check, "message"));
+                    resolveMessageLiteral(rule);
+                    rules.add(rule);
+                }
+            }
+            if (!rules.isEmpty()) {
+                entity.put("targetAgreementRules", rules);
+                entity.put("hasTargetAgreementRules", Boolean.TRUE);
+            }
+        }
     }
 
     /**

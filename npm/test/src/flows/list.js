@@ -40,10 +40,43 @@ export function listFlow(manifest, entity) {
     const emptyState = page.getByText('Get started by creating the first record').filter({ visible: true }).first();
     await expect(firstHeader.or(emptyState).first()).toBeVisible();
     if (entity.expectSeedData || (await firstHeader.isVisible())) {
-      for (const field of (entity.fields ?? []).filter((f) => f.major !== false && !f.primaryKey)) {
-        await expect(page.getByRole('columnheader').filter({ hasText: labelOf(field) }).first()).toBeVisible();
+      for (const label of declaredColumns(entity)) {
+        await expect(page.getByRole('columnheader').filter({ hasText: label }).first()).toBeVisible();
+      }
+      for (const label of hiddenColumns(entity)) {
+        await expect(page.getByRole('columnheader').filter({ hasText: label })).toHaveCount(0);
       }
       await expect(page.locator('tbody tr:visible').first()).toBeVisible();
     }
   });
+}
+
+// The headers the list is expected to render, in order (dirigible #7664). `list:` curates the list
+// INDEPENDENTLY of each field's own `major`, so an entity that declares it renders exactly those
+// columns and the `major` rule says nothing about it - which is why asserting the rule against a
+// curated entity failed on the first instance that held a row, and passed on every empty one,
+// where the assertion never runs at all.
+function declaredColumns(entity) {
+  if (entity.list?.length) return entity.list.map((name) => columnLabel(entity, name));
+  return (entity.fields ?? []).filter((f) => f.major !== false && !f.primaryKey).map(labelOf);
+}
+
+// ...and the ones it must NOT render. A curated list is the whole statement, so a field left off it
+// is absent from the table however its own `major` reads - the half that catches a `list:` the page
+// ignored.
+function hiddenColumns(entity) {
+  if (!entity.list?.length) return [];
+  const listed = new Set(entity.list);
+  return (entity.fields ?? [])
+    .filter((f) => !f.primaryKey && !listed.has(f.name))
+    .map(labelOf);
+}
+
+// A `list:` entry names a property - a field, or a to-one relation - and the header carries that
+// property's own label, which is what the manifest's `label` on the field already is.
+function columnLabel(entity, name) {
+  const field = (entity.fields ?? []).find((f) => f.name === name);
+  if (field) return labelOf(field);
+  const relation = (entity.relations ?? []).find((r) => r.name === name);
+  return relation?.label ?? name;
 }
