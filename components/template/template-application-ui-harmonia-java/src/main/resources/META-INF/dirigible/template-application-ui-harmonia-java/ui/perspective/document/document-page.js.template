@@ -585,9 +585,9 @@ document.addEventListener('alpine:init', () => {
 #elseif($property.widgetPickable)
         // Picker rule (intent `pickable:`): a target row failing it is listed disabled with the rule's
         // message, or hidden - the server's own checks remain the gate.
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows${property.name}, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(rows${property.name}, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
 #else
-        this.options${property.name} = this.sortOptions((rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })));
+        this.options${property.name} = this.sortOptions((rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })), '$!{property.widgetOptionsOrdered}');
 #end
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -635,14 +635,14 @@ document.addEventListener('alpine:init', () => {
             { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
 #if($property.widgetPickable)
-        this.options${property.name} = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}));
+        this.options${property.name} = this.sortOptions(this.pickableOptions(rows, '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
         if (adjust) {
           // Only a row the picker rule lets the user pick is auto-selected.
           const pickable = this.options${property.name}.filter(o => !o.disabled);
           this.form.${property.name} = pickable.length === 1 ? String(pickable[0].value) : '';
         }
 #else
-        this.options${property.name} = this.sortOptions((rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })));
+        this.options${property.name} = this.sortOptions((rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end })), '$!{property.widgetOptionsOrdered}');
         if (adjust) {
           this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
         }
@@ -988,7 +988,7 @@ document.addEventListener('alpine:init', () => {
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           // col.pickable (intent `pickable:`) marks the rows the dialog must not offer; the table's label
           // resolution reads the same list, which is why they stay in it.
-          this.itemOptions[col.name] = this.sortOptions(this.pickableOptions(rows, col.lookup.key, col.lookup.text, col.pickable));
+          this.itemOptions[col.name] = this.sortOptions(this.pickableOptions(rows, col.lookup.key, col.lookup.text, col.pickable), col.ordered);
           if (col.hier) {
             // Hierarchy column (leafOnly): the dialog chooser gets depth-indented leaves; the
             // items table label resolution above keeps the full set.
@@ -1001,7 +1001,7 @@ document.addEventListener('alpine:init', () => {
             const filtered = await App.services.api.post(col.lookup.url + '/search', {
               conditions: [{ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value }]
             }, { baseUrl: '' });
-            this.filteredOptions[col.name] = this.sortOptions(this.pickableOptions(filtered, col.lookup.key, col.lookup.text, col.pickable));
+            this.filteredOptions[col.name] = this.sortOptions(this.pickableOptions(filtered, col.lookup.key, col.lookup.text, col.pickable), col.ordered);
           }
         } catch (e) {
           console.error('[${name}DocumentPage] failed to load item options for ' + col.name, e);
@@ -1082,7 +1082,7 @@ document.addEventListener('alpine:init', () => {
             const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
             if (col.filter) conditions.push({ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value });
             const rows = await App.services.api.post(col.lookup.url + '/search', { conditions }, { baseUrl: '' });
-            this.draftOptions[col.name] = this.sortOptions(this.pickableOptions(rows, col.lookup.key, col.lookup.text, col.pickable));
+            this.draftOptions[col.name] = this.sortOptions(this.pickableOptions(rows, col.lookup.key, col.lookup.text, col.pickable), col.ordered);
             if (adjust) {
               // Only a row the picker rule lets the user pick is auto-selected.
               const pickable = this.draftOptions[col.name].filter(o => !o.disabled);

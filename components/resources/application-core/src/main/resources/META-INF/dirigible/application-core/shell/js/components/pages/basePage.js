@@ -34,9 +34,15 @@ function basePage() {
      * A" several times over (issue #7464). This is the DEFAULT ordering for an otherwise unconfigured
      * picker; a hierarchy picker's depth-indented options are built by hierarchizeOptions and never
      * pass through here. Collation is textCollator's.
+     *
+     * `serverOrdered` is the opt-out: a target entity declaring `orderBy:` has already been listed in
+     * that order by its controller, and that order is the answer to this picker too.
      */
-    sortOptions(options) {
+    sortOptions(options, serverOrdered) {
       const list = options || [];
+      // The target declares its own row order (intent `orderBy:`, issue #7727), so the controller
+      // already listed its rows in it - re-sorting them by label would override what the model says.
+      if (serverOrdered) return list;
       const collator = this.textCollator();
       return list.sort((a, b) => collator.compare(String(a && a.text != null ? a.text : ''),
         String(b && b.text != null ? b.text : '')));

@@ -1044,6 +1044,24 @@ Names match like `order:` (case-insensitive, no name twice) and must be a field,
 column. Without `list:` the list shows the `major` properties (every one unless `major: false`) in
 control order, as before.
 
+**Default row order (`orderBy:` on an entity):** `list:` says WHICH columns a list shows, `order:` the
+sequence of the form's controls - neither says anything about the order of the ROWS, which without
+`orderBy:` is whatever the database returns (a chart of accounts reads "mixed"). Name the properties
+the rows sort by, each optionally with a direction:
+
+```yaml
+- name: Account
+  orderBy: [number]                            # ascending; a single property needs no list
+- name: SalesInvoice
+  orderBy: [{ field: date, dir: desc }, number]
+```
+
+Members are fields or to-one relations of the entity (a relation orders by its foreign key), matched
+like `order:`, no name twice, `dir` is `asc` (the default) or `desc`. It becomes the `ORDER BY` of the
+entity's list endpoint - so it is also the sibling order of a `hierarchy:` tree and the option order of
+every picker that targets the entity, which otherwise sorts its options by display text. A user's
+header click still re-sorts the list; `orderBy:` is only the default.
+
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
 then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a

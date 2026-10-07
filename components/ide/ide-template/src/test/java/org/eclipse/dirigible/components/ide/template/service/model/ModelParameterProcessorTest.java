@@ -115,6 +115,51 @@ class ModelParameterProcessorTest {
         assertSame(due, listed.get(3));
     }
 
+    /**
+     * The entity's default row order (intent {@code orderBy:}, dirigible #7727) reaches the generated
+     * list endpoint twice, because the two paths query differently: as the HQL fragment the paged and
+     * filtered queries append, and as the Criteria chain the scoped (my / partner) surfaces list
+     * through. Both say the same thing, so they are derived from the one attribute.
+     */
+    @Test
+    void anOrderByReachesBothQueryShapes() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Number", "VARCHAR"), property("Date", "DATE"));
+        entity.put("orderBy", "Date desc,Number");
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals("e.Date desc, e.Number asc", entity.get("orderByHql"), "a term without a direction is ascending");
+        assertEquals(".orderByDesc(\"Date\").orderByAsc(\"Number\")", entity.get("orderByCriteria"));
+    }
+
+    /**
+     * A hand-modeled entity says the same thing through the entity editor's per-property
+     * {@code dataOrderBy}, so its list is ordered too - one clause, whichever way it was authored.
+     */
+    @Test
+    void theEntityEditorsOwnOrderingDrivesTheSameClause() {
+        Map<String, Object> number = property("Number", "VARCHAR");
+        Map<String, Object> date = property("Date", "DATE");
+        date.put("dataOrderBy", "DESC");
+        number.put("dataOrderBy", "ASC");
+
+        Map<String, Object> entity = entity("Invoice", "Invoices", number, date);
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals("e.Number asc, e.Date desc", entity.get("orderByHql"), "in the properties' own order");
+    }
+
+    /** An entity declaring neither leaves no clause, so its queries are emitted exactly as before. */
+    @Test
+    void noDeclaredOrderLeavesTheQueriesAlone() {
+        Map<String, Object> entity = entity("Invoice", "Invoices", property("Number", "VARCHAR"));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertNull(entity.get("orderByHql"));
+        assertNull(entity.get("orderByCriteria"));
+    }
+
     /** Without a {@code listOrder} the list follows the control order, as before #7614. */
     @Test
     @SuppressWarnings("unchecked")
