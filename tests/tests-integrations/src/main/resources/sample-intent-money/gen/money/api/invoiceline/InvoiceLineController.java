@@ -271,7 +271,7 @@ public class InvoiceLineController {
         if (entity.Description == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Description' property is required");
         }
-        if (entity.Description != null && entity.Description.length() > 200) {
+        if (entity.Description.length() > 200) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Description' exceeds the maximum length of 200");
         }
         if (entity.Quantity == null) {
