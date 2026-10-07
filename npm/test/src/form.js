@@ -86,9 +86,20 @@ export async function resolveRelationSamples(request, manifest, entity) {
     if (relation.entityStatus) continue;
     // a filtered picker needs a matching candidate, so fetch a page and filter client-side; a
     // constrained relation needs alternatives to choose from
-    const wide = relation.where || relation.leafOnly || constrained.has(relation.name);
+    const wide =
+      relation.where || relation.leafOnly || relation.pickable || relation.forbiddenTarget || constrained.has(relation.name);
     const { rows: fetched, labelFrom } = await fetchRows(relation, wide ? 200 : 1);
     let rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
+    // A picker rule narrows what the chooser OFFERS (dirigible #7663) and the child's own
+    // forbidWhen decides which parent it accepts at all (#7667). Both refuse a row the manifest
+    // otherwise describes as a candidate, so the sample has to respect them or the record is built
+    // from a row the UI never offers and the REST create is answered 400.
+    if (rows?.length && relation.pickable?.when?.length) {
+      rows = rows.filter((row) => relation.pickable.when.every((term) => termHolds(row, term)));
+    }
+    if (rows?.length && relation.forbiddenTarget?.length) {
+      rows = rows.filter((row) => !relation.forbiddenTarget.some((term) => termHolds(row, term)));
+    }
     if (relation.leafOnly && rows?.length) {
       // the generated validation rejects a non-leaf target - pick a row no other row parents
       const prop = relation.leafOnly.hierarchyProperty;
@@ -97,7 +108,7 @@ export async function resolveRelationSamples(request, manifest, entity) {
     }
     if (!rows?.length) {
       // a required FK cannot be satisfied - fail loudly; an optional one is simply left unset
-      if (relation.required) throw new Error(`Relation ${entity.name}.${relation.name}: no ${relation.to} rows to pick from`);
+      if (relation.required) throw new Error(`Relation ${entity.name}.${relation.name}: ${noCandidateReason(relation)}`);
       continue;
     }
     const label = rows[0][labelFrom];
@@ -177,4 +188,27 @@ export async function fillForm(page, manifest, entity, record, relationSamples, 
   const triggers = pickable.filter((s) => !s.relation.dependsOn);
   const dependents = pickable.filter((s) => s.relation.dependsOn);
   for (const sample of [...triggers, ...dependents]) await pickDropdown(page, sample.relation, sample.label);
+}
+
+// One term of a picker rule or of a forbidWhen reaching through a relation, as the manifest writes
+// it: `{ by, op, value }` with `op` one of eq / ne / present / absent, a presence test carrying no
+// value. Compared as strings, because an id arrives as a number from REST and as text from a
+// rendered option.
+function termHolds(row, term) {
+  const value = row?.[term.by];
+  const empty = value == null || String(value).trim() === '';
+  if (term.op === 'present') return !empty;
+  if (term.op === 'absent') return empty;
+  if (term.op === 'ne') return String(value) !== String(term.value);
+  return String(value) === String(term.value);
+}
+
+// Why a required relation had nothing to pick: the rule that excluded every row, in the words the
+// model authored it in, so the failure names the business rule rather than "no rows".
+function noCandidateReason(relation) {
+  const refusal = (relation.forbiddenTarget ?? []).find((term) => term.message)?.message;
+  if (refusal) return `every ${relation.to} is refused - ${refusal}`;
+  if (relation.forbiddenTarget?.length) return `every ${relation.to} is in a state this record refuses`;
+  if (relation.pickable?.when?.length) return `no ${relation.to} row satisfies the picker rule`;
+  return `no ${relation.to} rows to pick from`;
 }
