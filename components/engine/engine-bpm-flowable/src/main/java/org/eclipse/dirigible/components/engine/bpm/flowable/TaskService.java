@@ -209,6 +209,18 @@ public interface TaskService {
 
     List<IdentityLink> getTaskIdentityLinks(String taskId);
 
+    /**
+     * The identity links of a task a LISTING query just returned, without re-validating that the task
+     * exists (issue #7232). {@link #getTaskIdentityLinks(String)} validates first, which is right for a
+     * caller holding an id from the outside - and is a second statement per row for a listing that read
+     * the task one statement ago. A task completed in between simply has no links, and the listing's
+     * own completed-task path is what omits it.
+     *
+     * @param taskId the id of a task the caller just listed
+     * @return its identity links
+     */
+    List<IdentityLink> getListedTaskIdentityLinks(String taskId);
+
     void setTaskVariables(String taskId, Map<String, Object> variables);
 
     Object getTaskVariable(String taskId, String variableName);

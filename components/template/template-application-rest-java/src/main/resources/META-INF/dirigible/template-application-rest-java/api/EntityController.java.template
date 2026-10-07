@@ -117,12 +117,12 @@ public class ${name}Controller {
         if (${masterEntityId} != null) {
             Map<String, Object> params = new LinkedHashMap<>();
             params.put("${masterEntityId}", ${masterEntityId});
-            result = repository.query("from ${javaGenFolderName}_${name}Entity e where e.${masterEntityId} = :${masterEntityId}", params);
+            result = repository.query("from ${javaGenFolderName}_${name}Entity e where e.${masterEntityId} = :${masterEntityId}#if($orderByHql) order by ${orderByHql}#end", params);
         } else {
-            result = repository.findAll(actualLimit, actualOffset);
+            result = repository.findAll(actualLimit, actualOffset#if($orderByHql), "${orderByHql}"#end);
         }
 #else
-        List<${name}Entity> result = repository.findAll(actualLimit, actualOffset);
+        List<${name}Entity> result = repository.findAll(actualLimit, actualOffset#if($orderByHql), "${orderByHql}"#end);
 #end
 #if($isEntityPropertySecurityEnabled)
         result.forEach(this::redactRead);
@@ -656,6 +656,11 @@ public class ${name}Controller {
                 first = false;
             }
         }
+#if($orderByHql)
+        // The entity's declared default row order (intent `orderBy:`): a filtered list reads in the
+        // same order as the unfiltered one, unless the caller sorted it by a column of their own.
+        hql.append(" order by ${orderByHql}");
+#end
         return repository.query(hql.toString(), params);
     }
 

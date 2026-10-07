@@ -52,7 +52,7 @@ class BpmInboxEndpointVanishedTaskTest {
         when(task.getProcessInstanceId()).thenReturn("instance-" + id);
         when(task.getProcessVariables()).thenReturn(Map.of());
         when(bpmService.getProcessInstanceById("instance-" + id)).thenReturn(new ProcessInstanceData());
-        when(bpmService.getTaskIdentityLinks(id)).thenReturn(List.of());
+        when(bpmService.getListedTaskIdentityLinks(id)).thenReturn(List.of());
         when(bpmService.isTaskActive(id)).thenReturn(true);
         return task;
     }
@@ -61,7 +61,7 @@ class BpmInboxEndpointVanishedTaskTest {
     @Test
     void aTaskCompletedBeforeItsIdentityLinksAreReadIsOmitted() {
         List<Task> found = List.of(task("t1"), task("t2"), task("t3"));
-        when(bpmService.getTaskIdentityLinks("t2")).thenThrow(
+        when(bpmService.getListedTaskIdentityLinks("t2")).thenThrow(
                 new IllegalArgumentException("Task with id [t2] not found or does not belong to current tenant"));
         when(bpmService.isTaskActive("t2")).thenReturn(false);
         when(bpmService.findTasksWithProcessVariables(PrincipalType.CANDIDATE_GROUPS)).thenReturn(found);
@@ -93,7 +93,7 @@ class BpmInboxEndpointVanishedTaskTest {
     void aFailureOnATaskThatStillExistsStillFailsTheList() {
         List<Task> found = List.of(task("t1"));
         IllegalStateException failure = new IllegalStateException("database unavailable");
-        when(bpmService.getTaskIdentityLinks("t1")).thenThrow(failure);
+        when(bpmService.getListedTaskIdentityLinks("t1")).thenThrow(failure);
         when(bpmService.findTasksWithProcessVariables(PrincipalType.ASSIGNEE)).thenReturn(found);
 
         IllegalStateException thrown = assertThrows(IllegalStateException.class, () -> endpoint.getTasks("assignee"));
@@ -105,7 +105,7 @@ class BpmInboxEndpointVanishedTaskTest {
     @Test
     void aProcessInstanceListingOmitsAVanishedTaskToo() {
         List<Task> found = List.of(task("t1"), task("t2"));
-        when(bpmService.getTaskIdentityLinks("t1")).thenThrow(
+        when(bpmService.getListedTaskIdentityLinks("t1")).thenThrow(
                 new IllegalArgumentException("Task with id [t1] not found or does not belong to current tenant"));
         when(bpmService.isTaskActive("t1")).thenReturn(false);
         when(bpmService.findTasksWithProcessVariables("instance", PrincipalType.ASSIGNEE)).thenReturn(found);

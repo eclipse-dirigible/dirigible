@@ -332,6 +332,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
               # postings source-FK-copy counterparty (#6533): a plain nomenclature copied by FK id.
               - name: Party
+                orderBy: [name]
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
@@ -340,6 +341,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # schema gains the composite constraint over (PARTY, CODE) and a colliding write is
               # answered with the authored message rather than a server error.
               - name: PartyCode
+                # entity-level orderBy (#7727): the list reads newest code first instead of in
+                # insertion order, and the Party picker below keeps ITS target's declared order.
+                orderBy: [{ field: code, dir: desc }]
                 unique:
                   - { fields: [party, code], message: 'This "code" is already registered for the party' }
                 fields:
@@ -2743,6 +2747,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String partyCodeController = contentOf("gen/emission/api/partycode/PartyCodeController.java");
         assertTrue(partyCodeController.contains("This \\\"code\\\" is already registered for the party"),
                 "the generated controller must carry the authored conflict message");
+        // entity-level orderBy (#7727): the declared row order has to reach BOTH query shapes of the
+        // list endpoint - the paged read and the filtered search - because an unordered page is free
+        // to be a different slice on every call, so ordering it after the fact orders the wrong rows.
+        assertTrue(partyCodeController.contains("repository.findAll(actualLimit, actualOffset, \"e.Code desc\")"),
+                "the paged list must ask the database for the declared order: " + partyCodeController);
+        assertTrue(partyCodeController.contains("hql.append(\" order by e.Code desc\")"),
+                "a filtered list must read in the same order as the unfiltered one");
+        // ...and a picker whose target declares one keeps it rather than re-sorting by display text.
+        String partyCodeForm = contentOf("gen/emission/js/components/pages/PartyCode/PartyCodeFormPage.js");
+        assertTrue(partyCodeForm.contains("this.sortOptions(") && partyCodeForm.contains(", 'true')"),
+                "the Party picker must be told its target is already ordered by the server, so it keeps that order "
+                        + "instead of re-sorting by display text: " + partyCodeForm);
         assertTrue(schema.contains("EMISSION_UNIT_LANG"), "multilingual must emit the _LANG translation table into the schema");
         // manyToMany: the link entity is an ordinary entity from parse time on, so it must reach the
         // schema as its own table and the REST layer as its own (detail) controller. Asserting the
@@ -3197,6 +3213,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
                 "applyServerFilter must discard a stale response superseded by a newer keystroke");
+        // A boolean column filters on a Yes/No choice that sends EQ with a real true/false. As a
+        // string column it got a text box and LIKE '%true%', which the controller coerced to
+        // Boolean.valueOf("%true%") = false - so neither "true" nor "false" ever matched (#7720).
+        String channelManageList = contentOf("gen/emission/js/components/pages/Settings/ChannelManageListPage.js");
+        assertTrue(channelManageList.contains("{ name: 'Active', type: 'boolean'"),
+                "a boolean column must reach the Filter menu as type 'boolean', not 'string' (#7720)");
+        assertTrue(channelManageList.contains("operator: 'EQ', value: raw === true || String(raw) === 'true'"),
+                "a boolean filter must send EQ with a real boolean, never LIKE '%true%' (#7720)");
+        String channelManageView = contentOf("gen/emission/views/Settings/Channel-manage-list.html");
+        assertTrue(
+                channelManageView.contains("editedFilterColumn.type === 'boolean'")
+                        && channelManageView.contains("<option value=\"false\""),
+                "a boolean filter must be a Yes/No choice rather than a text box (#7720)");
         assertTrue(campaignListPage.contains("exportRowsCsv(this.sortedItems"),
                 "the master's list must export its filtered+sorted rows as CSV");
         assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList()"),
@@ -4727,6 +4756,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.Id == 1 }.Channels", equalTo("1,3"))
                                                  .body("find { it.Id == 2 }.Channels", nullValue()),
                 30);
+        // #7720: the condition the manage list's boolean filter now sends binds a real boolean - every
+        // seeded channel is active, so Yes answers all three and No answers none.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Active\",\"operator\":\"EQ\",\"value\":true}]}")
+                                                 .when()
+                                                 .post(API + "/settings/ChannelController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(3)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Active\",\"operator\":\"EQ\",\"value\":false}]}")
+                                                 .when()
+                                                 .post(API + "/settings/ChannelController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
         // A write posts a SET, so the caller may send it in any order and with a repeat; the stored value
         // is the normative shape (ascending, de-duplicated) because the REPOSITORY normalizes it - not
         // only the generated form. Before that, "3,1,1" persisted verbatim and was silently rewritten
@@ -5530,6 +5575,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
+        // entity-level orderBy (#7727): the list the UI reads comes back in the declared order - the
+        // whole point being that the ORDER BY is the database's, so paging stays coherent. Asserted
+        // over the live endpoint because a token assertion says nothing about what the query returns.
+        restAssuredExecutor.execute(() -> {
+            List<String> codes = given().when()
+                                        .get(API + "/partycode/PartyCodeController")
+                                        .then()
+                                        .statusCode(200)
+                                        .extract()
+                                        .path("Code");
+            List<String> descending = new java.util.ArrayList<>(codes);
+            descending.sort(java.util.Comparator.reverseOrder());
+            assertEquals(descending, codes, "the list must read in the entity's declared orderBy, got: " + codes);
+        });
+
         // ...and immutableWhen now enforces: user writes and deletes on the POSTED record are 409.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId
@@ -5912,6 +5972,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Status", equalTo(3)));
+        // A record that does not exist is 404, never a 500 (#6540): the endpoint re-loads by id and
+        // the absent case is its own answer, the way the guard violations below are theirs. A missing
+        // id in the body stays 400 - that is a malformed request, not a missing record.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\": 999999}")
+                                                 .when()
+                                                 .post(transitionRun)
+                                                 .then()
+                                                 .statusCode(404)
+                                                 .body("error", containsString("not found")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{}")
+                                                 .when()
+                                                 .post(transitionRun)
+                                                 .then()
+                                                 .statusCode(400));
         // ...a second cancel is rejected from the wrong status (409, record untouched)...
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + cancellable.get() + "}")

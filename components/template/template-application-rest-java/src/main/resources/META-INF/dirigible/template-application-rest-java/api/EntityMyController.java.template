@@ -163,7 +163,7 @@ public class ${name}MyController {
         if (me == null) {
             return List.of();
         }
-        List<${name}Entity> result = repository.findAll(Criteria.create().eq("${personalProperty}", me));
+        List<${name}Entity> result = repository.findAll(Criteria.create().eq("${personalProperty}", me)#if($orderByCriteria)${orderByCriteria}#end);
         result.forEach(this::scrub);
         return result;
     }
