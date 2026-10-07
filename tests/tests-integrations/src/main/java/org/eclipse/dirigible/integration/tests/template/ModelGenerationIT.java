@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.ide.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -140,6 +141,12 @@ class ModelGenerationIT extends IntegrationTest {
      */
     private static final Pattern DANGLING_MEMBER_ACCESS = Pattern.compile("\\w\\.[ \\t]*[=;),!]");
 
+    /** The fixture whose Item entity has the LIST layout and a relation column to Category. */
+    private static final String CATALOG = "catalog.model";
+
+    /** The shared shell mixin every generated page spreads, evaluated under the rendered list page. */
+    private static final String BASE_PAGE = "/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js";
+
     /** The workspace service. */
     @Autowired
     private WorkspaceService workspaceService;
@@ -171,6 +178,9 @@ class ModelGenerationIT extends IntegrationTest {
             // keeping its own MANAGE layout - the partitions no other fixture exercises, because none
             // of them declares a view.
             new Case("views.model", TEMPLATE_APPLICATION, false), //
+            // The LIST layout (an entity browsed read-only, no manage page), with a relation column -
+            // the one layout no other fixture declares (#7721).
+            new Case(CATALOG, TEMPLATE_APPLICATION, false), //
             // The glue fixture's posting is deliberately written in the shape a .glue committed before
             // #7163 holds - a header assignment carrying its expression alone, none of the keys the
             // hoisted-local comparison reads. Velocity renders an undefined reference as its own
@@ -204,6 +214,7 @@ class ModelGenerationIT extends IntegrationTest {
         for (Case testCase : CASES) {
             problems.addAll(check(testCase));
         }
+        problems.addAll(listSortProblems());
         assertTrue(problems.isEmpty(),
                 () -> "The generation pipeline has " + problems.size() + " problem(s):\n\n" + String.join("\n\n", problems));
     }
@@ -343,6 +354,82 @@ class ModelGenerationIT extends IntegrationTest {
     private static String withUnreadAttribute(String model) {
         return PROPERTY_NAME.matcher(model)
                             .replaceAll(Matcher.quoteReplacement("\"" + UNREAD_ATTRIBUTE + "\": \"asked-for\", ") + "$0");
+    }
+
+    /**
+     * Runs the rendered LIST page's column sort over a relation column and collects what is wrong with
+     * the order (dirigible #7721).
+     *
+     * <p>
+     * The cell shows the referenced record's label, so that label is what the column sorts by; the
+     * foreign key behind it orders the rows the way the database happened to number them. The rows
+     * below are keyed so that the two orders disagree in both directions. The page is evaluated over
+     * the shipped {@code basePage.js}, so the ordering is the runtime's own collator.
+     *
+     * @return the problems found, empty when the column sorts by its label
+     * @throws IOException when the fixture or a template is missing, or rendering fails
+     */
+    private List<String> listSortProblems() throws IOException {
+        Map<String, String> rendered = render(workspaceName(CATALOG, TEMPLATE_APPLICATION), CATALOG, TEMPLATE_APPLICATION);
+        String page = rendered.entrySet()
+                              .stream()
+                              .filter(file -> file.getKey()
+                                                  .endsWith("/ItemListPage.js"))
+                              .map(Map.Entry::getValue)
+                              .findFirst()
+                              .orElse(null);
+        if (page == null) {
+            return List.of("[" + CATALOG + "] rendered no ItemListPage.js for its LIST entity: " + rendered.keySet());
+        }
+        List<String> problems = new ArrayList<>();
+        String ascending = sortOrder(page, "asc");
+        if (!"12,11,10".equals(ascending)) {
+            problems.add("[" + CATALOG + "] sorting the Category column ascending must order the rows by the label the cell shows"
+                    + " (Books, garden, Tools -> 12,11,10), got " + ascending);
+        }
+        String descending = sortOrder(page, "desc");
+        if (!"10,11,12".equals(descending)) {
+            problems.add(
+                    "[" + CATALOG + "] sorting the Category column descending must reverse the label order (10,11,12), got " + descending);
+        }
+        return problems;
+    }
+
+    /**
+     * Sorts three Item rows by their Category relation on the rendered list page.
+     *
+     * @param page the rendered ItemListPage.js
+     * @param direction {@code asc} or {@code desc}
+     * @return the rows' ids, comma-joined, in the order the page lists them
+     * @throws IOException when the shipped basePage.js is missing
+     */
+    private static String sortOrder(String page, String direction) throws IOException {
+        String basePage;
+        try (InputStream in = ModelGenerationIT.class.getResourceAsStream(BASE_PAGE)) {
+            if (in == null) {
+                throw new IOException("Missing classpath resource [" + BASE_PAGE + "]");
+            }
+            basePage = IOUtils.toString(in, StandardCharsets.UTF_8);
+        }
+        try (Context context = Context.newBuilder("js")
+                                      // The interpreter-only notice is written straight to the native
+                                      // stream, which the forked test JVM reports as a corrupted channel.
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+            context.eval("js", basePage);
+            context.eval("js", page);
+            return context.eval("js",
+                    "(() => { const page = pages['ItemListPage']();"
+                            + " page.lookups = { Category: { 1: 'Tools', 2: 'garden', 3: 'Books' } };"
+                            + " page.items = [{ Id: 10, Category: 1 }, { Id: 11, Category: 2 }, { Id: 12, Category: 3 }];"
+                            + " page.sortColumn = 'Category'; page.sortDirection = '" + direction + "';"
+                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
+                          .asString();
+        }
     }
 
     /**

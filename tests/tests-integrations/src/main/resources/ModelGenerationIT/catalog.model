@@ -1,0 +1,147 @@
+{
+    "model": {
+        "entities": [
+            {
+                "properties": [
+                    {
+                        "dataAutoIncrement": "true",
+                        "dataName": "CATEGORY_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Id",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataLength": "100",
+                        "dataName": "CATEGORY_NAME",
+                        "dataNullable": "true",
+                        "dataType": "VARCHAR",
+                        "description": "",
+                        "name": "Name",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "100",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    }
+                ],
+                "caption": "Manage entity Category",
+                "dataCount": "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}CATEGORY\"",
+                "dataName": "CATEGORY",
+                "dataQuery": "",
+                "description": "Manage entity Category",
+                "generateDefaultRoles": "false",
+                "generateReport": "false",
+                "icon": "/services/web/resources/unicons/file.svg",
+                "layoutType": "MANAGE",
+                "menuIndex": "100",
+                "menuKey": "category",
+                "menuLabel": "Category",
+                "name": "Category",
+                "perspectiveHeader": "",
+                "perspectiveIcon": "/services/web/resources/unicons/tag.svg",
+                "perspectiveLabel": "Category",
+                "perspectiveName": "Category",
+                "perspectiveNavId": "",
+                "perspectiveOrder": "1",
+                "perspectiveRole": "",
+                "title": "Category",
+                "tooltip": "Category",
+                "type": "PRIMARY"
+            },
+            {
+                "properties": [
+                    {
+                        "dataAutoIncrement": "true",
+                        "dataName": "ITEM_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Id",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataLength": "100",
+                        "dataName": "ITEM_NAME",
+                        "dataNullable": "true",
+                        "dataType": "VARCHAR",
+                        "description": "",
+                        "name": "Name",
+                        "tooltip": "",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "100",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "dataName": "ITEM_CATEGORY",
+                        "dataNullable": "true",
+                        "dataType": "INTEGER",
+                        "description": "",
+                        "name": "Category",
+                        "tooltip": "",
+                        "widgetDropDownKey": "Id",
+                        "widgetDropDownValue": "Name",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "DROPDOWN",
+                        "relationshipName": "Item_Category",
+                        "relationshipEntityName": "Category",
+                        "relationshipEntityPerspectiveName": "Category",
+                        "relationshipEntityPerspectiveLabel": "Entities"
+                    }
+                ],
+                "caption": "List entity Item",
+                "dataCount": "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}ITEM\"",
+                "dataName": "ITEM",
+                "dataQuery": "",
+                "description": "List entity Item",
+                "generateDefaultRoles": "false",
+                "generateReport": "false",
+                "icon": "/services/web/resources/unicons/file.svg",
+                "layoutType": "LIST",
+                "menuIndex": "100",
+                "menuKey": "item",
+                "menuLabel": "Item",
+                "name": "Item",
+                "perspectiveHeader": "",
+                "perspectiveIcon": "/services/web/resources/unicons/list-ul.svg",
+                "perspectiveLabel": "Item",
+                "perspectiveName": "Item",
+                "perspectiveNavId": "",
+                "perspectiveOrder": "2",
+                "perspectiveRole": "",
+                "title": "Item",
+                "tooltip": "Item",
+                "type": "PRIMARY"
+            }
+        ],
+        "perspectives": [
+            {
+                "name": "Category",
+                "label": "Category",
+                "icon": "/services/web/resources/unicons/tag.svg",
+                "order": "1"
+            },
+            {
+                "name": "Item",
+                "label": "Item",
+                "icon": "/services/web/resources/unicons/list-ul.svg",
+                "order": "2"
+            }
+        ],
+        "navigations": []
+    }
+}

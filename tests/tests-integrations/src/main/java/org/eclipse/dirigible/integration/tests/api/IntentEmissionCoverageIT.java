@@ -3120,6 +3120,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the master's list must load the EntityStatus label lookup like any dropdown relation");
         assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status))"),
                 "the master's table must render the EntityStatus column as a resolved badge, not a raw id");
+        // ...and a relation column sorts by that label, not by the key behind it (#7721): keys 1, 2, 3
+        // label as Sent, draft, Approved, so key order and label order disagree.
+        String campaignRows =
+                "[{ Id: 10, Status: 1, Channels: '2' }, { Id: 11, Status: 2, Channels: '1,2' }," + " { Id: 12, Status: 3, Channels: '3' }]";
+        String campaignLookups = "{ Status: { 1: 'Sent', 2: 'draft', 3: 'Approved' }, Channels: { 1: 'Web', 2: 'Email', 3: 'Phone' } }";
+        assertEquals("12,11,10", pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Status", "asc"),
+                "a relation column must sort by its displayed label, case-insensitively");
+        assertEquals("10,11,12", pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Status", "desc"),
+                "a descending relation sort must reverse the label order");
+        assertEquals("10,12,11",
+                pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
+                "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
         assertFalse(campaignListView.contains("detailPanel("), "the record sheet shows the master's fields only, not its collections");
         assertTrue(contentOf("gen/emission/views/Campaign/Campaign-form.html").contains("detailPanel({...d"),
                 "a master's detail collections must render on the form its Preview / Edit open");
@@ -7682,6 +7694,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "(() => { const page = pages['" + componentName + "'](); page.options" + statusProperty + " = " + options + ";"
                             + " page.form = { " + statusProperty + ": " + current + " };"
                             + " return '[' + page.statusSteps().map(o => o.value).join(',') + '] active ' + page.activeStep(); })()")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated list page's column sort: the primary keys of {@code rows}, comma-joined, in the
+     * order {@code sortedItems} returns them when sorted by {@code column} in {@code direction}, with
+     * {@code lookups} as the loaded relation labels. The page is evaluated over the shipped
+     * {@code basePage.js}, so the ordering is the runtime's own collator, not a stub of it.
+     */
+    private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
+            String direction) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
+                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
+                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
                           .asString();
         }
     }
