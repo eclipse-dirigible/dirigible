@@ -3179,6 +3179,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "displayState must keep the settled view while a filter query is in flight, never the empty state");
         assertTrue(unitManageList.contains("if (seq !== this.filterSeq) return;"),
                 "applyServerFilter must discard a stale response superseded by a newer keystroke");
+        // A boolean column filters on a Yes/No choice that sends EQ with a real true/false. As a
+        // string column it got a text box and LIKE '%true%', which the controller coerced to
+        // Boolean.valueOf("%true%") = false - so neither "true" nor "false" ever matched (#7720).
+        String channelManageList = contentOf("gen/emission/js/components/pages/Settings/ChannelManageListPage.js");
+        assertTrue(channelManageList.contains("{ name: 'Active', type: 'boolean'"),
+                "a boolean column must reach the Filter menu as type 'boolean', not 'string' (#7720)");
+        assertTrue(channelManageList.contains("operator: 'EQ', value: raw === true || String(raw) === 'true'"),
+                "a boolean filter must send EQ with a real boolean, never LIKE '%true%' (#7720)");
+        String channelManageView = contentOf("gen/emission/views/Settings/Channel-manage-list.html");
+        assertTrue(
+                channelManageView.contains("editedFilterColumn.type === 'boolean'")
+                        && channelManageView.contains("<option value=\"false\""),
+                "a boolean filter must be a Yes/No choice rather than a text box (#7720)");
         assertTrue(campaignListPage.contains("exportRowsCsv(this.sortedItems"),
                 "the master's list must export its filtered+sorted rows as CSV");
         assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList()"),
@@ -4709,6 +4722,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.Id == 1 }.Channels", equalTo("1,3"))
                                                  .body("find { it.Id == 2 }.Channels", nullValue()),
                 30);
+        // #7720: the condition the manage list's boolean filter now sends binds a real boolean - every
+        // seeded channel is active, so Yes answers all three and No answers none.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Active\",\"operator\":\"EQ\",\"value\":true}]}")
+                                                 .when()
+                                                 .post(API + "/settings/ChannelController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(3)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Active\",\"operator\":\"EQ\",\"value\":false}]}")
+                                                 .when()
+                                                 .post(API + "/settings/ChannelController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
         // A write posts a SET, so the caller may send it in any order and with a repeat; the stored value
         // is the normative shape (ascending, de-duplicated) because the REPOSITORY normalizes it - not
         // only the generated form. Before that, "3,1,1" persisted verbatim and was silently rewritten
