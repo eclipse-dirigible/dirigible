@@ -28,17 +28,19 @@ document.addEventListener('alpine:init', () => {
     pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
-    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ.
+    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ,
+    // boolean -> EQ with a real true/false picked from Yes/No (a LIKE '%true%' reaches the controller as
+    // Boolean.valueOf("%true%") = false and matches nothing, issue #7720).
     // FK columns render a dropdown from the same lookup maps the list loads. Order + `number` mirror
     // the table header (major, non-auto-increment properties). A MULTISELECT column is type 'none':
     // its stored value is a key LIST ("1,3"), so an EQ can only match the exact whole list and a LIKE
-    // by id false-positives on multi-digit keys - buildConditions handles only string|number|fk|date,
+    // by id false-positives on multi-digit keys - buildConditions handles only string|number|fk|date|boolean,
     // so 'none' contributes no condition by construction and the filter row renders an empty cell.
     columnFilters: {},
     filterColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
 #end
 #end
     ],
@@ -426,6 +428,8 @@ document.addEventListener('alpine:init', () => {
           conds.push({ propertyName: col.name, operator: 'EQ', value: isNaN(n) ? raw : n });
         } else if (col.type === 'date') {
           conds.push({ propertyName: col.name, operator: 'EQ', value: raw });
+        } else if (col.type === 'boolean') {
+          conds.push({ propertyName: col.name, operator: 'EQ', value: raw === true || String(raw) === 'true' });
         }
       }
       return conds;
@@ -488,6 +492,10 @@ document.addEventListener('alpine:init', () => {
       const v = this.columnFilters[col.name];
       if (col.type === 'fk')   return this.lookupText(col.name, v);
       if (col.type === 'date') return this.displayValue(v, true);
+      if (col.type === 'boolean') {
+        const yes = v === true || String(v) === 'true';
+        return window.T ? (yes ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No')) : (yes ? 'Yes' : 'No');
+      }
       return String(v);
     },
 
