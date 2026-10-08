@@ -13,54 +13,28 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.springframework.stereotype.Component;
 
 /**
  * Decides which configuration keys a tenant is allowed to override through its per-tenant
  * configuration.
  * <p>
- * This is an explicit white-list of full configuration keys (exact match, no wildcards). A key is
+ * This is an explicit white-list of full configuration keys (exact match, no wildcards): the
+ * {@link DirigibleConfig} entries marked tenant-overridable, in their tenant order. A key is
  * injectable only when it is one of {@link #ALLOWED_KEYS}; everything else is stored but inert, so
  * a tenant can never shadow infrastructure keys (database, repository, security, multi-tenancy
- * plumbing, ...). For now only the branding properties are exposed; add concrete keys to
- * {@link #ALLOWED_KEYS} as more become safe to override per tenant.
+ * plumbing, ...). To expose another key, mark its entry with {@code meta().tenant(order)} once it
+ * is safe to override per tenant - read per call, not cached at startup.
  */
 @Component
 class TenantConfigurationKeyPolicy {
 
     /**
-     * The full configuration keys a tenant is allowed to override - the branding properties for now.
+     * The full configuration keys a tenant is allowed to override, in display order: branding, the
+     * Region & Language settings, the documents switches and the application base URL.
      */
-    private static final List<String> ALLOWED_KEYS = List.of( //
-            "DIRIGIBLE_BRANDING_NAME", //
-            "DIRIGIBLE_BRANDING_SUBTITLE", //
-            "DIRIGIBLE_BRANDING_BRAND", //
-            "DIRIGIBLE_BRANDING_BRAND_URL", //
-            "DIRIGIBLE_BRANDING_FAVICON", //
-            "DIRIGIBLE_BRANDING_THEME", //
-            "DIRIGIBLE_BRANDING_PREFIX", //
-            "DIRIGIBLE_BRANDING_ANALYTICS", //
-            // The platform language set the Region & Language picker offers (comma-separated codes,
-            // e.g. "en,bg,fr"). Per-tenant: each tenant decides which languages its users see; the
-            // modules themselves carry whatever translations they ship, falling back to the default
-            // (first) language for anything missing.
-            "DIRIGIBLE_APPLICATION_LANGUAGES", //
-            // The tenant's country as an ISO 3166-1 alpha-2 code, resolving the country-scoped label
-            // variants a generated application declares. Per-tenant by definition: one deployment
-            // serves companies in several jurisdictions, and the term a field goes by follows the
-            // company's country rather than the reader's language.
-            "DIRIGIBLE_APPLICATION_COUNTRY", //
-            // Serve and store Office documents with the legacy Microsoft mime types. Per-tenant
-            // because it depends on the client software a tenant's users actually open files with;
-            // the resolver reads it per call, so a change applies without a restart.
-            "DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", //
-            // Whether the per-path CMS access grants are enforced at all. Per-tenant because whether
-            // a tenant restricts folders by role is its own decision; the resolver reads it per
-            // request, so switching it applies immediately.
-            "DIRIGIBLE_CMS_ROLES_ENABLED", //
-            // The application's externally-reachable base URL (e.g. the {appUrl} notify token) -
-            // per-tenant because a tenant may be served from its own subdomain/host.
-            "DIRIGIBLE_APP_BASE_URL");
+    private static final List<String> ALLOWED_KEYS = DirigibleConfig.tenantOverridableKeys();
 
     /**
      * The full list of configuration keys a tenant may override, in display order.
