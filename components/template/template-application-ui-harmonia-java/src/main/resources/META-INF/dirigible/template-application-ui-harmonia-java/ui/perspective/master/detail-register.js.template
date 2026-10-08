@@ -20,6 +20,9 @@
 ## Input-format regex (intent field `pattern:`): the item dialog binds it as the input's HTML pattern.
 ## Pre-rendered as a JS literal by ModelParameterProcessor (a regex's backslashes must survive it).
 #macro(patternMeta $property)#if($property.widgetPatternJs), pattern: ${property.widgetPatternJs}#end#end
+## Input normalization (intent field `normalize:`, #7726): the item dialog applies it on blur, as the
+## server does on save. Pre-rendered as a JS function by ModelParameterProcessor.
+#macro(normalizeMeta $property)#if($property.normalizeJs), normalize: ${property.normalizeJs}#end#end
 ## Static option filter (intent `where:`): the item dialog's chooser narrows to matching rows; the
 ## table's label-resolution lookup stays on the full set so historical rows still resolve.
 #macro(optionsFilterMeta $property)#if($property.widgetOptionsFilterBy), filter: { by: '${property.widgetOptionsFilterBy}', value: ${property.widgetOptionsFilterValueJs} }#end#end
@@ -144,7 +147,7 @@ App.registerDetail('${masterEntity}', {
 ## can honour it.
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'MULTISELECT', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, multi: true, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.widgetOptionsEntityName}', creatable: false }#optionsFilterMeta($property)#sensitiveMeta($property) },
 #else
-    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property)#normalizeMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
 #end
 #end
 #end

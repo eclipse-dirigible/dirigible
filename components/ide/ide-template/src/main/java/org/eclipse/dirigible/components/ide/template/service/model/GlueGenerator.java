@@ -53,7 +53,7 @@ class GlueGenerator {
             "aborts", "deleteAborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages",
             "inboundFiles", "outbound", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
             "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "sends", "posts", "aggregates",
-            "postings", "printFeeders", "snapshots", "numbering", "resolves");
+            "postings", "postingReopens", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -124,7 +124,9 @@ class GlueGenerator {
             case "transitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
-            case "postings" -> each(collection, source, content, model, parameters, GlueGenerator::bindPosting);
+            // The reopen sweep renders from the posting it re-runs (#7703), so the two cannot
+            // disagree about which documents qualify.
+            case "postings", "postingReopens" -> each(collection, source, content, model, parameters, GlueGenerator::bindPosting);
             case "printFeeders" -> each(collection, source, content, model, parameters, GlueGenerator::bindPrintFeeder);
             case "snapshots" -> each(collection, source, content, model, parameters, GlueGenerator::bindSnapshot);
             case "numbering" -> each(collection, source, content, model, parameters, GlueGenerator::bindNumbering);
@@ -868,6 +870,17 @@ class GlueGenerator {
         copy(context, item, "name", "className", "isCreate", "sourcePerspective", "sourceEntity", "sourceKeyField", "guardProperty",
                 "guardValue", "targetEntity", "targetPk", "itemsEntity", "itemsFk", "backRefProperty", "stornoProperty",
                 "stornoFilterProperty", "hasRule", "ruleEntity", "ruleMatchProperty", "ruleMatchValueJava", "usedRuleColumns");
+        // The target's period lock (#7703): the handler asks the register before it writes, and the
+        // sweep re-runs what a closed period refused. Every key defaults to the EMPTY STRING rather
+        // than being left out, because the templates gate on it - an absent reference renders as its
+        // own literal and would read as "there is a lock" for every posting in a .glue written before
+        // the key existed.
+        for (String key : new String[] {"periodRegisterEntity", "periodRegisterPerspective", "periodRegisterKeyField",
+                "periodStartProperty", "periodEndProperty", "periodStatusProperty", "periodClosedValues", "periodDateProperty",
+                "periodSourceDateProperty", "reopenClassName", "reopenTopicSuffix"}) {
+            context.put(key, strOr(item, key, ""));
+        }
+        context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
         // The derived line rows, each cell and each row guard rendered from the reading the glue
         // carries (issue #7425); the classifier ternaries the handler null-guards up front are the
         // very cells that carry one, collected here rather than shipped twice.

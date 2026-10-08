@@ -29,8 +29,10 @@ import org.eclipse.dirigible.components.data.store.java.outbox.EventOutbox;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
+import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.hibernate.Session;
+import org.hibernate.StaleStateException;
 import org.hibernate.Transaction;
 import org.hibernate.engine.spi.EntityHolder;
 import org.hibernate.engine.spi.EntityKey;
@@ -42,6 +44,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import jakarta.persistence.LockModeType;
+import jakarta.persistence.OptimisticLockException;
 
 /**
  * Public CRUD facade for Dirigible Java entities. Designed to be used directly from client
@@ -124,6 +129,7 @@ public class JavaEntityStore {
                 // session with the transaction still active, making the outcome depend on what the
                 // pool does with such a connection rather than on an explicit rollback.
                 rollback(unit.transaction, ex);
+                requireNoConcurrentWrite(ex);
                 throw ex;
             }
             unit.dispatch();
@@ -132,6 +138,50 @@ public class JavaEntityStore {
             UNIT_OF_WORK.remove();
             unit.session.close();
         }
+    }
+
+    /**
+     * Whether the current thread runs inside a unit of work - see {@link #inUnitOfWork(Supplier)}.
+     *
+     * @return {@code true} while a unit of work is open on this thread
+     */
+    public boolean isInUnitOfWork() {
+        return UNIT_OF_WORK.get() != null;
+    }
+
+    /**
+     * Locks one row against every other writer until the current unit of work ends - a
+     * {@code SELECT ... FOR UPDATE}. A writer that reads a row and then writes it whole holds the row
+     * from the read on, so a targeted write another transaction makes in between (the process id a
+     * trigger stamps) waits for this unit's commit and lands after it, instead of being overwritten
+     * with the value read before it.
+     *
+     * <p>
+     * Only meaningful inside a unit of work: outside one the lock would be released the moment the
+     * statement's own transaction ended, so that is refused rather than silently doing nothing.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary-key value
+     * @return {@code true} when the row exists and is now locked, {@code false} when there is no such
+     *         row
+     * @throws IllegalStateException when no unit of work is open on this thread
+     */
+    public <T> boolean lockForUpdate(Class<T> type, Object id) {
+        UnitOfWork unit = UNIT_OF_WORK.get();
+        if (unit == null) {
+            throw new IllegalStateException(
+                    "A row lock lasts as long as its transaction - lock [" + type.getName() + "] inside a unit of work (UnitOfWork.run)");
+        }
+        RegisteredEntity meta = resolve(type);
+        unit.session.flush();
+        return !unit.session.createQuery("from " + meta.entityName() + " where " + meta.idField()
+                                                                                       .getName()
+                + " = :id", Map.class)
+                            .setParameter("id", id)
+                            .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                            .getResultList()
+                            .isEmpty();
     }
 
     /**
@@ -798,6 +848,7 @@ public class JavaEntityStore {
                 // Throwable for the same reason as in inUnitOfWork: an Error must roll this write
                 // back rather than ride out on the try-with-resources close.
                 rollback(tx, ex);
+                requireNoConcurrentWrite(ex);
                 throw ex;
             }
             dispatch(events);
@@ -858,6 +909,28 @@ public class JavaEntityStore {
      * reached through their own objects and never see the caller's session.
      */
     private static final ThreadLocal<UnitOfWork> UNIT_OF_WORK = new ThreadLocal<>();
+
+    /**
+     * What a failed write's caller is told when the write found a row it had read already changed or
+     * removed by another writer (a delete counting one row and deleting none): a
+     * {@link ConcurrentWriteException} - a conflict with current state the caller can repeat - in place
+     * of the persistence failure. Every other failure is left for the caller to rethrow as it was.
+     */
+    private static void requireNoConcurrentWrite(Throwable failure) {
+        if (!(failure instanceof ConcurrentWriteException) && isStaleState(failure)) {
+            throw new ConcurrentWriteException("The record was changed by another write while this one was in progress - nothing was"
+                    + " saved; reload it and try again", failure);
+        }
+    }
+
+    private static boolean isStaleState(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof StaleStateException || cause instanceof OptimisticLockException) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     /**
      * Rolls back a transaction whose work failed, keeping the original failure as the one the caller

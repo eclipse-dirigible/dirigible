@@ -1017,6 +1017,37 @@ class ModelParameterProcessorTest {
         assertEquals("^\\\\d{3}\\\\.\\\\d{2}$", property.get("widgetPatternJava"));
     }
 
+    /**
+     * A field's {@code normalize:} (#7726): the strip set as a Java string body, the whole step as a JS
+     * function that is safe verbatim inside a double-quoted HTML attribute, and the entity flagged.
+     */
+    @Test
+    void preRendersANormalizeStepForJavaAndTheForm() {
+        Map<String, Object> iban = property("Iban", "VARCHAR");
+        iban.put("normalizeTrim", "true");
+        iban.put("normalizeStrip", " \"'\\<&");
+        iban.put("normalizeCase", "upper");
+        Map<String, Object> label = property("Label", "VARCHAR");
+        Map<String, Object> entity = entity("Account", "Accounts", iban, label);
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(" \\\"'\\\\<&", iban.get("normalizeStripJava"));
+        String js = (String) iban.get("normalizeJs");
+        assertEquals("((v) => typeof v === 'string' ? v.trim().split('').filter((c) => !' \\u0022\\u0027\\u005c\\u003c\\u0026'.includes(c))"
+                + ".join('').toUpperCase() : v)", js);
+        assertFalse(js.contains("\"") || js.contains("&") || js.contains("<"), "the function must survive an HTML attribute: " + js);
+        assertNull(label.get("normalizeJs"), "a property without normalize gets no function");
+        assertTrue(Boolean.TRUE.equals(entity.get("hasNormalize")));
+    }
+
+    @Test
+    void anEntityWithoutNormalizeIsNotFlagged() {
+        Map<String, Object> entity = entity("Book", "Books", property("Code", "VARCHAR"));
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertNull(entity.get("hasNormalize"));
+    }
+
     @Test
     void marksAHierarchicalEntityAsNeedingReferenceValidation() {
         Map<String, Object> entity = entity("Category", "Categories", property("Name", "VARCHAR"));

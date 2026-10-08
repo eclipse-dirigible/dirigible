@@ -446,6 +446,15 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.
+- `normalize` (on a `string`/`text` field) - **what the value becomes before it is validated and stored** (#7726):
+  `- { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\+[1-9][0-9]{6,14}$' }`
+  stores a pasted `+359 898 123 456` or `+359-898-123-456` as `+359898123456` instead of refusing it. Transforms:
+  `trim`, `strip: "<characters>"` (removed wherever they occur), `upper`, `lower` - a list, or one bare transform
+  (`normalize: upper`). They run in a fixed order whatever order they are listed in: trim, strip, case. The generated
+  repository applies it on every create and update (REST, client Java, workflow), the controllers before `pattern`
+  and `checks`, and the form on blur. Pair it with a strict `pattern` - normalize what people type, then demand the
+  canonical form. An IBAN is `normalize: [strip: " ", upper]`. A transform listed twice, both case folds, or `strip`
+  without its characters is refused.
 - `ageing(<date field>, [30, 60, 90])` (a report **dimension**) - **the receivables-ageing bucket**: groups rows by how
   long ago the date fell, yielding `0-30` / `31-60` / `61-90` / `90+` (a null date becomes `n/a`).
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
@@ -513,7 +522,10 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   that would MOVE a record into one - once March is closed, nothing dated in March may appear,
   change or vanish. The lock is enforced in the generated REPOSITORY as well (#7590), so a posting,
   a create-from or a schedule booking into a closed period is refused with the same sentence (a 400,
-  or the failure of the handler that carried it) - a closed period is closed for the system too. A date
+  or the failure of the handler that carried it) - a closed period is closed for the system too. A
+  POSTING additionally asks the register BEFORE it writes (#7703): it logs which document it left
+  unposted and on which period, and re-runs itself for those documents the moment that period
+  reopens, so a closed month no longer costs an issued document its ledger entry for good. A date
   covered by no period is open (periods are opened as they are needed) and an unset date falls in
   none. The lock reaches composition CHILDREN exactly as the status one does. Boundary: the register
   must be an entity of the SAME model - the guard is generated into this model's controllers, which
@@ -579,7 +591,8 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as a
   tree-table (#7613): the list's own columns, the first one indented under an expand chevron with the
   entity's `icon:`. It shows the flat table while no record has a parent yet, and for a search or a
-  filter; a Tree / Table toggle on the toolbar is remembered per user. The server rejects cycles. A
+  filter; a Tree / Table toggle on the toolbar is remembered per user. Each record offers **Add
+  child** (#7724), the create form with the parent preset and locked. The server rejects cycles. A
   self-FK alone does NOT imply a hierarchy - declare it.
 - `leafOnly: true` (on a to-one relation) - restricts the picker to LEAF nodes of its hierarchical
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an

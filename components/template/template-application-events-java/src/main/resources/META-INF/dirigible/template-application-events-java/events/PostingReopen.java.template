@@ -1,0 +1,108 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Period-reopen sweep for posting ${name}: when a ${periodRegisterEntity} is moved out of a closed
+ * status, re-run the posting for the ${sourceEntity} documents that period refused. Generated from the
+ * intent postings block - do not edit; it is re-generated with the application.
+ *
+ * Why it exists (#7703): ${targetEntity} declares `immutableInPeriod`, so a post dated inside a closed
+ * ${periodRegisterEntity} is refused (#7590). The posting runs on a listener, AFTER its source has
+ * committed the transition that raised it - so the issuer was answered 200, the refusal reached only
+ * the handler's log, and the document stayed unposted for good: nothing the posting listens to is
+ * published when the period reopens. An issued, numbered document with no ledger entry at all is the
+ * unposted worklist by accident, and the books and the register disagree with nothing saying so.
+ *
+ * What it does NOT do: it never posts a document the posting itself would not. Each candidate goes
+ * through ${className}Posting.post, so the status guard, the determination rule, the at-most-once
+ * back-reference and the period check all apply exactly as they do on the event - this only decides
+ * WHICH documents are worth offering again.
+ */
+@Component("${javaGenFolderName}_${reopenClassName}")
+public class ${reopenClassName} implements MessageHandler {
+
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${reopenClassName}");
+
+    @Override
+    public String destination() {
+        return "${projectName}-${periodRegisterPerspective}-${periodRegisterEntity}${reopenTopicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity period =
+                Json.parse(message, gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity.class);
+        if (period == null || period.${periodRegisterKeyField} == null) {
+            return;
+        }
+        // The register announces every move of its status, so most of them are not a reopening: a
+        // period moving BETWEEN closed statuses, or into one, leaves the documents where they are.
+        for (String closed : "${periodClosedValues}".split(",")) {
+            if (closed.equals(String.valueOf(period.${periodStatusProperty}))) {
+                return;
+            }
+        }
+        Criteria candidates = Criteria.create();
+#if($guardProperty != "")
+        // The posting's own guard: only a ${sourceEntity} standing where the posting fires can have
+        // been refused by the period.
+        candidates.eq("${guardProperty}", ${guardValue});
+#end
+#if($periodSourceDateProperty != "")
+        // ...dated inside the period that just reopened. The posting copies ${periodSourceDateProperty}
+        // into the ${targetEntity}'s ${periodDateProperty}, so this is the same date the lock tested -
+        // which is what keeps the sweep to the documents this reopening is about rather than every
+        // unposted document ever.
+        candidates.ge("${periodSourceDateProperty}", period.${periodStartProperty})
+                  .le("${periodSourceDateProperty}", period.${periodEndProperty});
+#else
+        // The ${targetEntity}'s ${periodDateProperty} is not a plain copy of a ${sourceEntity} column,
+        // so the period cannot be turned into a query here: every document the guard selects is
+        // offered, and the posting's own period check decides each one.
+#end
+        ${className}Posting posting = new ${className}Posting();
+        int reposted = 0;
+        for (gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source :
+                new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findAll(candidates)) {
+            // Already posted? The back-reference is the posting's own at-most-once key, so asking it
+            // here keeps the sweep off the documents that need nothing - and off rewriting a post that
+            // is already right.
+            if (!new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository()
+                    .findAll(Criteria.create()
+                                     .eq("${backRefProperty}", source.${sourceKeyField}))
+                    .isEmpty()) {
+                continue;
+            }
+            try {
+                posting.post(source);
+                reposted++;
+            } catch (RuntimeException ex) {
+                // One document that cannot be posted must not stop the rest of the period: the sweep
+                // is a recovery pass, and a refusal here is the same refusal the original event got.
+                LOG.error("Posting ${name}: ${sourceEntity} [{}] still cannot be posted after ${periodRegisterEntity} [{}] reopened",
+                        source.${sourceKeyField}, period.${periodRegisterKeyField}, ex);
+            }
+        }
+        if (reposted > 0) {
+            LOG.info("Posting ${name}: ${periodRegisterEntity} [{}] reopened - posted [{}] ${sourceEntity} document(s) it had refused",
+                    period.${periodRegisterKeyField}, reposted);
+        }
+    }
+
+    @Override
+    public void onError(String error) {
+        LOG.error("Posting ${name}: the reopen sweep on [{}] failed - [{}]", destination(), error);
+    }
+}

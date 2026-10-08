@@ -1992,6 +1992,9 @@ final class ModelParameterProcessor {
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
                 resolveDependsOn(property, entity, entities);
                 resolveWidgetLiterals(property);
+                if (resolveNormalizeLiterals(property)) {
+                    entity.put("hasNormalize", Boolean.TRUE);
+                }
             }
             // A hierarchical entity guards its own tree edge against a cycle.
             if (entity.get("hierarchyProperty") != null) {
@@ -2067,6 +2070,64 @@ final class ModelParameterProcessor {
             String raw = String.valueOf(property.get("widgetOptionsFilterValue"));
             property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw : "'" + JsLiterals.escape(raw) + "'");
         }
+    }
+
+    /**
+     * Pre-renders a property's {@code normalize:} (#7726) for the templates: the characters it strips
+     * as the body of a Java string literal ({@code normalizeStripJava}), and the whole step as a
+     * JavaScript function ({@code normalizeJs}) the generated form applies on blur - the same
+     * transforms, in the same order, as {@code org.eclipse.dirigible.sdk.db.Normalize} on the server.
+     * The function is written so it can sit verbatim inside a double-quoted HTML attribute and inside a
+     * JavaScript file: every character of the strip set outside a plain safe set is a {@code \\uXXXX}
+     * escape.
+     *
+     * @param property the property
+     * @return whether the property normalizes anything
+     */
+    private static boolean resolveNormalizeLiterals(Map<String, Object> property) {
+        boolean trim = "true".equals(str(property, "normalizeTrim"));
+        Object stripValue = property.get("normalizeStrip");
+        String strip = stripValue == null ? null : stripValue.toString();
+        String caseFold = str(property, "normalizeCase");
+        boolean hasStrip = strip != null && !strip.isEmpty();
+        boolean hasCase = "upper".equals(caseFold) || "lower".equals(caseFold);
+        if (!trim && !hasStrip && !hasCase) {
+            return false;
+        }
+        StringBuilder js = new StringBuilder("((v) => typeof v === 'string' ? v");
+        if (trim) {
+            js.append(".trim()");
+        }
+        if (hasStrip) {
+            property.put("normalizeStripJava", JavaLiterals.escape(strip));
+            js.append(".split('').filter((c) => !'")
+              .append(attributeSafeJs(strip))
+              .append("'.includes(c)).join('')");
+        }
+        if (hasCase) {
+            js.append("upper".equals(caseFold) ? ".toUpperCase()" : ".toLowerCase()");
+        }
+        js.append(" : v)");
+        property.put("normalizeJs", js.toString());
+        return true;
+    }
+
+    /**
+     * The body of a single-quoted JavaScript string that is also safe inside a double-quoted HTML
+     * attribute: letters, digits and a few punctuation marks verbatim, everything else as
+     * {@code \\uXXXX}.
+     */
+    private static String attributeSafeJs(String raw) {
+        StringBuilder out = new StringBuilder(raw.length() * 2);
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (Character.isLetterOrDigit(c) && c < 128 || " -_.,:;()+/*=!?@%".indexOf(c) >= 0) {
+                out.append(c);
+            } else {
+                out.append(String.format("\\u%04x", (int) c));
+            }
+        }
+        return out.toString();
     }
 
     /**

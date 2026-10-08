@@ -159,6 +159,23 @@ document.addEventListener('alpine:init', () => {
         // `defaultValue: now`: a new record is dated today, in the field's own shape; a query-param
         // prefill below still wins, and the server fills the same value on a create that omits it.
         if ('${property.name}' in this.form) this.form.${property.name} = window.HarmoniaFormat.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+#elseif($property.dataDefaultValueJsLiteral && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS")
+## Every other authored default (`defaultValue:`, a relation's `init:`) is the value the server fills on
+## a create that omits it - shown up front, so the user sees it and can change it before saving rather
+## than meeting it only after the save (#7718). Seeded here, in the create branch only, never in the
+## form literal: loadRecord copies just the keys a record carries, so a literal default would surface
+## on an edit of a row that holds no value. The literal arrives in the shape the input binds (a real
+## boolean for a checkbox, a number for a numeric field, a string - the option's data-value - for a
+## dropdown); a MULTISELECT takes its csv as an array, a date its input format. A query-param prefill
+## below still wins. The document status is left to the server: its `init:` may name a status rather
+## than key one, and the lifecycle stamps the initial status itself.
+#if($property.widgetType == "MULTISELECT")
+        if ('${property.name}' in this.form) this.form.${property.name} = String(${property.dataDefaultValueJsLiteral}).split(',').map(v => v.trim()).filter(v => v !== '');
+#elseif($property.isDateType)
+        if ('${property.name}' in this.form) this.form.${property.name} = window.HarmoniaFormat.toDateInput(${property.dataDefaultValueJsLiteral}, '${property.widgetType}');
+#else
+        if ('${property.name}' in this.form) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
+#end
 #end
 #end
         // A MULTISELECT field (an ARRAY - what keeps the select in multiple mode) takes no prefill.

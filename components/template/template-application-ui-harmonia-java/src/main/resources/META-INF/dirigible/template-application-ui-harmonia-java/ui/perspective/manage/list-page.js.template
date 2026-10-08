@@ -134,8 +134,10 @@ document.addEventListener('alpine:init', () => {
     // Create / edit / preview while inline, through the shared related-record iframe dialog - the
     // same path a master's detail panel opens its child form on, for the same reason: the hosting
     // page keeps its state, and the list reloads when the dialog reports a save.
+    // A route may already carry its own query (Add child presets the parent), so the dialog flags
+    // join it rather than open a second '?', which the form would read as part of the last value.
     openInDialog(route, title) {
-      Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route + '?embedded=1&dialog=1',
+      Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route + (route.indexOf('?') >= 0 ? '&' : '?') + 'embedded=1&dialog=1',
               title, () => this.load());
     },
 
@@ -333,7 +335,12 @@ document.addEventListener('alpine:init', () => {
 #end
     },
     // A separator earns its place only between two groups that both have something in them.
+#if($hierarchyProperty)
+    // Add child is always in the record group, so the group is never empty.
+    get menuHasRecordActions() { return true; },
+#else
     get menuHasRecordActions() { return this.menuHasPreview || this.menuHasEdit; },
+#end
     get menuHasAnythingAbove() { return this.menuTasks.length > 0 || this.menuActions.length > 0 || this.menuHasRecordActions; },
 
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
@@ -644,6 +651,17 @@ document.addEventListener('alpine:init', () => {
       if (this.inlineHosted()) return this.openInDialog(route, window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new');
       window.PineconeRouter.navigate(route);
     },
+#if($hierarchyProperty)
+    // Add child (#7724): the create form with the hierarchy relation preset to this record. The
+    // query param both prefills ${hierarchyProperty} and context-locks it (isContextLocked), so the new
+    // record cannot land at the top level because the parent was never picked. Re-parenting stays
+    // where it was - the edit form's picker.
+    newChild(row) {
+      const route = '/${name}/create?${hierarchyProperty}=' + encodeURIComponent(row.${primaryKeysString});
+      if (this.inlineHosted()) return this.openInDialog(route, window.T ? T('$projectName:${tprefix}.defaults.addChild', 'Add child') : 'Add child');
+      window.PineconeRouter.navigate(route);
+    },
+#end
     editEntity(row) {
       const route = '/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit';
       if (this.inlineHosted()) return this.openInDialog(route, this.entityTitle());

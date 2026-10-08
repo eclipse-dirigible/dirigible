@@ -245,6 +245,8 @@
       <div x-h-alert-description>
         <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>
         <span x-show="errors.__summary" x-text="errors.__summary"></span>
+        <!-- A row created from a picker's "New" commits on its own: say it is saved (#7725). -->
+        <div x-show="savedAlongside(inlineCreated)" x-text="savedAlongside(inlineCreated)"></div>
       </div>
     </div>
 
@@ -381,18 +383,18 @@
         </div>
 #elseif($property.widgetType == "TEXTAREA")
         <textarea x-h-textarea id="f_${property.name}" rows="4" x-model="form.${property.name}"
-                  :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end></textarea>
+                  :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "COLOR")
         <input x-h-input type="color" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) readonly#end />
 #elseif($property.widgetType == "EMAIL")
         <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"
-               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($readonly) readonly#end />
+               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "URL")
         <input x-h-input type="url" id="f_${property.name}" x-model="form.${property.name}"
-               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($readonly) readonly#end />
+               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "TEL")
         <input x-h-input type="tel" id="f_${property.name}" x-model="form.${property.name}"
-               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($readonly) readonly#end />
+               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces), so
              form.${property.name} round-trips unchanged. Readonly (preview) -> the input is disabled. -->
@@ -428,7 +430,7 @@
         </div>
 #else
         <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"
-               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($readonly) readonly#end />
+               :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>

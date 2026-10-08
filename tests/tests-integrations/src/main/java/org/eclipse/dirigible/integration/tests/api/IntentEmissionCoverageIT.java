@@ -575,6 +575,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # #6336: an input-format regex must survive Generate and be enforced server-side.
                   # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
+                  # #7726 normalize: a pasted phone loses its separators BEFORE the strict pattern reads it,
+                  # and an IBAN is trimmed, de-spaced and upper-cased (the order of the list is not the
+                  # order of the transforms: trim, strip, case).
+                  - { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\\+[1-9][0-9]{6,14}$' }
+                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
 
               # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
               # writable surface (power + my), a |format label token rendering "2026 July", and
@@ -624,6 +629,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # for a caller the server serves it to, on the power and the personal form alike.
                   - { name: reviewedOn, type: date, readOnly: true, visibleTo: [Payroll] }
                   - { name: approved, type: boolean, readOnly: true }
+                  # #7718: a `true` default opens checked on the power AND the personal create form.
+                  - { name: billable, type: boolean, defaultValue: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -860,6 +867,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: recordedAt, type: timestamp, defaultValue: now }
                   - { name: note,       type: string, length: 100 }
                   - { name: comment,    type: string, length: 100 }
+                  # #7718: every other authored default - text, a `true` checkbox, a number, a relation's
+                  # `init:` - opens the create page already holding the value the server would fill.
+                  - { name: channel,    type: string, length: 20, defaultValue: web }
+                  - { name: rush,       type: boolean, defaultValue: true }
+                  - { name: copies,     type: integer, defaultValue: 2 }
+                relations:
+                  - { name: Unit, kind: manyToOne, to: Unit, init: 1 }
               - name: ReorderItem
                 function: DocumentItem
                 fields:
@@ -876,6 +890,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: subject, type: string, length: 200 }
                   - { name: secret,  type: decimal, sensitive: true }
+                  # #7718: the partner create form shows the default too.
+                  - { name: priority, type: integer, defaultValue: 3 }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
                   # #7496: the partner form builds its options apart from the others, so it carries a rule too.
@@ -1729,6 +1745,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
             # linked to the original through Entry.Storno, fail-soft when nothing was posted.
             postings:
+              # #7703: the target carries immutableInPeriod, so this posting asks the register before
+              # it writes and says which document it left unposted - and its reopen sweeps re-run it.
+              - name: freightPosting
+                event: { onCreate: Consignment }
+                creates: FreightEntry
+                backReference: Consignment
+                map: { entryDate: shippedOn }
+                items:
+                  - { amount: "Value" }
               - name: docPosting
                 event: { onTransition: Doc, when: "Status == 2" }
                 creates: Entry
@@ -2061,7 +2086,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             """;
 
     /** The whole fixture, as the two halves above spell it. */
+    // Still the entities list, for the same 65535-byte reason. A posting whose TARGET is locked by a
+    // fiscal period (#7703): the lock is enforced in the target's repository (#7590), but the posting
+    // runs on a listener after its source committed - so a closed period dropped the post where
+    // nobody was listening, and reopening the period published nothing the posting binds.
+    private static final String INTENT_YAML_PERIOD_POSTING = """
+              - name: Consignment
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: shippedOn, type: date, required: true }
+                  - { name: value,    type: decimal }
+              # The posting's target, locked by the very register LedgerBooking is locked by.
+              - name: FreightEntry
+                immutableInPeriod: { period: AccountingPeriod, date: entryDate }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date, required: true }
+                relations:
+                  - { name: Consignment, kind: manyToOne, to: Consignment }
+              - name: FreightEntryLine
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: FreightEntry, kind: manyToOne, to: FreightEntry, composition: true, required: true }
+            """;
+
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
+                                                                  .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_GLUE);
 
     @Autowired
@@ -2260,7 +2312,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          equalTo(List.of(today.getYear(), today.getMonthValue(), today.getDayOfMonth())))
                                                  .body("Period", equalTo(java.time.YearMonth.from(today)
                                                                                             .toString()))
-                                                 .body("RecordedAt", notNullValue()));
+                                                 .body("RecordedAt", notNullValue())
+                                                 // #7718: the very values the create page now opens with.
+                                                 .body("Channel", equalTo("web"))
+                                                 .body("Rush", equalTo(true))
+                                                 .body("Copies", equalTo(2))
+                                                 .body("Unit", equalTo(1)));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Reference\":\"R-given\",\"OrderedOn\":\"2020-01-15\",\"Period\":\"2020-01\"}")
                                                  .when()
@@ -2465,6 +2522,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(personForm.contains("pattern=\""), "a field pattern must reach the form input as an HTML pattern attribute");
         // On a document item the dialog is metadata-driven, so the regex travels as a JS literal in
         // the detail register (backslash-safe) rather than as markup.
+        // #7726 normalize: the repository brings the value to its stored form on every write, the
+        // controller does so before its checks read it, and the form applies the same on blur.
+        String personRepository = contentOf("gen/emission/data/person/PersonRepository.java");
+        assertTrue(
+                personRepository.contains("public static void normalize(PersonEntity entity)")
+                        && personRepository.contains("org.eclipse.dirigible.sdk.db.Normalize.apply(entity.Phone, false, \" -()\", null)")
+                        && personRepository.contains("org.eclipse.dirigible.sdk.db.Normalize.apply(entity.Iban, true, \" \", \"upper\")"),
+                "a field normalize must emit the repository's normalize step, got: " + personRepository);
+        assertTrue(personController.contains("PersonRepository.normalize(entity);"),
+                "the controller must normalize before its pattern check reads the value");
+        assertTrue(personForm.contains(
+                "@blur=\"form.Phone = ((v) => typeof v === 'string' ? v.split('').filter((c) => !' -()'.includes(c)).join('') : v)(form.Phone)\""),
+                "a field normalize must reach the form input as a blur handler, got: " + personForm);
         String linePatternRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
         assertTrue(linePatternRegister.contains("pattern: '^[A-Z]{3}-[0-9]{4}$'"),
                 "an item field pattern must reach the item-dialog column metadata, got: " + linePatternRegister);
@@ -2903,6 +2973,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 pageStatusSteps(billDocumentPage, "BillDocumentPage", "Status",
                         "[{ value: 3, text: 'Анулирана' }, { value: 2, text: 'Публикувана' }, { value: 1, text: 'Чернова' }]", 1),
                 "the document page's stepper must follow the lifecycle, not the label order of its options");
+        // A row created through a picker's inline "New" is selected and listed even when the picker's
+        // reloaded list is narrowed past it, and a failed save of the record that picked it says the
+        // row was already saved (#7725) - two independent commits shown as one failure got the row
+        // entered twice. Run on the generated page: the header picker (Person) and an item picker
+        // narrowed by a `where:` filter (the Unit column of the line dialog).
+        assertEquals("42|42:Ada|Person 'Ada' was saved; this record was not.|42",
+                pageInlineCreate(billDocumentPage, "BillDocumentPage", "header"),
+                "the header picker must select and list the inline-created row, and its failed save must say it was saved");
+        assertEquals("43|43,1|Unit 'Pallet' was saved; this record was not.|43",
+                pageInlineCreate(billDocumentPage, "BillDocumentPage", "item"),
+                "the line dialog must select and list the inline-created row, and its failed save must say it was saved");
         // ...and a document master WITHOUT immutableWhen / immutable / a period lock must never
         // reference mutable at all (#7543): its page script does not define it, so an x-show="mutable"
         // on the header form threw in Alpine and hid the form - Create and Edit rendered no fields.
@@ -3027,6 +3108,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // resolved primary key in the call also proves the descriptor's targetPk reached the template: an
         // unforwarded parameter renders literally and compiles into nothing usable (the #6306 countProperty
         // class of bug).
+        // #7703: a posting whose target carries immutableInPeriod asks the register BEFORE it writes,
+        // and renders one reopen sweep per channel a register's status moves on.
+        String freightPosting = contentOf("gen/events/emission/FreightPostingPosting.java");
+        assertTrue(freightPosting.contains("if (!periodOpen("), "the pre-check: " + freightPosting);
+        assertTrue(freightPosting.contains("stays unposted"), "and it says which document it left unposted: " + freightPosting);
+        assertTrue(freightPosting.contains("public void post(gen.emission.data.consignment.ConsignmentEntity source)"),
+                "the body the sweep re-runs: " + freightPosting);
+        String freightReopen = contentOf("gen/events/emission/FreightPostingPostingReopen.java");
+        assertTrue(freightReopen.contains("\"emission-test-AccountingPeriod-AccountingPeriod-transitioned\""), freightReopen);
+        assertTrue(
+                freightReopen.contains(".ge(\"ShippedOn\", period.StartDate)")
+                        && freightReopen.contains(".le(\"ShippedOn\", period.EndDate)"),
+                "the sweep asks for the documents this reopening is about: " + freightReopen);
+        assertTrue(
+                contentOf("gen/events/emission/FreightPostingPostingReopenOnUpdate.java").contains(
+                        "\"emission-test-AccountingPeriod-AccountingPeriod-updated\""),
+                "a period is reopened by a transition OR by a plain update, and the two channels are disjoint");
+
         String ledgerAggregate = contentOf("gen/events/emission/LedgerTotalAggregateOnCreate.java");
         assertTrue(ledgerAggregate.contains("targets.updateDerived(target.Id, derived)"),
                 "a keyed aggregate must persist through the targeted derived write with a RESOLVED target pk");
@@ -3428,6 +3527,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // ...and the column gets no DEFAULT: `now` is not SQL.
         String reorderSchema = contentOf("gen/emission/schema/" + PROJECT + ".schema");
         assertFalse(reorderSchema.contains("\"defaultValue\": \"now\""), "now must never reach the DDL as a column DEFAULT");
+
+        // #7718: every other authored default opens the create page holding the value the server fills
+        // (assertNowDefaultRuntime proves those are the same values) - in the shape its input binds: a
+        // real boolean, a real number, text, and a relation's `init:` as the option's string data-value...
+        assertTrue(
+                reorderDoc.contains("if ('Channel' in this.form) this.form.Channel = 'web';")
+                        && reorderDoc.contains("if ('Rush' in this.form) this.form.Rush = true;")
+                        && reorderDoc.contains("if ('Copies' in this.form) this.form.Copies = 2;")
+                        && reorderDoc.contains("if ('Unit' in this.form) this.form.Unit = '1';"),
+                "a declared default must be prefilled when a new document opens, got: " + reorderDoc);
+        assertTrue(reorderDoc.indexOf("this.form.Unit = '1';") < reorderDoc.indexOf("const v = this.queryParam(key);",
+                reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
+        // ...in the create branch only: the form literal stays blank, since loadRecord copies just the
+        // keys a record carries and a literal default would surface on an edit of a row holding none...
+        assertTrue(reorderDoc.contains("Rush: false,") && reorderDoc.contains("Unit: '',"),
+                "the form literal must stay blank, the default is seeded on create only, got: " + reorderDoc);
+        // ...on the plain form, the personal one and the partner one alike...
+        String claimFormDefaults = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
+        String claimMyFormDefaults = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        String partnerFormDefaults = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
+        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+                "a true default must open checked on the create form, got: " + claimFormDefaults);
+        assertTrue(claimMyFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+                "...and on the personal create form, got: " + claimMyFormDefaults);
+        assertTrue(partnerFormDefaults.contains("if ('Priority' in this.form) this.form.Priority = 3;"),
+                "...and on the partner create form, got: " + partnerFormDefaults);
+        // ...while the document status is the lifecycle's to stamp: its `init:` may name a status.
+        String entryFormDefaults = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
+        assertFalse(entryFormDefaults.contains("this.form.Status = "), "the status must not be seeded on the create form");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
@@ -5223,6 +5351,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/person/PersonController")
                                                  .then()
                                                  .statusCode(200));
+
+        // #7726 normalize: the pasted forms are accepted and stored without their separators, the
+        // pattern judging the normalized value; what still does not match after normalizing is refused.
+        int normalizedPerson = createRecord("/person/PersonController",
+                "{\"Name\":\"Pasted\",\"Email\":\"p3@example.com\",\"Phone\":\"+359 898-123 (456)\",\"Iban\":\" bg80 bnbg 9661 1020 3456 78 \"}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/person/PersonController/" + normalizedPerson)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Phone", equalTo("+359898123456"))
+                                                 .body("Iban", equalTo("BG80BNBG96611020345678")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Letters\",\"Email\":\"p4@example.com\",\"Phone\":\"+359 898 12a\"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -7794,6 +7939,70 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Run a generated document page's inline create (#7725) over the shipped shell runtime (basePage,
+     * baseFormPage, apiError) with a stubbed REST client: the "New" dialog reports id 42 (header
+     * {@code Person}) or 43 (line {@code Unit}), the picker's reloaded list does not carry it, and the
+     * save that follows is refused with a 400. Answers
+     * {@code selected|listed|saved-sentence|selected-after-the-failure}.
+     */
+    private static String pageInlineCreate(String pageScript, String componentName, String surface) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var window = this; var pages = {}; var __related = {};"
+                    + " var document = { addEventListener: (event, callback) => callback(), getElementById: () => null };"
+                    + " var Alpine = { data: (name, factory) => { pages[name] = factory; },"
+                    + "   store: () => ({ create: (url, title, onCreated) => { __related.onCreated = onCreated; } }) };"
+                    + " var T = (key, fallback, options) => String(fallback).replace(/\\{\\{(\\w+)\\}\\}/g, (m, n) => options && options[n] != null ? options[n] : m);"
+                    + " var requestAnimationFrame = (f) => f(); var FormValidation = { validate: () => ({ errors: {}, valid: true }) };"
+                    + " window.HarmoniaFormat = { toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js", "var __refused = { isApiError: true, httpStatus: 400, errorType: 'BadRequest', errorMessage: 'refused' };"
+                    + " App.utils = { relatedCreateUrl: () => 'create-url' };" + " App.services.api = {"
+                    + "   getAll: (url) => Promise.resolve(url === '/units' ? [{ Id: 1, Name: 'Kg' }, { Id: 43, Name: 'Pallet' }] : []),"
+                    + "   get: (url) => Promise.resolve(/\\/42$/.test(url) ? { Id: 42, Name: 'Ada' } : url === '/units/43' ? { Id: 43, Name: 'Pallet' } : {}),"
+                    + "   post: (url) => url === '/units/search' ? Promise.resolve([{ Id: 1, Name: 'Kg' }]) : Promise.reject(__refused),"
+                    + "   put: () => Promise.reject(__refused) };");
+            context.eval("js", pageScript);
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); page.$nextTick = (f) => f && f(); page.refreshIcons = () => {};"
+                            + " page.id = 7; page.mode = 'edit'; page.form = { Person: '' };");
+            if ("header".equals(surface)) {
+                context.eval("js", "page.addRelated('Person', 'app-url', 'Person'); __related.onCreated(42);");
+                context.eval("js",
+                        "var __before = page.form.Person + '|' + page.optionsPerson.map(o => o.value + ':' + o.text).join(','); page.save();");
+                return context.eval("js",
+                        "__before + '|' + page.savedAlongside(page.inlineCreated).split(' It ')[0] + '|' + page.form.Person")
+                              .asString();
+            }
+            context.eval("js", "page.itemsEnabled = true; page.isDirty = () => false; page.itemRestricted = [];"
+                    + " page.itemsDef = { apiPath: '/lines', masterEntityId: 'Bill', primaryKey: 'Id', editColumns: [{ name: 'Unit',"
+                    + "   widget: 'DROPDOWN', label: 'Unit', tkey: 'unit', filter: { by: 'Active', value: true },"
+                    + "   lookup: { url: '/units', key: 'Id', text: 'Name', entity: 'Unit' } }] };"
+                    + " page.openRowDialog(null); page.addRelatedItem(page.editColumns[0]); __related.onCreated(43);");
+            context.eval("js",
+                    "var __before = page.draft.Unit + '|' + page.dialogOptionsFor('Unit').map(o => o.value).join(','); page.saveDraft();");
+            return context.eval("js",
+                    "__before + '|' + page.savedAlongside(page.draftInlineCreated).split(' It ')[0] + '|' + page.draft.Unit")
+                          .asString();
+        }
+    }
+
+    private static String shellScript(String script) {
+        String resource = "/META-INF/dirigible/application-core/shell/js/" + script;
+        try (java.io.InputStream in = IntentEmissionCoverageIT.class.getResourceAsStream(resource)) {
+            if (in == null) {
+                throw new IllegalStateException("Missing classpath resource: " + resource);
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to read " + resource, ex);
+        }
+    }
+
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -8016,5 +8225,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Uuid", everyItem(notNullValue())),
                 120);
     }
+
+
 
 }
