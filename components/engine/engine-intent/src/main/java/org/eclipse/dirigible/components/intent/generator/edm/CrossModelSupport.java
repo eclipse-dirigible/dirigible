@@ -658,6 +658,56 @@ public final class CrossModelSupport {
     }
 
     /**
+     * The model that OWNS an entity a cross-model target's model names (issue #7748): that model
+     * itself, or - when the entity is a PROJECTION there, an entity of a third model - the model the
+     * projection references, read off its {@code projectionReferencedModel}
+     * ({@code /<project>/<alias>.model}). A payment's method lives in the payment-methods model, so its
+     * picker's controller is that model's, never the payments model's.
+     *
+     * @param context the generation context; without a repository the named model is returned as is
+     * @param uses the {@code uses:} entry naming the model the entity is named in
+     * @param entityName the entity
+     * @return the owning model, as a {@code uses:} entry
+     */
+    @SuppressWarnings("unchecked")
+    public static UsesIntent owningModel(IntentGenerationContext context, UsesIntent uses, String entityName) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return uses;
+        }
+        IRepository repository = context.getRepository();
+        for (String path : java.util.Arrays.asList(siblingModelPath(context.getProjectRoot(), uses.resolveProject(), uses.getModel()),
+                registryModelPath(uses))) {
+            IResource resource = path == null ? null : repository.getResource(path);
+            if (resource == null || !resource.exists()) {
+                continue;
+            }
+            Map<String, Object> root = GSON.fromJson(new String(resource.getContent(), StandardCharsets.UTF_8), Map.class);
+            Map<String, Object> body = root == null ? null : (Map<String, Object>) root.get("model");
+            List<Map<String, Object>> entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
+            for (Map<String, Object> entity : entities == null ? List.<Map<String, Object>>of() : entities) {
+                if (!entityName.equals(entity.get("name"))) {
+                    continue;
+                }
+                String referenced = str(entity.get("projectionReferencedModel"), null);
+                if (!"PROJECTION".equals(str(entity.get("type"), null)) || referenced == null) {
+                    return uses;
+                }
+                String[] parts = referenced.replaceFirst("^/", "")
+                                           .split("/");
+                if (parts.length != 2 || !parts[1].endsWith(".model")) {
+                    throw new IntentValidationException(List.of("Projection [" + entityName + "] in model [" + uses.getModel()
+                            + "] references [" + referenced + "], which is not a /<project>/<model>.model path"));
+                }
+                UsesIntent owner = new UsesIntent();
+                owner.setProject(parts[0]);
+                owner.setModel(parts[1].substring(0, parts[1].length() - ".model".length()));
+                return owner;
+            }
+        }
+        return uses;
+    }
+
+    /**
      * The repository path of a sibling project's {@code <alias>.model}. {@code projectRoot} is
      * {@code /users/<user>/<workspace>/<thisProject>}; the owner is a sibling under the same workspace.
      */

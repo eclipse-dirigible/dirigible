@@ -145,6 +145,18 @@ public class RelationIntent {
     private PickableIntent pickable;
 
     /**
+     * Whether the picker of this to-one offers to create a target row inline (issue #7748) - the "New
+     * &lt;Entity&gt;" button beside the form's and the document header's dropdown, and in the document
+     * item dialog. Absent, the generated UI decides as it always did (offered for any target outside
+     * Settings). {@code false} keeps the picker to existing rows: a row created from the dialog commits
+     * ON ITS OWN, before the record holding the relation is saved, so its create-time consumers run
+     * first - an {@code autoAllocate} settlement spread such a payment over the oldest open invoice and
+     * the allocation the clerk was entering was then refused. The value already held keeps its label
+     * either way.
+     */
+    private Boolean inlineCreate;
+
+    /**
      * Restricts this to-one relation to LEAF nodes of its (hierarchical) target: the picker offers only
      * childless nodes and the generated REST validation rejects an FK to a node with children (e.g. a
      * journal line may reference an analytical account, never a synthetic one). Valid only when the
@@ -395,6 +407,23 @@ public class RelationIntent {
 
     public void setPickable(PickableIntent pickable) {
         this.pickable = pickable;
+    }
+
+    public Boolean getInlineCreate() {
+        return inlineCreate;
+    }
+
+    public void setInlineCreate(Boolean inlineCreate) {
+        this.inlineCreate = inlineCreate;
+    }
+
+    /**
+     * Whether the author turned the inline create off.
+     *
+     * @return true only for an explicit {@code inlineCreate: false}
+     */
+    public boolean isInlineCreateDisabled() {
+        return Boolean.FALSE.equals(inlineCreate);
     }
 
     public String getWhenMasterDeleted() {

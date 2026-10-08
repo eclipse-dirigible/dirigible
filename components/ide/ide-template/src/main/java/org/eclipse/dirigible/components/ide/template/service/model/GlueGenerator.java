@@ -751,7 +751,10 @@ class GlueGenerator {
         context.put("fieldAssignments", assignments(item.get("fieldAssignments")));
         context.put("itemFieldAssignments", assignments(item.get("itemFieldAssignments")));
         context.put("itemLines", rows(item.get("itemLines")));
-        context.put("promptFields", assignments(item.get("promptFields")));
+        // A prompt field's source default (issue #7748); one written before the key existed has none.
+        List<Map<String, Object>> promptFields = assignments(item.get("promptFields"));
+        promptFields.forEach(field -> field.putIfAbsent("defaultProp", ""));
+        context.put("promptFields", promptFields);
         // The topic the listener binds is the glue's to state and the template's to emit verbatim - but
         // a .glue written before the step axis (issue #6800) carries no suffix at all, and a bare
         // reference renders as its own literal into a destination nothing ever publishes on. An absent
@@ -792,6 +795,12 @@ class GlueGenerator {
         // emits before the mapping reads a field off it. A .glue written before this key existed carries
         // none, and the loop renders nothing - the direct-property mapping it always had.
         context.put("relationLoads", relationLoads(item.get("relationLoads"), parameters));
+        // The link row back to the source (issue #7748): a composition child of the source, so it lives
+        // in the source's gen folder. A .glue written before the key existed carries no hasLink and
+        // renders the create-from it always had.
+        copy(context, item, "hasLink", "linkEntity", "linkParentFk", "linkTargetFk");
+        context.put("linkJavaPerspective", sanitize(item, "linkPerspective"));
+        context.put("linkAssignments", asMaps(item.get("linkAssignments")));
     }
 
     /**

@@ -164,6 +164,62 @@ class PersonalSurfaceCreateValidationTemplateIT {
         }
     }
 
+    /**
+     * A required string blank after trimming is as missing as a null one (#7719): every surface refuses
+     * spaces alone with the required message, while a required value that is not text keeps the plain
+     * null test.
+     */
+    @Test
+    void aRequiredStringOfSpacesAloneIsRefusedLikeAMissingOne() throws Exception {
+        for (String template : List.of("EntityController.java.template", "EntityMyController.java.template",
+                "EntityPartnerController.java.template")) {
+            String rendered = render(template, context());
+
+            assertTrue(rendered.contains("if (entity.Title == null || entity.Title.isBlank()) {"),
+                    template + " must refuse a blank required string: " + rendered);
+            assertTrue(rendered.contains("if (entity.FromDate == null) {"), template + " must keep the null test on a non-text field");
+        }
+
+        String repository = render(DAO_BASE, "Repository.java.template", context());
+        assertTrue(repository.contains("if (entity.Title == null || entity.Title.isBlank()) {"),
+                "the repository must refuse a blank required string on every write path: " + repository);
+    }
+
+    /**
+     * Text input is trimmed on every write and before the controllers' checks read it (#7719): the text
+     * fields are stripped, the primary key is not, and each write path trims first.
+     */
+    @Test
+    void everyWritePathTrimsTheTextFieldsButNotThePrimaryKey() throws Exception {
+        String repository = render(DAO_BASE, "Repository.java.template", context());
+
+        int trim = repository.indexOf("public static void trimText(VacationRequestEntity entity) {");
+        assertTrue(trim >= 0, "the repository must declare the trim: " + repository);
+        String body = repository.substring(trim, repository.indexOf("\n    }", trim));
+        for (String field : List.of("Number", "Title", "Note")) {
+            assertTrue(body.contains("entity." + field + " = entity." + field + ".strip();"), field + " must be trimmed: " + body);
+        }
+        assertTrue(!body.contains("entity.Id"), "the primary key must not be touched: " + body);
+
+        for (String method : List.of("public VacationRequestEntity save(VacationRequestEntity entity) {",
+                "public VacationRequestEntity update(VacationRequestEntity entity) {",
+                "public VacationRequestEntity updateWithoutEvent(VacationRequestEntity entity) {")) {
+            int start = repository.indexOf(method);
+            assertTrue(start >= 0, "missing " + method);
+            assertTrue(repository.substring(start + method.length())
+                                 .stripLeading()
+                                 .startsWith("trimText(entity);"),
+                    method + " must trim before anything reads the record: " + repository);
+        }
+        for (String method : List.of("calculatedForCreate", "calculatedForUpdate")) {
+            int start = repository.indexOf("public VacationRequestEntity " + method + "(VacationRequestEntity submitted) {");
+            assertTrue(
+                    start >= 0 && repository.indexOf("trimText(submitted);", start) > start
+                            && repository.indexOf("trimText(submitted);", start) < repository.indexOf("return", start),
+                    method + " - the record the controllers check - must be trimmed: " + repository);
+        }
+    }
+
     private String render(String templateName, Map<String, Object> parameters) throws Exception {
         return render(REST_BASE, templateName, parameters);
     }

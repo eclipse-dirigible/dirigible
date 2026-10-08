@@ -200,7 +200,7 @@
              `from:`, a create-from outside its `fromStatus:` - is not offered at all (#7073, #7068). -->
         <div x-show="$store.customActions.getActions(caView, 'entity', selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="action in $store.customActions.getActions(caView, 'entity', selected)" :key="action.id">
-            <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">
+            <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId, selected)">
               <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
             </button>
           </template>

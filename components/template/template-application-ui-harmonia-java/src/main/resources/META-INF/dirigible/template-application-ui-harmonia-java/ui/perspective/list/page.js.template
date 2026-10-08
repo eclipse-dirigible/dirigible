@@ -151,6 +151,15 @@ document.addEventListener('alpine:init', () => {
       if (!this.sortColumn) return this.filteredItems;
       const col = this.sortColumn;
       const dir = this.sortDirection;
+      // A relation column shows the referenced record's label, not its key, so it sorts by that label
+      // (issue #7721) - resolved exactly as the cell and the export resolve it.
+      const relation = this.exportColumns.find(c => c.name === col && (c.fk || c.multi));
+      if (relation) {
+        const collator = this.textCollator();
+        const sign = dir === 'asc' ? 1 : -1;
+        return [...this.filteredItems].sort((a, b) =>
+          sign * collator.compare(this.exportCell(a, relation), this.exportCell(b, relation)));
+      }
       return [...this.filteredItems].sort((a, b) => {
         let va = a[col] ?? '';
         let vb = b[col] ?? '';

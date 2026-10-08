@@ -285,6 +285,13 @@ public class GeneratesIntent {
      */
     private List<PromptFieldIntent> prompt;
 
+    /**
+     * Optional link row back to the SOURCE (issue #7748): a row of the source's composition child
+     * pointing at the source and at the created target, written in the same unit of work. See
+     * {@link GeneratesLinkIntent}.
+     */
+    private GeneratesLinkIntent link;
+
     public String getName() {
         return name;
     }
@@ -518,5 +525,23 @@ public class GeneratesIntent {
     /** Whether this action declares a {@code prompt:} input form. */
     public boolean hasPrompt() {
         return prompt != null && !prompt.isEmpty();
+    }
+
+    public GeneratesLinkIntent getLink() {
+        return link;
+    }
+
+    public void setLink(GeneratesLinkIntent link) {
+        this.link = link;
+    }
+
+    /**
+     * Whether a link row back to the source is declared.
+     *
+     * @return true when {@code link:} names an entity
+     */
+    public boolean hasLink() {
+        return link != null && link.getEntity() != null && !link.getEntity()
+                                                                .isBlank();
     }
 }

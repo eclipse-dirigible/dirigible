@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.commons.config;
 
+import static org.eclipse.dirigible.commons.config.ConfigMeta.meta;
+
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +18,12 @@ import org.slf4j.LoggerFactory;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * The Enum DirigibleConfig.
@@ -27,8 +34,8 @@ public enum DirigibleConfig {
     MS_SHAREPOINT_SITE_HOSTNAME("DIRIGIBLE_MS_SHAREPOINT_SITE_HOSTNAME", null), //
     MS_SHAREPOINT_SITE_PATH("DIRIGIBLE_MS_SHAREPOINT_SITE_PATH", null), //
     MS_SHAREPOINT_CLIENT_ID("DIRIGIBLE_MS_SHAREPOINT_CLIENT_ID", null), //
-    MS_SHAREPOINT_CLIENT_SECRET("DIRIGIBLE_MS_SHAREPOINT_CLIENT_SECRET", null), //
-    MS_SHAREPOINT_TOKEN("DIRIGIBLE_MS_SHAREPOINT_TOKEN", null), //
+    MS_SHAREPOINT_CLIENT_SECRET("DIRIGIBLE_MS_SHAREPOINT_CLIENT_SECRET", null, meta().secret()), //
+    MS_SHAREPOINT_TOKEN("DIRIGIBLE_MS_SHAREPOINT_TOKEN", null, meta().secret()), //
 
     REGISTRY_EXTERNAL_FOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", null), //
 
@@ -37,16 +44,16 @@ public enum DirigibleConfig {
     // if set to false - /a/b/mydir will be replicated to <repo_dir>
     REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER_AS_SUBFOLDER", Boolean.FALSE.toString()), //
     // folders separated by comma, example value: target,bin,node_modules
-    REGISTRY_EXTERNAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_EXTERNAL_IGNORED_FOLDERS", null), //
+    REGISTRY_EXTERNAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_EXTERNAL_IGNORED_FOLDERS", null, meta().type(ConfigType.LIST)), //
     // folders separated by comma, example value: target,bin,node_modules
-    REGISTRY_LOCAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_LOCAL_IGNORED_FOLDERS", null), //
+    REGISTRY_LOCAL_IGNORED_FOLDERS("DIRIGIBLE_REGISTRY_LOCAL_IGNORED_FOLDERS", null, meta().type(ConfigType.LIST)), //
 
     CSV_DATA_BATCH_SIZE("DIRIGIBLE_CSV_DATA_BATCH_SIZE", "1000"), //
 
     FLOWABLE_DATABASE_DRIVER("DIRIGIBLE_FLOWABLE_DATABASE_DRIVER", null), //
     FLOWABLE_DATABASE_URL("DIRIGIBLE_FLOWABLE_DATABASE_URL", null), //
     FLOWABLE_DATABASE_USER("DIRIGIBLE_FLOWABLE_DATABASE_USER", null), //
-    FLOWABLE_DATABASE_PASSWORD("DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", null), //
+    FLOWABLE_DATABASE_PASSWORD("DIRIGIBLE_FLOWABLE_DATABASE_PASSWORD", null, meta().secret()), //
     FLOWABLE_DATABASE_DATASOURCE_NAME("DIRIGIBLE_FLOWABLE_DATABASE_DATASOURCE_NAME", null), //
     FLOWABLE_DATABASE_SCHEMA_UPDATE("DIRIGIBLE_FLOWABLE_DATABASE_SCHEMA_UPDATE", Boolean.TRUE.toString()), //
     /**
@@ -55,15 +62,16 @@ public enum DirigibleConfig {
      * that is gone from the runtime can still be accounted for; {@code none} is an explicit opt-out
      * that leaves no trace at all.
      */
-    FLOWABLE_HISTORY_LEVEL("DIRIGIBLE_FLOWABLE_HISTORY_LEVEL", "audit"), //
+    FLOWABLE_HISTORY_LEVEL("DIRIGIBLE_FLOWABLE_HISTORY_LEVEL", "audit", meta().type(ConfigType.ENUM)), //
 
-    FLOWABLE_MAIL_SERVER_HOST("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST", null), //
-    FLOWABLE_MAIL_SERVER_PORT("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PORT", "587"), //
-    FLOWABLE_MAIL_SERVER_USERNAME("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USERNAME", null), //
-    FLOWABLE_MAIL_SERVER_PASSWORD("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PASSWORD", null), //
-    FLOWABLE_MAIL_SERVER_USE_TLS("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_TLS", Boolean.TRUE.toString()), //
-    FLOWABLE_MAIL_SERVER_USE_SSL("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_SSL", Boolean.FALSE.toString()), //
-    FLOWABLE_MAIL_SERVER_DEFAULT_FROM("DIRIGIBLE_FLOWABLE_MAIL_SERVER_DEFAULT_FROM", null), //
+    FLOWABLE_MAIL_SERVER_HOST("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST", null, meta().subgroup("process")), //
+    FLOWABLE_MAIL_SERVER_PORT("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PORT", "587", meta().subgroup("process")), //
+    FLOWABLE_MAIL_SERVER_USERNAME("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USERNAME", null, meta().subgroup("process")), //
+    FLOWABLE_MAIL_SERVER_PASSWORD("DIRIGIBLE_FLOWABLE_MAIL_SERVER_PASSWORD", null, meta().subgroup("process")
+                                                                                         .secret()), //
+    FLOWABLE_MAIL_SERVER_USE_TLS("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_TLS", Boolean.TRUE.toString(), meta().subgroup("process")), //
+    FLOWABLE_MAIL_SERVER_USE_SSL("DIRIGIBLE_FLOWABLE_MAIL_SERVER_USE_SSL", Boolean.FALSE.toString(), meta().subgroup("process")), //
+    FLOWABLE_MAIL_SERVER_DEFAULT_FROM("DIRIGIBLE_FLOWABLE_MAIL_SERVER_DEFAULT_FROM", null, meta().subgroup("process")), //
 
     EXEC_COMMAND_LOGGING_ENABLED("DIRIGIBLE_EXEC_COMMAND_LOGGING_ENABLED", Boolean.FALSE.toString()), //
 
@@ -94,11 +102,18 @@ public enum DirigibleConfig {
 
     /**
      * The application's externally-reachable base URL, used to build absolute links (e.g. in
-     * notification emails).
+     * notification emails). Per tenant, because a tenant may be served from its own host.
      */
-    APP_BASE_URL("DIRIGIBLE_APP_BASE_URL", ""), //
+    APP_BASE_URL("DIRIGIBLE_APP_BASE_URL", "", meta().type(ConfigType.URL)
+                                                     .tenant(12)), //
 
-    APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en"), //
+    /**
+     * The languages the Region & Language picker offers, comma-separated (e.g. {@code en,bg,fr}), the
+     * first one the default. Per tenant: each tenant decides which languages its users see; the modules
+     * carry whatever translations they ship and fall back to the default language for anything missing.
+     */
+    APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en", meta().type(ConfigType.LIST)
+                                                                         .tenant(8)), //
 
     /**
      * The tenant's country as an ISO 3166-1 alpha-2 code (e.g. {@code BG}), blank when the deployment
@@ -106,11 +121,11 @@ public enum DirigibleConfig {
      * national identifier is called is a property of the company, not of the language its users read
      * the UI in - and is tenant-overridable through the tenant configuration.
      */
-    APPLICATION_COUNTRY("DIRIGIBLE_APPLICATION_COUNTRY", ""), //
+    APPLICATION_COUNTRY("DIRIGIBLE_APPLICATION_COUNTRY", "", meta().tenant(9)), //
 
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
-    MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //
+    MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null, meta().secret()), //
 
     MAIL_TRANSPORT_PROTOCOL("DIRIGIBLE_MAIL_TRANSPORT_PROTOCOL", "smtps"), //
 
@@ -129,8 +144,11 @@ public enum DirigibleConfig {
     /** The cms internal root folder. */
     CMS_INTERNAL_ROOT_FOLDER("DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER", "target/dirigible/cms"),
 
-    /** Serve and store Office documents with the legacy Microsoft mime types. */
-    DOCUMENTS_CONTENT_TYPE_MS_ENABLED("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", "false"),
+    /**
+     * Serve and store Office documents with the legacy Microsoft mime types. Per tenant, because it
+     * depends on the client software its users open files with; read per call.
+     */
+    DOCUMENTS_CONTENT_TYPE_MS_ENABLED("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", "false", meta().tenant(10)),
 
     /** The default data source name. */
     DEFAULT_DATA_SOURCE_NAME("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB"),
@@ -172,7 +190,7 @@ public enum DirigibleConfig {
      * user selected, validated against the identity provider groups named
      * {@code <tenantId>.<appId>.<role>}), which lets one host serve every tenant of the application.
      */
-    TENANT_RESOLUTION_STRATEGY("DIRIGIBLE_TENANT_RESOLUTION_STRATEGY", "SUBDOMAIN"),
+    TENANT_RESOLUTION_STRATEGY("DIRIGIBLE_TENANT_RESOLUTION_STRATEGY", "SUBDOMAIN", meta().type(ConfigType.ENUM)),
 
     /**
      * The id of the application this deployment runs, as it appears in the identity provider group
@@ -220,7 +238,7 @@ public enum DirigibleConfig {
     BASIC_ADMIN_USERNAME("DIRIGIBLE_BASIC_USERNAME", toBase64("admin")),
 
     /** The basic admin pass. */
-    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin")),
+    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin"), meta().secret()),
 
     /**
      * Optional application-owned login page for the OAuth2 login profiles (cognito, keycloak). When
@@ -239,7 +257,7 @@ public enum DirigibleConfig {
      * it - and a session opened from one of them is authenticated by its handshake cookie only with
      * {@link #CORS_ALLOW_CREDENTIALS}; otherwise its CONNECT frame carries a bearer token.
      */
-    CORS_ALLOWED_ORIGINS("DIRIGIBLE_CORS_ALLOWED_ORIGINS", null),
+    CORS_ALLOWED_ORIGINS("DIRIGIBLE_CORS_ALLOWED_ORIGINS", null, meta().type(ConfigType.LIST)),
 
     /**
      * Whether a cross-origin request from a configured origin may carry cookies and HTTP authentication
@@ -251,17 +269,18 @@ public enum DirigibleConfig {
     CORS_ALLOW_CREDENTIALS("DIRIGIBLE_CORS_ALLOW_CREDENTIALS", Boolean.FALSE.toString()),
 
     /** Comma-separated HTTP methods granted to the configured origins. */
-    CORS_ALLOWED_METHODS("DIRIGIBLE_CORS_ALLOWED_METHODS", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS"),
+    CORS_ALLOWED_METHODS("DIRIGIBLE_CORS_ALLOWED_METHODS", "GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS", meta().type(ConfigType.LIST)),
 
     /**
      * Comma-separated request headers granted to the configured origins. {@code X-Tenant-Id} is the
      * header a bearer request names its tenant with under the {@code TOKEN_GROUPS} tenant resolution
      * strategy.
      */
-    CORS_ALLOWED_HEADERS("DIRIGIBLE_CORS_ALLOWED_HEADERS", "Authorization,Content-Type,Accept,X-Requested-With,X-Tenant-Id"),
+    CORS_ALLOWED_HEADERS("DIRIGIBLE_CORS_ALLOWED_HEADERS", "Authorization,Content-Type,Accept,X-Requested-With,X-Tenant-Id",
+            meta().type(ConfigType.LIST)),
 
     /** Comma-separated response headers a script of a configured origin may read. */
-    CORS_EXPOSED_HEADERS("DIRIGIBLE_CORS_EXPOSED_HEADERS", "Content-Disposition"),
+    CORS_EXPOSED_HEADERS("DIRIGIBLE_CORS_EXPOSED_HEADERS", "Content-Disposition", meta().type(ConfigType.LIST)),
 
     /** Seconds a browser may cache the answer to a preflight request. */
     CORS_MAX_AGE("DIRIGIBLE_CORS_MAX_AGE", "3600"),
@@ -282,7 +301,7 @@ public enum DirigibleConfig {
      * generated shells frame their own pages), {@code DENY}, or {@code DISABLED} for a deployment whose
      * pages are framed by another site.
      */
-    SECURITY_FRAME_OPTIONS("DIRIGIBLE_SECURITY_FRAME_OPTIONS", "SAMEORIGIN"),
+    SECURITY_FRAME_OPTIONS("DIRIGIBLE_SECURITY_FRAME_OPTIONS", "SAMEORIGIN", meta().type(ConfigType.ENUM)),
 
     /**
      * When {@code Strict-Transport-Security} is sent: {@code auto} on requests the platform sees as
@@ -290,7 +309,7 @@ public enum DirigibleConfig {
      * {@code always} on every response - for a deployment reached only over https whose proxy does not
      * forward the scheme - or {@code off}.
      */
-    SECURITY_HSTS("DIRIGIBLE_SECURITY_HSTS", "auto"),
+    SECURITY_HSTS("DIRIGIBLE_SECURITY_HSTS", "auto", meta().type(ConfigType.ENUM)),
 
     /** The {@code Referrer-Policy} every chain answers with; blank sends none. */
     SECURITY_REFERRER_POLICY("DIRIGIBLE_SECURITY_REFERRER_POLICY", "strict-origin-when-cross-origin"),
@@ -317,7 +336,7 @@ public enum DirigibleConfig {
      * user's groups - and {@code access} - an access token of a machine client is identified by
      * {@code sub} and grants the roles its scopes map to.
      */
-    OAUTH2_JWT_TOKEN_KINDS("DIRIGIBLE_OAUTH2_JWT_TOKEN_KINDS", "id,access"),
+    OAUTH2_JWT_TOKEN_KINDS("DIRIGIBLE_OAUTH2_JWT_TOKEN_KINDS", "id,access", meta().type(ConfigType.LIST)),
 
     /**
      * Claim of a bearer ID token the user name is read from. Blank means the user-name attribute of the
@@ -332,7 +351,7 @@ public enum DirigibleConfig {
      * when this is set: a Cognito access token names its client in {@code client_id}, a Keycloak one
      * carries the {@code aud} an audience mapper of the realm adds.
      */
-    OAUTH2_JWT_AUDIENCES("DIRIGIBLE_OAUTH2_JWT_AUDIENCES", null),
+    OAUTH2_JWT_AUDIENCES("DIRIGIBLE_OAUTH2_JWT_AUDIENCES", null, meta().type(ConfigType.LIST)),
 
     /** Issuer a bearer token must carry. Blank means the issuer of the login profile. */
     OAUTH2_JWT_ISSUER_URI("DIRIGIBLE_OAUTH2_JWT_ISSUER_URI", null),
@@ -397,7 +416,7 @@ public enum DirigibleConfig {
      * default Maven Central URL; other entries are added to it. Credentials go in the
      * DIRIGIBLE_MAVEN_[ID]_USERNAME / DIRIGIBLE_MAVEN_[ID]_PASSWORD pair for the entry's uppercased id.
      */
-    MAVEN_REPOSITORIES("DIRIGIBLE_MAVEN_REPOSITORIES", null),
+    MAVEN_REPOSITORIES("DIRIGIBLE_MAVEN_REPOSITORIES", null, meta().type(ConfigType.LIST)),
 
     /** Whether Maven dependency resolution runs offline (local repository only). */
     MAVEN_OFFLINE("DIRIGIBLE_MAVEN_OFFLINE", Boolean.FALSE.toString()),
@@ -428,7 +447,7 @@ public enum DirigibleConfig {
     JAVA_RECONCILE_INTERVAL_SECONDS("DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS", "30"),
 
     /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
-    INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
+    INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null, meta().secret()),
 
     /** Claude model the Intent Editor's AI assistant talks to. */
     INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-5"),
@@ -461,7 +480,7 @@ public enum DirigibleConfig {
     MESSAGING_BROKER_USERNAME("DIRIGIBLE_MESSAGING_BROKER_USERNAME", null),
 
     /** Password for the external messaging broker; unset connects anonymously. */
-    MESSAGING_BROKER_PASSWORD("DIRIGIBLE_MESSAGING_BROKER_PASSWORD", null),
+    MESSAGING_BROKER_PASSWORD("DIRIGIBLE_MESSAGING_BROKER_PASSWORD", null, meta().secret()),
 
     /**
      * Whether the EMBEDDED messaging broker persists its messages in the default (system) database.
@@ -483,16 +502,247 @@ public enum DirigibleConfig {
      * memory, so a print that reaches for a 20 MB photograph must fail soft - print without it - rather
      * than take the render down. 2 MB is far above any logo or stamp.
      */
-    PRINT_IMAGE_MAX_SIZE("DIRIGIBLE_PRINT_IMAGE_MAX_SIZE", "2097152");
+    PRINT_IMAGE_MAX_SIZE("DIRIGIBLE_PRINT_IMAGE_MAX_SIZE", "2097152"),
+
+    // ---- Keys read by name elsewhere (folded in from Configuration.getConfigParams(), #7759). The
+    // deprecated ones are read nowhere in this repository: listed so a deployment that still sets one
+    // is warned at startup, to be removed one release later.
+
+    ANONYMOUS_USER_NAME_PROPERTY_NAME("DIRIGIBLE_ANONYMOUS_USER_NAME_PROPERTY_NAME", null), //
+    /** The branding keys: per tenant, so that each tenant's shell carries its own brand. */
+    BRANDING_NAME("DIRIGIBLE_BRANDING_NAME", null, meta().tenant(0)), //
+    BRANDING_SUBTITLE("DIRIGIBLE_BRANDING_SUBTITLE", null, meta().tenant(1)), //
+    BRANDING_BRAND("DIRIGIBLE_BRANDING_BRAND", null, meta().tenant(2)), //
+    BRANDING_BRAND_URL("DIRIGIBLE_BRANDING_BRAND_URL", null, meta().tenant(3)), //
+    BRANDING_FAVICON("DIRIGIBLE_BRANDING_FAVICON", null, meta().tenant(4)), //
+    BRANDING_THEME("DIRIGIBLE_BRANDING_THEME", null, meta().tenant(5)), //
+    BRANDING_PREFIX("DIRIGIBLE_BRANDING_PREFIX", null, meta().tenant(6)), //
+    BRANDING_ANALYTICS("DIRIGIBLE_BRANDING_ANALYTICS", null, meta().tenant(7)), //
+    GIT_ROOT_FOLDER("DIRIGIBLE_GIT_ROOT_FOLDER", null), //
+    REGISTRY_IMPORT_WORKSPACE("DIRIGIBLE_REGISTRY_IMPORT_WORKSPACE", null, meta().deprecated()), //
+    REPOSITORY_PROVIDER("DIRIGIBLE_REPOSITORY_PROVIDER", null), //
+    REPOSITORY_DATABASE_DATASOURCE_NAME("DIRIGIBLE_REPOSITORY_DATABASE_DATASOURCE_NAME", null, meta().deprecated()), //
+    MASTER_REPOSITORY_PROVIDER("DIRIGIBLE_MASTER_REPOSITORY_PROVIDER", null), //
+    MASTER_REPOSITORY_ZIP_LOCATION("DIRIGIBLE_MASTER_REPOSITORY_ZIP_LOCATION", null), //
+    MASTER_REPOSITORY_JAR_PATH("DIRIGIBLE_MASTER_REPOSITORY_JAR_PATH", null), //
+    REPOSITORY_SEARCH_ROOT_FOLDER("DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER", null), //
+    REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE("DIRIGIBLE_REPOSITORY_SEARCH_ROOT_FOLDER_IS_ABSOLUTE", null), //
+    REPOSITORY_SEARCH_INDEX_LOCATION("DIRIGIBLE_REPOSITORY_SEARCH_INDEX_LOCATION", null), //
+    REPOSITORY_VERSIONING_ENABLED("DIRIGIBLE_REPOSITORY_VERSIONING_ENABLED", null), //
+    DATABASE_PROVIDER("DIRIGIBLE_DATABASE_PROVIDER", null), //
+    DATABASE_DEFAULT_SET_AUTO_COMMIT("DIRIGIBLE_DATABASE_DEFAULT_SET_AUTO_COMMIT", null, meta().deprecated()), //
+    DATABASE_DEFAULT_MAX_CONNECTIONS_COUNT("DIRIGIBLE_DATABASE_DEFAULT_MAX_CONNECTIONS_COUNT", null, meta().deprecated()), //
+    DATABASE_DEFAULT_WAIT_TIMEOUT("DIRIGIBLE_DATABASE_DEFAULT_WAIT_TIMEOUT", null), //
+    DATABASE_DEFAULT_WAIT_COUNT("DIRIGIBLE_DATABASE_DEFAULT_WAIT_COUNT", null, meta().deprecated()), //
+    DATABASE_CUSTOM_DATASOURCES("DIRIGIBLE_DATABASE_CUSTOM_DATASOURCES", null), //
+    DATABASE_DERBY_ROOT_FOLDER_DEFAULT("DIRIGIBLE_DATABASE_DERBY_ROOT_FOLDER_DEFAULT", null, meta().deprecated()), //
+    DATABASE_H2_ROOT_FOLDER_DEFAULT("DIRIGIBLE_DATABASE_H2_ROOT_FOLDER_DEFAULT", null), //
+    DATABASE_H2_DRIVER("DIRIGIBLE_DATABASE_H2_DRIVER", null), //
+    DATABASE_H2_URL("DIRIGIBLE_DATABASE_H2_URL", null), //
+    DATABASE_H2_USERNAME("DIRIGIBLE_DATABASE_H2_USERNAME", null), //
+    DATABASE_H2_PASSWORD("DIRIGIBLE_DATABASE_H2_PASSWORD", null, meta().secret()), //
+    DATABASE_TRANSFER_BATCH_SIZE("DIRIGIBLE_DATABASE_TRANSFER_BATCH_SIZE", null), //
+    PERSISTENCE_CREATE_TABLE_ON_USE("DIRIGIBLE_PERSISTENCE_CREATE_TABLE_ON_USE", null), //
+    MONGODB_CLIENT_URI("DIRIGIBLE_MONGODB_CLIENT_URI", null), //
+    MONGODB_DATABASE_DEFAULT("DIRIGIBLE_MONGODB_DATABASE_DEFAULT", null), //
+    SCHEDULER_MEMORY_STORE("DIRIGIBLE_SCHEDULER_MEMORY_STORE", null), //
+    SCHEDULER_DATASOURCE_TYPE("DIRIGIBLE_SCHEDULER_DATASOURCE_TYPE", null, meta().deprecated()), //
+    SCHEDULER_DATASOURCE_NAME("DIRIGIBLE_SCHEDULER_DATASOURCE_NAME", null, meta().deprecated()), //
+    SCHEDULER_DATABASE_DELEGATE("DIRIGIBLE_SCHEDULER_DATABASE_DELEGATE", null), //
+    SCHEDULER_LOGS_RETANTION_PERIOD("DIRIGIBLE_SCHEDULER_LOGS_RETANTION_PERIOD", null, meta().type(ConfigType.DURATION)
+                                                                                             .aliasOf(
+                                                                                                     "DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD")), //
+    SCHEDULER_EMAIL_SENDER("DIRIGIBLE_SCHEDULER_EMAIL_SENDER", null), //
+    SCHEDULER_EMAIL_RECIPIENTS("DIRIGIBLE_SCHEDULER_EMAIL_RECIPIENTS", null, meta().type(ConfigType.LIST)), //
+    SCHEDULER_EMAIL_SUBJECT_ERROR("DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_ERROR", null), //
+    SCHEDULER_EMAIL_SUBJECT_NORMAL("DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_NORMAL", null), //
+    SCHEDULER_EMAIL_TEMPLATE_ERROR("DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_ERROR", null), //
+    SCHEDULER_EMAIL_TEMPLATE_NORMAL("DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_NORMAL", null), //
+    SCHEDULER_EMAIL_URL_SCHEME("DIRIGIBLE_SCHEDULER_EMAIL_URL_SCHEME", null), //
+    SCHEDULER_EMAIL_URL_HOST("DIRIGIBLE_SCHEDULER_EMAIL_URL_HOST", null), //
+    SCHEDULER_EMAIL_URL_PORT("DIRIGIBLE_SCHEDULER_EMAIL_URL_PORT", null), //
+    SYNCHRONIZER_IGNORE_DEPENDENCIES("DIRIGIBLE_SYNCHRONIZER_IGNORE_DEPENDENCIES", null, meta().deprecated()), //
+    SYNCHRONIZER_EXCLUDE_PATHS("DIRIGIBLE_SYNCHRONIZER_EXCLUDE_PATHS", null, meta().deprecated()), //
+    JOB_EXPRESSION_BPM("DIRIGIBLE_JOB_EXPRESSION_BPM", null, meta().deprecated()), //
+    JOB_EXPRESSION_DATA_STRUCTURES("DIRIGIBLE_JOB_EXPRESSION_DATA_STRUCTURES", null, meta().deprecated()), //
+    JOB_EXPRESSION_EXTENSIONS("DIRIGIBLE_JOB_EXPRESSION_EXTENSIONS", null, meta().deprecated()), //
+    JOB_EXPRESSION_JOBS("DIRIGIBLE_JOB_EXPRESSION_JOBS", null, meta().deprecated()), //
+    JOB_EXPRESSION_MESSAGING("DIRIGIBLE_JOB_EXPRESSION_MESSAGING", null, meta().deprecated()), //
+    JOB_EXPRESSION_MIGRATIONS("DIRIGIBLE_JOB_EXPRESSION_MIGRATIONS", null, meta().deprecated()), //
+    JOB_EXPRESSION_ODATA("DIRIGIBLE_JOB_EXPRESSION_ODATA", null, meta().deprecated()), //
+    JOB_EXPRESSION_PUBLISHER("DIRIGIBLE_JOB_EXPRESSION_PUBLISHER", null, meta().deprecated()), //
+    JOB_EXPRESSION_SECURITY("DIRIGIBLE_JOB_EXPRESSION_SECURITY", null, meta().deprecated()), //
+    JOB_EXPRESSION_REGISTRY("DIRIGIBLE_JOB_EXPRESSION_REGISTRY", null, meta().deprecated()), //
+    JOB_DEFAULT_TIMEOUT("DIRIGIBLE_JOB_DEFAULT_TIMEOUT", null), //
+    CMS_PROVIDER("DIRIGIBLE_CMS_PROVIDER", null), //
+    /**
+     * Whether the per-path CMS access grants are enforced. Per tenant, because whether a tenant
+     * restricts folders by role is its own decision; read per request.
+     */
+    CMS_ROLES_ENABLED("DIRIGIBLE_CMS_ROLES_ENABLED", Boolean.TRUE.toString(), meta().tenant(11)), //
+    CMS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE("DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE", null, meta().deprecated()), //
+    CMS_INTERNAL_VERSIONING_ENABLED("DIRIGIBLE_CMS_INTERNAL_VERSIONING_ENABLED", null), //
+    CMS_MANAGED_CONFIGURATION_JNDI_NAME("DIRIGIBLE_CMS_MANAGED_CONFIGURATION_JNDI_NAME", null, meta().deprecated()), //
+    CMS_MANAGED_CONFIGURATION_AUTH_METHOD("DIRIGIBLE_CMS_MANAGED_CONFIGURATION_AUTH_METHOD", null, meta().deprecated()), //
+    CMS_MANAGED_CONFIGURATION_NAME("DIRIGIBLE_CMS_MANAGED_CONFIGURATION_NAME", null, meta().deprecated()), //
+    CMS_MANAGED_CONFIGURATION_KEY("DIRIGIBLE_CMS_MANAGED_CONFIGURATION_KEY", null, meta().deprecated()), //
+    CMS_MANAGED_CONFIGURATION_DESTINATION("DIRIGIBLE_CMS_MANAGED_CONFIGURATION_DESTINATION", null, meta().deprecated()), //
+    CONNECTIVITY_CONFIGURATION_JNDI_NAME("DIRIGIBLE_CONNECTIVITY_CONFIGURATION_JNDI_NAME", null), //
+    CMS_DATABASE_DATASOURCE_TYPE("DIRIGIBLE_CMS_DATABASE_DATASOURCE_TYPE", null, meta().deprecated()), //
+    CMS_DATABASE_DATASOURCE_NAME("DIRIGIBLE_CMS_DATABASE_DATASOURCE_NAME", null, meta().deprecated()), //
+    BPM_PROVIDER("DIRIGIBLE_BPM_PROVIDER", null, meta().deprecated()), //
+    FLOWABLE_USE_SYSTEM_DATASOURCE("DIRIGIBLE_FLOWABLE_USE_SYSTEM_DATASOURCE", null, meta().deprecated()), //
+    KAFKA_BOOTSTRAP_SERVER("DIRIGIBLE_KAFKA_BOOTSTRAP_SERVER", null), //
+    KAFKA_ACKS("DIRIGIBLE_KAFKA_ACKS", null), //
+    KAFKA_KEY_SERIALIZER("DIRIGIBLE_KAFKA_KEY_SERIALIZER", null), //
+    KAFKA_VALUE_SERIALIZER("DIRIGIBLE_KAFKA_VALUE_SERIALIZER", null), //
+    KAFKA_AUTOCOMMIT_ENABLED("DIRIGIBLE_KAFKA_AUTOCOMMIT_ENABLED", null), //
+    KAFKA_AUTOCOMMIT_INTERVAL("DIRIGIBLE_KAFKA_AUTOCOMMIT_INTERVAL", null), //
+    JAVASCRIPT_ENGINE_TYPE_DEFAULT("DIRIGIBLE_JAVASCRIPT_ENGINE_TYPE_DEFAULT", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_DEBUGGER_PORT("DIRIGIBLE_JAVASCRIPT_GRAALVM_DEBUGGER_PORT", null), //
+    JAVASCRIPT_GRAALVM_ALLOW_HOST_ACCESS("DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_HOST_ACCESS", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_ALLOW_CREATE_THREAD("DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_THREAD", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_ALLOW_CREATE_PROCESS("DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_CREATE_PROCESS", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_ALLOW_IO("DIRIGIBLE_JAVASCRIPT_GRAALVM_ALLOW_IO", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_NASHORN("DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_NASHORN", null, meta().deprecated()), //
+    JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_MOZILLA("DIRIGIBLE_JAVASCRIPT_GRAALVM_COMPATIBILITY_MODE_MOZILLA", null, meta().deprecated()), //
+    OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT("DIRIGIBLE_OPERATIONS_LOGS_ROOT_FOLDER_DEFAULT", null), //
+    THEME_DEFAULT("DIRIGIBLE_THEME_DEFAULT", null), //
+    GENERATE_PRETTY_NAMES("DIRIGIBLE_GENERATE_PRETTY_NAMES", null, meta().deprecated()), //
+    OAUTH_CUSTOM_CLIENTS("DIRIGIBLE_OAUTH_CUSTOM_CLIENTS", null), //
+    OAUTH_ENABLED("DIRIGIBLE_OAUTH_ENABLED", null, meta().deprecated()), //
+    OAUTH_AUTHORIZE_UR("DIRIGIBLE_OAUTH_AUTHORIZE_UR", null, meta().aliasOf("DIRIGIBLE_OAUTH_AUTHORIZE_URL")), //
+    OAUTH_TOKEN_URL("DIRIGIBLE_OAUTH_TOKEN_URL", null, meta().deprecated()), //
+    OAUTH_CLIENT_ID("DIRIGIBLE_OAUTH_CLIENT_ID", null, meta().deprecated()), //
+    OAUTH_CLIENT_SECRET("DIRIGIBLE_OAUTH_CLIENT_SECRET", null, meta().secret()
+                                                                     .deprecated()), //
+    OAUTH_VERIFICATION_KEY("DIRIGIBLE_OAUTH_VERIFICATION_KEY", null, meta().deprecated()), //
+    OAUTH_APPLICATION_NAME("DIRIGIBLE_OAUTH_APPLICATION_NAME", null, meta().deprecated()), //
+    OAUTH_APPLICATION_HOST("DIRIGIBLE_OAUTH_APPLICATION_HOST", null, meta().deprecated()), //
+    OAUTH_ISSUER("DIRIGIBLE_OAUTH_ISSUER", null, meta().deprecated()), //
+    OAUTH_AUTHORIZE_URL("DIRIGIBLE_OAUTH_AUTHORIZE_URL", null, meta().deprecated()), //
+    OAUTH_TOKEN_REQUEST_METHOD("DIRIGIBLE_OAUTH_TOKEN_REQUEST_METHOD", null, meta().deprecated()), //
+    OAUTH_VERIFICATION_KEY_EXPONENT("DIRIGIBLE_OAUTH_VERIFICATION_KEY_EXPONENT", null, meta().deprecated()), //
+    OAUTH_CHECK_ISSUER_ENABLED("DIRIGIBLE_OAUTH_CHECK_ISSUER_ENABLED", null, meta().deprecated()), //
+    OAUTH_CHECK_AUDIENCE_ENABLED("DIRIGIBLE_OAUTH_CHECK_AUDIENCE_ENABLED", null, meta().deprecated()), //
+    PRODUCT_NAME("DIRIGIBLE_PRODUCT_NAME", null), //
+    PRODUCT_VERSION("DIRIGIBLE_PRODUCT_VERSION", null), //
+    PRODUCT_REPOSITORY("DIRIGIBLE_PRODUCT_REPOSITORY", null), //
+    PRODUCT_COMMIT_ID("DIRIGIBLE_PRODUCT_COMMIT_ID", null), //
+    PRODUCT_TYPE("DIRIGIBLE_PRODUCT_TYPE", null), //
+    INSTANCE_NAME("DIRIGIBLE_INSTANCE_NAME", null), //
+    SPARK_CLIENT_URI("DIRIGIBLE_SPARK_CLIENT_URI", null, meta().deprecated()), //
+    TERMINAL_ENABLED("DIRIGIBLE_TERMINAL_ENABLED", Boolean.TRUE.toString()), //
+    MAIL_CONFIG_PROVIDER("DIRIGIBLE_MAIL_CONFIG_PROVIDER", null), //
+    MAIL_SMTPS_HOST("DIRIGIBLE_MAIL_SMTPS_HOST", null), //
+    MAIL_SMTPS_PORT("DIRIGIBLE_MAIL_SMTPS_PORT", null), //
+    MAIL_SMTPS_AUTH("DIRIGIBLE_MAIL_SMTPS_AUTH", null), //
+    KEYCLOAK_AUTH_SERVER_URL("DIRIGIBLE_KEYCLOAK_AUTH_SERVER_URL", null), //
+    KEYCLOAK_CLIENT_ID("DIRIGIBLE_KEYCLOAK_CLIENT_ID", null), //
+    CSV_DATA_MAX_COMPARE_SIZE("DIRIGIBLE_CSV_DATA_MAX_COMPARE_SIZE", null, meta().deprecated()), //
+    DESTINATION_CLIENT_ID("DIRIGIBLE_DESTINATION_CLIENT_ID", null, meta().deprecated()), //
+    DESTINATION_CLIENT_SECRET("DIRIGIBLE_DESTINATION_CLIENT_SECRET", null, meta().secret()
+                                                                                 .deprecated()), //
+    DESTINATION_URL("DIRIGIBLE_DESTINATION_URL", null, meta().deprecated()), //
+    DESTINATION_URI("DIRIGIBLE_DESTINATION_URI", null, meta().deprecated()), //
+    BASIC_ENABLED("DIRIGIBLE_BASIC_ENABLED", null), //
+    FTP_USERNAME("DIRIGIBLE_FTP_USERNAME", null), //
+    FTP_PASSWORD("DIRIGIBLE_FTP_PASSWORD", null, meta().secret()), //
+    FTP_PORT("DIRIGIBLE_FTP_PORT", null), //
+    SFTP_USERNAME("DIRIGIBLE_SFTP_USERNAME", null), //
+    SFTP_PASSWORD("DIRIGIBLE_SFTP_PASSWORD", null, meta().secret()), //
+    SFTP_PORT("DIRIGIBLE_SFTP_PORT", null), //
+    SERVER_MAXHTTPHEADERSIZE("SERVER_MAXHTTPHEADERSIZE", null, meta().group("instance")), //
+    PUBLISH_DISABLED("DIRIGIBLE_PUBLISH_DISABLED", null), //
+    AWS_DEFAULT_REGION("AWS_DEFAULT_REGION", null, meta().group("documents")), //
+    AWS_ACCESS_KEY_ID("AWS_ACCESS_KEY_ID", null, meta().group("documents")), //
+    AWS_SECRET_ACCESS_KEY("AWS_SECRET_ACCESS_KEY", null, meta().group("documents")
+                                                               .secret()), //
+    S3_PROVIDER("DIRIGIBLE_S3_PROVIDER", null), //
+    S3_BUCKET("DIRIGIBLE_S3_BUCKET", null), //
+    DATABASE_SYSTEM_DRIVER("DIRIGIBLE_DATABASE_SYSTEM_DRIVER", null), //
+    DATABASE_SYSTEM_URL("DIRIGIBLE_DATABASE_SYSTEM_URL", null), //
+    DATABASE_SYSTEM_USERNAME("DIRIGIBLE_DATABASE_SYSTEM_USERNAME", null), //
+    DATABASE_SYSTEM_PASSWORD("DIRIGIBLE_DATABASE_SYSTEM_PASSWORD", null, meta().secret()), //
+    DATABASE_SYSTEM_DIALECT("DIRIGIBLE_DATABASE_SYSTEM_DIALECT", null), //
+    DATABASE_SYSTEM_DDL_AUTO("DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", null), //
+    SNOWFLAKE_DEFAULT_TABLE_TYPE("SNOWFLAKE_DEFAULT_TABLE_TYPE", null, meta().group("database")), //
+    PROJECT_TYPESCRIPT("DIRIGIBLE_PROJECT_TYPESCRIPT", null), //
+    MULTI_TENANT_MODE_SINGLE_USER_POOL("DIRIGIBLE_MULTI_TENANT_MODE_SINGLE_USER_POOL", null, meta().deprecated()), //
+    TRACING_TASK_ENABLED("DIRIGIBLE_TRACING_TASK_ENABLED", null), //
+
+    // ---- Keys read through a Spring placeholder or a local constant that the catalogue did not list
+    // (#7759).
+
+    COGNITO_CLIENT_ID("DIRIGIBLE_COGNITO_CLIENT_ID", null), //
+    COGNITO_CLIENT_SECRET("DIRIGIBLE_COGNITO_CLIENT_SECRET", null, meta().secret()), //
+    COGNITO_DOMAIN("DIRIGIBLE_COGNITO_DOMAIN", null), //
+    COGNITO_GRANT_TYPE("DIRIGIBLE_COGNITO_GRANT_TYPE", "authorization_code"), //
+    COGNITO_REGION_ID("DIRIGIBLE_COGNITO_REGION_ID", null), //
+    COGNITO_SCOPE("DIRIGIBLE_COGNITO_SCOPE", "openid"), //
+    COGNITO_USER_POOL_ID("DIRIGIBLE_COGNITO_USER_POOL_ID", null), //
+    CSV_STRICT_MODE("DIRIGIBLE_CSV_STRICT_MODE", Boolean.FALSE.toString()), //
+    DATABASE_DEFAULT_QUERY_LIMIT("DIRIGIBLE_DATABASE_DEFAULT_QUERY_LIMIT", "1000"), //
+    DATABASE_METADATA_CACHE_TIME_LIMIT_IN_MINUTES("DIRIGIBLE_DATABASE_METADATA_CACHE_TIME_LIMIT_IN_MINUTES", "60"), //
+    DESTINATIONS_INTERNAL_ROOT_FOLDER("DIRIGIBLE_DESTINATIONS_INTERNAL_ROOT_FOLDER", "target/dirigible"), //
+    DESTINATIONS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE("DIRIGIBLE_DESTINATIONS_INTERNAL_ROOT_FOLDER_IS_ABSOLUTE", Boolean.FALSE.toString()), //
+    DESTINATIONS_PROVIDER("DIRIGIBLE_DESTINATIONS_PROVIDER", "local"), //
+    ETCD_CLIENT_ENDPOINT("DIRIGIBLE_ETCD_CLIENT_ENDPOINT", "http://localhost:2379"), //
+    GITHUB_CLIENT_ID("DIRIGIBLE_GITHUB_CLIENT_ID", null), //
+    GITHUB_CLIENT_SECRET("DIRIGIBLE_GITHUB_CLIENT_SECRET", null, meta().secret()), //
+    GITHUB_SCOPE("DIRIGIBLE_GITHUB_SCOPE", "read:user,user:email", meta().type(ConfigType.LIST)), //
+    GRAALIUM_DEBUG_PATH("DIRIGIBLE_GRAALIUM_DEBUG_PATH", "debug"), //
+    GRAALIUM_DEBUG_PORT("DIRIGIBLE_GRAALIUM_DEBUG_PORT", "8081"), //
+    GRAALIUM_DEBUG_SECURE("DIRIGIBLE_GRAALIUM_DEBUG_SECURE", Boolean.FALSE.toString()), //
+    GRAALIUM_DEBUG_SUSPEND("DIRIGIBLE_GRAALIUM_DEBUG_SUSPEND", Boolean.TRUE.toString()), //
+    GRAALIUM_ENABLE_DEBUG("DIRIGIBLE_GRAALIUM_ENABLE_DEBUG", Boolean.FALSE.toString()), //
+    HOST("DIRIGIBLE_HOST", null), //
+    INDEXING_MAX_RESULTS("DIRIGIBLE_INDEXING_MAX_RESULTS", "100"), //
+    INDEXING_ROOT_FOLDER("DIRIGIBLE_INDEXING_ROOT_FOLDER", "target/dirigible/lucene"), //
+    KEYCLOAK_CLIENT_SECRET("DIRIGIBLE_KEYCLOAK_CLIENT_SECRET", null, meta().secret()), //
+    KEYCLOAK_GRANT_TYPE("DIRIGIBLE_KEYCLOAK_GRANT_TYPE", "authorization_code"), //
+    PRODUCTIVE_IFRAME_ENABLED("DIRIGIBLE_PRODUCTIVE_IFRAME_ENABLED", Boolean.TRUE.toString()), //
+    RABBITMQ_CLIENT_URI("DIRIGIBLE_RABBITMQ_CLIENT_URI", "127.0.0.1:5672"), //
+    REDIS_CLIENT_URI("DIRIGIBLE_REDIS_CLIENT_URI", "localhost:6379"), //
+    REPOSITORY_CACHE_ENABLED("DIRIGIBLE_REPOSITORY_CACHE_ENABLED", Boolean.FALSE.toString()), //
+    REPOSITORY_CACHE_SIZE_LIMIT_IN_MEGABYTES("DIRIGIBLE_REPOSITORY_CACHE_SIZE_LIMIT_IN_MEGABYTES", "100"), //
+    REPOSITORY_CACHE_TIME_LIMIT_IN_MINUTES("DIRIGIBLE_REPOSITORY_CACHE_TIME_LIMIT_IN_MINUTES", "10"), //
+    SCHEDULER_EMAIL_SUBJECT_DISABLE("DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_DISABLE", "Job execution has been disabled: [%s]"), //
+    SCHEDULER_EMAIL_SUBJECT_ENABLE("DIRIGIBLE_SCHEDULER_EMAIL_SUBJECT_ENABLE", "Job execution has been enabled: [%s]"), //
+    SCHEDULER_EMAIL_TEMPLATE_DISABLE("DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_DISABLE", "/job/templates/template-disable.txt"), //
+    SCHEDULER_EMAIL_TEMPLATE_ENABLE("DIRIGIBLE_SCHEDULER_EMAIL_TEMPLATE_ENABLE", "/job/templates/template-enable.txt"), //
+    SCHEDULER_LOGS_RETENTION_PERIOD("DIRIGIBLE_SCHEDULER_LOGS_RETENTION_PERIOD", "168", meta().type(ConfigType.DURATION)), //
+    SERVER_PORT("DIRIGIBLE_SERVER_PORT", "8080"), //
+    SESSION_COOKIE_SAMESITE("DIRIGIBLE_SESSION_COOKIE_SAMESITE", "lax", meta().type(ConfigType.ENUM)), //
+    SESSION_COOKIE_SECURE("DIRIGIBLE_SESSION_COOKIE_SECURE", Boolean.FALSE.toString()), //
+    SPRING_ADMIN_CLIENT_PASSWORD("DIRIGIBLE_SPRING_ADMIN_CLIENT_PASSWORD", "admin", meta().secret()), //
+    SPRING_ADMIN_CLIENT_USERNAME("DIRIGIBLE_SPRING_ADMIN_CLIENT_USERNAME", "admin"), //
+    SPRING_ADMIN_SERVER_PASSWORD("DIRIGIBLE_SPRING_ADMIN_SERVER_PASSWORD", "admin", meta().secret()), //
+    SPRING_ADMIN_SERVER_URL("DIRIGIBLE_SPRING_ADMIN_SERVER_URL", null), //
+    SPRING_ADMIN_SERVER_USERNAME("DIRIGIBLE_SPRING_ADMIN_SERVER_USERNAME", "admin"), //
+    TENANT_USERS_REQUEST_QUEUE("DIRIGIBLE_TENANT_USERS_REQUEST_QUEUE", null, meta().deprecatedBy("DIRIGIBLE_TENANT_USERS_CHANGE_QUEUE")), //
+    TSC_WATCH_SERVICE_ENABLED("DIRIGIBLE_TSC_WATCH_SERVICE_ENABLED", Boolean.TRUE.toString()), //
+    BRANDING_LOGO("DIRIGIBLE_BRANDING_LOGO", null);
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
+
+    /** The entries by key. */
+    private static final Map<String, DirigibleConfig> BY_KEY = Arrays.stream(values())
+                                                                     .collect(Collectors.toUnmodifiableMap(DirigibleConfig::getKey,
+                                                                             Function.identity()));
 
     /** The key. */
     private final String key;
 
     /** The default value. */
     private final String defaultValue;
+
+    /** The metadata. */
+    private final ConfigMeta meta;
+
+    /** The type - explicit, or inferred from the default value and the key. */
+    private final ConfigType type;
 
     /**
      * Instantiates a new dirigible config.
@@ -501,12 +751,169 @@ public enum DirigibleConfig {
      * @param defaultValue the default value
      */
     DirigibleConfig(String key, String defaultValue) {
+        this(key, defaultValue, meta());
+    }
+
+    /**
+     * Instantiates a new dirigible config with its metadata.
+     *
+     * @param key the key
+     * @param defaultValue the default value
+     * @param meta the metadata
+     */
+    DirigibleConfig(String key, String defaultValue, ConfigMeta meta) {
         this.key = key;
         this.defaultValue = defaultValue;
+        this.meta = meta;
+        this.type = meta.getType() != null ? meta.getType() : inferType(key, defaultValue);
+    }
+
+    /**
+     * Infers the type of an entry that does not declare one: the key suffix of a time unit, a boolean
+     * or whole-number default, then a URL suffix.
+     *
+     * @param key the key
+     * @param defaultValue the default value
+     * @return the type
+     */
+    private static ConfigType inferType(String key, String defaultValue) {
+        if (key.endsWith("_SECONDS") || key.endsWith("_MILLIS") || key.endsWith("_MS") || key.endsWith("_MINUTES")) {
+            return ConfigType.DURATION;
+        }
+        if (Boolean.TRUE.toString()
+                        .equals(defaultValue)
+                || Boolean.FALSE.toString()
+                                .equals(defaultValue)
+                || key.endsWith("_ENABLED")) {
+            return ConfigType.BOOLEAN;
+        }
+        if (defaultValue != null && defaultValue.matches("-?\\d+")) {
+            return ConfigType.INT;
+        }
+        if (key.endsWith("_URL") || key.endsWith("_URI")) {
+            return ConfigType.URL;
+        }
+        return ConfigType.STRING;
     }
 
     public String getDefaultValue() {
         return defaultValue;
+    }
+
+    /**
+     * The group set explicitly on the entry. It wins over the group the key prefix resolves to.
+     *
+     * @return the group id, or null when the key prefix decides
+     */
+    public String getGroup() {
+        return meta.getGroup();
+    }
+
+    /**
+     * Gets the subgroup within the group.
+     *
+     * @return the subgroup id, or null
+     */
+    public String getSubgroup() {
+        return meta.getSubgroup();
+    }
+
+    /**
+     * Gets the type of the value.
+     *
+     * @return the type, never null
+     */
+    public ConfigType getType() {
+        return type;
+    }
+
+    /**
+     * Whether the value must never be shown in clear.
+     *
+     * @return true for passwords, secrets, tokens and API keys
+     */
+    public boolean isSensitive() {
+        return meta.isSensitive();
+    }
+
+    /**
+     * Whether a tenant may override the key through its tenant configuration.
+     *
+     * @return true if the key is tenant-overridable
+     */
+    public boolean isTenantOverridable() {
+        return meta.getTenantOrder() >= 0;
+    }
+
+    /**
+     * Gets the position of a tenant-overridable key in the tenant settings.
+     *
+     * @return the order, or -1 when the key is not tenant-overridable
+     */
+    public int getTenantOrder() {
+        return meta.getTenantOrder();
+    }
+
+    /**
+     * Whether a changed value applies only after a restart. True unless the value is known to be read
+     * per call.
+     *
+     * @return true if a restart is required
+     */
+    public boolean isRestartRequired() {
+        return meta.isRestartRequired();
+    }
+
+    /**
+     * Whether the key is deprecated: read nowhere, renamed or misspelled. A deployment that sets one is
+     * warned at startup.
+     *
+     * @return true if deprecated
+     */
+    public boolean isDeprecated() {
+        return meta.isDeprecated();
+    }
+
+    /**
+     * Gets the key that replaces this one.
+     *
+     * @return the replacement key, or null
+     */
+    public String getDeprecatedBy() {
+        return meta.getDeprecatedBy();
+    }
+
+    /**
+     * Whether the key is a misspelling of {@link #getDeprecatedBy()}: a value set under either spelling
+     * is read under both.
+     *
+     * @return true for a misspelled alias
+     */
+    public boolean isAlias() {
+        return meta.isAlias();
+    }
+
+    /**
+     * Finds the entry of a key.
+     *
+     * @param key the key
+     * @return the entry, or empty when the key is not catalogued
+     */
+    public static Optional<DirigibleConfig> fromKey(String key) {
+        return Optional.ofNullable(BY_KEY.get(key));
+    }
+
+    /**
+     * Gets the keys a tenant may override, in the order the tenant settings show them.
+     *
+     * @return the tenant-overridable keys
+     */
+    public static List<String> tenantOverridableKeys() {
+        return Arrays.stream(values())
+                     .filter(DirigibleConfig::isTenantOverridable)
+                     .sorted(Comparator.comparingInt(DirigibleConfig::getTenantOrder))
+                     .map(DirigibleConfig::getKey)
+                     .toList();
     }
 
     /**

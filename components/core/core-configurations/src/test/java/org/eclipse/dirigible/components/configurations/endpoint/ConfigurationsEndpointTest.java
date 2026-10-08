@@ -9,9 +9,16 @@
  */
 package org.eclipse.dirigible.components.configurations.endpoint;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.util.List;
+
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.configurations.service.ConfigurationsService;
+import org.eclipse.dirigible.components.configurations.service.SensitiveConfigurations;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -24,14 +31,50 @@ import org.junit.jupiter.api.Test;
  */
 public class ConfigurationsEndpointTest {
 
-    /** The configurations service. */
-    private final ConfigurationsService configurationsService = new ConfigurationsService();
+    private static final String SENSITIVE_KEY = "DIRIGIBLE_INTENT_AI_API_KEY";
+
+    private static final String PLAIN_KEY = "DIRIGIBLE_BRANDING_NAME";
+
+    /** The configurations endpoint. */
+    private final ConfigurationsEndpoint configurationsEndpoint = new ConfigurationsEndpoint(new ConfigurationsService());
+
+    @AfterEach
+    public void tearDown() {
+        Configuration.remove(SENSITIVE_KEY);
+        Configuration.remove(PLAIN_KEY);
+    }
 
     /**
      * Find all.
      */
     @Test
     public void findAll() {
-        assertNotNull(configurationsService.findAll());
+        assertNotNull(configurationsEndpoint.findAll()
+                                            .getBody());
+    }
+
+    /**
+     * A sensitive value set at runtime never appears in clear in the body; a plain one is unchanged.
+     */
+    @Test
+    public void findAllMasksSensitiveValues() {
+        Configuration.set(SENSITIVE_KEY, "sk-live-value");
+        Configuration.set(PLAIN_KEY, "Acme");
+
+        List<List<String>> body = configurationsEndpoint.findAll()
+                                                        .getBody();
+
+        assertNotNull(body);
+        assertFalse(body.toString()
+                        .contains("sk-live-value"));
+        assertEquals(SensitiveConfigurations.MASK, row(body, SENSITIVE_KEY).get(1));
+        assertEquals("Acme", row(body, PLAIN_KEY).get(1));
+    }
+
+    private static List<String> row(List<List<String>> body, String key) {
+        return body.stream()
+                   .filter(r -> key.equals(r.get(0)))
+                   .findFirst()
+                   .orElseThrow(() -> new AssertionError("No row for " + key));
     }
 }

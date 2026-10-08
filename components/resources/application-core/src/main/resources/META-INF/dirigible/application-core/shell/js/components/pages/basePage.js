@@ -33,9 +33,7 @@ function basePage() {
      * - database heap order, which drifts as rows are re-seeded and reads as a list that "restarts at
      * A" several times over (issue #7464). This is the DEFAULT ordering for an otherwise unconfigured
      * picker; a hierarchy picker's depth-indented options are built by hierarchizeOptions and never
-     * pass through here. Collation is locale-aware: the app's current language (localStorage, the same
-     * flag i18n and Accept-Language read) drives it, so a Bulgarian label list sorts in Bulgarian
-     * order, falling back to the runtime locale; numeric:true keeps "Item 2" before "Item 10".
+     * pass through here. Collation is textCollator's.
      *
      * `serverOrdered` is the opt-out: a target entity declaring `orderBy:` has already been listed in
      * that order by its controller, and that order is the answer to this picker too.
@@ -45,14 +43,26 @@ function basePage() {
       // The target declares its own row order (intent `orderBy:`, issue #7727), so the controller
       // already listed its rows in it - re-sorting them by label would override what the model says.
       if (serverOrdered) return list;
+      const collator = this.textCollator();
+      return list.sort((a, b) => collator.compare(String(a && a.text != null ? a.text : ''),
+        String(b && b.text != null ? b.text : '')));
+    },
+
+    /**
+     * The collator every displayed-text ordering goes through - relation pickers (sortOptions) and a
+     * list sorted by a relation column (issue #7721). Locale-aware: the app's current language
+     * (localStorage, the same flag i18n and Accept-Language read) drives it, so a Bulgarian label list
+     * sorts in Bulgarian order, falling back to the runtime locale; numeric:true keeps "Item 2" before
+     * "Item 10", and sensitivity:'base' ignores case and accents.
+     */
+    textCollator() {
       let locale;
       try {
         locale = window.localStorage.getItem('codbex.harmonia.language') || undefined;
       } catch (e) {
         locale = undefined;
       }
-      return list.sort((a, b) => String(a && a.text != null ? a.text : '')
-        .localeCompare(String(b && b.text != null ? b.text : ''), locale, { numeric: true, sensitivity: 'base' }));
+      return new Intl.Collator(locale, { numeric: true, sensitivity: 'base' });
     },
 
     /**

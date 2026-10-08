@@ -59,6 +59,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesLinkIntent;
 import org.eclipse.dirigible.components.intent.model.PromptFieldIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.InboundSourceIntent;
@@ -4485,6 +4486,11 @@ public final class IntentParser {
                 if (relation.getPickable() != null) {
                     validatePickable(entity, relation, byName, issues);
                 }
+                if (relation.getInlineCreate() != null && "oneToMany".equals(relation.getKind())) {
+                    // The inline create is a to-one picker's affordance; a collection renders none (#7748).
+                    issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] declares `inlineCreate`, but a"
+                            + " collection relation has no picker - declare it on the to-one relation whose dropdown offers the New button");
+                }
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
@@ -4691,6 +4697,9 @@ public final class IntentParser {
         }
         if (relation.getPickable() != null) {
             unsupported.add("pickable");
+        }
+        if (relation.getInlineCreate() != null) {
+            unsupported.add("inlineCreate");
         }
         if (!unsupported.isEmpty()) {
             issues.add(subject + " is a subset relation so it cannot declare " + unsupported
@@ -9582,7 +9591,8 @@ public final class IntentParser {
             }
             validateGeneratesFromStatus(g, name, byName, crossModelSource, issues);
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
-            validateGeneratesPrompt(g, name, byName, crossModel, issues);
+            validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
+            validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesReopen(g, name, byName, crossModel, model, issues);
         }
     }
@@ -9779,26 +9789,121 @@ public final class IntentParser {
     }
 
     /**
+     * Validate the {@code link:} row of a generates action (issue #7748): a row of a composition child
+     * of the SOURCE, written in the create-from's unit of work and pointing at the source and at the
+     * created target. The link entity lives in this model and declares the composition to-one to the
+     * source and exactly one to-one to the target ({@code relation:} disambiguates several); its
+     * {@code map} copies created-target fields onto link fields of the same type. A cross-model
+     * target's properties are checked at generation, against the owner model.
+     */
+    private static void validateGeneratesLink(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
+            boolean crossModelSource, List<String> issues) {
+        if (g.getLink() == null) {
+            return;
+        }
+        String subject = "generates [" + name + "] link";
+        GeneratesLinkIntent link = g.getLink();
+        if (!g.hasLink()) {
+            issues.add(subject + " has no entity - name the composition child of [" + g.getFrom() + "] the row is written into");
+            return;
+        }
+        if (crossModelSource) {
+            issues.add(subject + " requires a local source - the link row is a composition child of the source, so it belongs to the"
+                    + " model owning [" + g.getFrom() + "] (fromUses [" + g.getFromUses() + "])");
+            return;
+        }
+        EntityIntent linkEntity = byName.get(link.getEntity());
+        if (linkEntity == null) {
+            issues.add(subject + " names unknown entity [" + link.getEntity() + "]");
+            return;
+        }
+        boolean childOfSource = false;
+        List<RelationIntent> toTarget = new ArrayList<>();
+        for (RelationIntent relation : linkEntity.getRelations() == null ? List.<RelationIntent>of() : linkEntity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (!toOne || relation.getTo() == null) {
+                continue;
+            }
+            boolean sameModel = isBlank(relation.getModel());
+            if (relation.isComposition() && sameModel && relation.getTo()
+                                                                 .equals(g.getFrom())) {
+                childOfSource = true;
+            } else if (relation.getTo()
+                               .equals(g.getTo())
+                    && (crossModel ? g.getUses()
+                                      .equals(relation.getModel())
+                            : sameModel)) {
+                toTarget.add(relation);
+            }
+        }
+        if (!childOfSource) {
+            issues.add(subject + " entity [" + link.getEntity() + "] must declare a composition to-one relation to the source ["
+                    + g.getFrom() + "] - the row is written as a child of the record the action runs on");
+        }
+        if (!isBlank(link.getRelation())) {
+            if (toTarget.stream()
+                        .noneMatch(r -> link.getRelation()
+                                            .equals(r.getName()))) {
+                issues.add(subject + " relation [" + link.getRelation() + "] is not a to-one relation of [" + link.getEntity()
+                        + "] to the target [" + g.getTo() + "]");
+            }
+        } else if (toTarget.isEmpty()) {
+            issues.add(subject + " entity [" + link.getEntity() + "] declares no to-one relation to the target [" + g.getTo()
+                    + "] - the row must point at the record the action creates");
+        } else if (toTarget.size() > 1) {
+            issues.add(subject + " entity [" + link.getEntity() + "] declares several to-one relations to the target [" + g.getTo()
+                    + "] - name the one the row is linked through with relation:");
+        }
+        EntityIntent target = crossModel || g.getTo() == null ? null : byName.get(g.getTo());
+        for (Map.Entry<String, String> entry : link.getMap()
+                                                   .entrySet()) {
+            FieldIntent linkField = fieldByName(linkEntity, entry.getKey());
+            if (linkField == null || linkField.isPrimaryKey()) {
+                issues.add(subject + " map key [" + entry.getKey() + "] is not a field of [" + link.getEntity() + "]");
+                continue;
+            }
+            if (target == null) {
+                continue; // a cross-model target is resolved, and its property checked, at generation
+            }
+            FieldIntent targetField = entry.getValue() == null ? null : fieldByName(target, entry.getValue());
+            if (targetField == null) {
+                issues.add(subject + " map value [" + entry.getValue() + "] is not a field of the target [" + g.getTo() + "]");
+            } else if (!sameValueType(linkField.getType(), targetField.getType())) {
+                issues.add(subject + " map copies [" + entry.getValue() + "] (" + targetField.getType() + ") into [" + entry.getKey()
+                        + "] (" + linkField.getType() + ") - the two fields must have the same type");
+            }
+        }
+    }
+
+    /**
+     * Whether a value of one field type can be assigned to a field of the other as it is: the same
+     * type, or two of the text types that all generate a Java {@code String}.
+     */
+    private static boolean sameValueType(String a, String b) {
+        String left = a == null ? "string" : a;
+        String right = b == null ? "string" : b;
+        Set<String> text = Set.of("string", "text", "uuid");
+        return left.equals(right) || (text.contains(left) && text.contains(right));
+    }
+
+    /**
      * Validate the {@code prompt:} input form of a generates action (issue #6685). Entries name
-     * properties of the TARGET entity, so the dialog is typed from the target's own definitions and the
-     * target's {@code dependsOn:} declarations apply unchanged. The v1 constraints are deliberate: the
-     * target must be local and a composition to-one child of {@code forEntity} - that is what
-     * guarantees the generated detail registration the dialog is rendered from, and it is the
-     * motivating shape (a post-issue child on an immutable document); the scope must be {@code entity}
-     * (the input is collected for the selected record); and a prompted property must not also be mapped
-     * or defaulted - a value with two writers is ambiguous.
+     * properties of the TARGET entity, so the dialog is typed from the target's own definitions. The
+     * scope must be {@code entity} (the input is collected for the selected record), an event-driven
+     * create-from has nobody to answer it, and a prompted property must not also be mapped or defaulted
+     * - a value with two writers is ambiguous. A target registered as a composition child of
+     * {@code forEntity} is rendered from that detail registration (its {@code dependsOn:} cascade
+     * included); any other target - a standalone or a cross-model one (issue #7748) - from the controls
+     * the action descriptor itself carries, so its properties are checked here when local and at
+     * generation, against the owner model, when not. A {@code default:} names a SOURCE property of the
+     * same type, which the dialog pre-fills and the controller applies to an input left empty.
      */
     private static void validateGeneratesPrompt(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
-            List<String> issues) {
+            boolean crossModelSource, List<String> issues) {
         if (!g.hasPrompt()) {
             return;
         }
         String subject = "generates [" + name + "]";
-        if (crossModel) {
-            issues.add(subject + " prompt is not supported with a cross-model target (uses [" + g.getUses()
-                    + "]) - the prompt dialog is rendered from the local target's generated detail metadata");
-            return;
-        }
         if (!"entity".equals(g.getScope())) {
             issues.add(subject + " prompt requires scope 'entity' - the input is collected for the selected record");
         }
@@ -9806,24 +9911,11 @@ public final class IntentParser {
             issues.add(subject + " prompt cannot be combined with event: - an event-driven create-from runs with nobody"
                     + " there to answer the input form");
         }
-        EntityIntent target = g.getTo() == null ? null : byName.get(g.getTo());
-        if (target == null) {
+        EntityIntent target = crossModel || g.getTo() == null ? null : byName.get(g.getTo());
+        if (!crossModel && target == null) {
             return; // an unknown target is already reported
         }
-        String forEntity = g.getForEntity();
-        boolean childOfForEntity = false;
-        if (target.getRelations() != null) {
-            for (RelationIntent relation : target.getRelations()) {
-                if (relation.isComposition() && forEntity != null && forEntity.equals(relation.getTo())
-                        && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
-                    childOfForEntity = true;
-                }
-            }
-        }
-        if (!childOfForEntity) {
-            issues.add(subject + " prompt requires the target [" + g.getTo() + "] to declare a composition to-one relation to forEntity ["
-                    + forEntity + "] - the prompt dialog is rendered from the target's detail metadata on that view");
-        }
+        EntityIntent source = crossModelSource || g.getFrom() == null ? null : byName.get(g.getFrom());
         Set<String> seen = new HashSet<>();
         for (PromptFieldIntent p : g.getPrompt()) {
             String field = p.getField();
@@ -9834,6 +9926,20 @@ public final class IntentParser {
             if (!seen.add(field)) {
                 issues.add(subject + " prompt names [" + field + "] more than once");
             }
+            if (g.getMap()
+                 .containsKey(field)
+                    || g.getDefaults()
+                        .containsKey(field)) {
+                issues.add(subject + " prompt field [" + field + "] is also mapped or defaulted - a prompted value must have exactly one"
+                        + " writer");
+            }
+            if (p.hasDefault() && crossModelSource) {
+                issues.add(subject + " prompt field [" + field + "] defaults to [" + p.getDefaultFrom() + "], but the source ["
+                        + g.getFrom() + "] belongs to model [" + g.getFromUses() + "] - a prompt default reads a local source");
+            }
+            if (target == null) {
+                continue; // a cross-model target's properties are checked at generation, against the owner model
+            }
             FieldIntent targetField = fieldByName(target, field);
             RelationIntent targetRelation = toOneRelationByName(target, field);
             if (targetField == null && targetRelation == null) {
@@ -9843,13 +9949,33 @@ public final class IntentParser {
             if (targetField != null && "timestamp".equals(targetField.getType())) {
                 issues.add(subject + " prompt field [" + field + "] has type timestamp, which the prompt dialog does not support yet");
             }
-            if (g.getMap()
-                 .containsKey(field)
-                    || g.getDefaults()
-                        .containsKey(field)) {
-                issues.add(subject + " prompt field [" + field + "] is also mapped or defaulted - a prompted value must have exactly one"
-                        + " writer");
+            if (p.hasDefault() && source != null) {
+                validatePromptDefault(subject, p, targetField, targetRelation, source, issues);
             }
+        }
+    }
+
+    /**
+     * A prompt {@code default:} (issue #7748) names a property of the SOURCE whose value the input
+     * takes: a field of the same type as a prompted field, or a to-one relation to the same entity as a
+     * prompted relation - anything else would assign a value the target property cannot hold.
+     */
+    private static void validatePromptDefault(String subject, PromptFieldIntent p, FieldIntent targetField, RelationIntent targetRelation,
+            EntityIntent source, List<String> issues) {
+        String from = p.getDefaultFrom();
+        FieldIntent sourceField = fieldByName(source, from);
+        RelationIntent sourceRelation = toOneRelationByName(source, from);
+        if (sourceField == null && sourceRelation == null) {
+            issues.add(subject + " prompt field [" + p.getField() + "] defaults to [" + from + "], which is not a field or to-one relation"
+                    + " of the source [" + source.getName() + "]");
+        } else if (targetField != null && (sourceField == null || !sameValueType(sourceField.getType(), targetField.getType()))) {
+            issues.add(subject + " prompt field [" + p.getField() + "] (" + targetField.getType() + ") defaults to [" + from + "] ("
+                    + (sourceField == null ? "a relation" : sourceField.getType()) + ") - the two must have the same type");
+        } else if (targetRelation != null
+                && (sourceRelation == null || !java.util.Objects.equals(sourceRelation.getTo(), targetRelation.getTo())
+                        || !java.util.Objects.equals(sourceRelation.getModel(), targetRelation.getModel()))) {
+            issues.add(subject + " prompt relation [" + p.getField() + "] defaults to [" + from + "], which is not a to-one relation of the"
+                    + " source to the same entity [" + targetRelation.getTo() + "]");
         }
     }
 
