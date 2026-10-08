@@ -21,6 +21,7 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/settings-print-templates/configs/print-templates.js"></script>
         <meta name="platform-links" category="ng-view">
+        <script type="text/javascript" src="/webjars/diff/dist/diff.min.js"></script>
         <script type="text/javascript" src="js/print-templates.js"></script>
         <style>
             .print-templates__source {
@@ -66,7 +67,7 @@
                     </bk-select>
                     <span class="fd-text"><b>Language</b></span>
                     <bk-select title="Language" placeholder="Language" ng-model="selected.language" ng-change="load()" dropdown-fixed="true" style="min-width: 6rem">
-                        <bk-option ng-repeat="lang in languages track by lang" text="{{lang}}" value="lang"></bk-option>
+                        <bk-option ng-repeat="lang in languages track by lang.code" text="{{lang.code}}" value="lang.code"></bk-option>
                     </bk-select>
                     <span style="flex: 1 1 auto"></span>
                     <bk-button label="Compare" glyph="sap-icon--compare" ng-disabled="comparing().length !== 2" title="Select two templates to compare" ng-click="compare()"></bk-button>

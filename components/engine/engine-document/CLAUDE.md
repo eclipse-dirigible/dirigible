@@ -45,9 +45,11 @@ uploaded). The Print button asks which to use when several exist.
 
 ## The print template catalogue (`PrintTemplateCatalog`)
 
-All print-template knowledge lives in the print engine; **`CmsStore`, the generic CMS seed and the
-Documents perspective know nothing about templates, versions or the active one** - no marker files,
-no CMIS properties. A language folder holds two kinds, told apart by the name alone
+All print-template knowledge lives in the print engine; **`CmsStore` and the generic CMS seed know
+nothing about templates, versions or the active one** - no marker files, no CMIS properties. (The
+Documents perspective knows one thing, through the generic `DocumentWriteGuard` SPI of engine-cms:
+`ShippedPrintTemplateGuard` refuses an upload over, a rename of or a delete of a shipped version,
+409 with the reason.) A language folder holds two kinds, told apart by the name alone
 (`PrintTemplateName`):
 
 ```
@@ -57,42 +59,94 @@ Templates/SalesInvoice/Print/en/
   acme-blue.print           tenant template - editable, records <!-- derived-from: standard@1.28.0 -->
 ```
 
+A document whose name is not a valid template name (`Invoice template.print`, `фактура.print`, the
+`standard.print-<millis>` an overwrite leaves behind on S3, whose rename does nothing) is **never
+dropped**: it is a tenant template under its sanitised name (`Invoice-template`, `template-<hash>`,
+`standard`) - the resolution before versions printed such files.
+
 - **Version** = the project's `project.json` `version` when valid, else the first 8 hex digits of the
-  content SHA-256. Per tenant the seed adds `<name>@<version>.print` when missing, **converges** an
-  existing one whose bytes drifted (immutability by convergence, not CMS permissions), adds nothing
-  when the newest shipped version already has the same bytes, and never touches a tenant template.
-- **Migration**: the first seed per tenant renames a legacy `<name>.print` (the create-if-absent
-  era) to the version when its bytes equal the shipped ones, else to `<name>-custom` and selects it -
-  no tenant loses a layout and no tenant's output changes. "First" = no `<name>@*` exists yet; after
-  that a `<name>.print` is the tenant's own.
+  content SHA-256 - and then **`PrintTemplateReleases`** makes it immutable against the ledger
+  `DIRIGIBLE_PRINT_TEMPLATE_VERSIONS` (every version this instance ever shipped, append-only, with
+  the content hash): bytes shipped before get their earlier version back (a rollback or an unchanged
+  release adds nothing), and changed bytes under a label already recorded ship as
+  `<label>+<hash>` (a WARN) instead of overwriting what pinned tenants print. Per tenant the seed adds
+  `<name>@<version>.print` when missing, **converges** an existing one whose bytes drifted, adds
+  nothing when the newest shipped version already has the same bytes, and never touches a tenant
+  template.
+- **Order** of shipped versions = the ledger's id, i.e. when the instance first shipped them - the
+  only order a content hash has (no base module declares a release version, and the AOT packager
+  drops `project.json`), and the release order for release versions published in order. A version
+  the ledger never recorded ranks below every recorded one (release versions compare numerically,
+  pre-releases identifier by identifier), and `@legacy` below everything.
+- **Default** (no selection): of the **primary** template - `standard`, else the first name the
+  registry ships - the version the registry ships **now** (`PrintTemplateSeed` rows), else that
+  name's newest version present, else the first tenant template. Scoped by name, so a release that
+  adds a `compact.print` does not switch every tenant to it, and redeploying an older release
+  makes its version the default again.
+- **Migration** (`migrate`), before the first version of a template lands in a folder. Everything is
+  a copy + read-back + delete (`CmsStore.move`) - **never the CMS rename**, which S3 does not
+  implement (silently a no-op) and SharePoint refuses:
+  - While the folder has no shipped version at all, the rule before versions still decides what
+    printed: the first `.print` document in CMS order. Without a stored selection, a document other
+    than the legacy copy that printed (`acme.print`) is selected - moved to its sanitised name first
+    when it had none.
+  - The legacy `<name>.print` whose bytes the ledger knows becomes that version, unselected: an
+    unedited copy, however stale, is not a customisation, and the tenant gets the current release.
+  - Any other legacy copy becomes `<name>-custom` with `<!-- derived-from: <name>@legacy -->` (BOM
+    dropped), so every shipped version is flagged newer, and is selected when it is what printed.
+  The ledger only knows releases this instance shipped through the catalogue - plus the bytes the
+  generic seed shipped last, recorded when the synchronizer retires that seed's row (below). A copy of
+  an older release is indistinguishable from a customisation and is kept as one, flagged.
+- **Taking over from the generic seed.** On an upgraded instance every `.print` had a `cms-seed`
+  definition and `DIRIGIBLE_CMS_SEEDS` row. `PrintTemplateSynchronizer.parseImpl` deletes the rows at
+  its location (recording their content in the ledger first), and `SynchronizationProcessor.markDeleted`
+  matches definitions by **key** (type + location), so the `cms-seed` definition left at a location the
+  print synchronizer now owns goes DELETED - by location it stayed PARSED forever, and after a tenant
+  activation blanked its checksum the initialization status reported IN_PROGRESS for every tenant.
+- **One failing tenant keeps the artefact FAILED.** The row is shared and the tenants are completed
+  one after another, each `registerState` overwriting the last; the synchronizer keeps the set of
+  tenants whose seed failed per artefact key and registers FAILED until it is empty, so a later
+  tenant's success cannot hide an earlier failure from the START retry.
 - **Selection** is the tenant configuration `DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG>`
-  (`PrintTemplateSelection`; the key policy admits the family by prefix). It is read like every
-  tenant override, from the thread-scoped `Configuration` the request filter / listener dispatch fill;
-  `PrintFacade` loads it for a render outside both (a snapshot on the BPM executor), and only the
-  migration reads the store directly (`getStored`). Keep the GET handlers off the store: reaching its
-  lazy `CREATE TABLE` from a GET is what CodeQL reports as an unprotected state-changing request. **Resolution**: `template` request parameter → configuration (a missing name logs
-  WARN and falls through) → newest shipped version → the first tenant template (a language the tenant
-  uploaded itself). Newest: a release version (`\d+.\d+...`) beats a hash, release versions compare
-  numerically, and among hashes the one the registry ships now (`PrintTemplateSeed` rows) wins.
+  (`PrintTemplateSelection`; the key policy admits the family by prefix - see `tenants.md` for why
+  this one prefix exists - and `/predefined` does not list it, or the shells' Save would write a stale
+  selection back). It is read like every tenant override, from the thread-scoped `Configuration` the
+  request filter / listener dispatch fill; `PrintFacade` loads it for a render outside both (a
+  snapshot on the BPM executor); the migration and the delete-the-active guard read the store
+  directly (`getStored`), the guard because the request's copy can be stale on another node. Keep
+  the GET handlers off the store: reaching its lazy `CREATE TABLE` from a GET is what CodeQL reports
+  as an unprotected state-changing request. **Resolution**: `template` request parameter →
+  configuration (a missing name logs WARN and falls through) → the default above.
+- **A print costs no statement in the steady state**: `PrintTemplateReleases` caches the seed rows'
+  name/version projection and the ledger per entity and language for 60 s (invalidated by the
+  synchronizer; the expiry covers other nodes). `PerformanceBaselineIT`'s print step counts statements
+  and gates on `tests/PERF_BASELINE.json` - a per-print query here is a regression there.
 - The artefact table is `DIRIGIBLE_PRINT_TEMPLATE_SEEDS` (content inline binary, as for `CmsSeed`).
-  Deleting the shipped file removes the row only; its versions stay in every tenant's catalogue.
+  Deleting the shipped file removes the row only; its versions stay in every tenant's catalogue and
+  in the ledger.
 
 ## Endpoints
 
-- `GET /services/print/{entity}/languages` → `[{"code":"en","name":"English"}, ...]` — the child
+- `GET /services/print/{entity}/languages` → `[{"code":"en","name":"English","selectionKey":"DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_EN"}, ...]` — the child
   folders of `Templates/{entity}/Print`, display names via `Locale.forLanguageTag(code)
   .getDisplayLanguage(Locale.ENGLISH)` (code fallback). Empty array when the folder is missing.
 - `POST /services/print/{entity}?lang=en&template=` with `{"document": {...}, "items": [...]}` →
   `application/pdf` (inline). Resolves the template through the catalogue (404 with a clear message
   when absent), then `DocumentParser → DataBinder → XslFoRenderer → PDFFacade.generate(fo, "<data/>")`.
-- `GET /services/print/document-types`; `GET /{entity}/templates?lang=` (the catalogue: name, kind,
-  version, derivedFrom, active, newer); `GET|PUT|DELETE /{entity}/templates/{name}?lang=` (raw
-  content / write a tenant template - 409 for a shipped version, 400 when it does not parse / delete
-  - 409 for a shipped or the active one); `POST /{entity}/templates/{name}/duplicate?lang=&as=`.
-  Writes are ADMINISTRATOR/OPERATOR. The active selection is written through
-  `PUT /services/core/configurations/tenant`, not here. The IDE page is
-  `components/ui/settings-print-templates` (Settings → Print Templates); the generated Print dialog
-  offers the layouts of the chosen language, preselected to the active one.
+- `GET /services/print/document-types` (the entity folders, one listing - languages are read per
+  type); `GET /{entity}/templates?lang=&details=` (the catalogue: name, kind, version, derivedFrom,
+  active, newer - `details=true` reads the tenant templates for `derivedFrom`, the Settings page asks
+  for it, the print dialog does not); `GET|PUT|DELETE /{entity}/templates/{name}?lang=` (raw content /
+  write a tenant template - 409 for a shipped version, 400 when it does not parse / delete - 409 for
+  a shipped or the active one); `POST /{entity}/templates/{name}/duplicate?lang=&as=` (the copy is
+  parse-checked). Reading a source and every write are ADMINISTRATOR/OPERATOR, **and the CMS access
+  grants of the template's path apply on top** (`DocumentAccessEvaluator`, 403), as in the Documents
+  perspective. The active selection is written through `PUT /services/core/configurations/tenant`,
+  not here. The IDE page is `components/ui/settings-print-templates` (Settings → Print Templates).
+  The generated pages share one Print implementation, `application-core/shell/js/components/printActions.js`:
+  the dialog opens for more than one language or more than one layout, where a layout is a tenant
+  template or the shipped default (older shipped versions are pinned in Settings, not offered per
+  print), and Print waits while a language's layouts load and drops a stale response.
 
 **The client feeds this endpoint from a server-side feeder, not from its own screen state.** The
 Harmonia document/manage page first GETs the generated `…PrintFeeder/{id}` (client-Java), which
@@ -122,11 +176,14 @@ formats in the form money pattern `### ### ### ##0.00`).
 - `CmsStore` is the **only** CMS surface, and a plain file store: **seed** — `seed(cmsPath, bytes)`
   (generic, create-if-absent, `ensureFolder` walks/creates one level at a time since the engine
   `CmisFolder.createFolder` is single-level; a media type is inferred from the file extension); and
-  generic `listFolders` / `listDocuments` / `read` / `write` / `rename` / `delete` that
-  `PrintTemplateCatalog` builds on. A missing path is the
+  generic `listFolders` / `listDocuments` / `read` / `write` / `move` / `delete` that
+  `PrintTemplateCatalog` builds on. `write` replaces as delete + create and writes the previous bytes
+  back when the create fails; `move` is copy + read-back + delete (rolled back on failure) - there is
+  no `rename`, because no CMS backend but the internal one implements it. A missing path is the
   `IOException` `getObjectByPath` throws (logged at DEBUG with the throwable). Writes go through the
   raw engine-cms interfaces (`CmisSessionFactory.getSession()`), which bypass CMS role checks —
-  correct for a server-side seeder, same as `data-processes`' `BaseExportTask`.
+  correct for the seeder; the catalogue's user-facing operations check `DocumentAccessEvaluator`
+  themselves.
 - `CmsSeed` stores the raw content in a `CMS_SEED_CONTENT` binary column (bytes, so binary seeds
   work) plus the target `CMS_SEED_PATH`, so the seeding phase does not re-read the repository.
   **The column is `@JdbcTypeCode(SqlTypes.LONG32VARBINARY)`, never `@Lob`.** A `@Lob byte[]` is an

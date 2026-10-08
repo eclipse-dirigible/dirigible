@@ -23,7 +23,9 @@ class PrintTemplateException extends Exception {
         /** The operation contradicts the template's kind or state (a shipped version, the active one). */
         CONFLICT,
         /** A name, a language or a template's content is not acceptable. */
-        INVALID
+        INVALID,
+        /** The caller's CMS access grants do not allow the operation on the template's path. */
+        FORBIDDEN
     }
 
     private final Reason reason;

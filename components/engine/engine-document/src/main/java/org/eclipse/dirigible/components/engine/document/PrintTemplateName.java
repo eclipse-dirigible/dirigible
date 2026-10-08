@@ -9,6 +9,11 @@
  */
 package org.eclipse.dirigible.components.engine.document;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
+import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -49,6 +54,21 @@ record PrintTemplateName(String name, String version) {
      * as one), an optional pre-release and optional build metadata.
      */
     private static final Pattern SEMVER = Pattern.compile("(\\d+(?:\\.\\d+)+)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?");
+
+    /**
+     * What an overwrite through the Documents perspective leaves behind on a CMS whose rename does
+     * nothing (S3): {@code standard.print-1696000000000} - the upload, under its temporary name.
+     */
+    private static final Pattern OVERWRITE_LEFTOVER = Pattern.compile("(?i)(.+)\\.print-\\d+");
+
+    /** The longest template name, as {@link #NAME} admits it. */
+    private static final int MAX_NAME_LENGTH = 100;
+
+    /** A character a template name cannot carry. */
+    private static final Pattern NOT_A_NAME_CHARACTER = Pattern.compile("[^A-Za-z0-9._-]+");
+
+    /** A combining mark, dropped so an accented letter keeps its base letter. */
+    private static final Pattern COMBINING_MARK = Pattern.compile("\\p{M}+");
 
     PrintTemplateName {
         if (!isValidName(name)) {
@@ -112,6 +132,91 @@ record PrintTemplateName(String name, String version) {
             return Optional.empty();
         }
         return parse(fileName.substring(0, fileName.length() - EXTENSION.length()));
+    }
+
+    /**
+     * The base name a document of a language folder carries when it is a print template at all - also
+     * one whose name is not a valid template name ({@code Invoice template.print},
+     * {@code фактура.print}) and the leftover of an overwrite on a CMS whose rename does nothing
+     * ({@code standard.print-1696000000000}). The old resolution printed such documents, so the
+     * catalogue keeps them visible rather than dropping them.
+     *
+     * @param documentName the document name
+     * @return the name without the {@code .print} extension, empty when the document is not a print
+     *         template
+     */
+    static Optional<String> templateBase(String documentName) {
+        if (documentName == null) {
+            return Optional.empty();
+        }
+        String base = null;
+        if (documentName.toLowerCase(Locale.ROOT)
+                        .endsWith(EXTENSION)) {
+            base = documentName.substring(0, documentName.length() - EXTENSION.length());
+        } else {
+            Matcher leftover = OVERWRITE_LEFTOVER.matcher(documentName);
+            if (leftover.matches()) {
+                base = leftover.group(1);
+            }
+        }
+        return base == null || base.isBlank() ? Optional.empty() : Optional.of(base);
+    }
+
+    /**
+     * Turns any document base name into a valid tenant template name, deterministically: accents are
+     * dropped, every run of other characters - {@code @} included, so the result is never a shipped
+     * version - becomes a dash, and a name with nothing left is named after a hash of the original.
+     *
+     * @param base the base name
+     * @return a valid template name
+     */
+    static String sanitize(String base) {
+        String plain = COMBINING_MARK.matcher(Normalizer.normalize(base, Normalizer.Form.NFKD))
+                                     .replaceAll("");
+        String name = NOT_A_NAME_CHARACTER.matcher(plain)
+                                          .replaceAll("-")
+                                          .replaceFirst("^[._-]+", "");
+        if (name.length() > MAX_NAME_LENGTH) {
+            name = name.substring(0, MAX_NAME_LENGTH);
+        }
+        return name.isEmpty() ? "template-" + shortHash(base) : name;
+    }
+
+    /**
+     * The first 8 hex digits of the SHA-256 of a text - a short, stable discriminator.
+     *
+     * @param text the text
+     * @return 8 lower-case hex digits
+     */
+    static String shortHash(String text) {
+        return shortHash(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /**
+     * The first 8 hex digits of the SHA-256 of some bytes - the content version of a shipped template
+     * whose module declares no release version.
+     *
+     * @param content the bytes
+     * @return 8 lower-case hex digits
+     */
+    static String shortHash(byte[] content) {
+        return contentHash(content).substring(0, 8);
+    }
+
+    /**
+     * The SHA-256 of some bytes, in hex.
+     *
+     * @param content the bytes
+     * @return 64 lower-case hex digits
+     */
+    static String contentHash(byte[] content) {
+        try {
+            return HexFormat.of()
+                            .formatHex(MessageDigest.getInstance("SHA-256")
+                                                    .digest(content));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
     }
 
     /**
@@ -201,7 +306,36 @@ record PrintTemplateName(String name, String version) {
         if (leftPre == null || rightPre == null) {
             return leftPre == null ? (rightPre == null ? 0 : 1) : -1;
         }
-        return leftPre.compareTo(rightPre);
+        return comparePreRelease(leftPre.split("\\."), rightPre.split("\\."));
+    }
+
+    /**
+     * Compares two pre-releases the SemVer way: identifier by identifier, numerically when both are
+     * numeric ({@code rc.2} below {@code rc.10}), a numeric one below an alphanumeric one, otherwise by
+     * their text; a pre-release that is a prefix of the other ranks below it.
+     */
+    private static int comparePreRelease(String[] left, String[] right) {
+        for (int i = 0; i < Math.min(left.length, right.length); i++) {
+            boolean leftNumeric = isNumeric(left[i]);
+            boolean rightNumeric = isNumeric(right[i]);
+            int compared;
+            if (leftNumeric && rightNumeric) {
+                compared = compareNumbers(left[i], right[i]);
+            } else if (leftNumeric != rightNumeric) {
+                compared = leftNumeric ? -1 : 1;
+            } else {
+                compared = left[i].compareTo(right[i]);
+            }
+            if (compared != 0) {
+                return compared;
+            }
+        }
+        return Integer.compare(left.length, right.length);
+    }
+
+    private static boolean isNumeric(String identifier) {
+        return !identifier.isEmpty() && identifier.chars()
+                                                  .allMatch(Character::isDigit);
     }
 
     /** Compares two digit strings as numbers of any length. */

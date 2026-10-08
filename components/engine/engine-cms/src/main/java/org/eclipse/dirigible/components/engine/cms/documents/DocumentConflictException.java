@@ -9,12 +9,19 @@
  */
 package org.eclipse.dirigible.components.engine.cms.documents;
 
-/** Raised when an upload would replace an existing document without being asked to. HTTP 409. */
+/**
+ * Raised when an upload would replace an existing document without being asked to, or a
+ * {@link DocumentWriteGuard} refuses the change. HTTP 409.
+ */
 class DocumentConflictException extends RuntimeException {
 
     private static final long serialVersionUID = 1L;
 
     DocumentConflictException(String path) {
         super("An object already exists at [" + path + "]");
+    }
+
+    DocumentConflictException(String path, String reason) {
+        super("[" + path + "] cannot be changed: " + reason);
     }
 }

@@ -15,12 +15,23 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 
 import io.restassured.response.Response;
 
+import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
+import org.eclipse.dirigible.components.engine.document.domain.CmsSeed;
+import org.eclipse.dirigible.components.engine.document.service.CmsSeedService;
+import org.eclipse.dirigible.components.initializers.definition.Definition;
+import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
+import org.eclipse.dirigible.components.initializers.definition.DefinitionState;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -45,12 +56,17 @@ class PrintTemplateCatalogIT extends IntegrationTest {
     private static final String PROJECT_DESCRIPTOR = registryPath("/" + PROJECT + "/project.json");
     private static final String VERSIONED_TEMPLATE = registryPath("/" + PROJECT + "/doc/Templates/VersionedDoc/Print/en/standard.print");
     private static final String LEGACY_TEMPLATE = registryPath("/" + PROJECT + "/doc/Templates/LegacyDoc/Print/en/standard.print");
+    private static final String UPGRADED_LOCATION = "/" + PROJECT + "/doc/Templates/UpgradedDoc/Print/en/standard.print";
+    private static final String UPGRADED_TEMPLATE = registryPath(UPGRADED_LOCATION);
 
     private static final String VERSIONED = "/services/print/VersionedDoc";
     private static final String LEGACY = "/services/print/LegacyDoc";
+    private static final String UPGRADED = "/services/print/UpgradedDoc";
+    private static final String DOCUMENTS = "/services/documents";
     private static final String CONFIGURATIONS = "/services/core/configurations/tenant";
     private static final String VERSIONED_KEY = "DIRIGIBLE_PRINT_TEMPLATE_VERSIONEDDOC_EN";
     private static final String LEGACY_KEY = "DIRIGIBLE_PRINT_TEMPLATE_LEGACYDOC_EN";
+    private static final String UPGRADED_KEY = "DIRIGIBLE_PRINT_TEMPLATE_UPGRADEDDOC_EN";
 
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
 
@@ -62,6 +78,12 @@ class PrintTemplateCatalogIT extends IntegrationTest {
 
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
+
+    @Autowired
+    private DefinitionService definitionService;
+
+    @Autowired
+    private CmsSeedService cmsSeedService;
 
     @Test
     void releasesAddVersionsAndTheTenantSelectsTheOneThatPrints() {
@@ -110,7 +132,7 @@ class PrintTemplateCatalogIT extends IntegrationTest {
         // Selecting it is a tenant configuration; the newer shipped version is flagged.
         setConfiguration(VERSIONED_KEY, "acme");
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get(VERSIONED + "/templates?lang=en")
+                                                 .get(VERSIONED + "/templates?lang=en&details=true")
                                                  .then()
                                                  .statusCode(200)
                                                  .body("find { it.name == 'acme' }.active", equalTo(true))
@@ -140,6 +162,22 @@ class PrintTemplateCatalogIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400));
 
+        // ... and the Documents perspective cannot change a shipped version behind the catalogue's back.
+        String shippedPath = "/Templates/VersionedDoc/Print/en/standard@1.30.0.print";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"path\": \"" + shippedPath + "\", \"name\": \"mine.print\"}")
+                                                 .when()
+                                                 .put(DOCUMENTS)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("shipped print template version")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("[\"" + shippedPath + "\"]")
+                                                 .when()
+                                                 .delete(DOCUMENTS)
+                                                 .then()
+                                                 .statusCode(409));
+
         // The active template prints, and so does any other one asked for explicitly.
         restAssuredExecutor.execute(() -> print(VERSIONED, "").then()
                                                               .statusCode(200)
@@ -155,6 +193,63 @@ class PrintTemplateCatalogIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("entity", hasItem("VersionedDoc")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(VERSIONED + "/languages")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("[0].code", equalTo("en"))
+                                                 .body("[0].selectionKey", equalTo(VERSIONED_KEY)));
+    }
+
+    @Test
+    void anUpgradedInstanceRetiresTheGenericSeedAndRecognisesTheTenantsUneditedCopyOfThePreviousRelease() throws Exception {
+        String previous = template("previous");
+        // What an instance upgraded from the generic create-if-absent seed carries: the file's
+        // cms-seed definition and row (FAILED, as one is when the CMS was unreachable on the last
+        // boot), and in the tenant the copy that seed made of the previous release.
+        Definition definition =
+                new Definition(UPGRADED_LOCATION, "standard", CmsSeed.ARTEFACT_TYPE, previous.getBytes(StandardCharsets.UTF_8));
+        definition.setState(DefinitionState.PARSED);
+        definition = definitionService.save(definition);
+        CmsSeed row = new CmsSeed(UPGRADED_LOCATION, "standard.print", null);
+        row.setCmsPath("Templates/UpgradedDoc/Print/en/standard.print");
+        row.setContent(previous.getBytes(StandardCharsets.UTF_8));
+        row.setLifecycle(ArtefactLifecycle.FAILED);
+        row.updateKey();
+        cmsSeedService.save(row);
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(previous)
+                                                 .when()
+                                                 .put(UPGRADED + "/templates/standard?lang=en")
+                                                 .then()
+                                                 .statusCode(204));
+
+        // One pass for both files: a pass between them would reap the legacy row, whose file does not
+        // exist yet - before the print template synchronizer could retire it.
+        write(PROJECT_DESCRIPTOR, descriptor("1.28.0"));
+        publish(UPGRADED_TEMPLATE, template("current"));
+
+        // The unedited copy became the version it is, not a customisation: no selection, and the
+        // tenant prints the current release.
+        String previousVersion = "standard@" + shortHash(previous);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(UPGRADED + "/templates?lang=en")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("name", contains("standard@1.28.0", previousVersion))
+                                                 .body("find { it.name == 'standard@1.28.0' }.active", equalTo(true)),
+                ASSERTION_TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CONFIGURATIONS)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.key == '" + UPGRADED_KEY + "' }", nullValue()));
+
+        // The generic seed's definition and row are retired, so nothing waits for them any more.
+        assertEquals(DefinitionState.DELETED, definitionService.findByKey(definition.getKey())
+                                                               .getState());
+        assertTrue(cmsSeedService.findByLocation(UPGRADED_LOCATION)
+                                 .isEmpty());
     }
 
     @Test
@@ -186,19 +281,25 @@ class PrintTemplateCatalogIT extends IntegrationTest {
                                                  .get(LEGACY + "/templates/standard-custom?lang=en")
                                                  .then()
                                                  .statusCode(200)
+                                                 .body(startsWith("<!-- derived-from: standard@legacy -->"))
                                                  .body(containsString("customised")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(LEGACY + "/templates?lang=en&details=true")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("find { it.kind == 'shipped' }.newer", equalTo(true)));
     }
 
     @AfterEach
     void cleanup() {
-        for (String key : new String[] {VERSIONED_KEY, LEGACY_KEY}) {
+        for (String key : new String[] {VERSIONED_KEY, LEGACY_KEY, UPGRADED_KEY}) {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete(CONFIGURATIONS + "?key=" + key)
                                                      .then()
                                                      .statusCode(204));
         }
         boolean any = false;
-        for (String path : new String[] {VERSIONED_TEMPLATE, LEGACY_TEMPLATE, PROJECT_DESCRIPTOR}) {
+        for (String path : new String[] {VERSIONED_TEMPLATE, LEGACY_TEMPLATE, UPGRADED_TEMPLATE, PROJECT_DESCRIPTOR}) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
                 any = true;
@@ -210,6 +311,11 @@ class PrintTemplateCatalogIT extends IntegrationTest {
     }
 
     private void publish(String path, String content) {
+        write(path, content);
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    private void write(String path, String content) {
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         if (repository.hasResource(path)) {
             repository.getResource(path)
@@ -217,7 +323,6 @@ class PrintTemplateCatalogIT extends IntegrationTest {
         } else {
             repository.createResource(path, bytes, false, "text/plain", true);
         }
-        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     private void setConfiguration(String key, String value) {
@@ -234,6 +339,13 @@ class PrintTemplateCatalogIT extends IntegrationTest {
                       .body("{\"document\": {\"number\": \"INV-1\"}, \"items\": []}")
                       .when()
                       .post(endpoint + "?lang=en" + query);
+    }
+
+    private static String shortHash(String content) throws Exception {
+        return HexFormat.of()
+                        .formatHex(MessageDigest.getInstance("SHA-256")
+                                                .digest(content.getBytes(StandardCharsets.UTF_8)))
+                        .substring(0, 8);
     }
 
     private static String registryPath(String location) {

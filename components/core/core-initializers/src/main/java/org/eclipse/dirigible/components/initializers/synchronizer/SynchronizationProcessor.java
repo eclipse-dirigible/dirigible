@@ -637,7 +637,11 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     }
 
     /**
-     * Mark deleted.
+     * Marks deleted every definition this pass did not collect. Matched by key - type and location -
+     * not by location alone: a file another synchronizer has taken over (a print template the generic
+     * CMS seed handled before #7755) leaves the old type's definition behind at the same location, and
+     * a location match would keep it alive forever, unprocessed - which the tenant initialization
+     * status reads as a definition still awaiting its pass.
      */
     private void markDeleted() {
         Map<String, Definition> found = new HashMap<>();
@@ -645,13 +649,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             Map<String, Definition> map = checkSynchronizerMap(synchronizer);
             Collection<Definition> immutableDefinitions = Collections.synchronizedCollection(map.values());
             for (Definition definition : immutableDefinitions) {
-                found.put(definition.getLocation(), definition);
+                found.put(definition.getKey(), definition);
             }
         }
         List<Definition> existings = definitionService.getAll();
         for (Definition existing : existings) {
-            if (found.get(existing.getLocation()) == null && !existing.getState()
-                                                                      .equals(DefinitionState.DELETED)) {
+            if (found.get(existing.getKey()) == null && !existing.getState()
+                                                                 .equals(DefinitionState.DELETED)) {
                 registerDeleteState(existing);
             }
         }

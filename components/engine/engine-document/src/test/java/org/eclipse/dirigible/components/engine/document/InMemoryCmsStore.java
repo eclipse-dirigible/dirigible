@@ -21,7 +21,8 @@ import java.util.TreeSet;
 
 /**
  * A {@link CmsStore} over a map of paths to bytes - the plain file operations the print template
- * catalogue is built on, without a CMS.
+ * catalogue is built on, without a CMS. Listings come back in name order, and there is no rename:
+ * the catalogue must manage with copy and delete, as it does on the S3 and SharePoint CMS.
  */
 class InMemoryCmsStore extends CmsStore {
 
@@ -66,12 +67,13 @@ class InMemoryCmsStore extends CmsStore {
     }
 
     @Override
-    void rename(String cmsPath, String newName) throws IOException {
-        byte[] content = documents.remove(cmsPath);
-        if (content == null) {
-            throw new IOException("No document [" + cmsPath + "]");
+    void move(String cmsPath, String newName, byte[] content) throws IOException {
+        String target = cmsPath.substring(0, cmsPath.lastIndexOf('/') + 1) + newName;
+        if (!documents.containsKey(cmsPath) || documents.containsKey(target)) {
+            throw new IOException("Cannot move [" + cmsPath + "] to [" + target + "]");
         }
-        documents.put(cmsPath.substring(0, cmsPath.lastIndexOf('/') + 1) + newName, content);
+        documents.put(target, content.clone());
+        documents.remove(cmsPath);
     }
 
     @Override

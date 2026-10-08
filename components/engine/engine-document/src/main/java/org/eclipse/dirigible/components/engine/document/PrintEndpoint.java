@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.document;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -40,6 +41,7 @@ import com.google.gson.ToNumberPolicy;
 import com.google.gson.reflect.TypeToken;
 
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * The print surface of generated applications:
@@ -50,9 +52,10 @@ import jakarta.annotation.security.RolesAllowed;
  * (the requested one, else the active one) with the posted JSON data and responds with the
  * PDF.</li>
  * <li>{@code /services/print/{entity}/templates...} — the entity's template catalogue: list, read,
- * write, duplicate and delete (see {@link PrintTemplateCatalog}). Changing it is an administrator's
- * task; which template is active is a tenant configuration, written through
- * {@code PUT /services/core/configurations/tenant}, not here.</li>
+ * write, duplicate and delete (see {@link PrintTemplateCatalog}). Reading a source and changing the
+ * catalogue is an administrator's task, and the CMS access grants of the template's path apply on
+ * top, as they do in the Documents perspective; which template is active is a tenant configuration,
+ * written through {@code PUT /services/core/configurations/tenant}, not here.</li>
  * </ul>
  */
 @RestController
@@ -79,9 +82,10 @@ class PrintEndpoint extends BaseEndpoint {
     }
 
     /**
-     * Lists the document types that have print templates, with their languages.
+     * Lists the document types that may have print templates - their languages are listed by
+     * {@code /{entity}/languages}.
      *
-     * @return a JSON array of {@code {"entity": "SalesInvoice", "languages": ["en", "bg"]}} entries
+     * @return a JSON array of {@code {"entity": "SalesInvoice"}} entries
      */
     @GetMapping(value = "/document-types", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<List<PrintTemplateCatalog.DocumentType>> getDocumentTypes() {
@@ -96,15 +100,18 @@ class PrintEndpoint extends BaseEndpoint {
      * Lists the languages the given entity has print templates for.
      *
      * @param entity the domain entity name
-     * @return a JSON array of {@code {"code": "en", "name": "English"}} entries, empty when the entity
-     *         has no templates
+     * @return a JSON array of {@code {"code": "en", "name": "English", "selectionKey":
+     *         "DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN"}} entries - the selection key is the tenant
+     *         configuration that selects the language's active template - empty when the entity has no
+     *         templates
      */
     @GetMapping(value = "/{entity}/languages", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<List<Map<String, String>>> getLanguages(@PathVariable("entity") String entity) {
         try {
             List<Map<String, String>> languages = catalog.languages(entity)
                                                          .stream()
-                                                         .map(code -> Map.of("code", code, "name", displayName(code)))
+                                                         .map(code -> Map.of("code", code, "name", displayName(code), "selectionKey",
+                                                                 PrintTemplateSelection.key(entity, code)))
                                                          .toList();
             return ResponseEntity.ok(languages);
         } catch (PrintTemplateException e) {
@@ -145,13 +152,16 @@ class PrintEndpoint extends BaseEndpoint {
      *
      * @param entity the domain entity name
      * @param language the template language
+     * @param details whether to read each tenant template for the version it derives from - the
+     *        Settings page asks for it, a print dialog does not need it
      * @return the shipped versions newest first, then the tenant templates
      */
     @GetMapping(value = "/{entity}/templates", produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<List<PrintTemplateCatalog.Entry>> listTemplates(@PathVariable("entity") String entity,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language) {
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language,
+            @RequestParam(name = "details", defaultValue = "false") boolean details) {
         try {
-            return ResponseEntity.ok(catalog.list(entity, language));
+            return ResponseEntity.ok(catalog.list(entity, language, details));
         } catch (PrintTemplateException e) {
             throw refused(e);
         } catch (IOException e) {
@@ -165,13 +175,15 @@ class PrintEndpoint extends BaseEndpoint {
      * @param entity the domain entity name
      * @param name the template reference
      * @param language the template language
+     * @param request the request, for the CMS access grants
      * @return the source as plain text
      */
     @GetMapping(value = "/{entity}/templates/{name}", produces = MediaType.TEXT_PLAIN_VALUE)
+    @RolesAllowed({Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR})
     ResponseEntity<String> readTemplate(@PathVariable("entity") String entity, @PathVariable("name") String name,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language) {
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, HttpServletRequest request) {
         try {
-            return ResponseEntity.ok(catalog.read(entity, language, name));
+            return ResponseEntity.ok(catalog.read(entity, language, name, request));
         } catch (PrintTemplateException e) {
             throw refused(e);
         } catch (IOException e) {
@@ -187,14 +199,16 @@ class PrintEndpoint extends BaseEndpoint {
      * @param name the tenant template name
      * @param language the template language
      * @param source the template source
+     * @param request the request, for the CMS access grants
      * @return an empty 204 response
      */
     @PutMapping(value = "/{entity}/templates/{name}", consumes = MediaType.TEXT_PLAIN_VALUE)
     @RolesAllowed({Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR})
     ResponseEntity<Void> writeTemplate(@PathVariable("entity") String entity, @PathVariable("name") String name,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestBody String source) {
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestBody String source,
+            HttpServletRequest request) {
         try {
-            catalog.write(entity, language, name, source);
+            catalog.write(entity, language, name, source, request);
             return ResponseEntity.noContent()
                                  .build();
         } catch (PrintTemplateException e) {
@@ -211,14 +225,16 @@ class PrintEndpoint extends BaseEndpoint {
      * @param name the template to copy
      * @param language the template language
      * @param target the new tenant template's name
+     * @param request the request, for the CMS access grants
      * @return 201 with {@code {"name": "<target>"}}
      */
     @PostMapping(value = "/{entity}/templates/{name}/duplicate", produces = MediaType.APPLICATION_JSON_VALUE)
     @RolesAllowed({Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR})
     ResponseEntity<Map<String, String>> duplicateTemplate(@PathVariable("entity") String entity, @PathVariable("name") String name,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestParam("as") String target) {
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestParam("as") String target,
+            HttpServletRequest request) {
         try {
-            PrintTemplateName copy = catalog.duplicate(entity, language, name, target);
+            PrintTemplateName copy = catalog.duplicate(entity, language, name, target, request);
             return ResponseEntity.status(HttpStatus.CREATED)
                                  .body(Map.of("name", copy.reference()));
         } catch (PrintTemplateException e) {
@@ -234,19 +250,20 @@ class PrintEndpoint extends BaseEndpoint {
      * @param entity the domain entity name
      * @param name the tenant template name
      * @param language the template language
+     * @param request the request, for the CMS access grants
      * @return an empty 204 response
      */
     @DeleteMapping(value = "/{entity}/templates/{name}")
     @RolesAllowed({Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR})
     ResponseEntity<Void> deleteTemplate(@PathVariable("entity") String entity, @PathVariable("name") String name,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language) {
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, HttpServletRequest request) {
         try {
-            catalog.delete(entity, language, name);
+            catalog.delete(entity, language, name, request);
             return ResponseEntity.noContent()
                                  .build();
         } catch (PrintTemplateException e) {
             throw refused(e);
-        } catch (IOException e) {
+        } catch (IOException | SQLException e) {
             throw serverError("Failed to delete the print template [" + name + "]", e);
         }
     }
@@ -267,11 +284,12 @@ class PrintEndpoint extends BaseEndpoint {
             case NOT_FOUND -> HttpStatus.NOT_FOUND;
             case CONFLICT -> HttpStatus.CONFLICT;
             case INVALID -> HttpStatus.BAD_REQUEST;
+            case FORBIDDEN -> HttpStatus.FORBIDDEN;
         };
         return new ResponseStatusException(status, e.getMessage(), e);
     }
 
-    private static ResponseStatusException serverError(String message, IOException e) {
+    private static ResponseStatusException serverError(String message, Exception e) {
         logger.error("{}", LoggedPath.of(message), e);
         return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, message, e);
     }

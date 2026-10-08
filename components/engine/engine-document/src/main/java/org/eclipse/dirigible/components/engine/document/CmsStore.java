@@ -24,6 +24,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -35,8 +36,8 @@ import java.util.Optional;
  * {@code doc/} folder into the (tenant-scoped) CMS at the mirrored path, <b>create-if-absent</b>:
  * an already existing document is a user customization and is never overwritten. Generic — any
  * path, any content.</li>
- * <li><b>Plain file operations</b> — list, read, write, rename and delete documents and folders.
- * The CMS stays a plain file store: what a print template, a version or the active layout is, is
+ * <li><b>Plain file operations</b> — list, read, write, move and delete documents and folders. The
+ * CMS stays a plain file store: what a print template, a version or the active layout is, is
  * {@link PrintTemplateCatalog}'s knowledge, built on these operations.</li>
  * <li><b>Binary reads</b> — {@link #readDocument(String, long)} reads any document's raw bytes and
  * media type, bounded, for an image a print template embeds.</li>
@@ -120,6 +121,11 @@ class CmsStore {
      * Writes a document, replacing an existing one at the same path. Missing parent folders are
      * created.
      *
+     * <p>
+     * The CMS has no in-place content update and no rename every backend honours, so a replacement is a
+     * delete followed by a create. Should the create fail, the previous content is written back before
+     * the failure is reported - a failed write never costs the document it was replacing.
+     *
      * @param cmsPath the absolute CMS path
      * @param content the raw content
      * @throws IOException on CMS access failure
@@ -127,29 +133,73 @@ class CmsStore {
     void write(String cmsPath, byte[] content) throws IOException {
         String normalized = normalize(cmsPath);
         CmisSession session = CmisSessionFactory.getSession();
-        Optional<CmisDocument> existing = findDocument(session, normalized);
-        if (existing.isPresent()) {
-            existing.get()
-                    .delete();
-        }
         int lastSeparator = normalized.lastIndexOf(PATH_SEPARATOR);
         String folderPath = normalized.substring(0, lastSeparator);
+        String documentName = normalized.substring(lastSeparator + 1);
         CmisFolder folder = folderPath.isEmpty() ? session.getRootFolder() : ensureFolder(session, folderPath);
-        createDocument(session, folder, normalized.substring(lastSeparator + 1), content);
+        Optional<CmisDocument> existing = findDocument(session, normalized);
+        if (existing.isEmpty()) {
+            createDocument(session, folder, documentName, content);
+            return;
+        }
+        byte[] previous;
+        try (InputStream inputStream = existing.get()
+                                               .getContentStream()
+                                               .getStream()) {
+            previous = inputStream.readAllBytes();
+        }
+        existing.get()
+                .delete();
+        try {
+            createDocument(session, folder, documentName, content);
+        } catch (IOException | RuntimeException e) {
+            try {
+                createDocument(session, folder, documentName, previous);
+                logger.warn("CMS document [{}] could not be replaced - its previous content was restored", LoggedPath.of(normalized), e);
+            } catch (IOException | RuntimeException restore) {
+                e.addSuppressed(restore);
+                logger.error("CMS document [{}] could not be replaced, nor its previous content ({} bytes) restored",
+                        LoggedPath.of(normalized), previous.length, e);
+            }
+            throw e;
+        }
     }
 
     /**
-     * Renames a document within its folder.
+     * Moves a document to another name in its folder by copying it there and deleting the original -
+     * never through the CMS rename, which the S3 backend does not implement (it silently does nothing)
+     * and SharePoint refuses. The copy is read back before the original is deleted; should the delete
+     * fail, the copy is removed again, so a failed move leaves the document where it was.
      *
      * @param cmsPath the absolute CMS path of the document
      * @param newName the new document name
-     * @throws IOException on CMS access failure, or when the path names no document
+     * @param content the content the moved document gets - its own, or a rewritten one
+     * @throws IOException on CMS access failure, when the path names no document or the new name is
+     *         taken
      */
-    void rename(String cmsPath, String newName) throws IOException {
+    void move(String cmsPath, String newName, byte[] content) throws IOException {
         String normalized = normalize(cmsPath);
-        CmisDocument document = findDocument(CmisSessionFactory.getSession(), normalized).orElseThrow(
-                () -> new IOException("CMS document [" + normalized + "] does not exist"));
-        document.rename(newName);
+        CmisSession session = CmisSessionFactory.getSession();
+        CmisDocument original =
+                findDocument(session, normalized).orElseThrow(() -> new IOException("CMS document [" + normalized + "] does not exist"));
+        String folderPath = normalized.substring(0, normalized.lastIndexOf(PATH_SEPARATOR));
+        String target = folderPath + PATH_SEPARATOR + newName;
+        if (exists(session, target)) {
+            throw new IOException("CMS document [" + target + "] already exists");
+        }
+        CmisFolder folder = folderPath.isEmpty() ? session.getRootFolder() : ensureFolder(session, folderPath);
+        createDocument(session, folder, newName, content);
+        Optional<byte[]> copied = read(target);
+        if (copied.isEmpty() || !Arrays.equals(copied.get(), content)) {
+            delete(target);
+            throw new IOException("CMS document [" + target + "] did not read back as written - [" + normalized + "] is left in place");
+        }
+        try {
+            original.delete();
+        } catch (IOException | RuntimeException e) {
+            delete(target);
+            throw e;
+        }
     }
 
     /**

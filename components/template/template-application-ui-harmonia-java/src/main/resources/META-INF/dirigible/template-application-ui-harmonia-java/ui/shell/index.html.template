@@ -620,6 +620,7 @@
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/printActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/relatedPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>

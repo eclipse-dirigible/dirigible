@@ -14,6 +14,7 @@ import java.util.List;
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.engine.document.domain.PrintTemplateSeed;
 import org.eclipse.dirigible.components.engine.document.repository.PrintTemplateSeedRepository;
+import org.eclipse.dirigible.components.engine.document.repository.PrintTemplateSeedRepository.ShippedVersion;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,14 +38,15 @@ public class PrintTemplateSeedService extends BaseArtefactService<PrintTemplateS
     }
 
     /**
-     * Finds the templates the registry currently ships for a document type and language.
+     * The template names and versions the registry ships now for a document type and language, without
+     * their content.
      *
      * @param entityName the document type
      * @param language the language code
-     * @return the shipped templates
+     * @return the shipped versions
      */
     @Transactional(readOnly = true)
-    public List<PrintTemplateSeed> findShipped(String entityName, String language) {
-        return printTemplateSeedRepository.findByEntityNameAndLanguage(entityName, language);
+    public List<ShippedVersion> findShippedVersions(String entityName, String language) {
+        return printTemplateSeedRepository.findShippedVersions(entityName, language);
     }
 }

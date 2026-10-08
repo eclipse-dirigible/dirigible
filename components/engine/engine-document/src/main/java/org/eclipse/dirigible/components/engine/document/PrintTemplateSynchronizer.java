@@ -12,12 +12,13 @@ package org.eclipse.dirigible.components.engine.document;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
-import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -28,7 +29,10 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.engine.document.domain.CmsSeed;
 import org.eclipse.dirigible.components.engine.document.domain.PrintTemplateSeed;
+import org.eclipse.dirigible.components.engine.document.service.CmsSeedService;
 import org.eclipse.dirigible.components.engine.document.service.PrintTemplateSeedService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -53,8 +57,21 @@ import com.google.gson.JsonParser;
  * <p>
  * The version is the module's release version - the {@code version} field of the project's
  * {@code project.json} - when it declares a valid one, else the first 8 hex digits of the content's
- * SHA-256. Deleting the file removes the artefact row only; the versions it shipped stay in every
- * tenant's catalogue.
+ * SHA-256; {@link PrintTemplateReleases} keeps it immutable (bytes shipped before get their earlier
+ * version back, changed bytes under a recorded label get the label qualified by their hash).
+ * Deleting the file removes the artefact row only; the versions it shipped stay in every tenant's
+ * catalogue.
+ *
+ * <p>
+ * Taking a file over from {@link CmsSeedSynchronizer} retires its {@code cms-seed} row, recording
+ * the bytes that row last shipped as the previous version - which is how a tenant's unedited copy
+ * of the previous release is recognised during the migration.
+ *
+ * <p>
+ * A seed that fails for one tenant stays FAILED until it has succeeded for every tenant: the
+ * artefact row is shared by all tenants, and the tenants are completed one after another, so a
+ * later tenant's success would otherwise overwrite the earlier tenant's failure and nothing would
+ * retry it.
  */
 @Component
 @Order(SynchronizersOrder.PRINT_TEMPLATE)
@@ -72,15 +89,25 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
     private static final int HASH_VERSION_LENGTH = 8;
 
     private final PrintTemplateSeedService printTemplateSeedService;
+    private final CmsSeedService cmsSeedService;
     private final PrintTemplateCatalog catalog;
+    private final PrintTemplateReleases releases;
     private final IRepository repository;
+    private final TenantContext tenantContext;
+
+    /** The tenants whose seed of an artefact failed, by artefact key, until each one succeeds. */
+    private final Map<String, Set<String>> failedTenants = new ConcurrentHashMap<>();
 
     private SynchronizerCallback callback;
 
-    PrintTemplateSynchronizer(PrintTemplateSeedService printTemplateSeedService, PrintTemplateCatalog catalog, IRepository repository) {
+    PrintTemplateSynchronizer(PrintTemplateSeedService printTemplateSeedService, CmsSeedService cmsSeedService,
+            PrintTemplateCatalog catalog, PrintTemplateReleases releases, IRepository repository, TenantContext tenantContext) {
         this.printTemplateSeedService = printTemplateSeedService;
+        this.cmsSeedService = cmsSeedService;
         this.catalog = catalog;
+        this.releases = releases;
         this.repository = repository;
+        this.tenantContext = tenantContext;
     }
 
     /**
@@ -91,7 +118,7 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
      * @param entity the document type
      * @param language the language code
      * @param name the template name - the file name without the extension (and without any
-     *        {@code @version} the file name carries)
+     *        {@code @version} the file name carries), sanitised when it is not a valid template name
      */
     record ShippedLocation(String project, String entity, String language, String name) {
 
@@ -113,15 +140,21 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                     || !PrintTemplateCatalog.isSegment(segments[1]) || !PrintTemplateCatalog.isSegment(segments[3])) {
                 return Optional.empty();
             }
-            Optional<PrintTemplateName> file = PrintTemplateName.fromFileName(segments[4]);
-            if (file.isEmpty()) {
+            String fileName = segments[4];
+            if (!fileName.toLowerCase(Locale.ROOT)
+                         .endsWith(PrintTemplateName.EXTENSION)) {
                 return Optional.empty();
             }
+            // A module may ship a file whose name is not a valid template name (Invoice template.print):
+            // it is still a print template, and ships under its sanitised name.
+            String name = PrintTemplateName.fromFileName(fileName)
+                                           .map(PrintTemplateName::name)
+                                           .orElseGet(() -> PrintTemplateName.sanitize(PrintTemplateName.templateBase(fileName)
+                                                                                                        .orElseThrow()));
             String[] head = normalized.substring(0, doc)
                                       .split("/");
             String project = head.length == 0 ? "" : head[head.length - 1];
-            return Optional.of(new ShippedLocation(project, segments[1], segments[3], file.get()
-                                                                                          .name()));
+            return Optional.of(new ShippedLocation(project, segments[1], segments[3], name));
         }
     }
 
@@ -159,10 +192,12 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         seed.setEntityName(shipped.entity());
         seed.setLanguage(shipped.language());
         seed.setTemplateName(shipped.name());
-        seed.setVersion(releaseVersion(shipped.project()).orElseGet(() -> contentVersion(content)));
         seed.setContent(content);
-        seed.updateKey();
         try {
+            retireCmsSeeds(location, shipped);
+            String label = releaseVersion(shipped.project()).orElseGet(() -> PrintTemplateName.shortHash(content));
+            seed.setVersion(releases.assign(shipped.entity(), shipped.language(), shipped.name(), label, content));
+            seed.updateKey();
             PrintTemplateSeed maybe = getService().findByKey(seed.getKey());
             if (maybe != null) {
                 seed.setId(maybe.getId());
@@ -171,8 +206,29 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         } catch (Exception e) {
             logger.error("Failed to save shipped print template [{}]", seed, e);
             throw new ParseException(e.getMessage(), 0);
+        } finally {
+            releases.invalidate(shipped.entity(), shipped.language());
         }
         return List.of(seed);
+    }
+
+    /**
+     * Retires the {@code cms-seed} rows of a file this synchronizer took over: the generic seed handled
+     * every file under {@code doc/} before print templates were versioned, and its rows would otherwise
+     * stay behind - a FAILED one forever reported by the health check and the tenant initialization
+     * status. The bytes such a row last shipped are recorded as the version before the current one.
+     */
+    private void retireCmsSeeds(String location, ShippedLocation shipped) {
+        for (CmsSeed legacy : cmsSeedService.findByLocation(location)) {
+            byte[] previous = legacy.getContent();
+            if (previous != null && previous.length > 0) {
+                String version = releases.assign(shipped.entity(), shipped.language(), shipped.name(),
+                        PrintTemplateName.shortHash(previous), previous);
+                logger.info("The print template [{}] was seeded as a plain CMS file before - recorded as version [{}@{}]", location,
+                        shipped.name(), version);
+            }
+            cmsSeedService.delete(legacy);
+        }
     }
 
     /** The {@code version} of the project's {@code project.json}, when it declares a valid one. */
@@ -204,19 +260,6 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
             logger.warn("Cannot read the version of project [{}] - using the content hash for its print templates", project, e);
         }
         return Optional.empty();
-    }
-
-    /** The first 8 hex digits of the content's SHA-256. */
-    static String contentVersion(byte[] content) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                                         .digest(content);
-            return HexFormat.of()
-                            .formatHex(digest)
-                            .substring(0, HASH_VERSION_LENGTH);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is not available", e);
-        }
     }
 
     @Override
@@ -258,6 +301,8 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                     // remove the database row only - the shipped versions stay in every tenant's catalogue
                     try {
                         getService().delete(seed);
+                        failedTenants.remove(seed.getKey());
+                        releases.invalidate(seed.getEntityName(), seed.getLanguage());
                         callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                     } catch (Exception e) {
                         callback.addError(e.getMessage());
@@ -266,7 +311,8 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                 }
                 break;
             case START:
-                // A seed that failed (the CMS or the tenant configuration not reachable yet) is retried.
+                // A seed that failed for some tenant (the CMS or the tenant configuration not reachable
+                // yet) is retried - for every tenant, which is safe: seeding is idempotent.
                 if (ArtefactLifecycle.FAILED.equals(lifecycle)) {
                     return seed(wrapper, ArtefactLifecycle.CREATED);
                 }
@@ -279,17 +325,29 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
     }
 
     /**
-     * Seeds the template into the current tenant's catalogue and registers the given lifecycle state.
+     * Seeds the template into the current tenant's catalogue and registers the given lifecycle state -
+     * or FAILED while any tenant's seed of it is still failing.
      */
     private boolean seed(TopologyWrapper<PrintTemplateSeed> wrapper, ArtefactLifecycle lifecycle) {
         PrintTemplateSeed seed = wrapper.getArtefact();
+        String tenant = tenantContext.getCurrentTenant()
+                                     .getId();
+        Set<String> failing = failedTenants.computeIfAbsent(seed.getKey(), key -> ConcurrentHashMap.newKeySet());
         try {
             catalog.seed(seed.getEntityName(), seed.getLanguage(), seed.getTemplateName(), seed.getVersion(), seed.getContent());
-            callback.registerState(this, wrapper, lifecycle);
+            failing.remove(tenant);
+            if (failing.isEmpty()) {
+                failedTenants.remove(seed.getKey(), failing);
+                callback.registerState(this, wrapper, lifecycle);
+            } else {
+                String error = "The seed has not succeeded for the tenant(s) " + failing + " yet";
+                callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, error);
+            }
             return true;
         } catch (Exception e) {
-            logger.error("Failed to seed print template [{}@{}] of [{}/{}]", seed.getTemplateName(), seed.getVersion(),
-                    seed.getEntityName(), seed.getLanguage(), e);
+            failing.add(tenant);
+            logger.error("Failed to seed print template [{}@{}] of [{}/{}] for tenant [{}]", seed.getTemplateName(), seed.getVersion(),
+                    seed.getEntityName(), seed.getLanguage(), tenant, e);
             callback.addError(e.getMessage());
             callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
             return false;
@@ -301,6 +359,8 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         // never delete from the CMS - shipped versions stay in every tenant's catalogue
         try {
             getService().delete(seed);
+            failedTenants.remove(seed.getKey());
+            releases.invalidate(seed.getEntityName(), seed.getLanguage());
         } catch (Exception e) {
             callback.addError(e.getMessage());
             callback.registerState(this, seed, ArtefactLifecycle.DELETED, e);

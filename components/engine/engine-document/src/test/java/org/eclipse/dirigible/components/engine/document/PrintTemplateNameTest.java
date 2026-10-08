@@ -56,6 +56,33 @@ class PrintTemplateNameTest {
     }
 
     @Test
+    void preReleasesCompareIdentifierByIdentifierAndNumericallyWhereBothAreNumbers() {
+        assertTrue(shipped("1.30.0-rc.10").compareReleaseVersion(shipped("1.30.0-rc.2")) > 0);
+        assertTrue(shipped("1.30.0-rc").compareReleaseVersion(shipped("1.30.0-rc.1")) < 0);
+        assertTrue(shipped("1.30.0-1").compareReleaseVersion(shipped("1.30.0-alpha")) < 0);
+        assertTrue(shipped("1.30.0-beta").compareReleaseVersion(shipped("1.30.0-alpha.9")) > 0);
+    }
+
+    @Test
+    void anyDocumentNameSanitisesToATenantTemplateName() {
+        assertEquals("Invoice-template", PrintTemplateName.sanitize("Invoice template"));
+        assertEquals("standard-1-", PrintTemplateName.sanitize("standard (1)"));
+        assertEquals("standard-1.0", PrintTemplateName.sanitize("standard@1.0"), "never a shipped version");
+        assertEquals("Facture", PrintTemplateName.sanitize("Factur\u00e9"), "an accent keeps its letter");
+        assertEquals("template-" + PrintTemplateName.shortHash("\u0444\u0430\u043a\u0442\u0443\u0440\u0430"),
+                PrintTemplateName.sanitize("\u0444\u0430\u043a\u0442\u0443\u0440\u0430"));
+        assertTrue(PrintTemplateName.isValidName(PrintTemplateName.sanitize("x".repeat(300))));
+    }
+
+    @Test
+    void theOverwriteLeftoverOnS3IsAPrintTemplateButOtherDocumentsAreNot() {
+        assertEquals(Optional.of("standard"), PrintTemplateName.templateBase("standard.print-1696000000000"));
+        assertEquals(Optional.of("Invoice template"), PrintTemplateName.templateBase("Invoice template.PRINT"));
+        assertEquals(Optional.empty(), PrintTemplateName.templateBase("logo.png"));
+        assertEquals(Optional.empty(), PrintTemplateName.templateBase("standard.print-draft"));
+    }
+
+    @Test
     void aContentHashIsNotAReleaseVersionEvenWhenItIsAllDigits() {
         assertFalse(shipped("12345678").hasReleaseVersion());
         assertFalse(shipped("a1b2c3d4").hasReleaseVersion());

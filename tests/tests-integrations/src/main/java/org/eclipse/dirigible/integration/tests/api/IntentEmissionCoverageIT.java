@@ -7934,14 +7934,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      * Run a generated document page's status stepper: the step values {@code statusSteps()} returns and
      * the {@code activeStep()} it marks, for a record standing at {@code current} whose status options
      * are {@code options}. The page registers itself through Alpine.data inside an alpine:init
-     * listener; both are stubbed, and baseFormPage contributes nothing the stepper reads.
+     * listener; both are stubbed, and baseFormPage and printActions contribute nothing the stepper
+     * reads.
      */
     private static String pageStatusSteps(String pageScript, String componentName, String statusProperty, String options, int current) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
-            context.eval("js", "var pages = {}; var window = {}; var document = { addEventListener: (event, callback) => callback() };"
-                    + "var Alpine = { data: (name, factory) => { pages[name] = factory; } }; var baseFormPage = () => ({});");
+            context.eval("js",
+                    "var pages = {}; var window = {}; var document = { addEventListener: (event, callback) => callback() };"
+                            + "var Alpine = { data: (name, factory) => { pages[name] = factory; } }; var baseFormPage = () => ({});"
+                            + " var printActions = () => ({});");
             context.eval("js", pageScript);
             return context.eval("js",
                     "(() => { const page = pages['" + componentName + "'](); page.options" + statusProperty + " = " + options + ";"
@@ -7995,7 +7998,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     + " var T = (key, fallback, options) => String(fallback).replace(/\\{\\{(\\w+)\\}\\}/g, (m, n) => options && options[n] != null ? options[n] : m);"
                     + " var requestAnimationFrame = (f) => f(); var FormValidation = { validate: () => ({ errors: {}, valid: true }) };"
                     + " window.HarmoniaFormat = { toPayload: (v) => v, value: (v) => v };");
-            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "services/apiError.js")) {
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "components/printActions.js",
+                    "services/apiError.js")) {
                 context.eval("js", shellScript(script));
             }
             context.eval("js", "var __refused = { isApiError: true, httpStatus: 400, errorType: 'BadRequest', errorMessage: 'refused' };"

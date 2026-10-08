@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.configurations.tenant;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -104,25 +103,21 @@ public class TenantConfigurationService {
 
     /**
      * Lists the predefined (allow-listed) configuration keys together with the current tenant's stored
-     * value for each - {@code value} is {@code null} when the tenant has not set that key - followed by
-     * the stored members of the allowed key families (e.g. {@code DIRIGIBLE_PRINT_TEMPLATE_*}), which
-     * cannot be listed before the tenant sets them. This is what the settings UI renders: the fixed set
-     * of overridable properties, not just the ones already stored.
+     * value for each - {@code value} is {@code null} when the tenant has not set that key. This is what
+     * the settings UI renders: the fixed set of overridable properties, not just the ones already
+     * stored. Members of the allowed key families ({@code DIRIGIBLE_PRINT_TEMPLATE_*}) are deliberately
+     * not listed: they have their own page, and the shells save every listed entry back on Save, which
+     * would put a stale selection back over one made elsewhere meanwhile.
      *
-     * @return one entry per allowed key in the policy's display order, then the stored family members
+     * @return one entry per allowed key, in the policy's display order
      * @throws SQLException if the read fails
      */
     public List<TenantConfiguration> listPredefinedForCurrentTenant() throws SQLException {
         Map<String, String> stored = load();
-        List<TenantConfiguration> predefined = new ArrayList<>();
-        keyPolicy.allowedKeys()
-                 .forEach(key -> predefined.add(new TenantConfiguration(key, stored.get(key))));
-        stored.entrySet()
-              .stream()
-              .filter(entry -> keyPolicy.isPrefixed(entry.getKey()))
-              .sorted(Map.Entry.comparingByKey())
-              .forEach(entry -> predefined.add(new TenantConfiguration(entry.getKey(), entry.getValue())));
-        return predefined;
+        return keyPolicy.allowedKeys()
+                        .stream()
+                        .map(key -> new TenantConfiguration(key, stored.get(key)))
+                        .toList();
     }
 
     /**

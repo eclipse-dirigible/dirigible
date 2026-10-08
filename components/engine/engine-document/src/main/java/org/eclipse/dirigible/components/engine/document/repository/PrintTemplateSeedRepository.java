@@ -37,11 +37,32 @@ public interface PrintTemplateSeedRepository extends ArtefactRepository<PrintTem
     void setRunningToAll(@Param("running") boolean running);
 
     /**
-     * Finds the templates shipped for a document type and language.
+     * The template names and versions shipped now for a document type and language - without the
+     * content, which a print never needs.
      *
      * @param entityName the document type
      * @param language the language code
-     * @return the shipped templates
+     * @return the shipped versions
      */
-    List<PrintTemplateSeed> findByEntityNameAndLanguage(String entityName, String language);
+    @Query("SELECT s.templateName AS templateName, s.version AS version FROM PrintTemplateSeed s"
+            + " WHERE s.entityName = :entityName AND s.language = :language")
+    List<ShippedVersion> findShippedVersions(@Param("entityName") String entityName, @Param("language") String language);
+
+    /** A template name and the version it ships as. */
+    interface ShippedVersion {
+
+        /**
+         * Gets the template name.
+         *
+         * @return the template name
+         */
+        String getTemplateName();
+
+        /**
+         * Gets the version.
+         *
+         * @return the version
+         */
+        String getVersion();
+    }
 }

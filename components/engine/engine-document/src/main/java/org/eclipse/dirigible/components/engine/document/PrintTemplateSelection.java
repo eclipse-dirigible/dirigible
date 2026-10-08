@@ -22,8 +22,9 @@ import org.springframework.stereotype.Component;
  * state in the CMS. The key is {@code DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG>} (e.g.
  * {@code DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN}) and the value a template reference
  * ({@code acme-blue}, or {@code standard@1.28.0} to pin a shipped version), so the selection is per
- * tenant, cached by the configuration store, and editable raw in Settings → Configurations as well
- * as from the Print templates page.
+ * tenant and cached by the configuration store. It is set from Settings → Print Templates (or any
+ * client of {@code PUT /services/core/configurations/tenant}); the tenant configuration page does
+ * not list it, so its Save cannot write a stale selection back.
  */
 @Component
 class PrintTemplateSelection {

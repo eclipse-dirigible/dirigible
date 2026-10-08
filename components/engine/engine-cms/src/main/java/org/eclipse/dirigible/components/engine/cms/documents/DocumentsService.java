@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
@@ -49,11 +50,14 @@ public class DocumentsService {
     private final CmsService cmsService;
     private final DocumentAccessEvaluator accessEvaluator;
     private final ContentTypeResolver contentTypeResolver;
+    private final List<DocumentWriteGuard> writeGuards;
 
-    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver) {
+    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver,
+            List<DocumentWriteGuard> writeGuards) {
         this.cmsService = cmsService;
         this.accessEvaluator = accessEvaluator;
         this.contentTypeResolver = contentTypeResolver;
+        this.writeGuards = List.copyOf(writeGuards);
     }
 
     /**
@@ -135,6 +139,7 @@ public class DocumentsService {
         requireCleanPath(name);
         CmisFolder folder = folderOrRoot(folderPath);
         assertWritable(folder.getPath(), request);
+        assertChangeable(childPath(folder.getPath(), name));
         String resolvedType = contentTypeResolver.beforeUpload(name, contentType);
         CmisDocument existing = cmsService.getChildDocumentByName(folder, name);
         if (existing != null) {
@@ -180,6 +185,8 @@ public class DocumentsService {
         requireCleanPath(name);
         assertNotHidden(path);
         assertWritable(path, request);
+        assertChangeable(path);
+        assertChangeable(childPath(parentPath(path), name));
         cmsService.getObjectByPath(path)
                   .rename(name);
     }
@@ -198,6 +205,9 @@ public class DocumentsService {
             assertNotHidden(path);
             assertWritable(path, request);
             CmisObject object = cmsService.getObjectByPath(path);
+            if (!isFolder(object)) {
+                assertChangeable(path);
+            }
             if (isFolder(object) && forceDelete) {
                 deleteTree((CmisFolder) object);
             } else {
@@ -321,6 +331,23 @@ public class DocumentsService {
         if (!isExportsAccessible(path, request) || !accessEvaluator.isWritable(path, request)) {
             throw new DocumentAccessDeniedException(path);
         }
+    }
+
+    /** Refuses a change a {@link DocumentWriteGuard} protects the document at the path from. */
+    private void assertChangeable(String path) {
+        for (DocumentWriteGuard guard : writeGuards) {
+            Optional<String> refusal = guard.refusal(path);
+            if (refusal.isPresent()) {
+                throw new DocumentConflictException(path, refusal.get());
+            }
+        }
+    }
+
+    /** The parent folder of a path, {@code /} for a top-level object. */
+    static String parentPath(String path) {
+        String trimmed = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+        int separator = trimmed.lastIndexOf('/');
+        return separator <= 0 ? "/" : trimmed.substring(0, separator);
     }
 
     private static void assertNotHidden(String path) {

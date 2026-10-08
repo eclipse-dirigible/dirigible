@@ -26,8 +26,8 @@ import com.google.gson.reflect.TypeToken;
  * snapshot delegate, which renders a document to an immutable PDF copy on issue. It is the
  * server-initiated counterpart to {@code PrintEndpoint}: where the endpoint takes the data the
  * browser POSTs, this resolves the entity's active print template for the language (the tenant's
- * selection, else the newest shipped version - see {@link PrintTemplateCatalog}) and renders the
- * supplied data map to PDF.
+ * selection, else the shipped default - see {@link PrintTemplateCatalog}) and renders the supplied
+ * data map to PDF.
  *
  * <p>
  * The {@code String}-payload overload parses the same {@code {document, items}} shape a

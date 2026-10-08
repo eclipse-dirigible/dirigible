@@ -17,4 +17,13 @@
 		<parent.pom.folder>../../../</parent.pom.folder>
 	</properties>
 
+	<dependencies>
+		<!-- jsdiff, for comparing two templates line by line -->
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>diff</artifactId>
+			<version>${diff.version}</version>
+		</dependency>
+	</dependencies>
+
 </project>

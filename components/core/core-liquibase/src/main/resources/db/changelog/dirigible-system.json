@@ -11763,6 +11763,129 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_PRINT_TEMPLATE_VERSIONS",
+        "author": "dirigible",
+        "comment": "Every print template version this instance has shipped, in shipping order (#7755): what orders content-hash versions, recognises a stale legacy copy and keeps a release label immutable.",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_PRINT_TEMPLATE_VERSIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_PRINT_TEMPLATE_VERSIONS"
+                    },
+                    "name": "PRINT_TEMPLATE_VERSION_ID",
+                    "type": "BIGINT"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_ENTITY",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_LANGUAGE",
+                    "type": "VARCHAR(64)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_NAME",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_VERSION",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_CONTENT_HASH",
+                    "type": "VARCHAR(64)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "PRINT_TEMPLATE_SHIPPED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_PRINT_TEMPLATE_VERSIONS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_PRINT_TEMPLATE_VERSIONS_VERSION",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_PRINT_TEMPLATE_VERSIONS",
+                  "constraintName": "UK_DIRIGIBLE_PRINT_TEMPLATE_VERSIONS_VERSION"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "PRINT_TEMPLATE_ENTITY, PRINT_TEMPLATE_LANGUAGE, PRINT_TEMPLATE_NAME, PRINT_TEMPLATE_VERSION",
+              "constraintName": "UK_DIRIGIBLE_PRINT_TEMPLATE_VERSIONS_VERSION",
+              "tableName": "DIRIGIBLE_PRINT_TEMPLATE_VERSIONS"
+            }
+          }
+        ]
+      }
     }
   ]
 }

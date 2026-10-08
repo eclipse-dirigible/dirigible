@@ -223,15 +223,9 @@ document.addEventListener('alpine:init', () => {
     deleteError: '',
 #if($hasPrint == "true")
 
-    // Print (document master rendered through this shared form): renders the CMS-seeded .print
-    // template server-side to PDF, asking for the language when several exist.
-    printLangOpen: false,
-    printLanguages: [],
-    printLang: '',
-    printTemplates: [],
-    printTemplate: '',
-    printBusy: false,
-    printError: null,
+    // Print (document master rendered through this shared form): renders the tenant's active .print
+    // template server-side to PDF - the shared runtime's printActions; the page provides `id`.
+    ...printActions({ entity: '${name}', feeder: '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' }),
 #end
 
     async init() {
@@ -815,106 +809,6 @@ document.addEventListener('alpine:init', () => {
 #end
       return payload;
     },
-#if($hasPrint == "true")
-
-    // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
-    // can be customized via the Documents perspective. One language prints directly; several ask.
-    //
-    // Print always renders LIVE, the same rule as the document layout. The immutable issued copy
-    // stays first-class on its own surface: the read-only Snapshot panel serves every stored version
-    // (Open + Download), so a live re-render after master-data changes is acceptable.
-    async openPrint() {
-      this.printError = null;
-      this.printBusy = true;
-      let languages = [];
-      try {
-        languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];
-      } catch (e) {
-        console.error('Print languages lookup failed', e);
-      }
-      this.printBusy = false;
-      // The Region & Language setting only pre-sorts its language first as the suggested default;
-      // zero languages still attempts the default, which the server answers with a clear 404.
-      const configured = (Alpine.store('locale') || {}).value;
-      this.printLanguages = languages.slice().sort((a, b) =>
-        (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
-      await this.selectPrintLanguage(languages.length ? this.printLanguages[0].code : 'en');
-      if (this.printLanguages.length > 1 || this.printTemplates.length > 1) {
-        // Several languages or layouts: ALWAYS ask (auto-printing the configured language here
-        // suppressed the dialog entirely, since the locale store always resolves to a value - a
-        // shipped regression). The layout is preselected to the one the tenant prints with.
-        this.printLangOpen = true;
-      } else {
-        await this.printDoc(this.printLang, this.printTemplate);
-      }
-    },
-
-    // The layouts of a print language - the tenant's print template catalogue (#7755) - with the
-    // active one preselected: the layout the tenant configured, else the newest shipped version.
-    // Picking another prints this one document with it; the tenant default stays as it is.
-    async selectPrintLanguage(lang) {
-      this.printLang = lang;
-      let templates = [];
-      try {
-        templates = (await App.services.api.get('/services/print/${name}/templates?lang=' + encodeURIComponent(lang), { baseUrl: '' })) || [];
-      } catch (e) {
-        console.error('Print templates lookup failed', e);
-      }
-      this.printTemplates = templates;
-      const active = templates.find((t) => t.active);
-      this.printTemplate = active ? active.name : '';
-    },
-
-    async printDoc(lang, template) {
-      this.printError = null;
-      this.printBusy = true;
-      try {
-        // The generated print feeder (gen/events/${javaGenFolderName}/${name}PrintFeeder) loads the document + its related
-        // graph through the repositories and returns the { document, items } payload the template binds
-        // - so {{document.<Relation>.<Field>}} resolves. It is called as the logged-in user (auth +
-        // tenant + i18n are the caller's).
-        // Pin the feeder's language to the CHOSEN print language, not the UI locale: the repositories'
-        // multilingual overlay reads Accept-Language, so without this the nomenclature values (Payment
-        // Method, Status, ...) would render in the UI locale while the template is in the print language.
-        const payload = await App.services.api.get(
-          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '', language: lang });
-        const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang)
-          + (template ? '&template=' + encodeURIComponent(template) : ''), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) {
-          this.printError = response.status === 404
-            ? 'No print template found. Publish the project or upload one via Documents.'
-            : 'Print failed (' + response.status + ')';
-          return;
-        }
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        // The object URL must outlive the tab that renders it: a timed revoke kills the PDF
-        // viewer's reload/print the moment it fires (observed live - the blob tab worked once,
-        // then "the file was removed"). The URL is released when THIS page unloads, which is the
-        // blob's natural owner lifetime; a print-sized PDF held until then costs nothing.
-        const opened = window.open(url, '_blank');
-        if (!opened) {
-          // Popup blocked - the open runs after async work, outside the click's gesture stack.
-          // Fall back to a download, which the browser always allows.
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = '${name}-' + this.id + '.pdf';
-          document.body.appendChild(link);
-          link.click();
-          link.remove();
-        }
-      } catch (e) {
-        console.error('Print failed', e);
-        this.printError = 'Print failed';
-      } finally {
-        this.printBusy = false;
-      }
-    },
-#end
 
     cancel() {
       // A form with unsaved edits asks before it is abandoned (issue #7359); a clean one leaves

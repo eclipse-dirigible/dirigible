@@ -41,11 +41,29 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
         });
     }
 
-    // The same key the print engine reads (PrintTemplateSelection.key): the entity and the language,
-    // upper-cased, anything but a letter or digit turned into an underscore.
+    // A response read as a blob carries its error body as a blob too: read it back as JSON first.
+    function showBlobError(title, response) {
+        const body = response && response.data;
+        if (!(body instanceof Blob)) {
+            showError(title, response);
+            return;
+        }
+        body.text().then((text) => {
+            let data = null;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error(e);
+            }
+            $scope.$evalAsync(() => showError(title, { ...response, data: data }));
+        });
+    }
+
+    // The tenant configuration key that selects the active template - the server names it, so the
+    // page never repeats the print engine's key rule.
     $scope.selectionKey = () => {
-        const segment = (value) => (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '_');
-        return `DIRIGIBLE_PRINT_TEMPLATE_${segment($scope.selected.entity)}_${segment($scope.selected.language)}`;
+        const language = $scope.languages.find((each) => each.code === $scope.selected.language);
+        return language ? language.selectionKey : '';
     };
 
     $scope.loadDocumentTypes = () => {
@@ -60,13 +78,20 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
         }, (response) => showError('Unable to load the document types', response));
     };
 
+    // The languages of the chosen document type only - one CMS listing per choice, not per type.
     $scope.entitySelected = () => {
-        const type = $scope.documentTypes.find((each) => each.entity === $scope.selected.entity);
-        $scope.languages = type ? type.languages : [];
-        if (!$scope.languages.includes($scope.selected.language)) {
-            $scope.selected.language = $scope.languages.length ? $scope.languages[0] : '';
-        }
-        $scope.load();
+        $scope.languages = [];
+        $scope.templates = [];
+        if (!$scope.selected.entity) return;
+        const entity = $scope.selected.entity;
+        $http.get(`${PRINT_API}/${encodeURIComponent(entity)}/languages`).then((response) => {
+            if (entity !== $scope.selected.entity) return;
+            $scope.languages = response.data;
+            if (!$scope.languages.some((each) => each.code === $scope.selected.language)) {
+                $scope.selected.language = $scope.languages.length ? $scope.languages[0].code : '';
+            }
+            $scope.load();
+        }, (response) => showError('Unable to load the print template languages', response));
     };
 
     $scope.load = () => {
@@ -76,7 +101,7 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
             $scope.templates = [];
             return;
         }
-        $http.get(`${templatesUrl()}?${lang()}`).then((response) => {
+        $http.get(`${templatesUrl()}?${lang()}&details=true`).then((response) => {
             $scope.templates = response.data.map((template) => ({ ...template, compare: false }));
         }, (response) => showError('Unable to load the print templates', response));
     };
@@ -84,14 +109,31 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
     $scope.comparing = () => $scope.templates.filter((template) => template.compare);
 
     $scope.preview = (template) => {
+        // The tab is opened now, while the click is still the user's gesture: opened after the
+        // asynchronous render, the browser's popup blocker would swallow it.
+        const tab = window.open('', '_blank');
         // Renders the template with an empty record, so the layout shows with its labels and no data.
         const url = `${PRINT_API}/${encodeURIComponent($scope.selected.entity)}?${lang()}&template=${encodeURIComponent(template.name)}`;
         $http.post(url, JSON.stringify({ document: {}, items: [] }), {
             headers: { 'Content-Type': 'application/json' },
             responseType: 'blob',
         }).then((response) => {
-            window.open(URL.createObjectURL(response.data), '_blank');
-        }, (response) => showError('Unable to preview the print template', response));
+            const pdf = URL.createObjectURL(response.data);
+            if (tab) {
+                tab.location.href = pdf;
+                return;
+            }
+            // Popups are blocked outright: download the preview instead, which is always allowed.
+            const link = document.createElement('a');
+            link.href = pdf;
+            link.download = `${template.name}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        }, (response) => {
+            if (tab) tab.close();
+            showBlobError('Unable to preview the print template', response);
+        });
     };
 
     $scope.setActive = (template) => {
@@ -178,31 +220,16 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
         $scope.diff = null;
     };
 
-    /** A line diff over the longest common subsequence: ' ' kept, '-' only on the left, '+' only on the right. */
+    /** A line diff (jsdiff): ' ' kept, '-' only on the left, '+' only on the right. */
     function diffLines(leftText, rightText) {
-        const left = leftText.split(/\r?\n/);
-        const right = rightText.split(/\r?\n/);
-        const common = Array.from({ length: left.length + 1 }, () => new Array(right.length + 1).fill(0));
-        for (let i = left.length - 1; i >= 0; i--) {
-            for (let j = right.length - 1; j >= 0; j--) {
-                common[i][j] = left[i] === right[j] ? common[i + 1][j + 1] + 1 : Math.max(common[i + 1][j], common[i][j + 1]);
-            }
-        }
         const lines = [];
-        let i = 0;
-        let j = 0;
-        while (i < left.length && j < right.length) {
-            if (left[i] === right[j]) {
-                lines.push({ kind: ' ', text: left[i++] });
-                j++;
-            } else if (common[i + 1][j] >= common[i][j + 1]) {
-                lines.push({ kind: '-', text: left[i++] });
-            } else {
-                lines.push({ kind: '+', text: right[j++] });
+        for (const part of Diff.diffLines(leftText, rightText)) {
+            const kind = part.added ? '+' : part.removed ? '-' : ' ';
+            const text = part.value.replace(/\r?\n$/, '');
+            for (const line of text.split(/\r?\n/)) {
+                lines.push({ kind: kind, text: line });
             }
         }
-        while (i < left.length) lines.push({ kind: '-', text: left[i++] });
-        while (j < right.length) lines.push({ kind: '+', text: right[j++] });
         return lines;
     }
 
