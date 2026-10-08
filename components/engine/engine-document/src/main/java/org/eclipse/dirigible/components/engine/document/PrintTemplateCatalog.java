@@ -255,7 +255,7 @@ class PrintTemplateCatalog {
         }
         requireParses(source);
         cmsStore.write(folder.filePath(name), source.getBytes(StandardCharsets.UTF_8));
-        logger.info("Print template [{}] of [{}/{}] written", name.reference(), entity, language);
+        logger.info("Print template [{}] written", LoggedPath.of(folder.filePath(name)));
     }
 
     /**
@@ -289,7 +289,7 @@ class PrintTemplateCatalog {
                                   .replaceFirst("");
         String duplicate = "<!-- derived-from: " + origin + " -->\n" + body;
         cmsStore.write(folder.filePath(copy), duplicate.getBytes(StandardCharsets.UTF_8));
-        logger.info("Print template [{}] of [{}/{}] duplicated as [{}]", source.reference(), entity, language, copy.reference());
+        logger.info("Print template [{}] duplicated as [{}]", LoggedPath.of(folder.filePath(source)), LoggedPath.of(copy.reference()));
         return copy;
     }
 
@@ -316,7 +316,7 @@ class PrintTemplateCatalog {
                     "The print template [" + reference + "] is the active one - select another template before deleting it");
         }
         cmsStore.delete(folder.filePath(name));
-        logger.info("Print template [{}] of [{}/{}] deleted", name.reference(), entity, language);
+        logger.info("Print template [{}] deleted", LoggedPath.of(folder.filePath(name)));
     }
 
     /**
@@ -405,7 +405,7 @@ class PrintTemplateCatalog {
         }
         // Select before renaming: should the selection fail, the legacy file is still in place and the
         // next attempt migrates it, instead of the tenant silently printing the shipped layout.
-        Optional<String> selected = selection.get(folder.entity(), folder.language());
+        Optional<String> selected = selection.getStored(folder.entity(), folder.language());
         if (selected.isEmpty() || selected.get()
                                           .equals(legacy.reference())) {
             selection.select(folder.entity(), folder.language(), custom.reference());
@@ -427,8 +427,8 @@ class PrintTemplateCatalog {
             if (selected.isPresent()) {
                 return selected;
             }
-            logger.warn("The print template [{}] selected by [{}] does not exist - printing with the default one", configured.get(),
-                    PrintTemplateSelection.key(folder.entity(), folder.language()));
+            logger.warn("The print template [{}] selected by [{}] does not exist - printing with the default one",
+                    LoggedPath.of(configured.get()), LoggedPath.of(PrintTemplateSelection.key(folder.entity(), folder.language())));
         }
         List<PrintTemplateName> shipped = shippedNewestFirst(folder, order);
         if (!shipped.isEmpty()) {

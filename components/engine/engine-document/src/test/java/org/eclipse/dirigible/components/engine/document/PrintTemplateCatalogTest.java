@@ -55,6 +55,8 @@ class PrintTemplateCatalogTest {
         PrintTemplateSelection selection = mock(PrintTemplateSelection.class);
         when(selection.get(anyString(), anyString())).thenAnswer(
                 invocation -> Optional.ofNullable(configuration.get(invocation.getArgument(0) + "/" + invocation.getArgument(1))));
+        when(selection.getStored(anyString(), anyString())).thenAnswer(
+                invocation -> Optional.ofNullable(configuration.get(invocation.getArgument(0) + "/" + invocation.getArgument(1))));
         doAnswer(invocation -> configuration.put(invocation.getArgument(0) + "/" + invocation.getArgument(1),
                 invocation.getArgument(2))).when(selection)
                                            .select(anyString(), anyString(), anyString());

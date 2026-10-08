@@ -271,6 +271,7 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                     return seed(wrapper, ArtefactLifecycle.CREATED);
                 }
                 break;
+            case PREPARE:
             case STOP:
                 break;
         }

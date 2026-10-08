@@ -272,7 +272,7 @@ class PrintEndpoint extends BaseEndpoint {
     }
 
     private static ResponseStatusException serverError(String message, IOException e) {
-        logger.error(message, e);
+        logger.error("{}", LoggedPath.of(message), e);
         return new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, message, e);
     }
 

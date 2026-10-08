@@ -66,9 +66,11 @@ Templates/SalesInvoice/Print/en/
   no tenant loses a layout and no tenant's output changes. "First" = no `<name>@*` exists yet; after
   that a `<name>.print` is the tenant's own.
 - **Selection** is the tenant configuration `DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG>`
-  (`PrintTemplateSelection`; the key policy admits the family by prefix). It is read through
-  `TenantConfigurationService` directly, so a render outside a request (`attach: print`, a snapshot)
-  follows it too. **Resolution**: `template` request parameter → configuration (a missing name logs
+  (`PrintTemplateSelection`; the key policy admits the family by prefix). It is read like every
+  tenant override, from the thread-scoped `Configuration` the request filter / listener dispatch fill;
+  `PrintFacade` loads it for a render outside both (a snapshot on the BPM executor), and only the
+  migration reads the store directly (`getStored`). Keep the GET handlers off the store: reaching its
+  lazy `CREATE TABLE` from a GET is what CodeQL reports as an unprotected state-changing request. **Resolution**: `template` request parameter → configuration (a missing name logs
   WARN and falls through) → newest shipped version → the first tenant template (a language the tenant
   uploaded itself). Newest: a release version (`\d+.\d+...`) beats a hash, release versions compare
   numerically, and among hashes the one the registry ships now (`PrintTemplateSeed` rows) wins.

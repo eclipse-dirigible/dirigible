@@ -50,23 +50,36 @@ class PrintTemplateSelection {
     }
 
     /**
-     * The selected template reference of the current tenant. Read from the tenant configuration
-     * directly rather than from the request-scoped configuration, so a render outside a request (a
-     * listener mailing a print, a process snapshot) follows the same selection; a deployment-wide value
-     * from the environment applies when the tenant has none.
+     * The selected template reference of the current tenant, read like every other tenant override:
+     * from the thread-scoped configuration, which {@code TenantConfigurationInitFilter} fills for a
+     * request and the listener dispatch fills for a message (a render outside both loads it first - see
+     * {@link PrintFacade}). A deployment-wide value from the environment applies when the tenant has
+     * none.
      *
      * @param entity the document type
      * @param language the language code
      * @return the selected reference, empty when none is set
      */
     Optional<String> get(String entity, String language) {
+        return nonBlank(Configuration.get(key(entity, language)));
+    }
+
+    /**
+     * The selection the current tenant has stored, read from its configuration store - for the
+     * synchronizer, whose thread carries no tenant configuration.
+     *
+     * @param entity the document type
+     * @param language the language code
+     * @return the stored reference, empty when none is stored
+     * @throws SQLException if the tenant configuration cannot be read
+     */
+    Optional<String> getStored(String entity, String language) throws SQLException {
         String key = key(entity, language);
-        String value = tenantConfigurationService.resolveInjectableForCurrentTenant()
-                                                 .get(key);
-        if (value == null || value.isBlank()) {
-            value = Configuration.get(key);
-        }
-        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
+        return tenantConfigurationService.listForCurrentTenant()
+                                         .stream()
+                                         .filter(entry -> key.equals(entry.key()))
+                                         .findFirst()
+                                         .flatMap(entry -> nonBlank(entry.value()));
     }
 
     /**
@@ -79,6 +92,10 @@ class PrintTemplateSelection {
      */
     void select(String entity, String language, String reference) throws SQLException {
         tenantConfigurationService.set(key(entity, language), reference);
+    }
+
+    private static Optional<String> nonBlank(String value) {
+        return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
     }
 
     private static String keySegment(String value) {

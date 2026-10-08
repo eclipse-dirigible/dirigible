@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.engine.document;
 import java.io.IOException;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.springframework.stereotype.Component;
 
 import com.google.gson.Gson;
@@ -42,10 +44,12 @@ public class PrintFacade {
 
     private final PrintTemplateCatalog catalog;
     private final PrintImageResolver imageResolver;
+    private final TenantConfigurationService tenantConfigurationService;
 
-    PrintFacade(PrintTemplateCatalog catalog, PrintImageResolver imageResolver) {
+    PrintFacade(PrintTemplateCatalog catalog, PrintImageResolver imageResolver, TenantConfigurationService tenantConfigurationService) {
         this.catalog = catalog;
         this.imageResolver = imageResolver;
+        this.tenantConfigurationService = tenantConfigurationService;
     }
 
     /**
@@ -58,12 +62,25 @@ public class PrintFacade {
      * @throws IOException if no template exists for the entity/language or the CMS read fails
      */
     public byte[] renderToPdf(String entity, String language, Map<String, Object> data) throws IOException {
+        // The tenant's template selection is a tenant configuration, read from the thread-scoped
+        // configuration a request or a listener dispatch carries. A render outside both - a process
+        // snapshot on the BPM executor - loads it here the same way, and clears it afterwards so it never
+        // leaks onto the pooled thread.
+        boolean loaded = Configuration.getThreadConfiguration()
+                                      .isEmpty();
+        if (loaded) {
+            Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
+        }
         String template;
         try {
             template = catalog.resolve(entity, language, null)
                               .source();
         } catch (PrintTemplateException e) {
             throw new IOException(e.getMessage(), e);
+        } finally {
+            if (loaded) {
+                Configuration.removeThreadConfiguration();
+            }
         }
         return PrintRenderer.renderPdf(template, language, data, imageResolver);
     }
