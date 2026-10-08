@@ -155,7 +155,7 @@ Three things about it are deliberate and easy to get wrong:
 | process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |
 
 Asset embedding (Phase 1 — DONE, verified end-to-end against a live app):
-- Alpine `3.17.4` + Harmonia `3.5.1` + Lucide `1.48.0` are **webjars** bundled via
+- Alpine `3.17.4` + Harmonia `3.6.0` + Lucide `1.48.0` are **webjars** bundled via
   `components/resources/application-core` (`alpinejs.version` / `harmonia.version` / `lucide.version`
   in the root pom), served version-less through webjars-locator at `/webjars/...` (public). The
   Harmonia rules live in the upstream skill - see `.claude/docs/harmonia-ui.md`.
