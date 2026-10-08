@@ -2,10 +2,16 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const cliJarPath = path.join(__dirname, './dirigible-cli.jar');
+// downloaded by postinstall.js, which an install with --ignore-scripts skips
+const cliJarPath = path.join(__dirname, '../data/dirigible-cli-executable.jar');
+if (!fs.existsSync(cliJarPath)) {
+    console.error(`❌ The Dirigible CLI JAR is missing at ${cliJarPath}. Run "npm rebuild @dirigiblelabs/dirigible-cli" to download it.`);
+    process.exit(1);
+}
 
 // resolve dirigible jar from package @dirigiblelabs/dirigible
 const require = createRequire(import.meta.url);
