@@ -30,9 +30,10 @@
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
  *   $store.customActions.getActions(view, 'entity', record)  -> the view's per-record actions, minus
  *                                                               those the record's status bars
- *   $store.customActions.trigger(action, id)                 -> open the action page in the app-wide
+ *   $store.customActions.trigger(action, id, record)         -> open the action page in the app-wide
  *                                                               dialog (an entity action passes the
- *                                                               record id as ?id=)
+ *                                                               record id as ?id=); the optional record
+ *                                                               pre-fills a prompt's source defaults
  * The action page opens in the dialog wired in index.html; on its `harmonia.form.close` message (or an
  * explicit close) the store closes it and raises a `harmonia:action-done` window event, so a view that
  * a mutating action changed (duplicate / create-from / aggregate) can refresh without a manual reload.
@@ -228,13 +229,13 @@ document.addEventListener('alpine:init', () => {
     //   - otherwise (`path`): open the contributed page in the app-wide dialog.
     // An entity action carries the selected record's primary key as `id`; the view knows its own primary
     // key so it passes the id value here rather than the whole row.
-    trigger(action, id) {
+    trigger(action, id, record) {
       if (!action) return;
       if (action.endpoint) {
         // A declared input form (issue #6685) opens the prompt dialog instead of the plain
         // confirm; when the target's detail registration is unavailable (e.g. the shared shell,
         // which does not load the hosted apps' registrations) it degrades to the confirm below.
-        if (Array.isArray(action.prompt) && action.prompt.length && this.openPrompt(action, id)) return;
+        if (Array.isArray(action.prompt) && action.prompt.length && this.openPrompt(action, id, record)) return;
         this.confirmAction = action;
         this.confirmId = (id !== undefined && id !== null && id !== '') ? id : null;
         this.confirmOpen = true;
@@ -275,11 +276,15 @@ document.addEventListener('alpine:init', () => {
 
     // Open the input dialog for a prompted action. Returns false (so trigger() falls back to the
     // plain confirm) when the target's detail registration is not loaded in this shell - the
-    // registration is what types the controls, so without it there is nothing to render.
-    openPrompt(action, id) {
-      const reg = (window.App && typeof App.detailsFor === 'function')
-        ? (App.detailsFor(action.view) || []).find((d) => d.entity === action.promptEntity)
-        : null;
+    // registration is what types the controls, so without it there is nothing to render. A target
+    // that is no detail of the view - a standalone or a cross-model one (issue #7748) - carries its
+    // controls on the descriptor (`promptColumns`) instead.
+    openPrompt(action, id, record) {
+      const reg = Array.isArray(action.promptColumns)
+        ? { editColumns: action.promptColumns, masterEntityId: null }
+        : (window.App && typeof App.detailsFor === 'function')
+          ? (App.detailsFor(action.view) || []).find((d) => d.entity === action.promptEntity)
+          : null;
       if (!reg || !Array.isArray(reg.editColumns)) {
         console.warn('customActions: no detail registration for prompt target [' + action.promptEntity
           + '] on view [' + action.view + '] - falling back to a plain confirm');
@@ -290,10 +295,21 @@ document.addEventListener('alpine:init', () => {
         const col = reg.editColumns.find((c) => c.name === p.name);
         // An unregistered property still renders (as a plain text input) rather than vanishing -
         // the authored-but-silently-unconsumed failure mode is worse than an untyped control.
-        return col ? { ...col, required: !!(p.required || col.required) }
-                   : { name: p.name, label: p.name, widget: 'TEXT', required: !!p.required };
+        const typed = col ? { ...col, required: !!(p.required || col.required) }
+                          : { name: p.name, label: p.name, widget: 'TEXT', required: !!p.required };
+        // The SOURCE property the input defaults to (issue #7748): the controller applies it to an
+        // input left empty, so a defaulted input is never missing.
+        return p.default ? { ...typed, sourceDefault: p.default } : typed;
       });
       this.promptValues = {};
+      // Pre-fill the defaults from the record the dialog is opened on, when the view handed it over.
+      // A value the dialog's control cannot hold as it is (a date the backend serialised as an array)
+      // is left empty - the controller applies the same default.
+      for (const col of this.promptCols) {
+        const v = (col.sourceDefault && record) ? record[col.sourceDefault] : null;
+        if (v == null || v === '' || typeof v === 'object') continue;
+        this.promptValues[col.name] = col.widget === 'DROPDOWN' ? String(v) : v;
+      }
       this.promptOptions = {};
       this.promptError = '';
       this.promptAction = action;
@@ -430,7 +446,7 @@ document.addEventListener('alpine:init', () => {
     // with the source id.
     async promptRun() {
       if (!this.promptAction || this.promptBusy) return;
-      const missing = this.promptCols.filter((c) => c.required
+      const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault
         && (this.promptValues[c.name] == null || this.promptValues[c.name] === ''));
       if (missing.length) {
         this.promptError = missing.map((c) => c.label || c.name).join(', ');

@@ -16,7 +16,7 @@
  * instead of basePage in form pages.
  *
  * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses,
- *           fieldMap, clearError, scrollToSummary, navigateBack, refreshIcons,
+ *           fieldMap, clearError, validateOnBlur, scrollToSummary, navigateBack, refreshIcons,
  *           applyApiError, mapCauses, applyLoadError, inlineCreated,
  *           adoptCreatedOption, rememberInlineCreated, savedAlongside.
  *
@@ -46,6 +46,23 @@ function baseFormPage() {
       if (this.errors[field]) this.errors[field] = '';
       if (this.errors.__summary) this.errors.__summary = '';
       this.unmatchedCauses = [];
+    },
+
+    // Re-checks the one field focus just left against the page's validationSchema(), so a required
+    // text field left empty - or holding only spaces - is marked the moment the user moves on rather
+    // than only on Save, and a corrected one is unmarked the same way (#7719). Bound as the form's
+    // @focusout (focusout bubbles, blur does not). Only typed controls: a picker or a dropdown loses
+    // focus to its own popover while a value is being chosen, and must not flash red meanwhile.
+    validateOnBlur(event) {
+      const el = event && event.target;
+      if (!el || !el.id || !el.id.startsWith('f_') || !this.form || typeof this.validationSchema !== 'function') return;
+      const typed = el.tagName === 'TEXTAREA' || el.hasAttribute('x-h-input') || !!el.closest('[x-h-input-number]');
+      if (!typed) return;
+      const field = el.id.slice(2);
+      const rules = this.validationSchema()[field];
+      if (!rules) return;
+      const { errors } = FormValidation.validate({ [field]: this.form[field] }, { [field]: rules });
+      this.errors[field] = errors[field] || '';
     },
 
     /**

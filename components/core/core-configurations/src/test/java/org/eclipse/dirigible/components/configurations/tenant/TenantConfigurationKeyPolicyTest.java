@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -65,6 +66,17 @@ class TenantConfigurationKeyPolicyTest {
                          .contains("DIRIGIBLE_BRANDING_THEME"));
         assertFalse(policy.allowedKeys()
                           .isEmpty());
+    }
+
+    @Test
+    void allowedKeysAreTheTenantOverridableCatalogueEntriesInOrder() {
+        assertEquals(DirigibleConfig.tenantOverridableKeys(), policy.allowedKeys());
+        assertEquals(13, policy.allowedKeys()
+                               .size());
+        assertEquals("DIRIGIBLE_BRANDING_NAME", policy.allowedKeys()
+                                                      .get(0));
+        assertEquals("DIRIGIBLE_APP_BASE_URL", policy.allowedKeys()
+                                                     .get(12));
     }
 
     @Test

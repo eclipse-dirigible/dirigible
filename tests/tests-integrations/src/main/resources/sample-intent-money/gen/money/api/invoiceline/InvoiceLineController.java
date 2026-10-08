@@ -268,7 +268,7 @@ public class InvoiceLineController {
     // Public so a process task's write-back (the generated <Process><Step>Write delegate) holds the
     // reviewer's edits to exactly these rules and messages before it writes them (#7552).
     public static void validate(InvoiceLineEntity entity) {
-        if (entity.Description == null) {
+        if (entity.Description == null || entity.Description.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The 'Description' property is required");
         }
         if (entity.Description.length() > 200) {

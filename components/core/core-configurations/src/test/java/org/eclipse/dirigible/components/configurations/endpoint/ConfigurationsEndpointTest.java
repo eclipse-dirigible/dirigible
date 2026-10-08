@@ -25,6 +25,7 @@ import org.eclipse.dirigible.commons.config.ConfigGroups;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.SensitiveConfigs;
 import org.eclipse.dirigible.components.configurations.service.ConfigurationsService;
+import org.eclipse.dirigible.components.configurations.service.SensitiveConfigurations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -42,6 +43,10 @@ public class ConfigurationsEndpointTest {
 
     private static final String SECRET_KEY = "DIRIGIBLE_MAIL_PASSWORD";
 
+    private static final String SENSITIVE_KEY = "DIRIGIBLE_INTENT_AI_API_KEY";
+
+    private static final String PLAIN_KEY = "DIRIGIBLE_BRANDING_NAME";
+
     /** The configurations service. */
     private final ConfigurationsService configurationsService = new ConfigurationsService();
 
@@ -50,6 +55,8 @@ public class ConfigurationsEndpointTest {
     @AfterEach
     void cleanUp() {
         Configuration.remove(SECRET_KEY);
+        Configuration.remove(SENSITIVE_KEY);
+        Configuration.remove(PLAIN_KEY);
     }
 
     /**
@@ -57,7 +64,33 @@ public class ConfigurationsEndpointTest {
      */
     @Test
     public void findAll() {
-        assertNotNull(configurationsService.findAll());
+        assertNotNull(endpoint.findAll(null)
+                              .getBody());
+    }
+
+    /**
+     * A sensitive value set at runtime never appears in clear in the body; a plain one is unchanged.
+     */
+    @Test
+    public void findAllMasksSensitiveValues() {
+        Configuration.set(SENSITIVE_KEY, "sk-live-value");
+        Configuration.set(PLAIN_KEY, "Acme");
+
+        List<List<String>> body = endpoint.findAll(null)
+                                          .getBody();
+
+        assertNotNull(body);
+        assertFalse(body.toString()
+                        .contains("sk-live-value"));
+        assertEquals(SensitiveConfigurations.MASK, row(body, SENSITIVE_KEY).get(1));
+        assertEquals("Acme", row(body, PLAIN_KEY).get(1));
+    }
+
+    private static List<String> row(List<List<String>> body, String key) {
+        return body.stream()
+                   .filter(r -> key.equals(r.get(0)))
+                   .findFirst()
+                   .orElseThrow(() -> new AssertionError("No row for " + key));
     }
 
     /** Without a group the legacy endpoint answers exactly what it did before groups existed. */

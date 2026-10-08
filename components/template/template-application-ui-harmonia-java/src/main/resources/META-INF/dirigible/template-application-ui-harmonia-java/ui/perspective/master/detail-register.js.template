@@ -130,7 +130,8 @@ App.registerDetail('${masterEntity}', {
   // Full editable-column metadata for inline editing (used by the document header-items layout's
   // item add/edit dialog; the generic detailPanel ignores it). Every editable column (auto-increment
   // PK, the master FK and audit columns excluded). A DROPDOWN lookup carries `entity` + `creatable`
-  // (false for SETTING targets) so the dialog can offer "Add new <related>".
+  // (false for SETTING targets and for an `inlineCreate: false` relation, #7748) so the dialog can
+  // offer "Add new <related>".
   editColumns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE"))
@@ -140,7 +141,7 @@ App.registerDetail('${masterEntity}', {
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($ereadonly = (($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)) || $property.isReadOnlyProperty == "true"))
 #if($property.widgetType == "DROPDOWN")
-    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}'#if($property.widgetDropDownDocumentNumber), documentNumber: true#end, entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#pickableMeta($property)#orderedMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}'#if($property.widgetDropDownDocumentNumber), documentNumber: true#end, entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && $property.widgetInlineCreate != "false")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#pickableMeta($property)#orderedMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
 #elseif($property.widgetType == "MULTISELECT")
 ## No `creatable` add-new (the return path writes a single value) and no dependsOn/hier metadata -
 ## a subset relation carries none of those. The static `where:` filter travels so the dialog chooser

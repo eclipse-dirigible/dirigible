@@ -1289,7 +1289,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("itemRefuse", "");
             }
             e.put("hasPrompt", g.hasPrompt());
-            e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo())));
+            e.put("promptFields", promptFields(g, crossModel ? null : byName.get(g.getTo()), target, source));
+            putLink(g, e, byName, compositionParents, model, target);
             out.add(e);
         }
         return out;
@@ -1564,35 +1565,172 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * The {@code link:} row of a create-from (issue #7748), pre-rendered onto its glue entry: the link
+     * entity and its perspective (a composition child of the source, so the source's model and gen
+     * folder), the foreign key set to the source's key, the one set to the created target's key, and
+     * each mapped field as a link property / created-target property pair. A cross-model target's
+     * mapped properties are checked here against the owner model, which the parser cannot read.
+     */
+    private static void putLink(GeneratesIntent g, Map<String, Object> e, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentModel model, CrossModelSupport.TargetInfo crossModelTarget) {
+        EntityIntent linkEntity = g.hasLink() ? byName.get(g.getLink()
+                                                            .getEntity())
+                : null;
+        e.put("hasLink", linkEntity != null);
+        if (linkEntity == null) {
+            e.put("linkEntity", "");
+            e.put("linkPerspective", "");
+            e.put("linkParentFk", "");
+            e.put("linkTargetFk", "");
+            e.put("linkAssignments", new ArrayList<>());
+            return;
+        }
+        String parentFk = null;
+        String targetFk = null;
+        for (RelationIntent relation : linkEntity.getRelations()) {
+            if (relation.isComposition() && g.getFrom()
+                                             .equals(relation.getTo())) {
+                parentFk = IntentNaming.pascalCase(relation.getName());
+            } else if (g.getTo()
+                        .equals(relation.getTo())
+                    && (g.getLink()
+                         .getRelation() == null || g.getLink()
+                                                    .getRelation()
+                                                    .equals(relation.getName()))) {
+                targetFk = IntentNaming.pascalCase(relation.getName());
+            }
+        }
+        List<Map<String, Object>> assignments = new ArrayList<>();
+        List<String> unknown = new ArrayList<>();
+        for (Map.Entry<String, String> entry : g.getLink()
+                                                .getMap()
+                                                .entrySet()) {
+            String targetProperty = IntentNaming.pascalCase(entry.getValue());
+            if (crossModelTarget != null && crossModelTarget.propertyNames() != null && !crossModelTarget.propertyNames()
+                                                                                                         .contains(targetProperty)) {
+                unknown.add(entry.getValue());
+            }
+            Map<String, Object> assignment = new LinkedHashMap<>();
+            assignment.put("linkProp", IntentNaming.pascalCase(entry.getKey()));
+            assignment.put("targetProp", targetProperty);
+            assignments.add(assignment);
+        }
+        if (!unknown.isEmpty()) {
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                    List.of("generates [" + g.getName() + "] link map reads " + unknown + ", which the target [" + g.getTo()
+                            + "] of model [" + g.getUses() + "] does not declare"));
+        }
+        e.put("linkEntity", linkEntity.getName());
+        e.put("linkPerspective", IntentEntities.resolvePerspective(linkEntity.getName(), compositionParents, model));
+        e.put("linkParentFk", parentFk);
+        e.put("linkTargetFk", targetFk);
+        e.put("linkAssignments", assignments);
+    }
+
+    /**
      * The {@code prompt:} inputs of a generates action (issue #6685), pre-rendered for the template
      * (the expansions convention - the template stays shape-only): per prompted TARGET property its
-     * PascalCase name, the required flag, and the Java expression converting the posted JSON value (an
+     * PascalCase name, the required flag, the Java expression converting the posted JSON value (an
      * {@code Object raw} local - Gson delivers numbers as Double, everything else as String/Boolean) to
-     * the generated entity field's Java type. A to-one relation is its integer FK. The parser has
-     * already constrained prompts to a local target and rejected unsupported field types.
+     * the generated entity field's Java type, and the PascalCase SOURCE property an input left empty
+     * defaults to (issue #7748; empty for none). A to-one relation is its integer FK. A local target
+     * was checked by the parser; a cross-model one (issue #7748) is typed - and checked - here, against
+     * the owner model.
      */
-    private static List<Map<String, Object>> promptFields(GeneratesIntent g, EntityIntent target) {
+    private static List<Map<String, Object>> promptFields(GeneratesIntent g, EntityIntent target,
+            CrossModelSupport.TargetInfo crossModelTarget, EntityIntent source) {
         List<Map<String, Object>> out = new ArrayList<>();
-        if (!g.hasPrompt() || target == null) {
+        if (!g.hasPrompt() || (target == null && crossModelTarget == null)) {
             return out;
         }
+        List<String> problems = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.PromptFieldIntent p : g.getPrompt()) {
             String field = p.getField();
             if (field == null || field.isBlank()) {
                 continue; // parser already reported it
             }
-            FieldIntent targetField = fieldNamed(target, field);
-            if (targetField == null && toOneRelation(target, field) == null) {
-                continue; // parser already reported it
+            String prop = IntentNaming.pascalCase(field);
+            String type;
+            if (target != null) {
+                FieldIntent targetField = fieldNamed(target, field);
+                if (targetField == null && toOneRelation(target, field) == null) {
+                    continue; // parser already reported it
+                }
+                type = targetField == null ? "relation" : targetField.getType();
+            } else {
+                type = crossModelPromptType(g, field, prop, crossModelTarget, problems);
+                if (type == null) {
+                    continue;
+                }
+                if (p.hasDefault() && source != null) {
+                    checkCrossModelPromptDefault(g, p, prop, type, crossModelTarget, source, problems);
+                }
             }
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("prop", IntentNaming.pascalCase(field));
+            entry.put("prop", prop);
             entry.put("required", p.isRequired());
             // The conversion of the posted value to the field's type, as a reading (issue #7425).
-            entry.put("reading", Readings.convert(targetField == null ? "relation" : targetField.getType()));
+            entry.put("reading", Readings.convert(type));
+            entry.put("defaultProp", p.hasDefault() ? IntentNaming.pascalCase(p.getDefaultFrom()) : "");
             out.add(entry);
         }
+        if (!problems.isEmpty()) {
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(problems);
+        }
         return out;
+    }
+
+    /**
+     * The intent type of a cross-model target's prompted property, read off the owner model: a to-one
+     * relation is its key, a field its column's type. Null, with the problem recorded, for a property
+     * the target does not declare, a timestamp the dialog cannot collect, or an owner model that is not
+     * readable at all - a guessed type would convert the posted value into the wrong Java type.
+     */
+    private static String crossModelPromptType(GeneratesIntent g, String field, String prop, CrossModelSupport.TargetInfo target,
+            List<String> problems) {
+        String subject = "generates [" + g.getName() + "] prompt field [" + field + "]";
+        if (!target.resolved() || target.propertyTypes() == null) {
+            problems.add(
+                    subject + " cannot be typed - the model [" + g.getUses() + "] owning the target [" + g.getTo() + "] could not be read");
+            return null;
+        }
+        if (target.propertyRelations() != null && target.propertyRelations()
+                                                        .containsKey(prop)) {
+            return "relation";
+        }
+        String dataType = target.propertyTypes()
+                                .get(prop);
+        if (dataType == null) {
+            problems.add(subject + " is not a property of the target [" + g.getTo() + "] of model [" + g.getUses() + "]");
+            return null;
+        }
+        String kind = kindOfJdbcType(dataType);
+        if ("timestamp".equals(kind)) {
+            problems.add(subject + " has type timestamp, which the prompt dialog does not support yet");
+            return null;
+        }
+        return kind;
+    }
+
+    /**
+     * A cross-model target's prompt {@code default:} must name a SOURCE property able to hold the
+     * value: a field of the same kind, or a to-one relation to the same entity for a prompted relation.
+     */
+    private static void checkCrossModelPromptDefault(GeneratesIntent g, org.eclipse.dirigible.components.intent.model.PromptFieldIntent p,
+            String prop, String type, CrossModelSupport.TargetInfo target, EntityIntent source, List<String> problems) {
+        String subject = "generates [" + g.getName() + "] prompt field [" + p.getField() + "] defaults to [" + p.getDefaultFrom() + "]";
+        FieldIntent sourceField = fieldNamed(source, p.getDefaultFrom());
+        RelationIntent sourceRelation = toOneRelation(source, p.getDefaultFrom());
+        if ("relation".equals(type)) {
+            String related = target.propertyRelations()
+                                   .get(prop);
+            if (sourceRelation == null || !related.equals(sourceRelation.getTo())) {
+                problems.add(subject + ", which is not a to-one relation of the source [" + source.getName() + "] to [" + related + "]");
+            }
+        } else if (sourceField == null
+                || !kindOfIntentType(sourceField.getType() == null ? "string" : sourceField.getType()).equals(type)) {
+            problems.add(subject + ", which is not a field of the source [" + source.getName() + "] of the target's type [" + type + "]");
+        }
     }
 
     /**

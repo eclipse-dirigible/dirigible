@@ -57,7 +57,7 @@
                     <tr bk-table-row ng-repeat="config in configurations track by config.key" hoverable="true" activable="false" ng-hide="config.hidden">
                         <td bk-table-cell fit-content="true">{{$index + 1}}</td>
                         <td bk-table-cell>{{::config.key}}</td>
-                        <td bk-table-cell>{{config.display}}</td>
+                        <td bk-table-cell>{{config.value}}</td>
                         <td bk-table-cell fit-content="true">
                             <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-click="editEntry(config)"></bk-button>
                             <bk-button state="transparent" glyph="sap-icon--delete" title="Delete" aria-label="Delete" ng-click="deleteEntry(config)"></bk-button>
@@ -74,21 +74,11 @@
                     $scope.searchField = { text: '' };
                     $scope.configurations = [];
 
-                    function isSecret(key) {
-                        const k = key.toLowerCase();
-                        return k.includes('password') || k.includes('secret') || k.includes('token');
-                    }
-
-                    function toDisplay(key, value) {
-                        return (value && value.length && isSecret(key)) ? '********' : value;
-                    }
-
                     $scope.load = () => {
                         $http.get(API).then((response) => {
                             $scope.configurations = response.data.map((entry) => ({
                                 key: entry.key,
                                 value: entry.value,
-                                display: toDisplay(entry.key, entry.value),
                                 hidden: false
                             }));
                         }, (error) => {

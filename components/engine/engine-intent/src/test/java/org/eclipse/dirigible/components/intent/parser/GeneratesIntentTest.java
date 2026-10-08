@@ -817,8 +817,12 @@ class GeneratesIntentTest {
                 "got: " + ex.getIssues());
     }
 
+    /**
+     * A cross-model target's prompt is rendered from the controls the action descriptor carries (issue
+     * #7748), so it is accepted; its properties are checked at generation, against the owner.
+     */
     @Test
-    void rejectsAPromptOnACrossModelTarget() {
+    void acceptsAPromptOnACrossModelTarget() {
         String yaml = """
                 name: timesheets
                 uses:
@@ -835,27 +839,25 @@ class GeneratesIntentTest {
                     prompt:
                       - { field: amount }
                 """;
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
-        assertTrue(ex.getIssues()
-                     .stream()
-                     .anyMatch(i -> i.contains("prompt is not supported with a cross-model target")),
-                "got: " + ex.getIssues());
+        assertTrue(IntentParser.parse(yaml)
+                               .getGenerates()
+                               .get(0)
+                               .hasPrompt());
     }
 
+    /**
+     * A local target that is not a detail of the view the button lives on is accepted too (issue
+     * #7748): the descriptor carries its controls instead of a detail registration.
+     */
     @Test
-    void rejectsAPromptWhoseTargetIsNotACompositionChildOfForEntity() {
-        // CustomerPayment relates to Customer, not to the invoice the button lives on - there is no
-        // detail registration to render the dialog from. (The stale map/prompt leftovers do not fire
-        // their own issues: map keys are target-side and amount is a CustomerPayment field too.)
+    void acceptsAPromptOnAStandaloneLocalTarget() {
         String yaml = PROMPTED_ALLOCATION.replace("to: SalesInvoiceCustomerPayment", "to: CustomerPayment")
-                                         .replace("- { field: CustomerPayment, required: true }\n", "");
-        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
-        assertTrue(ex.getIssues()
-                     .stream()
-                     .anyMatch(i -> i.contains(
-                             "prompt requires the target [CustomerPayment] to declare a composition to-one relation to forEntity"
-                                     + " [SalesInvoice]")),
-                "got: " + ex.getIssues());
+                                         .replace("- { field: CustomerPayment, required: true }\n", "")
+                                         .replace("  SalesInvoice: id\n", "");
+        assertEquals("CustomerPayment", IntentParser.parse(yaml)
+                                                    .getGenerates()
+                                                    .get(0)
+                                                    .getTo());
     }
 
     @Test

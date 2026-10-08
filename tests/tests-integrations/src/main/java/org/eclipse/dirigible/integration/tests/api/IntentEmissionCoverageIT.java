@@ -3235,6 +3235,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the master's list must load the EntityStatus label lookup like any dropdown relation");
         assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status))"),
                 "the master's table must render the EntityStatus column as a resolved badge, not a raw id");
+        // ...and a relation column sorts by that label, not by the key behind it (#7721): keys 1, 2, 3
+        // label as Sent, draft, Approved, so key order and label order disagree.
+        String campaignRows =
+                "[{ Id: 10, Status: 1, Channels: '2' }, { Id: 11, Status: 2, Channels: '1,2' }," + " { Id: 12, Status: 3, Channels: '3' }]";
+        String campaignLookups = "{ Status: { 1: 'Sent', 2: 'draft', 3: 'Approved' }, Channels: { 1: 'Web', 2: 'Email', 3: 'Phone' } }";
+        assertEquals("12,11,10", pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Status", "asc"),
+                "a relation column must sort by its displayed label, case-insensitively");
+        assertEquals("10,11,12", pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Status", "desc"),
+                "a descending relation sort must reverse the label order");
+        assertEquals("10,12,11",
+                pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
+                "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
         assertFalse(campaignListView.contains("detailPanel("), "the record sheet shows the master's fields only, not its collections");
         assertTrue(contentOf("gen/emission/views/Campaign/Campaign-form.html").contains("detailPanel({...d"),
                 "a master's detail collections must render on the form its Preview / Edit open");
@@ -4934,6 +4946,38 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(400)
                                                  .body("message", equalTo("The 'Name' property is required")));
+        // Spaces alone are no value either (#7719): a required string blank after trimming is refused
+        // with the same message as a missing one, and a value is stored without its surrounding
+        // whitespace - on create and on update - so " Acme " and "Acme" are one name.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"   \",\"UnitPrice\":1}")
+                                                 .when()
+                                                 .post(API + "/settings/UnitController")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Name' property is required")));
+        AtomicInteger trimmedCampaign = new AtomicInteger();
+        restAssuredExecutor.execute(() -> trimmedCampaign.set(given().contentType("application/json")
+                                                                     .body("{\"Name\":\"  Padded  \"}")
+                                                                     .when()
+                                                                     .post(API + "/campaign/CampaignController")
+                                                                     .then()
+                                                                     .statusCode(200)
+                                                                     .body("Name", equalTo("Padded"))
+                                                                     .extract()
+                                                                     .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\" Repadded \",\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Repadded")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Repadded")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Name\":\"" + "x".repeat(101) + "\"}")
                                                  .when()
@@ -7906,6 +7950,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                           .asString();
         }
     }
+
+    /**
+     * Run a generated list page's column sort: the primary keys of {@code rows}, comma-joined, in the
+     * order {@code sortedItems} returns them when sorted by {@code column} in {@code direction}, with
+     * {@code lookups} as the loaded relation labels. The page is evaluated over the shipped
+     * {@code basePage.js}, so the ordering is the runtime's own collator, not a stub of it.
+     */
+    private static String pageSortOrder(String pageScript, String componentName, String lookups, String rows, String column,
+            String direction) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); page.lookups = " + lookups + "; page.items = " + rows + ";"
+                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
+                            + " return page.sortedItems.map(row => row.Id).join(','); })()")
+                          .asString();
+        }
+    }
+
 
     /**
      * Run a generated document page's inline create (#7725) over the shipped shell runtime (basePage,

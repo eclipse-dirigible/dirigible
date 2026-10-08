@@ -30,6 +30,18 @@ public class ConfigGroupsTest {
         assertTrue("Keys without a group (add a prefix rule to ConfigGroups): " + ungrouped, ungrouped.isEmpty());
     }
 
+    /** An explicit catalogue group must name a known group, or it would be silently ignored. */
+    @Test
+    public void everyExplicitGroupIsKnownAndWins() {
+        for (DirigibleConfig entry : DirigibleConfig.values()) {
+            if (entry.getGroup() != null) {
+                assertEquals(entry.getKey(), ConfigGroup.fromId(entry.getGroup())
+                                                        .orElseThrow(),
+                        ConfigGroups.resolve(entry.getKey()));
+            }
+        }
+    }
+
     @Test
     public void specificPrefixesWinOverGeneralOnes() {
         assertEquals(ConfigGroup.MAIL, ConfigGroups.resolve("DIRIGIBLE_FLOWABLE_MAIL_SERVER_HOST"));

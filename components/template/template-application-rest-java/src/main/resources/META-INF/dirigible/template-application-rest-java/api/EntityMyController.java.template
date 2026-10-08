@@ -972,7 +972,8 @@ public class ${name}MyController {
 ## document with a message about a field no form has (#7099).
 #set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
 #if($requiredChecked)
-        if (entity.${property.name} == null) {
+## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
+        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || entity.${property.name}.isBlank()#end) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
         }
 #end

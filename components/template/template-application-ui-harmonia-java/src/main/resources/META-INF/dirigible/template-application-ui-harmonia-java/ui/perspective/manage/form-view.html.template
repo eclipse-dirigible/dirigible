@@ -237,7 +237,7 @@
     <!-- The header form holds the editable fields only. The Save button lives in the footer below
          (outside this form, beneath the detail panels) so the footer can sit at the very bottom; it
          calls save() directly, while @submit.prevent keeps Enter-to-save working inside a field. -->
-    <form @submit.prevent="save()" class="vbox gap-4 w-full">
+    <form @submit.prevent="save()" @focusout="validateOnBlur($event)" class="vbox gap-4 w-full">
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
       <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>
@@ -275,7 +275,8 @@
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
-#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
+## `inlineCreate: false` (#7748) keeps it to existing rows: the plain picker, no "New" button.
+#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && $property.widgetInlineCreate != "false" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabelJs)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end

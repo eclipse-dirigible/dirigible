@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * One input of a {@code generates} action's {@code prompt:} - a declared input form shown before
  * the target record is created (issue #6685). Each entry names a property of the <b>target</b>
@@ -30,6 +32,15 @@ public class PromptFieldIntent {
      */
     private boolean required;
 
+    /**
+     * Optional SOURCE property whose value the input defaults to (issue #7748) - a payment recorded
+     * from an invoice defaults its amount to the invoice's {@code balance}. The dialog pre-fills it
+     * from the record it was opened on, and the generated controller applies it to an input left empty,
+     * so a caller that posts no value gets the same default; a required input is satisfied by it.
+     */
+    @SerializedName("default")
+    private String defaultFrom;
+
     public String getField() {
         return field;
     }
@@ -44,5 +55,22 @@ public class PromptFieldIntent {
 
     public void setRequired(boolean required) {
         this.required = required;
+    }
+
+    public String getDefaultFrom() {
+        return defaultFrom;
+    }
+
+    public void setDefaultFrom(String defaultFrom) {
+        this.defaultFrom = defaultFrom;
+    }
+
+    /**
+     * Whether the input defaults to a source property.
+     *
+     * @return true when {@code default:} names one
+     */
+    public boolean hasDefault() {
+        return defaultFrom != null && !defaultFrom.isBlank();
     }
 }

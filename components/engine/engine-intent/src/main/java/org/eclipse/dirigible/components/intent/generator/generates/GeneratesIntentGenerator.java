@@ -102,7 +102,8 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             context.writeModelFile(fileBase + ".js",
                     buildDescriptorModule(project, IntentNaming.javaModule(context), g,
                             IntentNaming.customActionTranslationKey(project, context, name),
-                            GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context))));
+                            GeneratesGuardSupport.of(g, GeneratesGuardSupport.statusProperty(g, model, context)),
+                            PromptColumns.of(g, model, context)));
         }
     }
 
@@ -126,7 +127,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String buildDescriptorModule(String project, String javaModule, GeneratesIntent g, String translationKey,
-            GeneratesGuardSupport.Guard guard) {
+            GeneratesGuardSupport.Guard guard, List<Map<String, Object>> promptColumns) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + g.getForEntity() + "-" + g.getName());
         String label = IntentNaming.customActionLabel(g.getName(), g.getLabel());
@@ -163,10 +164,11 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         }
         if (g.hasPrompt()) {
             // Declared input form (issue #6685): the customActions store opens a dialog instead of the
-            // plain confirm, rendering one control per entry. The descriptor carries only the authored
-            // names (PascalCased to the generated property names) - control types, lookups and
-            // dependsOn metadata are resolved AT RUNTIME from the target's own detail registration
-            // (App.detailsFor(view)), so the intent layer never references template-owned routes.
+            // plain confirm, rendering one control per entry. For a target that is a detail of this view
+            // the descriptor carries only the authored names (PascalCased to the generated property
+            // names) - control types, lookups and dependsOn metadata are resolved AT RUNTIME from the
+            // target's own detail registration (App.detailsFor(view)); any other target carries its
+            // controls in promptColumns below.
             List<Map<String, Object>> prompt = new ArrayList<>();
             for (PromptFieldIntent p : g.getPrompt()) {
                 if (p.getField() == null || p.getField()
@@ -176,10 +178,21 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
                 Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("name", IntentNaming.pascalCase(p.getField()));
                 entry.put("required", p.isRequired());
+                if (p.hasDefault()) {
+                    // The SOURCE property the input defaults to (issue #7748): the dialog pre-fills it from
+                    // the record it is opened on; the controller applies it to an input left empty.
+                    entry.put("default", IntentNaming.pascalCase(p.getDefaultFrom()));
+                }
                 prompt.add(entry);
             }
             view.put("prompt", prompt);
             view.put("promptEntity", g.getTo());
+            if (promptColumns != null) {
+                // A target that is not a detail of this view - a standalone or a cross-model one (issue
+                // #7748) - has no detail registration to type the dialog from, so the controls ride
+                // the descriptor itself.
+                view.put("promptColumns", promptColumns);
+            }
         }
         // A CommonJS module exporting getView() - the shape the extension-services endpoint loads.
         return "const viewData = " + JsonHelper.toJson(view) + ";\n" + "if (typeof exports !== 'undefined') {\n"

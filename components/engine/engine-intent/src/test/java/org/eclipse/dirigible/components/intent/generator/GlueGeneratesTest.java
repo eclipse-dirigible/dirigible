@@ -1039,13 +1039,75 @@ class GlueGeneratesTest {
         List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
         assertEquals(3, prompt.size());
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "CustomerPayment", "required", true, "expr",
+                                .contains(Map.of("prop", "CustomerPayment", "required", true, "defaultProp", "", "expr",
                                         "Integer.valueOf(new java.math.BigDecimal(String.valueOf(raw)).intValue())")));
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "Amount", "required", true, "expr",
+                                .contains(Map.of("prop", "Amount", "required", true, "defaultProp", "", "expr",
                                         "new java.math.BigDecimal(String.valueOf(raw))")));
         assertTrue(GlueRendering.rendered(prompt)
-                                .contains(Map.of("prop", "Note", "required", false, "expr", "String.valueOf(raw)")));
+                                .contains(Map.of("prop", "Note", "required", false, "defaultProp", "", "expr", "String.valueOf(raw)")));
+    }
+
+    /**
+     * Record a payment FROM the invoice it pays (issue #7748): the prompt's amount defaults to the
+     * invoice's balance, and the link row - the invoice's own allocation child - is carried with the
+     * foreign keys it sets and the created-target values it copies.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void aLinkAndAPromptDefaultAreCarriedOnTheEntry() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: CustomerPayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, required: true }
+                      - { name: reference, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: balance, type: decimal }
+                  - name: SalesInvoicePayment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: allocated, type: decimal, required: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                      - { name: Payment, kind: manyToOne, to: CustomerPayment, required: true }
+                generates:
+                  - name: record-payment
+                    from: SalesInvoice
+                    to: CustomerPayment
+                    prompt:
+                      - { field: amount, required: true, default: balance }
+                      - { field: reference }
+                    link:
+                      entity: SalesInvoicePayment
+                      map: { allocated: amount }
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        List<Map<String, Object>> prompt = (List<Map<String, Object>>) g.get("promptFields");
+        assertEquals("Balance", prompt.get(0)
+                                      .get("defaultProp"));
+        assertEquals("", prompt.get(1)
+                               .get("defaultProp"));
+        assertEquals(true, g.get("hasLink"));
+        assertEquals("SalesInvoicePayment", g.get("linkEntity"));
+        // A composition child lives under its master's perspective.
+        assertEquals("SalesInvoice", g.get("linkPerspective"));
+        assertEquals("Invoice", g.get("linkParentFk"));
+        assertEquals("Payment", g.get("linkTargetFk"));
+        assertEquals(List.of(Map.of("linkProp", "Allocated", "targetProp", "Amount")), g.get("linkAssignments"));
+    }
+
+    /** No link declared - the flag is off and the template renders the create-from it always did. */
+    @Test
+    void noLinkLeavesTheFlagOff() {
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(IntentParser.parse(YAML))
+                                                   .get(0);
+        assertEquals(false, g.get("hasLink"));
     }
 
     /** An action without a prompt keeps the flag off so the template renders nothing new. */

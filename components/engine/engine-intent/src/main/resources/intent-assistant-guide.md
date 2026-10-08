@@ -311,6 +311,10 @@ composition is opt-in.
 **Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated` and `length`, a
 field may declare:
 
+(Every write trims a text field's leading and trailing whitespace before it is checked or stored, and
+a `required` text field is refused when it is blank after that trim - spaces alone are no value,
+#7719. Nothing to declare.)
+
 - `defaultValue: <value>` - the field's default, in four places at once: the **repository's create**
   (a create that leaves the field empty gets the default assigned BEFORE the create-time calculations,
   guards and checks run, so a `calculatedOnCreate` that reads the field sees the default and not a
@@ -485,6 +489,15 @@ field may declare:
   at the status that needs it). Not on a composition parent, an `EntityStatus`, a subset, or with
   `leafOnly`. Canonical shape:
     `- { name: Customer, kind: manyToOne, to: Customer, pickable: { when: [registrationNumber != null, address != null], message: "Registration data incomplete" } }`
+- `inlineCreate: false` on a manyToOne/oneToOne (#7748) - **a picker of existing rows only**: no
+  "New <Entity>" button beside the dropdown in the form, the document header or the document item
+  dialog (the stored value still shows its label). Use it where a row created from the picker would
+  be WRONG, not merely inconvenient: the dialog commits the new row on its own, before the record
+  holding the relation is saved, so the new row's create-time consumers run first - an allocation's
+  payment picker under an `autoAllocate` settlement is the canonical case (the inline payment is
+  spread over the oldest open invoice before the allocation the clerk was entering is saved). Pair it
+  with a create-from that records the target FROM the document (`generates` + `link:`). Not on a
+  collection relation (no picker). `- { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, inlineCreate: false }`
 - `immutableWhen: "<Status> == <seed id> [|| ...]"` (entity-level) - **status-scoped user-write
   immutability**: while the entity's `function: EntityStatus` relation satisfies the expression,
   update and delete through the REST surface are rejected with 409 (e.g.
@@ -2549,13 +2562,57 @@ generates:
   payment's amount - all authored on the target already).
 - `required: true` is enforced in the dialog AND by the generated controller (400 before anything is
   written); an absent optional input leaves the target's own default in place.
+- `default: <source property>` (#7748) pre-fills the input from the record the action runs on (a
+  payment's amount from the invoice's `balance`) and is applied by the controller to an input left
+  empty, so a defaulted required input is never missing. It names a field of the SOURCE of the same
+  type (or, for a prompted to-one, a to-one of the source to the same entity).
 - Prompted values are set on the target AFTER `map`/`defaults`; a property may not be both prompted
   and mapped/defaulted (exactly one writer - parser-rejected).
-- Constraints (v1, parser-enforced): the target must be a **local** entity (no `uses:`) declaring a
-  **composition to-one relation to `forEntity`** (that is what guarantees the generated detail
-  metadata the dialog renders from), `scope` must be `entity`, a `timestamp` field cannot be
-  prompted yet, and `prompt:` cannot be combined with `event:` - an event-driven create-from runs
-  with nobody there to answer the form.
+- A target that is a **composition child of `forEntity`** renders the dialog from its own detail
+  metadata (its `dependsOn:` cascade included). Any other target - a standalone entity, or one of
+  another model (`uses:`, #7748) - renders it from controls the generated action carries (field type,
+  caption, and for a to-one the picker of its target, a third model's included); those controls have
+  no `dependsOn` cascade.
+- Constraints (parser-enforced): `scope` must be `entity`, a `timestamp` field cannot be prompted yet,
+  and `prompt:` cannot be combined with `event:` - an event-driven create-from runs with nobody there
+  to answer the form.
+
+**Record it FROM the document it settles (`link:`, #7748).** When the target is recorded from a
+document and must be linked back to it - a payment recorded from the invoice it pays - `link:` writes
+one row of a composition child of the SOURCE (the allocation) in the SAME unit of work as the target:
+its composition relation set to the source, its to-one to the target set to the new target, its fields
+copied from the target by `map: { <link field>: <target field> }`. It goes through the link entity's
+own repository, so what that repository enforces still holds (the capacity guard of a roll-up over it
+among them) and a refusal takes the target back with it (400, nothing saved). The target's events are
+published only after the unit commits, so an `autoAllocate` settlement sees the payment already fully
+allocated and spreads nothing - this is THE way to record a payment against one particular invoice when
+a settlement is configured. Pair it with `inlineCreate: false` on the allocation's payment picker.
+
+```yaml
+generates:
+  - name: record-payment
+    from: SalesInvoice
+    to: CustomerPayment
+    uses: customer-payments
+    label: Record payment
+    fromStatus: [3, 4, 5]
+    map: { Customer: Customer, Currency: Currency, Company: Company }
+    defaults: { date: now }
+    prompt:
+      - { field: amount, required: true, default: balance }   # pre-filled from the invoice
+      - { field: Method, required: true }
+      - { field: reference }
+    link:
+      entity: SalesInvoiceCustomerPayment   # composition child of SalesInvoice, in this model
+      map: { amount: amount }               # link field <- created target field (same type)
+```
+
+- The link entity must live in the source's model, declare the composition to-one to the source and
+  exactly ONE to-one to the target; with several, name it with `relation:`. A cross-model source
+  (`fromUses:`) cannot carry a `link:`.
+- The ungated row checks (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) run
+  in the generated controller only and are not part of a repository write; express the refusal the link must honour as a roll-up capacity
+  (`capacity:`) or a status-gated check.
 
 ### reports - read-only aggregations
 

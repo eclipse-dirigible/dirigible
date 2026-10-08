@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.commons.config;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Places a configuration key in its {@link ConfigGroup} by prefix.
@@ -18,8 +19,8 @@ import java.util.List;
  * before the general one it would otherwise fall under: {@code FLOWABLE_MAIL_} lands in mail before
  * {@code FLOWABLE_} takes it to BPM, and {@code JAVASCRIPT_GRAALVM_DEBUGGER_PORT} in the developer
  * tools before {@code JAVASCRIPT_} takes it to the runtimes. Prefixes are matched after a leading
- * {@code DIRIGIBLE_}, which is optional. Once keys carry explicit metadata (#7759), an explicit
- * group wins over these rules.
+ * {@code DIRIGIBLE_}, which is optional. A group set explicitly on the key's
+ * {@link DirigibleConfig} entry wins over these rules, and so does its subgroup.
  */
 public final class ConfigGroups {
 
@@ -50,7 +51,7 @@ public final class ConfigGroups {
             new Rule(ConfigGroup.LOCALE, "APPLICATION_LANGUAGES", "APPLICATION_COUNTRY"), //
             new Rule(ConfigGroup.TENANCY, "MULTI_TENANT", "TENANT_", "TENANTS_", "APP_ID"), //
             new Rule(ConfigGroup.WEB, "CORS_", "SECURITY_CROSS", "SECURITY_FRAME", "SECURITY_HSTS", "SECURITY_REFERRER", "SECURITY_CONTENT",
-                    "SECURITY_PERMISSIONS", "SESSION_COOKIE"), //
+                    "SECURITY_PERMISSIONS", "SESSION_COOKIE", "PRODUCTIVE_IFRAME"), //
             new Rule(ConfigGroup.AUTH, "BASIC_", "OAUTH", "KEYCLOAK_", "COGNITO_", "GITHUB_", "ANONYMOUS_", "SECURITY_LOGIN", "ACT_AS",
                     "JWT"), //
             new Rule(ConfigGroup.MAIL, SUBGROUP_PROCESS, List.of("FLOWABLE_MAIL_")), //
@@ -75,6 +76,10 @@ public final class ConfigGroups {
      * @return the group, {@link ConfigGroup#OTHER} when no rule matches
      */
     public static ConfigGroup resolve(String key) {
+        Optional<ConfigGroup> explicit = explicitGroup(key);
+        if (explicit.isPresent()) {
+            return explicit.get();
+        }
         Rule rule = rule(key);
         return rule == null ? ConfigGroup.OTHER : rule.group();
     }
@@ -87,8 +92,26 @@ public final class ConfigGroups {
      * @return the subgroup id, or {@code null} when the key sits in its group directly
      */
     public static String subgroup(String key) {
+        Optional<DirigibleConfig> entry = catalogued(key);
+        if (entry.isPresent() && entry.get()
+                                      .getSubgroup() != null) {
+            return entry.get()
+                        .getSubgroup();
+        }
+        if (explicitGroup(key).isPresent()) {
+            return null;
+        }
         Rule rule = rule(key);
         return rule == null ? null : rule.subgroup();
+    }
+
+    private static Optional<ConfigGroup> explicitGroup(String key) {
+        return catalogued(key).map(DirigibleConfig::getGroup)
+                              .flatMap(ConfigGroup::fromId);
+    }
+
+    private static Optional<DirigibleConfig> catalogued(String key) {
+        return key == null ? Optional.empty() : DirigibleConfig.fromKey(key);
     }
 
     private static Rule rule(String key) {

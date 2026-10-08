@@ -9,25 +9,27 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import java.util.Locale;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Decides which configuration values are secrets and masks them before they leave the server.
- * <p>
- * The classification is a name heuristic until keys carry an explicit {@code sensitive} flag
- * (#7759): passwords, secrets, tokens, API and other keys, and the URIs that embed credentials.
+ * Decides which configuration values are secrets and masks them before they leave the server. It is
+ * the one classification every configuration response uses: the legacy rows, the descriptors and
+ * the tenant endpoints.
  */
 public final class SensitiveConfigs {
 
     /** What a set sensitive value is replaced with. */
     public static final String MASK = "********";
 
-    private static final Pattern SENSITIVE = Pattern.compile("PASSWORD|SECRET|TOKEN|API_KEY|_KEY$|CLIENT_URI|BROKER_URL");
-
-    /** Secrets the name pattern cannot tell: the basic-auth user is stored base64-encoded. */
-    private static final Set<String> SENSITIVE_KEYS = Set.of("DIRIGIBLE_BASIC_USERNAME");
+    /**
+     * Key names that carry a credential: passwords, secrets, API keys, tokens and signing keys, the
+     * base64 basic-auth user, and client/broker URIs, which embed {@code user:password@host}.
+     * {@code TOKEN} matches only as the last segment, so {@code *_MAX_TOKENS} or {@code *_TOKEN_URL}
+     * stay readable.
+     */
+    private static final Pattern SENSITIVE_KEY =
+            Pattern.compile("PASSWORD|PASSWD|SECRET|API_KEY|(^|_)TOKEN$|_KEY$|CLIENT_URI$|BROKER_URL$|^DIRIGIBLE_BASIC_USERNAME$",
+                    Pattern.CASE_INSENSITIVE);
 
     private SensitiveConfigs() {}
 
@@ -38,12 +40,8 @@ public final class SensitiveConfigs {
      * @return true when the value must never be shown in clear
      */
     public static boolean isSensitive(String key) {
-        if (key == null) {
-            return false;
-        }
-        String name = key.toUpperCase(Locale.ROOT);
-        return SENSITIVE_KEYS.contains(name) || SENSITIVE.matcher(name)
-                                                         .find();
+        return key != null && SENSITIVE_KEY.matcher(key)
+                                           .find();
     }
 
     /**
@@ -56,6 +54,18 @@ public final class SensitiveConfigs {
      */
     public static String mask(String key, String value) {
         return value != null && isSensitive(key) ? MASK : value;
+    }
+
+    /**
+     * Whether a submitted value is the mask echoed back for a sensitive key, i.e. an unchanged edit
+     * that must not overwrite the stored secret with the mask.
+     *
+     * @param key the configuration key
+     * @param value the submitted value
+     * @return true if the write should keep the stored value
+     */
+    public static boolean isMaskEcho(String key, String value) {
+        return MASK.equals(value) && isSensitive(key);
     }
 
 }
