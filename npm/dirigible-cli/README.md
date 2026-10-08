@@ -23,8 +23,8 @@ There are two primary ways to install and use the Dirigible CLI: globally for sy
 development dependency for project-specific use.
 
 The CLI JAR is not part of the package: the install downloads the `dirigible-cli` executable JAR of the same version from
-Maven Central and verifies its SHA-256 checksum. If the package was installed with `--ignore-scripts`, run
-`npm rebuild @dirigiblelabs/dirigible-cli` to download it.
+Maven Central and verifies its SHA-256 checksum. When the install skips scripts (`--ignore-scripts`, pnpm) or the
+download fails, the first run of `dirigible` downloads it instead.
 
 ### 1. Global Installation (Recommended for CLI Tools)
 
