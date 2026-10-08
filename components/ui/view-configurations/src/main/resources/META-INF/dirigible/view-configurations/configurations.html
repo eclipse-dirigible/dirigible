@@ -84,20 +84,13 @@
                     }, 200);
                 };
 
-                function checkEnv(name, value) {
-                    if (value && value.length && (name.toLowerCase().includes('password') || name.toLowerCase().includes('secret'))) {
-                        return '********';
-                    }
-                    return value;
-                }
-
                 $http.get('/services/core/configurations').then((response) => {
                     for (let i = 0; i < response.data.length; i++) {
                         $scope.configurations.push({
                             num: i + 1,
                             name: response.data[i][0],
                             runtime: response.data[i][1],
-                            env: checkEnv(response.data[i][0], response.data[i][2]),
+                            env: response.data[i][2],
                             deployment: response.data[i][3],
                             module: response.data[i][4],
                             hidden: false

@@ -24,27 +24,14 @@ import org.springframework.stereotype.Service;
 public class ConfigurationsService {
 
     /**
-     * Find all.
+     * Find all. The value of every sensitive key (see {@link SensitiveConfigurations}) is masked in
+     * every column; unset values stay {@code null}.
      *
      * @return the list
      */
     public List<List<String>> findAll() {
-
-        Map<String, String> runtimeVariables = Configuration.getRuntimeVariables();
-        Map<String, String> environmentVariables = Configuration.getEnvironmentVariables();
-        Map<String, String> deploymentVariables = Configuration.getDeploymentVariables();
-        Map<String, String> moduleVariables = Configuration.getModuleVariables();
-
-        List<List<String>> result = new ArrayList<List<String>>();
-        for (String parameter : Configuration.getConfigurationParameters()) {
-            List<String> row = new ArrayList<String>();
-            row.add(parameter);
-            row.add(runtimeVariables.get(parameter));
-            row.add(environmentVariables.get(parameter));
-            row.add(deploymentVariables.get(parameter));
-            row.add(moduleVariables.get(parameter));
-            result.add(row);
-        }
+        List<List<String>> result = rows(Configuration.getConfigurationParameters(), Configuration.getRuntimeVariables(),
+                Configuration.getEnvironmentVariables(), Configuration.getDeploymentVariables(), Configuration.getModuleVariables());
 
         // String customDataSourcesList = Configuration.get("DIRIGIBLE_DATABASE_CUSTOM_DATASOURCES");
         // if ((customDataSourcesList != null) && !"".equals(customDataSourcesList)) {
@@ -90,6 +77,32 @@ public class ConfigurationsService {
         // }
         // }
 
+        return result;
+    }
+
+    /**
+     * Builds one {@code [key, runtime, environment, deployment, module]} row per parameter, masking the
+     * values of sensitive keys in every column.
+     *
+     * @param parameters the configuration parameters
+     * @param runtimeVariables the runtime values
+     * @param environmentVariables the environment values
+     * @param deploymentVariables the deployment values
+     * @param moduleVariables the module values
+     * @return the rows
+     */
+    static List<List<String>> rows(String[] parameters, Map<String, String> runtimeVariables, Map<String, String> environmentVariables,
+            Map<String, String> deploymentVariables, Map<String, String> moduleVariables) {
+        List<List<String>> result = new ArrayList<List<String>>();
+        for (String parameter : parameters) {
+            List<String> row = new ArrayList<String>();
+            row.add(parameter);
+            row.add(SensitiveConfigurations.mask(parameter, runtimeVariables.get(parameter)));
+            row.add(SensitiveConfigurations.mask(parameter, environmentVariables.get(parameter)));
+            row.add(SensitiveConfigurations.mask(parameter, deploymentVariables.get(parameter)));
+            row.add(SensitiveConfigurations.mask(parameter, moduleVariables.get(parameter)));
+            result.add(row);
+        }
         return result;
     }
 

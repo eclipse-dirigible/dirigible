@@ -14,6 +14,7 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.configurations.domain.TenantConfiguration;
+import org.eclipse.dirigible.components.configurations.service.SensitiveConfigurations;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -31,7 +32,8 @@ import jakarta.annotation.security.RolesAllowed;
 /**
  * Manages the configuration entries of the current tenant, stored in the tenant's own
  * DIRIGIBLE_CONFIGURATIONS table. Only the allow-listed keys among them are actually injected into
- * the runtime configuration for the tenant's requests; the rest are stored but inert.
+ * the runtime configuration for the tenant's requests; the rest are stored but inert. Values of
+ * sensitive keys are returned masked (see {@link SensitiveConfigurations}).
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "configurations/tenant")
@@ -52,7 +54,7 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
     @GetMapping
     public ResponseEntity<List<TenantConfiguration>> findAll() {
         try {
-            return ResponseEntity.ok(tenantConfigurationService.listForCurrentTenant());
+            return ResponseEntity.ok(masked(tenantConfigurationService.listForCurrentTenant()));
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
         }
@@ -67,14 +69,15 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
     @GetMapping("/predefined")
     public ResponseEntity<List<TenantConfiguration>> findPredefined() {
         try {
-            return ResponseEntity.ok(tenantConfigurationService.listPredefinedForCurrentTenant());
+            return ResponseEntity.ok(masked(tenantConfigurationService.listPredefinedForCurrentTenant()));
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
         }
     }
 
     /**
-     * Inserts or updates a configuration entry of the current tenant.
+     * Inserts or updates a configuration entry of the current tenant. The mask submitted back for a
+     * sensitive key is an unchanged edit and keeps the stored value.
      *
      * @param configuration the entry to store
      * @return an empty 200 response
@@ -84,6 +87,10 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
         if (configuration == null || configuration.key() == null || configuration.key()
                                                                                  .isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Configuration key must not be blank");
+        }
+        if (SensitiveConfigurations.isMaskEcho(configuration.key(), configuration.value())) {
+            return ResponseEntity.ok()
+                                 .build();
         }
         try {
             tenantConfigurationService.set(configuration.key(), configuration.value());
@@ -112,6 +119,12 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to delete tenant configuration", ex);
         }
+    }
+
+    private static List<TenantConfiguration> masked(List<TenantConfiguration> configurations) {
+        return configurations.stream()
+                             .map(c -> new TenantConfiguration(c.key(), SensitiveConfigurations.mask(c.key(), c.value())))
+                             .toList();
     }
 
 }
