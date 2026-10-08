@@ -71,6 +71,29 @@ class TableAlterProcessorTest {
         }
     }
 
+    /**
+     * A string column added with a default: the default is the text the model carries, quoted into the
+     * DDL - a bare word after DEFAULT is a column reference PostgreSQL refuses (dirigible #7765). The
+     * existing row, which never set the column, reads the literal back.
+     */
+    @Test
+    void anAddedStringColumnGetsItsDefaultAsALiteral() throws SQLException {
+        try (Connection connection = connect("alter_string_default")) {
+            createTable(connection, "\"A\" VARCHAR(20)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'a')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+            new TableColumn("CHANNEL", "VARCHAR", "20", true, false, "web", "0", "0", false, tableModel);
+            new TableColumn("COPY", "VARCHAR", "40", true, false, "Owner's copy", "0", "0", false, tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertEquals("web", value(connection, "CHANNEL"));
+            assertEquals("Owner's copy", value(connection, "COPY"));
+        }
+    }
+
     @Test
     void aColumnListedAsDroppedIsDropped() throws SQLException {
         try (Connection connection = connect("alter_undeclared_dropped")) {
