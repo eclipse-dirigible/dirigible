@@ -17,7 +17,8 @@
  *
  * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses,
  *           fieldMap, clearError, scrollToSummary, navigateBack, refreshIcons,
- *           applyApiError, mapCauses, applyLoadError.
+ *           applyApiError, mapCauses, applyLoadError, inlineCreated,
+ *           adoptCreatedOption, rememberInlineCreated, savedAlongside.
  *
  * NOTE: Do NOT put ES6 getters in this object — the spread operator invokes
  * them at spread-time and copies the result as a plain value, breaking Alpine
@@ -196,6 +197,53 @@ function baseFormPage() {
           window.parent.postMessage({ type: 'harmonia.entity.updated', id: id }, '*');
         }
       } catch (e) { /* cross-origin / standalone: nothing to notify */ }
+    },
+
+    // Rows the user created through a picker's inline "New <entity>" dialog since this form last
+    // saved (#7725). The child commits on its own, before the parent, so a parent save that fails
+    // afterwards leaves the child behind; savedAlongside() names it in the error so the user
+    // corrects this form instead of creating the child a second time. A page clears it once its
+    // own write lands.
+    inlineCreated: [],
+
+    // After an inline create: make sure the picker lists the new row, and return its option. The
+    // reloaded list is the picker's NARROWED one (a `where:` filter, a Depends-On cascade, a
+    // `pickable:` rule that hides, a leaf-only hierarchy), and a new row outside it matched no
+    // option - the id was assigned but the select read as empty. The row is spliced in by id, as
+    // ensureFilteredCurrent does for a stored off-filter value; the server stays the gate.
+    async adoptCreatedOption(options, id, lookup) {
+      if (!Array.isArray(options) || id == null) return null;
+      const existing = options.find(o => String(o.value) === String(id));
+      if (existing) return existing;
+      if (!lookup || !lookup.url) return null;
+      try {
+        const row = await App.services.api.get(lookup.url + '/' + encodeURIComponent(id), { baseUrl: '' });
+        if (row && row[lookup.key] != null) {
+          const option = { value: row[lookup.key], text: row[lookup.text] };
+          options.unshift(option);
+          return option;
+        }
+      } catch (e) {
+        console.error('[baseFormPage] failed to resolve the inline-created option ' + id, e);
+      }
+      return null;
+    },
+
+    // Record an inline-created row in `created` (this.inlineCreated, or a dialog's own list) under
+    // the label the picker shows for it.
+    rememberInlineCreated(created, entity, id, option) {
+      const text = option && option.text != null && option.text !== '' ? String(option.text) : '#' + id;
+      created.push({ entity: entity, text: text });
+    },
+
+    // The sentence a failed save adds to its error when inline-created rows are already saved:
+    // two independent commits must not read as one failure, or the user creates the child again.
+    savedAlongside(created) {
+      if (!created || !created.length) return '';
+      const saved = created.map(c => c.entity + " '" + c.text + "'").join(', ');
+      return created.length === 1
+        ? T('application-core:shell.related.savedOne', '{{saved}} was saved; this record was not. It stays selected - correct this record and save again instead of creating it anew.', { saved })
+        : T('application-core:shell.related.savedMany', '{{saved}} were saved; this record was not. They stay selected - correct this record and save again instead of creating them anew.', { saved });
     },
 
     // Ask the hosting dialog to close (embedded Cancel) instead of navigating this iframe to a list.

@@ -247,6 +247,13 @@ export function getTemplate(parameters) {
                 collection: "postings"
             },
             {
+                location: "/template-application-events-java/events/PostingReopen.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{reopenClassName}}.java",
+                engine: "velocity",
+                collection: "postingReopens"
+            },
+            {
                 location: "/template-application-events-java/events/Posts.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}Post.java",

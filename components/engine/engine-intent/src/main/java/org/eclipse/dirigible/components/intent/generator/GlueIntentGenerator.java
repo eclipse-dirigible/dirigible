@@ -39,6 +39,8 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
+import org.eclipse.dirigible.components.intent.model.PeriodIntent;
+import org.eclipse.dirigible.components.intent.model.PeriodLockIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
@@ -133,6 +135,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> postingReopens = buildPostingReopens(postings);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
@@ -198,6 +201,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("transitions", transitions);
         glue.put("sends", sends);
         glue.put("postings", postings);
+        glue.put("postingReopens", postingReopens);
         glue.put("posts", posts);
         glue.put("aggregates", aggregates);
         glue.put("resolves", resolves);
@@ -2638,6 +2642,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
             e.put("headerAssignments", headerAssignments);
+            putPostingPeriodLock(e, creates, byName, compositionParents, model, headerAssignments);
             // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source. Each
             // cell and each row guard is a READING (issue #7425) the template layer renders.
             List<Map<String, Object>> itemRows = new ArrayList<>();
@@ -3073,6 +3078,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Test hook: the postings that also render a period-reopen sweep.
+     */
+    static List<Map<String, Object>> buildPostingReopensForTest(IntentModel model) {
+        return buildPostingReopens(buildPostingsForTest(model));
+    }
+
+    /**
      * Test hook: build the postings glue without a repository (convention fallbacks, deterministic).
      */
     static List<Map<String, Object>> buildPostingsForTest(IntentModel model) {
@@ -3142,6 +3154,126 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         }
         return Readings.ruleCase(IntentNaming.pascalCase(selector.by()), "source", cases,
                 selector.defaultColumn() != null ? IntentNaming.pascalCase(selector.defaultColumn()) : null);
+    }
+
+    /**
+     * The period lock of a posting's TARGET, carried onto the posting itself (issue #7703).
+     *
+     * <p>
+     * {@code immutableInPeriod} is enforced in the target's generated repository (#7590), so a posting
+     * dated inside a closed period was refused there - asynchronously, after the source had already
+     * committed its transition. The issuer saw a 200, the handler's listener logged the refusal, and
+     * the document stayed unposted for good: reopening the period published nothing the posting listens
+     * to. The register is an entity of the TARGET's own model (the parser refuses any other), so the
+     * facts needed to ask it are all local and travel with the posting: the handler asks before it
+     * writes and says what it skipped, and the reopen sweep built from the same keys re-runs it.
+     *
+     * <p>
+     * {@code periodSourceDateProperty} is the source column the locked date is copied FROM, emitted
+     * only when the authored {@code map:} cell is a plain copy. That is what lets the sweep ask for
+     * just the documents the reopened period covers; an expression leaves it empty and the sweep falls
+     * back to the posting's own status guard.
+     *
+     * @param e the posting descriptor
+     * @param creates the target entity
+     * @param byName all local entities by name
+     * @param compositionParents composition-parent map
+     * @param model the intent
+     * @param headerAssignments the header cells, already built
+     */
+    private static void putPostingPeriodLock(Map<String, Object> e, EntityIntent creates, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentModel model, List<Map<String, Object>> headerAssignments) {
+        PeriodLockIntent lock = creates == null ? null : creates.getImmutableInPeriod();
+        EntityIntent register = lock == null ? null : byName.get(lock.getPeriod());
+        PeriodIntent period = register == null ? null : register.getPeriod();
+        RelationIntent status = register == null ? null : LifecycleStages.statusRelation(register);
+        if (period == null || status == null) {
+            return; // no lock, or a register the parser already refused
+        }
+        String dateProperty = IntentNaming.pascalCase(lock.getDate());
+        e.put("periodRegisterEntity", register.getName());
+        e.put("periodRegisterPerspective", IntentEntities.resolvePerspective(register.getName(), compositionParents, model));
+        e.put("periodRegisterKeyField", IntentEntities.keyFieldName(register));
+        e.put("periodStartProperty", IntentNaming.pascalCase(period.getStart()));
+        e.put("periodEndProperty", IntentNaming.pascalCase(period.getEnd()));
+        e.put("periodStatusProperty", IntentNaming.pascalCase(status.getName()));
+        e.put("periodClosedValues", closedStatusIds(period.getClosedWhen()));
+        e.put("periodDateProperty", dateProperty);
+        e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+    }
+
+    /** The seeded ids a {@code closedWhen} expression names, in authored order. */
+    private static String closedStatusIds(String expression) {
+        List<String> ids = new ArrayList<>();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("==\\s*(\\d+)")
+                                                                 .matcher(expression == null ? "" : expression);
+        while (matcher.find()) {
+            ids.add(matcher.group(1));
+        }
+        return String.join(",", ids);
+    }
+
+    /**
+     * The SOURCE property a header cell copies verbatim into the given target column, or the empty
+     * string when the cell is anything else - a literal, a template, an expression. Only a plain copy
+     * can be asked of the source as a query.
+     */
+    private static String sourceCopyOf(List<Map<String, Object>> headerAssignments, String targetProperty) {
+        for (Map<String, Object> assignment : headerAssignments) {
+            if (!targetProperty.equals(assignment.get("targetProp"))) {
+                continue;
+            }
+            if (assignment.get("reading") instanceof Map<?, ?> reading && "read".equals(reading.get("kind"))
+                    && "source".equals(reading.get("owner"))) {
+                return String.valueOf(reading.get("property"));
+            }
+            return "";
+        }
+        return "";
+    }
+
+    /**
+     * The period-reopen sweeps: one per posting whose target carries {@code immutableInPeriod} (issue
+     * #7703).
+     *
+     * <p>
+     * A posting the lock refuses leaves the source on the unposted worklist, and nothing used to bring
+     * it back - the register's reopening publishes on the REGISTER's topic, which the posting does not
+     * listen to. The sweep does, and re-runs the posting for the documents that period covers. It is
+     * the same descriptor the posting itself renders from, so the two can never disagree about which
+     * documents qualify; the follower twin is left out, since an edit's rewrite is not what a reopening
+     * is missing - the first post is.
+     *
+     * @param postings the posting descriptors
+     * @return the descriptors that also render a sweep, in posting order
+     */
+    private static List<Map<String, Object>> buildPostingReopens(List<Map<String, Object>> postings) {
+        List<Map<String, Object>> reopens = new ArrayList<>();
+        for (Map<String, Object> posting : postings) {
+            if (posting.get("periodRegisterEntity") == null || Boolean.TRUE.equals(posting.get("followsSource"))) {
+                continue;
+            }
+            // BOTH channels a register's status moves on, because the two are disjoint: a
+            // `transitions:` button publishes -transitioned and nothing else, a plain REST update
+            // publishes -updated and nothing else, and a period is legitimately reopened either way.
+            // One sweep per channel, from the one descriptor (the settlementListeners fan-out), so
+            // neither can drift; the sweep is a store-driven recompute, so a period edit that is not
+            // a reopening costs one query and nothing else.
+            String className = String.valueOf(posting.get("className"));
+            reopens.add(reopen(posting, className + "PostingReopen", "-transitioned"));
+            reopens.add(reopen(posting, className + "PostingReopenOnUpdate", "-updated"));
+        }
+        return reopens;
+    }
+
+    /**
+     * One sweep of a posting: the posting's own descriptor plus the class and channel it renders as.
+     */
+    private static Map<String, Object> reopen(Map<String, Object> posting, String className, String topicSuffix) {
+        Map<String, Object> reopen = new LinkedHashMap<>(posting);
+        reopen.put("reopenClassName", className);
+        reopen.put("reopenTopicSuffix", topicSuffix);
+        return reopen;
     }
 
     private static Map<String, Object> postingAssignment(String targetProperty, String value) {

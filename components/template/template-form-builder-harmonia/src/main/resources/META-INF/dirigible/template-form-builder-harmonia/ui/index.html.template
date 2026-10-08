@@ -31,6 +31,9 @@
           <span x-h-text class="text-sm wrap-break-word" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
 #elseif($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
           <span x-h-text class="text-sm wrap-break-word" x-text="fmtDate(model.$el.model, '$el.controlId')"></span>
+#elseif($el.documentNumber)
+          <!-- A number: { stampOn: issue } field: its pre-issue UUID placeholder shows as the draft marker. -->
+          <span x-h-text class="text-sm wrap-break-word" x-text="HarmoniaFormat.documentNumber(model.$el.model) || '—'"></span>
 #else
           <span x-h-text class="text-sm wrap-break-word" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
 #end

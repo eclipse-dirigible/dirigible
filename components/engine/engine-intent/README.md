@@ -396,8 +396,9 @@ A cross-model source declares its phases in its own model, so the name cannot be
 
 The list renders as a tree-table - the list's own columns, the first one indented under an expand
 chevron - and as the flat table while no record has a parent, for a search or a filter, or when the
-user picks Table on the toolbar toggle. The server rejects cycles and leaf-only references to a
-node with children.
+user picks Table on the toolbar toggle. Each record's row menu and its sheet offer **Add child**,
+which opens the create form with the parent preset and locked; the edit form's picker re-parents.
+The server rejects cycles and leaf-only references to a node with children.
 
 ## label - the stored display name
 

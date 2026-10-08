@@ -16,6 +16,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -148,6 +149,63 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
                   - { id: 2, name: Posted }
             """;
 
+    /**
+     * The fleet's shape for #7716: the entry goes WITH its payment
+     * ({@code whenTargetDeleted: cascade}), so a delete right after an edit races the edit's twin
+     * rewriting the entry's lines.
+     */
+    private static final String CASCADING_CONSUMER_INTENT = """
+            name: ledger
+            description: posting-follows-source fixture - the entry is deleted with its payment
+
+            uses:
+              - { model: pay, project: follow-pay }
+
+            entities:
+              - name: EntryStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              - name: Entry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - { name: Payment, kind: manyToOne, to: Payment, model: pay, whenTargetDeleted: cascade }
+
+              - name: EntryLine
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
+
+            postings:
+              - name: paymentPosting
+                event: { onCreate: Payment, model: pay }
+                creates: Entry
+                backReference: Payment
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
+
+            seeds:
+              - name: entry-statuses
+                entity: EntryStatus
+                rows:
+                  - { id: 1, name: Draft }
+                  - { id: 2, name: Posted }
+            """;
+
+    /** Create, correct and delete in a row - each round a chance for the delete to meet the rewrite. */
+    private static final int RACE_ROUNDS = 15;
+
+    /** A 409 is repeatable; this many in a row for one record would be a livelock, not a race. */
+    private static final int DELETE_ATTEMPTS = 5;
+
     @Autowired
     private IRepository repository;
 
@@ -214,6 +272,51 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
         // The original is left as it was posted - the storno corrects it, nothing rewrites it.
         assertEquals(entry, onlyEntryOf(payment, false));
         awaitLines(entry, 12.0f);
+    }
+
+    /**
+     * A delete that meets the edit's twin mid-rewrite is never a 500 (#7716). The cascade loads the
+     * entry's lines, the twin replaces them on its listener thread, and the delete then finds a line it
+     * loaded already gone: the delete runs once more from a fresh read, and a delete that collides
+     * twice is a 409 the caller can repeat.
+     */
+    @Test
+    void a_delete_racing_the_posting_rewrite_is_never_a_server_error() {
+        writeIntent(OWNER, OWNER_INTENT);
+        generateProject(OWNER);
+        writeIntent(CONSUMER, CASCADING_CONSUMER_INTENT);
+        generateProject(CONSUMER);
+        publishProject(OWNER);
+        publishProject(CONSUMER);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // The first payment waits for its entry, so the handlers are known to be subscribed.
+        int first = create(PAYMENTS, "{\"Amount\":10}");
+        awaitLines(onlyEntryOf(first, false), 10.0f);
+        deleteRetryingConflicts(first);
+
+        for (int round = 0; round < RACE_ROUNDS; round++) {
+            int payment = create(PAYMENTS, "{\"Amount\":10}");
+            update(PAYMENTS + "/" + payment, "{\"Id\":" + payment + ",\"Amount\":12}");
+            deleteRetryingConflicts(payment);
+        }
+    }
+
+    /** DELETE until it succeeds; a 409 is the collision's answer and may be repeated, a 500 never. */
+    private void deleteRetryingConflicts(int payment) {
+        AtomicInteger status = new AtomicInteger();
+        for (int attempt = 0; attempt < DELETE_ATTEMPTS; attempt++) {
+            restAssuredExecutor.execute(() -> status.set(given().when()
+                                                                .delete(PAYMENTS + "/" + payment)
+                                                                .then()
+                                                                .extract()
+                                                                .statusCode()));
+            if (status.get() < 300) {
+                return;
+            }
+            assertEquals(409, status.get(), "DELETE of payment " + payment + " answered " + status.get());
+        }
+        fail("DELETE of payment " + payment + " still collided after " + DELETE_ATTEMPTS + " attempts");
     }
 
     /**

@@ -293,6 +293,27 @@ class ControllerInvokerBindingTest {
                 response.body());
     }
 
+    @Test
+    void concurrent_write_exception_yields_409() {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("collide"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+        // Another writer changed the same rows mid-write and the write was rolled back whole (#7716):
+        // a conflict the caller can repeat, not a server fault.
+        assertEquals(HttpStatus.CONFLICT.value(), response.getStatus());
+        assertTrue(response.body()
+                           .contains("try again"),
+                response.body());
+    }
+
     // --- fixtures --------------------------------------------------------------------------------
 
     @Controller
@@ -346,6 +367,12 @@ class ControllerInvokerBindingTest {
         @Get("/delete-me")
         public String deleteMe() {
             throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException("This Category is referenced by Expense records");
+        }
+
+        @Get("/collide")
+        public String collide() {
+            throw new org.eclipse.dirigible.sdk.db.ConcurrentWriteException("changed by another write - reload it and try again",
+                    new IllegalStateException("Unexpected row count (expected row count 1 but was 0)"));
         }
     }
 

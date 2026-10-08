@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.data.store.java.store;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -20,12 +22,16 @@ import static org.mockito.Mockito.when;
 
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
 import org.eclipse.dirigible.components.data.store.java.outbox.EventOutbox;
+import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.hibernate.Session;
 import org.hibernate.SessionFactory;
+import org.hibernate.StaleObjectStateException;
 import org.hibernate.Transaction;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
+
+import jakarta.persistence.OptimisticLockException;
 
 /**
  * What {@code inUnitOfWork} owes its caller when the block fails: the transaction is rolled back
@@ -133,6 +139,56 @@ class JavaEntityStoreUnitOfWorkTest {
 
         assertEquals("after", store.inUnitOfWork(() -> "after"));
         verify(session, org.mockito.Mockito.times(2)).beginTransaction();
+    }
+
+    /**
+     * A commit that finds a row it read already changed or removed by another writer - a cascade
+     * deleting a line a posting handler replaced meanwhile (#7716) - is a conflict the caller can
+     * repeat, not a server fault: the unit is rolled back and the caller is handed a
+     * {@link ConcurrentWriteException} carrying the persistence failure.
+     */
+    @Test
+    void aCommitThatFindsAConcurrentWriteIsAConflict() {
+        OptimisticLockException stale = new OptimisticLockException("Unexpected row count (expected row count 1 but was 0)");
+        org.mockito.Mockito.doThrow(stale)
+                           .when(transaction)
+                           .commit();
+
+        ConcurrentWriteException thrown = assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWork(() -> "work"));
+
+        assertSame(stale, thrown.getCause());
+        verify(transaction).rollback();
+        verify(session).close();
+    }
+
+    /** The same failure raised by a flush inside the block, wrapped or not, reads the same way. */
+    @Test
+    void aFlushThatFindsAConcurrentWriteIsAConflict() {
+        RuntimeException wrapped =
+                new IllegalStateException("flush failed", new StaleObjectStateException("journal_JournalEntryItemEntity", 54));
+
+        ConcurrentWriteException thrown = assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWork(() -> {
+            throw wrapped;
+        }));
+
+        assertSame(wrapped, thrown.getCause());
+        assertRolledBackBeforeClose();
+    }
+
+    /** The unit is visible to the code it runs, and to nothing after it. */
+    @Test
+    void reportsWhetherAUnitIsOpen() {
+        assertFalse(store.isInUnitOfWork());
+        assertTrue(store.inUnitOfWork(store::isInUnitOfWork));
+        assertFalse(store.isInUnitOfWork());
+    }
+
+    /**
+     * A row lock outside a unit would be released by its own statement's commit - refused, not a no-op.
+     */
+    @Test
+    void refusesARowLockOutsideAUnit() {
+        assertThrows(IllegalStateException.class, () -> store.lockForUpdate(Object.class, 1));
     }
 
     private void assertRolledBackBeforeClose() {

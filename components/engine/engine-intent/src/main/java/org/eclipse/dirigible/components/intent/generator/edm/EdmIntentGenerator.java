@@ -1594,6 +1594,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // client-side feedback are the ones the pattern machinery already provides, not a second path.
             p.put("widgetPattern", EMAIL_PATTERN);
         }
+        // Input normalization (#7726): applied by the generated repository and controllers before the
+        // pattern and the checks, and by the form on blur. Three scalars rather than the authored list,
+        // so they survive the scalar-only .edm, and emitted only when authored, so a model that
+        // normalizes nothing generates byte-identically.
+        if (field.normalizeTrim()) {
+            p.put("normalizeTrim", "true");
+        }
+        if (field.normalizeStrip() != null) {
+            p.put("normalizeStrip", field.normalizeStrip());
+        }
+        if (field.normalizeCase() != null) {
+            p.put("normalizeCase", field.normalizeCase());
+        }
         return p;
     }
 
@@ -1795,8 +1808,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
-        putLookupColumns(p, relation);
+        putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
 
@@ -1849,6 +1863,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetOptionsEntityPerspectiveName", targetPerspective);
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        putDraftNumberLabel(p, labelIsDraftNumber(target));
         p.put("widgetPattern", "^\\d+(,\\d+)*$");
         return p;
     }
@@ -1899,9 +1914,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
+        putDraftNumberLabel(p, info.draftNumberProperties()
+                                   .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
-        putLookupColumns(p, relation);
+        putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
     }
 
@@ -1940,9 +1957,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit the relation's {@code show} target fields as {@code lookupColumns} (PascalCase name +
      * humanized label) so the Harmonia detail table renders them as extra read-only columns resolved
-     * from the already-fetched lookup row. Nothing is emitted when {@code show} is absent/empty.
+     * from the already-fetched lookup row. Nothing is emitted when {@code show} is absent/empty. A
+     * column showing one of {@code draftNumbers} - the target's {@code number: { stampOn: issue }}
+     * fields - is marked {@code documentNumber}, so it reads as the draft marker until the number is
+     * stamped (issue #7722).
      */
-    private static void putLookupColumns(Map<String, Object> p, RelationIntent relation) {
+    private static void putLookupColumns(Map<String, Object> p, RelationIntent relation, Set<String> draftNumbers) {
         if (relation.getShow() == null || relation.getShow()
                                                   .isEmpty()) {
             return;
@@ -1955,6 +1975,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> column = new LinkedHashMap<>();
             column.put("name", IntentNaming.pascalCase(field));
             column.put("label", IntentNaming.humanize(field));
+            if (draftNumbers.contains(IntentNaming.pascalCase(field))) {
+                column.put("documentNumber", "true");
+            }
             columns.add(column);
         }
         if (!columns.isEmpty()) {
@@ -3432,10 +3455,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /** The property keys a related register's column carries into the {@code .model}. */
-    private static final List<String> RELATED_COLUMN_KEYS =
-            List.of("name", "widgetLabel", "dataName", "dataType", "dataScale", "widgetType", "widgetPattern", "widgetDropDownKey",
-                    "widgetDropDownValue", "relationshipEntityName", "relationshipEntityPerspectiveName", "widgetOptionsEntityName",
-                    "widgetOptionsEntityPerspectiveName", "sensitiveProperty", "referencedModel");
+    private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
+            "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
+            "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "widgetOptionsEntityPerspectiveName", "sensitiveProperty",
+            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute
@@ -3990,6 +4013,41 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             parts.add(map);
         }
         return parts;
+    }
+
+    /**
+     * Mark a dropdown / subset property whose label ({@code widgetDropDownValue}) is a {@code number: {
+     * stampOn: issue }} field: until the target document is issued that label is a UUID placeholder, so
+     * every picker, lookup cell and register over it shows the draft marker instead (issue #7722).
+     * Emitted only when true, like every other boolean widget attribute.
+     */
+    private static void putDraftNumberLabel(Map<String, Object> p, boolean draftNumber) {
+        if (draftNumber) {
+            p.put("widgetDropDownDocumentNumber", "true");
+        }
+    }
+
+    /** Whether the target's label field is a {@code number: { stampOn: issue }} field. */
+    private static boolean labelIsDraftNumber(EntityIntent target) {
+        return target != null && draftNumberProperties(target).contains(labelFieldName(target));
+    }
+
+    /**
+     * The target's {@code number: { stampOn: issue }} property names (PascalCase) - the fields whose
+     * value is a UUID placeholder until their document is issued.
+     */
+    private static Set<String> draftNumberProperties(EntityIntent target) {
+        Set<String> names = new LinkedHashSet<>();
+        if (target == null) {
+            return names;
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && field.getNumber() != null && "issue".equalsIgnoreCase(field.getNumber()
+                                                                                                      .getStampOn())) {
+                names.add(IntentNaming.pascalCase(field.getName()));
+            }
+        }
+        return names;
     }
 
     private static String labelFieldName(EntityIntent target) {

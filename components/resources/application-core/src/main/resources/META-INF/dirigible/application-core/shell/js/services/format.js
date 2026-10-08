@@ -306,13 +306,17 @@
     /**
      * A document number for display. A not-yet-issued document holds a create-time UUID placeholder in
      * its number field (the platform's numbering places it there until the real number is stamped at
-     * issue); render that as empty so the title shows just the document label ("Sales Invoice", not the
-     * raw UUID). Once the real number is stamped it passes through unchanged, as does any non-UUID value.
+     * issue). The placeholder is a storage detail, so it renders as the translated draft marker - the
+     * title reads "Sales Invoice (draft)", a list cell or a picker label "(draft)" - never as the raw
+     * UUID (issue #7722). Once the real number is stamped it passes through unchanged, as does any
+     * non-UUID value. Callers pass only a `number: { stampOn: issue }` field (or a label that is one):
+     * a plain uuid field shares the shape and is shown as it is.
      */
     documentNumber(v) {
       if (v === null || v === undefined) return '';
       const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-      return uuid.test(String(v)) ? '' : v;
+      if (!uuid.test(String(v))) return v;
+      return typeof window.T === 'function' ? window.T('application-core:shell.defaults.draftNumber', '(draft)') : '(draft)';
     },
 
     /**

@@ -95,11 +95,16 @@ public final class CrossModelSupport {
      *        compared in - a {@code where} moment on a {@code DATE} column must be a
      *        {@code CURRENT_DATE}, or the query fails to bind on every tick (issue #7393); {@code null}
      *        when the model was not resolved - callers then skip the check
+     * @param draftNumberProperties the target's {@code number: { stampOn: issue }} property names (the
+     *        owner's {@code numberStampOnIssue}), whose value is a UUID placeholder until the document
+     *        is issued - a dropdown labelled by one, or a {@code show:} column of one, shows the draft
+     *        marker instead (issue #7722); empty when the model was not resolved
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
             java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
-            java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes) {
+            java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes,
+            java.util.Set<String> draftNumberProperties) {
     }
 
     @SuppressWarnings("unchecked")
@@ -524,7 +529,8 @@ public final class CrossModelSupport {
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
                         hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
-                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes);
+                        translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes,
+                        draftNumberProperties(properties));
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
@@ -565,6 +571,23 @@ public final class CrossModelSupport {
     }
 
     /**
+     * The {@code number: { stampOn: issue }} property names - the ones whose value is a UUID
+     * placeholder until their document is issued.
+     */
+    private static java.util.Set<String> draftNumberProperties(List<Map<String, Object>> properties) {
+        if (properties == null) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (Map<String, Object> p : properties) {
+            if ("true".equals(String.valueOf(p.get("numberStampOnIssue"))) && p.get("name") != null) {
+                names.add(String.valueOf(p.get("name")));
+            }
+        }
+        return names;
+    }
+
+    /**
      * The label property: the target's {@code Name} field, else its first non-PK string field, else the
      * key.
      */
@@ -592,7 +615,7 @@ public final class CrossModelSupport {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
         return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
-                java.util.Set.of(), null);
+                java.util.Set.of(), null, java.util.Set.of());
     }
 
     /**

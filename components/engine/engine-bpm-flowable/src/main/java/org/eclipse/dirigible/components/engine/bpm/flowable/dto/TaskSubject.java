@@ -52,7 +52,9 @@ public record TaskSubject(String url, String id, List<Field> fields) {
      * One property of a subject line.
      *
      * @param property the property to read off the record
-     * @param kind how to render it - {@code number}, {@code date}, {@code relation} or {@code text}
+     * @param kind how to render it - {@code number}, {@code integer}, {@code date}, {@code docnumber}
+     *        (a {@code number: { stampOn: issue }} field, shown as the draft marker until it is
+     *        stamped), {@code relation} or {@code text}
      * @param url for a {@code relation}, the target's REST controller URL; {@code null} otherwise
      * @param label for a {@code relation}, the target property to show; {@code null} otherwise
      */

@@ -317,6 +317,13 @@ document.addEventListener('alpine:init', () => {
 
     promptOptionsFor(name) { return this.promptOptions[name] || []; },
 
+    // A prompted dropdown's option label. One labelled by a number: { stampOn: issue } field reads as
+    // the draft marker until the number is stamped, never as its UUID placeholder (#7722).
+    promptLabel(col, row) {
+      const text = row[col.lookup.text];
+      return col.lookup.documentNumber ? window.HarmoniaFormat.documentNumber(text) : text;
+    },
+
     // Load each prompted dropdown's option list - the full target set, narrowed by the column's
     // static `where:` filter when it declares one (the same semantics as the item dialog).
     async loadPromptOptions() {
@@ -331,7 +338,7 @@ document.addEventListener('alpine:init', () => {
           } else {
             rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           }
-          this.promptOptions[col.name] = (rows || []).map((e) => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+          this.promptOptions[col.name] = (rows || []).map((e) => ({ value: e[col.lookup.key], text: this.promptLabel(col, e) }));
         } catch (e) {
           console.error('customActions: failed to load prompt options for ' + col.name, e);
         }
@@ -394,7 +401,7 @@ document.addEventListener('alpine:init', () => {
           const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
           if (col.filter) conditions.push({ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value });
           const rows = await App.services.api.post(col.lookup.url + '/search', { conditions }, { baseUrl: '' });
-          this.promptOptions[col.name] = (rows || []).map((e) => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+          this.promptOptions[col.name] = (rows || []).map((e) => ({ value: e[col.lookup.key], text: this.promptLabel(col, e) }));
           if (adjust) {
             this.promptValues[col.name] = this.promptOptions[col.name].length === 1
               ? String(this.promptOptions[col.name][0].value) : '';

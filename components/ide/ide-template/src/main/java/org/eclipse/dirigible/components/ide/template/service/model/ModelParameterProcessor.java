@@ -1843,6 +1843,7 @@ final class ModelParameterProcessor {
                     str(property, "relationshipEntityName")));
             lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
             lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+            putDocumentNumberLabel(lookup, property);
             column.put("lookup", lookup);
         } else if ("MULTISELECT".equals(widgetType) && truthy(property, "widgetOptionsEntityName")) {
             // A subset column holds a KEY LIST ("1,3"), so the panel resolves EACH key through the
@@ -1862,6 +1863,7 @@ final class ModelParameterProcessor {
                 lookup.put("url", javaControllerUrl(sourceProject, sourceGenFolder, perspective, optionsEntity));
                 lookup.put("key", strOr(property, "widgetDropDownKey", "Id"));
                 lookup.put("text", strOr(property, "widgetDropDownValue", "Name"));
+                putDocumentNumberLabel(lookup, property);
                 column.put("multi", Boolean.TRUE);
                 column.put("lookup", lookup);
             }
@@ -1880,7 +1882,26 @@ final class ModelParameterProcessor {
             // own lists render the column too.
             column.put("sensitive", Boolean.TRUE);
         }
+        if (isTrue(property, "numberStampOnIssue")) {
+            // A number: { stampOn: issue } column holds a UUID placeholder until its document is
+            // issued; the register shows the draft marker instead (issue #7722).
+            column.put("documentNumber", Boolean.TRUE);
+        }
         return column;
+    }
+
+    /**
+     * Mark a register column's lookup whose label is a {@code number: { stampOn: issue }} field, so the
+     * register resolves an unissued document to the draft marker rather than its UUID placeholder
+     * (issue #7722).
+     *
+     * @param lookup the column's lookup descriptor
+     * @param property the source property's metadata
+     */
+    private static void putDocumentNumberLabel(Map<String, Object> lookup, Map<String, Object> property) {
+        if (isTrue(property, "widgetDropDownDocumentNumber")) {
+            lookup.put("documentNumber", Boolean.TRUE);
+        }
     }
 
     /**
@@ -1992,6 +2013,9 @@ final class ModelParameterProcessor {
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
                 resolveDependsOn(property, entity, entities);
                 resolveWidgetLiterals(property);
+                if (resolveNormalizeLiterals(property)) {
+                    entity.put("hasNormalize", Boolean.TRUE);
+                }
             }
             // A hierarchical entity guards its own tree edge against a cycle.
             if (entity.get("hierarchyProperty") != null) {
@@ -2067,6 +2091,64 @@ final class ModelParameterProcessor {
             String raw = String.valueOf(property.get("widgetOptionsFilterValue"));
             property.put("widgetOptionsFilterValueJs", raw.matches("-?\\d+(\\.\\d+)?") ? raw : "'" + JsLiterals.escape(raw) + "'");
         }
+    }
+
+    /**
+     * Pre-renders a property's {@code normalize:} (#7726) for the templates: the characters it strips
+     * as the body of a Java string literal ({@code normalizeStripJava}), and the whole step as a
+     * JavaScript function ({@code normalizeJs}) the generated form applies on blur - the same
+     * transforms, in the same order, as {@code org.eclipse.dirigible.sdk.db.Normalize} on the server.
+     * The function is written so it can sit verbatim inside a double-quoted HTML attribute and inside a
+     * JavaScript file: every character of the strip set outside a plain safe set is a {@code \\uXXXX}
+     * escape.
+     *
+     * @param property the property
+     * @return whether the property normalizes anything
+     */
+    private static boolean resolveNormalizeLiterals(Map<String, Object> property) {
+        boolean trim = "true".equals(str(property, "normalizeTrim"));
+        Object stripValue = property.get("normalizeStrip");
+        String strip = stripValue == null ? null : stripValue.toString();
+        String caseFold = str(property, "normalizeCase");
+        boolean hasStrip = strip != null && !strip.isEmpty();
+        boolean hasCase = "upper".equals(caseFold) || "lower".equals(caseFold);
+        if (!trim && !hasStrip && !hasCase) {
+            return false;
+        }
+        StringBuilder js = new StringBuilder("((v) => typeof v === 'string' ? v");
+        if (trim) {
+            js.append(".trim()");
+        }
+        if (hasStrip) {
+            property.put("normalizeStripJava", JavaLiterals.escape(strip));
+            js.append(".split('').filter((c) => !'")
+              .append(attributeSafeJs(strip))
+              .append("'.includes(c)).join('')");
+        }
+        if (hasCase) {
+            js.append("upper".equals(caseFold) ? ".toUpperCase()" : ".toLowerCase()");
+        }
+        js.append(" : v)");
+        property.put("normalizeJs", js.toString());
+        return true;
+    }
+
+    /**
+     * The body of a single-quoted JavaScript string that is also safe inside a double-quoted HTML
+     * attribute: letters, digits and a few punctuation marks verbatim, everything else as
+     * {@code \\uXXXX}.
+     */
+    private static String attributeSafeJs(String raw) {
+        StringBuilder out = new StringBuilder(raw.length() * 2);
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (Character.isLetterOrDigit(c) && c < 128 || " -_.,:;()+/*=!?@%".indexOf(c) >= 0) {
+                out.append(c);
+            } else {
+                out.append(String.format("\\u%04x", (int) c));
+            }
+        }
+        return out.toString();
     }
 
     /**

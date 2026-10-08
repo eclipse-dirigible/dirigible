@@ -130,6 +130,36 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Add child (#7724): with a record in front of them, the user creates its child with the parent
+     * already set, instead of finding it in the Parent picker - forgetting which put a new subaccount
+     * at the top level. The create route carries the hierarchy relation as a query param, which the
+     * generated form both prefills and context-locks; inline, the dialog's own flags join that query.
+     */
+    @Test
+    void a_hierarchy_list_adds_a_child_with_its_parent_preset() throws Exception {
+        generateProject();
+        String page = contentOf("gen/orgtree/js/components/pages/Employee/EmployeeManageListPage.js");
+        String view = contentOf("gen/orgtree/views/Employee/Employee-manage-list.html");
+        String form = contentOf("gen/orgtree/views/Employee/Employee-form.html");
+
+        assertTrue(view.contains("@click=\"newChild(row)\""), "Add child on every row's menu");
+        assertTrue(view.contains("@click=\"newChild(selected)\""), "Add child on the selected record's sheet");
+        assertTrue(form.contains("isContextLocked('Manager')"), "the preset parent renders locked on the create form");
+
+        try (Context context = load(page)) {
+            set(context, "[e(1, 'Ada', null), e(4, 'Dee', 1)]");
+            eval(context, "page.newChild(page.items[1]);");
+            assertEquals("/Employee/create?Manager=4", eval(context, "__navigated"), "the create route names the parent");
+
+            // Inline (the Settings detail pane) the form opens in a dialog: one query string, not two,
+            // or the form would read the parent as "4?embedded=1".
+            eval(context, "window.location.hash = '#/Settings/Employee'; page.newChild(page.items[1]);");
+            String dialog = eval(context, "__dialogUrl");
+            assertTrue(dialog.endsWith("#/Employee/create?Manager=4&embedded=1&dialog=1"), dialog);
+        }
+    }
+
     /** The markup the page drives: one table, a tree column, the toggle - and no label tree. */
     private static void assertTheViewIsOneTableForBothModes(String view) {
         assertFalse(view.contains("x-h-tree"), "the label-only tree is gone");
@@ -178,7 +208,11 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
                           getItem: function (k) { if (__storageBroken) { throw new Error('denied'); } return k in __storage ? __storage[k] : null; },
                           setItem: function (k, v) { if (__storageBroken) { throw new Error('denied'); } __storage[k] = String(v); }
                         };
-                        var __stores = { currentUser: { name: 'ada' } };
+                        window.location = { hash: '#/Employee', pathname: '/index.html' };
+                        var __navigated = null;
+                        window.PineconeRouter = { context: {}, navigate: function (route) { __navigated = route; } };
+                        var __dialogUrl = null;
+                        var __stores = { currentUser: { name: 'ada' }, related: { create: function (url) { __dialogUrl = url; } } };
                         var __factory = null;
                         var Alpine = {
                           store: function (name, value) { if (value !== undefined) { __stores[name] = value; } return __stores[name]; },

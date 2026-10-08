@@ -1145,6 +1145,11 @@ public class ${name}Controller {
     // Public so a process task's write-back (the generated <Process><Step>Write delegate) holds the
     // reviewer's edits to exactly these rules and messages before it writes them (#7552).
     public static void validate(${name}Entity entity) {
+#if($hasNormalize)
+        // The checks below read the value as it will be stored (intent `normalize:`, #7726): a pasted
+        // "+359 898 123 456" meets a `pattern:` that demands "+359898123456".
+        ${name}Repository.normalize(entity);
+#end
 #set($checksLoadHops = false)
 #foreach($check in $rowChecks)
 #if($check.pathLoads && $check.pathLoads.size() > 0)

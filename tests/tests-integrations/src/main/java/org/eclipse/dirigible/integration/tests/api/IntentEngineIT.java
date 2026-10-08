@@ -35,6 +35,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -5005,6 +5006,74 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_number_stamped_on_issue_reads_as_the_draft_marker_until_it_is_stamped() {
+        // Until the issue step stamps it, a stampOn: issue number holds a UUID placeholder - a storage
+        // detail every surface printed as if it were the number: the approval task form, the list, the
+        // picker of a record referencing the document and its show: column (issue #7722). Each of them
+        // now renders it through HarmoniaFormat.documentNumber, which prints the draft marker instead.
+        writeIntent("""
+                name: drafts
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                      - { name: date, type: date }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                    relations:
+                      - { name: invoice, kind: manyToOne, to: SalesInvoice, show: [number] }
+                processes:
+                  - name: Approval
+                    trigger: { onCreate: SalesInvoice }
+                    steps:
+                      - { name: approve, kind: userTask, args: { assignee: manager, form: ApproveInvoice } }
+                      - { name: done, kind: end }
+                forms:
+                  - name: ApproveInvoice
+                    forEntity: SalesInvoice
+                    fields: [number, date]
+                    actions: [approve]
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "drafts.model");
+        generateFromModel("template-form-builder-harmonia/template/template.js", "ApproveInvoice.form");
+
+        String taskForm = contentOf("gen/ApproveInvoice/forms/ApproveInvoice/index.html");
+        assertTrue(taskForm.contains("x-text=\"HarmoniaFormat.documentNumber(model.Number) || '—'\""),
+                "the approval form must show the number through the draft marker: " + taskForm);
+        String invoiceListView = contentOf("gen/drafts/views/SalesInvoice/SalesInvoice-manage-list.html");
+        assertTrue(invoiceListView.contains("window.HarmoniaFormat.documentNumber(row.Number)"),
+                "the invoice list cell must show the number through the draft marker");
+        assertTrue(invoiceListView.contains("window.HarmoniaFormat.documentNumber(selected?.Number)"),
+                "and so must the record sheet beside it");
+        assertTrue(
+                contentOf("gen/drafts/js/components/pages/Payment/PaymentFormPage.js").contains(
+                        "text: window.HarmoniaFormat.documentNumber(e.Number)"),
+                "the payment's invoice picker must label its options the same way");
+
+        // The generated pages, run over the shipped shell runtime: an unissued invoice reads as the
+        // marker in the invoice list's export and in the payment list's lookup, a stamped one by its
+        // number.
+        String placeholder = "3f2a1c9e-1111-4222-8333-444455556666";
+        String invoiceList = contentOf("gen/drafts/js/components/pages/SalesInvoice/SalesInvoiceManageListPage.js");
+        assertEquals("(draft)|SI-0000001",
+                runGeneratedPage(invoiceList, "SalesInvoiceManageListPage",
+                        "const col = page.exportColumns.find(c => c.name === 'Number');" + " return page.exportCell({ Number: '"
+                                + placeholder + "' }, col) + '|' + page.exportCell({ Number: 'SI-0000001' }, col);"));
+        String paymentList = contentOf("gen/drafts/js/components/pages/Payment/PaymentManageListPage.js");
+        assertEquals("(draft)|SI-0000001",
+                runGeneratedPage(paymentList, "PaymentManageListPage",
+                        "await page.loadLookups(); return page.lookupText('Invoice', 1) + '|' + page.lookupText('Invoice', 2);",
+                        "[{ Id: 1, Number: '" + placeholder + "' }, { Id: 2, Number: 'SI-0000001' }]"));
+    }
+
+    @Test
     void numbering_partitions_the_default_company_by_the_relations_init() {
         // A per: Company series where Company carries init: 1 (issue #7101). The init is a DATABASE
         // default the insert applies - AFTER a stampOn: create number is drawn off the entity as the
@@ -5274,6 +5343,46 @@ class IntentEngineIT extends IntegrationTest {
     /** A repository-absolute resource - {@link #resource(String)} is relative to the test project. */
     private IResource resourceOf(String path) {
         return repository.getResource(path);
+    }
+
+    /**
+     * Runs {@code body} against a generated Alpine page component - the page script evaluated over the
+     * SHIPPED {@code format.js} and {@code basePage.js}, with every {@code App.services.api} read
+     * answering {@code rows} - and returns what the body returns. {@code page} is the component
+     * instance; the body may {@code await}.
+     */
+    private static String runGeneratedPage(String pageScript, String componentName, String body, String rows) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var window = this; var localStorage = { getItem: () => null }; var pages = {};" + " var addEventListener = () => {};"
+                            + " var document = { addEventListener: (event, callback) => { if (event === 'alpine:init') callback(); } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
+                            + " var App = { services: { api: { getAll: async () => " + rows + ", get: async () => " + rows + " } } };");
+            context.eval("js", shellScript("services/format.js"));
+            context.eval("js", shellScript("components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            context.eval("js", "var __result; (async () => { const page = pages['" + componentName + "'](); " + body
+                    + " })().then(r => { __result = String(r); }, e => { __result = 'ERROR ' + e; });");
+            return context.eval("js", "__result")
+                          .asString();
+        }
+    }
+
+    private static String runGeneratedPage(String pageScript, String componentName, String body) {
+        return runGeneratedPage(pageScript, componentName, body, "[]");
+    }
+
+    /** A script of the shared shell runtime, as the platform ships it. */
+    private static String shellScript(String path) {
+        String resource = "/META-INF/dirigible/application-core/shell/js/" + path;
+        try (java.io.InputStream in = IntentEngineIT.class.getResourceAsStream(resource)) {
+            assertNotNull(in, "missing classpath resource " + resource);
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 
     private String contentOf(String fileName) {

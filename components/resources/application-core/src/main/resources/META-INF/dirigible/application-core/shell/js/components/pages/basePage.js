@@ -66,6 +66,17 @@ function basePage() {
     },
 
     /**
+     * The target rows of a relation whose label property `text` is a `number: { stampOn: issue }` field,
+     * with that label shown as the draft marker until the number is stamped (issue #7722) - so a picker
+     * option, a lookup cell or a register label reads "(draft)", never the placeholder UUID. The rows
+     * are copies feeding an option list or a lookup map, which nothing writes back.
+     */
+    documentNumberLabels(rows, text) {
+      return (rows || []).map((row) => (row && row[text] !== undefined && row[text] !== null
+        ? { ...row, [text]: window.HarmoniaFormat.documentNumber(row[text]) } : row));
+    },
+
+    /**
      * Build relation-picker options from the target rows, applying the relation's `pickable:` rule
      * (issue #7496) when it declares one.
      *
@@ -369,8 +380,9 @@ function basePage() {
      * through the instance date format, a float through its own pattern (passed only for a float, so
      * an integer is not given decimals), a checkbox the label of its state - its options are the two
      * states, `{ value: true|false, text }`, so the page supplies the translated Yes/No (English when
-     * it passes none). Empty - an empty MULTISELECT included - is '', so a card hides the row on THIS
-     * output rather than on the raw value.
+     * it passes none). A DOCUMENT_NUMBER - the widget a `number: { stampOn: issue }` field is shown
+     * with - prints its draft marker until the number is stamped (issue #7722). Empty - an empty
+     * MULTISELECT included - is '', so a card hides the row on THIS output rather than on the raw value.
      */
     fieldDisplay(value, widget, pattern, options) {
       if (value === null || value === undefined || value === '') return '';
@@ -382,6 +394,8 @@ function basePage() {
         case 'DROPDOWN':
         case 'DOCUMENT_STATUS':
           return label(value);
+        case 'DOCUMENT_NUMBER':
+          return String(window.HarmoniaFormat.documentNumber(value));
         case 'MULTISELECT':
           return (Array.isArray(value) ? value : String(value).split(','))
             .map((key) => String(key).trim())

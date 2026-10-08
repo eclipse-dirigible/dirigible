@@ -338,6 +338,7 @@ public final class IntentParser {
         expandUniqueShorthand(tree);
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
+        wrapScalarNormalize(tree);
         normalizeOrderBy(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -4341,6 +4342,9 @@ public final class IntentParser {
                 if (!isBlank(field.getFormat())) {
                     validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.getNormalize() != null) {
+                    validateNormalize("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (isNowDefault(field)) {
                     validateNowDefault("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -6687,6 +6691,38 @@ public final class IntentParser {
     }
 
     /**
+     * A field's {@code normalize:} is a list of transforms, and one transform may be written without
+     * the list ({@code normalize: upper}, {@code normalize: {strip: " "}}, issue #7726). The scalar
+     * form is wrapped on the raw tree here, before the typed mapping, where Gson would refuse anything
+     * but a list; an explicit null is dropped.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void wrapScalarNormalize(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("normalize")) {
+                    continue;
+                }
+                Object declared = field.get("normalize");
+                Map<Object, Object> writable = (Map<Object, Object>) field;
+                if (declared == null) {
+                    writable.remove("normalize");
+                } else if (!(declared instanceof List)) {
+                    writable.put("normalize", new ArrayList<>(List.of(declared)));
+                }
+            }
+        }
+    }
+
+    /**
      * A settlement's {@code order:} is EITHER one field ({@code order: date}) or a list of them
      * ({@code order: [date, number]}, issue #7556). Both map to the one typed list, so the scalar form
      * is wrapped on the raw tree here - before the typed mapping, where Gson would refuse a string for
@@ -7126,6 +7162,71 @@ public final class IntentParser {
             java.util.regex.Pattern.compile(field.getPattern()); // lgtm[java/regex-injection]
         } catch (java.util.regex.PatternSyntaxException ex) {
             issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
+        }
+    }
+
+    /**
+     * The transforms a field's {@code normalize:} may list (#7726); {@code strip} takes its characters.
+     */
+    private static final Set<String> NORMALIZE_TRANSFORMS = Set.of("trim", "strip", "upper", "lower");
+
+    /**
+     * A field's {@code normalize:} (#7726). String/text fields only - it rewrites the text the user
+     * typed, and nothing else has text to rewrite. Each entry is a bare transform ({@code trim},
+     * {@code upper}, {@code lower}) or {@code strip:} with the characters it removes; a transform
+     * listed twice, both case folds, or a {@code strip} without characters is refused rather than
+     * resolved, since which one wins would be invisible to the author.
+     */
+    private static void validateNormalize(String subject, FieldIntent field, List<String> issues) {
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase();
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " `normalize` applies to a string/text field - got type [" + field.getType() + "]");
+            return;
+        }
+        if (field.getNormalize()
+                 .isEmpty()) {
+            issues.add(subject + " declares an empty `normalize` - list a transform (" + NORMALIZE_TRANSFORMS + ") or remove it");
+            return;
+        }
+        Set<String> seen = new HashSet<>();
+        for (Object entry : field.getNormalize()) {
+            String transform;
+            if (entry instanceof String name) {
+                transform = name.trim();
+                if ("strip".equals(transform)) {
+                    issues.add(subject + " `normalize` lists `strip` without the characters to remove - write `strip: \" -\"`");
+                    continue;
+                }
+            } else if (entry instanceof Map<?, ?> map && map.size() == 1) {
+                transform = String.valueOf(map.keySet()
+                                              .iterator()
+                                              .next());
+                Object argument = map.get(transform);
+                if (!"strip".equals(transform)) {
+                    issues.add(subject + " `normalize` transform [" + transform + "] takes no argument - write it bare");
+                    continue;
+                }
+                if (!(argument instanceof String chars) || chars.isEmpty()) {
+                    issues.add(
+                            subject + " `normalize` `strip` needs the characters to remove as a non-empty string, e.g. `strip: \" -()\"`");
+                    continue;
+                }
+            } else {
+                issues.add(subject + " `normalize` entry [" + entry + "] is neither a transform name nor `strip: <characters>`");
+                continue;
+            }
+            if (!NORMALIZE_TRANSFORMS.contains(transform)) {
+                issues.add(subject + " unknown `normalize` transform [" + transform + "] - supported: " + NORMALIZE_TRANSFORMS);
+                continue;
+            }
+            if (!seen.add(transform)) {
+                issues.add(subject + " `normalize` lists [" + transform + "] twice");
+            }
+        }
+        if (seen.contains("upper") && seen.contains("lower")) {
+            issues.add(subject + " `normalize` lists both `upper` and `lower` - declare one case fold");
         }
     }
 

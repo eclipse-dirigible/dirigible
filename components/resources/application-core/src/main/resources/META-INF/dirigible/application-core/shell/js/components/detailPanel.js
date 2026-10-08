@@ -110,8 +110,12 @@ function detailPanel(def, masterId, master) {
           // getAll (paged), NOT get: get returns only the controller's first page (default 20), so a
           // referenced row beyond it would leave the FK unresolved and the cell would show the raw id.
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: "" });
+          // A label that is a number: { stampOn: issue } field reads as the draft marker until it is
+          // stamped (issue #7722) - marked once here, so every cell, subset and title resolving off
+          // these rows shows it.
+          const labelled = col.lookup.documentNumber ? this.documentNumberLabels(rows, col.lookup.text) : rows || [];
           const m = {};
-          (rows || []).forEach((e) => {
+          labelled.forEach((e) => {
             m[e[col.lookup.key]] = e;
           });
           all[col.name] = m;
@@ -136,7 +140,10 @@ function detailPanel(def, masterId, master) {
       if (col.via) {
         const src = this.lookups[col.via.column];
         const ref = src ? src[row[col.via.column]] : undefined;
-        return this.displayValue(ref ? ref[col.via.field] : undefined, col.date);
+        const shown = ref ? ref[col.via.field] : undefined;
+        // A `show:` field that is a number: { stampOn: issue } reads as the draft marker (#7722).
+        if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(shown));
+        return this.displayValue(shown, col.date);
       }
       const v = row[col.name];
       // A subset column holds a key LIST ("1,3"): resolve each key through the lookup map and
@@ -159,6 +166,7 @@ function detailPanel(def, masterId, master) {
         const t = ref ? ref[col.lookup.text] : undefined;
         if (t !== undefined && t !== null && t !== "") return t;
       }
+      if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       if (col.float) return this.formatNumber(v, col.pattern);
       return this.displayValue(v, col.date);
     },

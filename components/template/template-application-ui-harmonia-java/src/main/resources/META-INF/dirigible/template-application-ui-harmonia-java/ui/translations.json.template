@@ -88,6 +88,7 @@
         "listView": "View",
         "tree": "Tree",
         "table": "Table",
+        "addChild": "Add child",
         "previous": "Previous",
         "next": "Next",
         "today": "Today",

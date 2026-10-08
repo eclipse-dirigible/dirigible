@@ -575,6 +575,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         }
         map.put("model", variable);
         map.put("required", false);
+        putDocumentNumber(map, targetField);
         if ("input-number".equals(control.controlId)) {
             map.put("pattern", numberPattern(targetField));
         }
@@ -584,6 +585,17 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             map.put("errorMessage", "Incorrect input");
         }
         return map;
+    }
+
+    /**
+     * Mark a control bound to a {@code number: { stampOn: issue }} field: until the document is issued
+     * its value is a UUID placeholder, which the form shows as the draft marker instead (issue #7722).
+     */
+    private static void putDocumentNumber(Map<String, Object> map, FieldIntent field) {
+        if (field != null && field.getNumber() != null && "issue".equalsIgnoreCase(field.getNumber()
+                                                                                        .getStampOn())) {
+            map.put("documentNumber", true);
+        }
     }
 
     /**
@@ -679,6 +691,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         }
         map.put("model", property);
         map.put("required", field != null && field.isRequired());
+        putDocumentNumber(map, field);
         if ("input-number".equals(control.controlId)) {
             map.put("pattern", numberPattern(field));
         }

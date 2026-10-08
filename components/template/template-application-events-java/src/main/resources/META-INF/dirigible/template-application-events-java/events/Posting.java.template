@@ -85,6 +85,17 @@ public class ${className}Posting implements MessageHandler {
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
 #end
+        post(source);
+    }
+
+    /**
+     * The post itself, for a ${sourceEntity} already in hand. The event path above reads it off the
+     * topic; the period-reopen sweep (#7703) hands over the documents a closed ${targetEntity} period
+     * refused, so both run the one body and cannot drift apart.
+     *
+     * @param source the ${sourceEntity} to post
+     */
+    public void post(gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
 #if($guardProperty != "")
         if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
             return;
@@ -241,6 +252,25 @@ public class ${className}Posting implements MessageHandler {
         var ${a.local} = ${a.expr};
 #end
 #end
+#if($periodRegisterEntity != "")
+#foreach($a in $headerAssignments)
+#if($a.targetProp == $periodDateProperty)
+        // Asked BEFORE the write (#7703): the target's own repository refuses a booking into a closed
+        // ${periodRegisterEntity} (#7590), but it does so from inside this listener - long after the
+        // source committed the transition that raised it. The issuer saw a 200, the refusal reached
+        // only the listener's error log, and the document stayed unposted for good, because reopening
+        // the period publishes nothing this handler listens to. Asking here says which document is
+        // waiting and on which period, leaves the message acked rather than redelivered against a
+        // period that will stay closed for days, and ${className}PostingReopen re-runs it the moment
+        // that period opens.
+        if (!periodOpen(${a.value})) {
+            LOG.warn("Posting ${name}: the ${periodRegisterEntity} covering [{}] is closed - ${sourceEntity} [{}] stays unposted"
+                    + " until it reopens", ${a.value}, source.${sourceKeyField});
+            return;
+        }
+#end
+#end
+#end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target;
         boolean refresh = !existingTargets.isEmpty();
         // The rows the post carries today: the ones a rewrite replaces, empty for a fresh post. Both
@@ -320,6 +350,16 @@ public class ${className}Posting implements MessageHandler {
             for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
                 itemsRepository.delete(stale);
             }
+            // A rewrite writes the header WHOLE, from a row this handler read before any of this - so the
+            // row is locked first, after its lines (the order a delete of the document takes them in).
+            // A system write landing in between, the process id the document's own trigger stamps, then
+            // waits for this commit instead of being reverted by it: update() takes those system-owned
+            // columns from the stored row, and that row cannot move any more (dirigible #7716).
+            if (refresh && !targetRepository.lockForUpdate(target.${targetPk})) {
+                LOG.info("Posting ${name}: ${targetEntity} [{}] was deleted while ${sourceEntity} [{}] was being re-posted - nothing"
+                        + " to rewrite", target.${targetPk}, source.${sourceKeyField});
+                return;
+            }
             gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
                     refresh ? targetRepository.update(target) : targetRepository.save(target);
             for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : derivedItems) {
@@ -392,6 +432,38 @@ public class ${className}Posting implements MessageHandler {
         }
         return java.util.Objects.equals(stored, derived);
     }
+#if($periodRegisterEntity != "")
+
+    /**
+     * Whether the ${periodRegisterEntity} covering a date is open - the same question the target's
+     * repository asks before it writes, read off the same register through its own generated
+     * repository. A null date, and a date no period covers, are open: periods are declared as they are
+     * needed, exactly as on the controllers.
+     *
+     * @param date the date the post would be booked on
+     * @return whether a write dated there would be accepted
+     */
+    private static boolean periodOpen(Object date) {
+        if (date == null) {
+            return true;
+        }
+        for (gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Entity period :
+                new gen.${javaGenFolderName}.data.${periodRegisterJavaPerspective}.${periodRegisterEntity}Repository().findAll(
+                        Criteria.create()
+                                .le("${periodStartProperty}", date)
+                                .ge("${periodEndProperty}", date))) {
+            if (period.${periodStatusProperty} == null) {
+                continue;
+            }
+            for (String closed : "${periodClosedValues}".split(",")) {
+                if (closed.equals(String.valueOf(period.${periodStatusProperty}))) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+#end
 
     @Override
     public void onError(String error) {

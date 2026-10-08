@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
@@ -3022,6 +3023,62 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("`pattern` is not a valid regular expression")),
                 "expected an invalid-regex issue, got: " + ex.getIssues());
+    }
+
+    private static final String FIELD_NORMALIZE = """
+            name: crm
+            entities:
+              - name: Contact
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: phone, type: string, length: 20, normalize: [strip: " -()"], pattern: '^\\+[1-9][0-9]{6,14}$' }
+                  - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
+                  - { name: code, type: string, length: 10, normalize: lower }
+                  - { name: age, type: integer }
+            """;
+
+    /** A field's {@code normalize:} (#7726): a list of transforms, or one bare transform. */
+    @Test
+    void fieldNormalizeParses() {
+        List<FieldIntent> fields = IntentParser.parse(FIELD_NORMALIZE)
+                                               .getEntities()
+                                               .get(0)
+                                               .getFields();
+        FieldIntent phone = fields.get(1);
+        assertFalse(phone.normalizeTrim());
+        assertEquals(" -()", phone.normalizeStrip());
+        assertNull(phone.normalizeCase());
+        FieldIntent iban = fields.get(2);
+        assertTrue(iban.normalizeTrim());
+        assertEquals(" ", iban.normalizeStrip());
+        assertEquals("upper", iban.normalizeCase());
+        // The scalar shorthand is wrapped into a one-entry list.
+        assertEquals("lower", fields.get(3)
+                                    .normalizeCase());
+        assertNull(fields.get(4)
+                         .getNormalize());
+    }
+
+    @Test
+    void fieldNormalizeRefusesWhatItCannotMean() {
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("- { name: age, type: integer }", "- { name: age, type: integer, normalize: [trim] }"),
+                "`normalize` applies to a string/text field");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [lower, upper]"), "both `upper` and `lower`");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [trim, trim]"), "lists [trim] twice");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [strip]"), "`strip` without the characters");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [strip: \"\"]"), "needs the characters to remove");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [upper: yes]"), "takes no argument");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [capitalize]"),
+                "unknown `normalize` transform [capitalize]");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: []"), "declares an empty `normalize`");
+    }
+
+    private static void assertNormalizeIssue(String yaml, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
     }
 
     private static final String FIELD_FORMAT = """

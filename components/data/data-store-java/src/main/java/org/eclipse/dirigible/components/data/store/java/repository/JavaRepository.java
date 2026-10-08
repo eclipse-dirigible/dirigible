@@ -20,11 +20,14 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
+import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.db.DeleteRestrictionException;
 import org.eclipse.dirigible.sdk.db.TargetAgreementRule;
 import org.eclipse.dirigible.sdk.db.TargetDeleteRule;
 import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.eclipse.dirigible.sdk.extensions.Extensions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Typed CRUD facade for a single Dirigible {@code @Entity} type. Client code subclasses this,
@@ -44,6 +47,8 @@ import org.eclipse.dirigible.sdk.extensions.Extensions;
  * @param <T> the entity type managed by this repository
  */
 public abstract class JavaRepository<T> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JavaRepository.class);
 
     /**
      * The records being deleted on this thread, keyed by entity class and id - so a cascade that comes
@@ -229,6 +234,19 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Locks this entity's row until the current unit of work ends, so no other writer can change it
+     * between this unit's read of the row and its write - see
+     * {@link JavaEntityStore#lockForUpdate(Class, Object)}. Call it inside {@link UnitOfWork#run}.
+     *
+     * @param id the primary-key value
+     * @return {@code true} when the row exists and is now locked, {@code false} when there is no such
+     *         row
+     */
+    public boolean lockForUpdate(Object id) {
+        return store().lockForUpdate(entityClass, id);
+    }
+
+    /**
      * Look up an entity by primary key. An absent id is an ordinary outcome — a dangling foreign key an
      * event handler should skip, a path parameter a controller should answer {@code 404} for — so it
      * reads back as {@code null} rather than as a thrown exception. Callers that require the row to
@@ -387,6 +405,16 @@ public abstract class JavaRepository<T> {
      * its own repository, its own rules applying in turn). A cascade that comes back round to a record
      * already being deleted on this thread stops there, so a cycle of cascading relations terminates.
      *
+     * <p>
+     * A cascade loads the referencing rows before it deletes them, and another writer may replace them
+     * in between - a posting handler rewriting a journal entry's lines on its own listener thread - so
+     * the delete finds a row it loaded already gone. The whole transaction is then rolled back and,
+     * when this delete owns it (no unit of work was open around it), run ONCE more from a fresh read:
+     * the other writer has committed by then, so the cascade sees the rows as they are now. A second
+     * collision, or one inside a caller's own unit of work - whose earlier writes this delete cannot
+     * repeat - reaches the caller as the {@link ConcurrentWriteException} itself, a 409 (dirigible
+     * #7716).
+     *
      * @param id the primary key of the record to delete
      * @param delete the store call that deletes it
      */
@@ -402,18 +430,37 @@ public abstract class JavaRepository<T> {
             return; // already being deleted further up this cascade
         }
         try {
-            requireDeletable(id, rules);
-            String target = entityClass.getName();
-            UnitOfWork.run(() -> {
-                rules.forEach(rule -> rule.release(target, id));
-                delete.run();
-            });
+            if (store().isInUnitOfWork()) {
+                releaseAndDelete(id, rules, delete);
+                return;
+            }
+            try {
+                releaseAndDelete(id, rules, delete);
+            } catch (ConcurrentWriteException collision) {
+                LOGGER.debug(
+                        "Deleting [{}] collided with a concurrent write to the records referencing it - retrying once from a fresh read",
+                        key, collision);
+                releaseAndDelete(id, rules, delete);
+            }
         } finally {
             deleting.remove(key);
             if (deleting.isEmpty()) {
                 DELETING.remove();
             }
         }
+    }
+
+    /**
+     * One attempt at the delete: the restrictions checked, then the references released and the record
+     * deleted in ONE transaction.
+     */
+    private void releaseAndDelete(Object id, List<TargetDeleteRule> rules, Runnable delete) {
+        requireDeletable(id, rules);
+        String target = entityClass.getName();
+        UnitOfWork.run(() -> {
+            rules.forEach(rule -> rule.release(target, id));
+            delete.run();
+        });
     }
 
     /**

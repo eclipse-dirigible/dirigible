@@ -330,6 +330,8 @@
                       <span class="truncate" x-text="displayValue(row.${property.name}, true)"></span>
 #elseif($property.isFloatType)
                       <span class="truncate" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></span>
+#elseif($property.numberStampOnIssue)
+                      <span class="truncate" x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></span>
 #else
                       <span class="truncate" x-text="displayValue(row.${property.name})"></span>
 #end
@@ -348,6 +350,8 @@
                   <td x-h-table-cell class="text-right"#visibleGate($property) x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #elseif($property.isNumberType)
                   <td x-h-table-cell class="text-right"#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
+#elseif($property.numberStampOnIssue)
+                  <td x-h-table-cell#visibleGate($property) x-text="window.HarmoniaFormat.documentNumber(row.${property.name})"></td>
 #else
                   <td x-h-table-cell#visibleGate($property) x-text="displayValue(row.${property.name})"></td>
 #end
@@ -359,6 +363,11 @@
                     </button>
                     <ul x-h-menu data-align="bottom-end">
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+#if($hierarchyProperty)
+                      <!-- Add child (#7724): a new record under this one, its parent preset. Offered on an
+                           immutable record too - the child is a new record, the parent is not written. -->
+                      <li x-h-menu-item @click="newChild(row)" x-text="T('$projectName:${tprefix}.defaults.addChild', 'Add child')"></li>
+#end
 #if($immutableStatusProperty || $immutableAlways)
                       <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
                            Preview stays - the record remains readable. -->
@@ -473,6 +482,13 @@
               <svg role="presentation" x-h-lucide data-lucide="pencil"></svg>
               <span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
             </li>
+#if($hierarchyProperty)
+            <!-- Add child (#7724): the selected record is the parent the new one is created under. -->
+            <li x-h-menu-item @click="newChild(selected)">
+              <svg role="presentation" x-h-lucide data-lucide="list-plus"></svg>
+              <span x-text="T('$projectName:${tprefix}.defaults.addChild', 'Add child')"></span>
+            </li>
+#end
 #if($scopedCalendars)
             <!-- Scoped calendars (intent `calendar.scope`): an entity whose calendar filters its
                  events to the selected record. The filter is a query parameter on the calendar's own
@@ -522,6 +538,8 @@
             <span x-text="multiLookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
             <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
+#elseif($property.numberStampOnIssue)
+            <span x-text="window.HarmoniaFormat.documentNumber(selected?.${property.name})"></span>
 #else
             <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end

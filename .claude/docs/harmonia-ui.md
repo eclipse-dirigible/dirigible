@@ -2,6 +2,36 @@
 
 The runtime UI stack for generated applications: they render as a self-contained **Alpine.js + Harmonia SPA** (client-routed by Pinecone in hash mode, no iframes/`postMessage` hubs), served at `/services/web/<project>/gen/<model>/index.html`, talking to the **reused** generated Java REST controllers over a `fetch` client. The AngularJS IDE is untouched; the application layer ships this stack only. `template-application-ui-harmonia-java` (registered on `platform-templates` as "Application - UI (Harmonia) - Java") emits the view types (list, manage, setting, master-detail, document, calendar, slots, reports) + built-in **Process Inbox** (`/inbox`) and **Documents** (`/documents`) shell sections + inline process-task surfacing; `template-form-builder-harmonia` ("Harmonia Generator from Form Model", extension `form`) is the runtime form generator. The stack is embedded as **webjars** via `components/resources/application-core` (`harmonia.version`, `alpinejs.version`, `lucide.version`, `pinecone-router.version`, `i18next.version` in the root `pom.xml`), served version-less through webjars-locator at `/webjars/<name>/dist/...`; a version bump is a pom-only change. Report charts use Harmonia's native `x-h-chart-*` SVG charts.
 
+### Colours come from the THEME - never from a CSS override (normative)
+
+**Never override a Harmonia colour in a stylesheet of this repo.** Colours in Harmonia are owned by
+the **theme**: `--primary`, `--negative`, `--positive`, the surface and border tokens and every
+variant built on them. If a colour has to change, **the theme changes** - upstream in the design
+system, where every component that reads that token changes with it. A rule in
+`application-core/shell/css/app.css` (or any module stylesheet) that sets a `color`,
+`background-color`, `border-color` or `fill` to a literal, or that re-points a Harmonia token, is
+refused in review however narrowly it is scoped.
+
+The reasoning, because the tempting case always looks local: an override is scoped to the one
+selector whose look the author happened to be looking at, so the SAME semantic colour then renders
+two different ways in one application - the overridden badge beside a destructive button, an error
+border, a chart series, a toast - and nothing anywhere records that they were meant to be one
+colour. It also silently stops tracking the design system: the next version ships a corrected
+`--negative` and every component picks it up except the one pinned here. A theme change has neither
+property.
+
+This holds even when a measurement is on the author's side. **A contrast figure is a guideline, not
+a verdict**: WCAG's 4.5:1 is what we steer by, not a rule that must be satisfied 100% of the time,
+and "below 4.5:1" does not by itself mean a colour is unreadable or that it must change. So a
+contrast finding is an argument to put to the design system, not a licence to patch a colour here -
+and whether it is acted on at all is the theme's call. (#7704 was exactly this shape and was
+withdrawn: a scoped `[data-slot="badge-indicator"][data-variant="negative"]` override of
+`--negative`'s rendered value, for a 3.94:1 reading on the notification badge.)
+
+What a module stylesheet legitimately owns is layout and non-colour affordance - spacing, sizing,
+the drag-grip and overflow rules already in `app.css` - and even there a colour value is written as
+`var(--token)`, never as a literal.
+
 ### The Harmonia rules live upstream - the skill is the rule set
 
 **Do not write Harmonia markup from memory or from the examples already in this repo.** The single source of truth for every `x-h-*` directive, attribute, modifier, variant and utility class is the Harmonia skill, version-matched to `harmonia.version`:
@@ -36,6 +66,7 @@ The runtime UI stack for generated applications: they render as a self-contained
 - **REST path must use the Java-sanitised names.** `restBase` is `/services/java/<project>/gen/${javaGenFolderName}/api` and each page's `apiPath` is the **relative** `/${javaPerspectiveName}/<Entity>Controller`; the fetch client prepends `restBase` exactly once. Use `javaGenFolderName`/`javaPerspectiveName` (e.g. `sales-order` -> `sales_order`), not the raw `genFolderName`/lowercased perspective.
 - **`{ baseUrl: '' }` means "URL is absolute, prepend nothing".** The fetch client checks `opts.baseUrl !== undefined`, not truthiness - passing `''` with a relative path (or omitting it with an absolute path) is the classic doubled-URL bug. Entity pages use a relative `apiPath` and no override; absolute URLs (relationship dropdowns, the detail registry) pass `{ baseUrl: '' }`.
 - **Date/time widgets need conversion both ways.** `toPayload()` turns an HTML `date`/`datetime-local` value into a full ISO instant so a Jackson `java.time.Instant`/`Timestamp` field binds (empty -> `null`, a bare `TIME` passes through); `toDateInput()` slices the backend's value back - and the Java controller serializes `java.time` as **arrays** (`LocalDate` -> `[y,m,d]`, `LocalDateTime` -> `[y,m,d,h,mi,s,ns]`) and `Instant` as a numeric epoch, so `toDateInput()` handles arrays/numbers/strings. A relationship FK comes back as a **number** while an option's `data-value` is a string: stringify on load (`form.X = String(record.X)`) or the `x-h-select` matches no option.
+- **A `number: { stampOn: issue }` value is never printed raw (#7722).** Until the issue step stamps it the column holds a UUID placeholder, and `HarmoniaFormat.documentNumber(v)` (format.js) is the one renderer: a UUID becomes the translated draft marker (`application-core:shell.defaults.draftNumber`, "(draft)"), anything else passes through. Callers opt in by flag, never by sniffing every value - a plain `type: uuid` field shares the shape: the field itself carries `numberStampOnIssue` (list cells, record sheets, `fieldDisplay(..., 'DOCUMENT_NUMBER')`, the summary line, export columns' `documentNumber`), a relation labelled by one carries `widgetDropDownDocumentNumber` (the per-page `#labelOf` / `#labelRows` macros, `basePage.documentNumberLabels`, a `lookup.documentNumber` spec that `detailPanel` and the prompt dialog honour), a `show:` column of one `documentNumber`, a task-form control `documentNumber`, an Inbox subject field kind `docnumber`. A new surface that prints a number or a relation label goes through the same flags.
 - **Master-detail is registry-driven.** A master browses on the manage list (its record sheet shows the master's own fields only, #7390) and its form - at `/:id/preview` and `/:id/edit` - renders one `detailPanel` per `App.detailsFor(<master>)` entry, each detail row offering its own actionable process tasks on Preview too; each detail self-registers via `App.registerDetail(...)` (relative `apiPath`); the detail list filters via the controller's `?<masterEntityId>=<id>` query.
 - **A parent FK implied by the navigation context renders locked, not free (#6551).** When the opening URL names the parent FK (`?<Fk>=<id>`), the form renders that relation as the referenced record's label, read-only (`isContextLocked(name)` / `contextLabel(value, options)` on `baseFormPage`); the shared `detailPanel` carries the master FK on edit/preview as well as create.
 - **The `.form` runs the existing AngularJS `code` via compat shims, and the page is self-contained.** `template-form-builder-harmonia` runs the `.form` `code` as the body of `formController(ctx)` and defines `$scope`/`$http`/`NotificationHub`/`DialogHub` shims; the page loads only `form.js` + its own minimal fetch client, because a BPM task form opens standalone in an iframe where the SPA shell assets are absent.

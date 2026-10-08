@@ -803,6 +803,11 @@ public class ${name}PartnerController {
      * series. Static and payload-only, so it costs no read.
      */
     private static void validate(${name}Entity entity) {
+#if($hasNormalize)
+        // The checks below read the value as it will be stored (intent `normalize:`, #7726): a pasted
+        // "+359 898 123 456" meets a `pattern:` that demands "+359898123456".
+        ${name}Repository.normalize(entity);
+#end
 #set($checksLoadHops = false)
 #foreach($check in $rowChecks)
 #if($check.pathLoads && $check.pathLoads.size() > 0)
