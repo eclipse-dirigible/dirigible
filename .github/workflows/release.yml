@@ -362,9 +362,18 @@ jobs:
         working-directory: ./npm/dirigible-cli
         run: npm pkg set dependencies.@dirigiblelabs/dirigible=${{ github.event.inputs.releaseVersion }}
 
+      # Not fatal until #7771: since #7708 the bundled jar is 352 MB and npm refuses it (E413). A
+      # failure here used to skip every step below - the release commits and tag push, @aerokit/sdk,
+      # the GitHub and Helm releases - after Maven Central and npm had already published.
       - name: (@dirigiblelabs/dirigible-cli) Publish the package to npm
+        id: publish-cli-npm
+        continue-on-error: true
         working-directory: ./npm/dirigible-cli
         run: npm publish --access public
+
+      - name: (@dirigiblelabs/dirigible-cli) Warn when the package was not published
+        if: steps.publish-cli-npm.outcome == 'failure'
+        run: echo "::warning title=dirigible-cli not published to npm::@dirigiblelabs/dirigible-cli@${{ github.event.inputs.releaseVersion }} was refused by npm - see #7771"
 
       #--------------- Publish dirigible-cli to NPM -----------------#
 
