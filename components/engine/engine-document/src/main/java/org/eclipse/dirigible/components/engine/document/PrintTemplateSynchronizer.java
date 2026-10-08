@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -79,8 +80,8 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
 
     private static final Logger logger = LoggerFactory.getLogger(PrintTemplateSynchronizer.class);
 
-    /** The project-relative folder whose contents are mirrored into the CMS. */
-    private static final String DOC_SEGMENT = "/doc/";
+    /** The project folder whose contents are mirrored into the CMS. */
+    private static final String DOC_FOLDER = "doc";
 
     private static final String TEMPLATES_SEGMENT = "Templates";
     private static final String PRINT_SEGMENT = "Print";
@@ -123,24 +124,29 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
     record ShippedLocation(String project, String entity, String language, String name) {
 
         /**
-         * Parses a registry-relative location or file path.
+         * Parses a registry-relative location ({@code /<project>/.../doc/Templates/...}) or an absolute
+         * file path. The shape is matched on the tail - the last six segments are
+         * {@code doc/Templates/<Entity>/Print/<lang>/<file>.print} - so a {@code /doc/} anywhere above it
+         * (in the repository root, in the project's name) does not matter; the project is the first
+         * segment, which is meaningful for a registry-relative location only (the one {@code parseImpl} is
+         * handed), and is where the project's {@code project.json} lives however deep the {@code doc/}
+         * folder is.
          *
          * @param location the location
          * @return the shipped location, empty when the file is not a shipped print template
          */
         static Optional<ShippedLocation> of(String location) {
-            String normalized = location.replace('\\', '/');
-            int doc = normalized.indexOf(DOC_SEGMENT);
-            if (doc < 0) {
+            String[] segments = Arrays.stream(location.replace('\\', '/')
+                                                      .split("/"))
+                                      .filter(segment -> !segment.isEmpty())
+                                      .toArray(String[]::new);
+            int doc = segments.length - 6;
+            if (doc < 1 || !DOC_FOLDER.equals(segments[doc]) || !TEMPLATES_SEGMENT.equals(segments[doc + 1])
+                    || !PRINT_SEGMENT.equals(segments[doc + 3]) || !PrintTemplateCatalog.isSegment(segments[doc + 2])
+                    || !PrintTemplateCatalog.isSegment(segments[doc + 4])) {
                 return Optional.empty();
             }
-            String[] segments = normalized.substring(doc + DOC_SEGMENT.length())
-                                          .split("/");
-            if (segments.length != 5 || !TEMPLATES_SEGMENT.equals(segments[0]) || !PRINT_SEGMENT.equals(segments[2])
-                    || !PrintTemplateCatalog.isSegment(segments[1]) || !PrintTemplateCatalog.isSegment(segments[3])) {
-                return Optional.empty();
-            }
-            String fileName = segments[4];
+            String fileName = segments[doc + 5];
             if (!fileName.toLowerCase(Locale.ROOT)
                          .endsWith(PrintTemplateName.EXTENSION)) {
                 return Optional.empty();
@@ -151,10 +157,7 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                                            .map(PrintTemplateName::name)
                                            .orElseGet(() -> PrintTemplateName.sanitize(PrintTemplateName.templateBase(fileName)
                                                                                                         .orElseThrow()));
-            String[] head = normalized.substring(0, doc)
-                                      .split("/");
-            String project = head.length == 0 ? "" : head[head.length - 1];
-            return Optional.of(new ShippedLocation(project, segments[1], segments[3], name));
+            return Optional.of(new ShippedLocation(segments[0], segments[doc + 2], segments[doc + 4], name));
         }
     }
 
@@ -194,7 +197,7 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         seed.setTemplateName(shipped.name());
         seed.setContent(content);
         try {
-            retireCmsSeeds(location, shipped);
+            retireCmsSeeds(location, shipped, content);
             String label = releaseVersion(shipped.project()).orElseGet(() -> PrintTemplateName.shortHash(content));
             seed.setVersion(releases.assign(shipped.entity(), shipped.language(), shipped.name(), label, content));
             seed.updateKey();
@@ -216,12 +219,13 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
      * Retires the {@code cms-seed} rows of a file this synchronizer took over: the generic seed handled
      * every file under {@code doc/} before print templates were versioned, and its rows would otherwise
      * stay behind - a FAILED one forever reported by the health check and the tenant initialization
-     * status. The bytes such a row last shipped are recorded as the version before the current one.
+     * status. The bytes such a row last shipped are recorded as the version before the current one -
+     * unless they are the current bytes, which then ship under the module's own version, not a hash.
      */
-    private void retireCmsSeeds(String location, ShippedLocation shipped) {
+    private void retireCmsSeeds(String location, ShippedLocation shipped, byte[] current) {
         for (CmsSeed legacy : cmsSeedService.findByLocation(location)) {
             byte[] previous = legacy.getContent();
-            if (previous != null && previous.length > 0) {
+            if (previous != null && previous.length > 0 && !Arrays.equals(previous, current)) {
                 String version = releases.assign(shipped.entity(), shipped.language(), shipped.name(),
                         PrintTemplateName.shortHash(previous), previous);
                 logger.info("The print template [{}] was seeded as a plain CMS file before - recorded as version [{}@{}]", location,

@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.components.engine.document;
 
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 
 import org.eclipse.dirigible.commons.config.Configuration;
@@ -66,8 +68,9 @@ class PrintTemplateSelection {
     }
 
     /**
-     * The selection the current tenant has stored, read from its configuration store - for the
-     * synchronizer, whose thread carries no tenant configuration.
+     * The selection the current tenant has stored, read from its configuration store past this node's
+     * cache - for the synchronizer, whose thread carries no tenant configuration, and for a decision
+     * that must not rest on another node's stale copy.
      *
      * @param entity the document type
      * @param language the language code
@@ -75,12 +78,38 @@ class PrintTemplateSelection {
      * @throws SQLException if the tenant configuration cannot be read
      */
     Optional<String> getStored(String entity, String language) throws SQLException {
+        return nonBlank(tenantConfigurationService.readStoredForCurrentTenant(key(entity, language)));
+    }
+
+    /**
+     * The selection a print of the current tenant resolves, read fresh: the layers {@link #get} reads
+     * through the request's copy, in the same order - a runtime value, the tenant's stored value (past
+     * the cache), then the deployment-wide environment, deployment and module values.
+     *
+     * @param entity the document type
+     * @param language the language code
+     * @return the effective reference, empty when no layer sets one
+     * @throws SQLException if the tenant configuration cannot be read
+     */
+    Optional<String> getEffective(String entity, String language) throws SQLException {
         String key = key(entity, language);
-        return tenantConfigurationService.listForCurrentTenant()
-                                         .stream()
-                                         .filter(entry -> key.equals(entry.key()))
-                                         .findFirst()
-                                         .flatMap(entry -> nonBlank(entry.value()));
+        Optional<String> runtime = nonBlank(Configuration.getRuntimeVariables()
+                                                         .get(key));
+        if (runtime.isPresent()) {
+            return runtime;
+        }
+        Optional<String> stored = getStored(entity, language);
+        if (stored.isPresent()) {
+            return stored;
+        }
+        for (Map<String, String> layer : List.of(Configuration.getEnvironmentVariables(), Configuration.getDeploymentVariables(),
+                Configuration.getModuleVariables())) {
+            Optional<String> value = nonBlank(layer.get(key));
+            if (value.isPresent()) {
+                return value;
+            }
+        }
+        return Optional.empty();
     }
 
     /**

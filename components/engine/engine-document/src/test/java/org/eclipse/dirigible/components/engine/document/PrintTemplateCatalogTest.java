@@ -78,6 +78,8 @@ class PrintTemplateCatalogTest {
                 : Optional.ofNullable(configuration.get(invocation.getArgument(0) + "/" + invocation.getArgument(1))));
         when(selection.getStored(anyString(), anyString())).thenAnswer(
                 invocation -> Optional.ofNullable(configuration.get(invocation.getArgument(0) + "/" + invocation.getArgument(1))));
+        when(selection.getEffective(anyString(), anyString())).thenAnswer(
+                invocation -> Optional.ofNullable(configuration.get(invocation.getArgument(0) + "/" + invocation.getArgument(1))));
         doAnswer(invocation -> configuration.put(invocation.getArgument(0) + "/" + invocation.getArgument(1),
                 invocation.getArgument(2))).when(selection)
                                            .select(anyString(), anyString(), anyString());
@@ -236,6 +238,37 @@ class PrintTemplateCatalogTest {
         assertEquals("acme", configuration.get(ENTITY + "/" + LANG));
         assertEquals("acme", resolved());
         assertEquals(Set.of("acme.print", "standard@1.28.0.print"), cms.names(FOLDER));
+    }
+
+    @Test
+    void anUneditedSecondTemplateThatPrintedStaysSelectedWhenItSeedsFirst() throws Exception {
+        assertTheTemplateThatPrintedStaysSelected(List.of("compact", "standard"));
+    }
+
+    @Test
+    void anUneditedSecondTemplateThatPrintedStaysSelectedWhenTheStandardOneSeedsFirst() throws Exception {
+        assertTheTemplateThatPrintedStaysSelected(List.of("standard", "compact"));
+    }
+
+    /**
+     * A module ships compact and standard; the tenant has unedited copies of both, and the resolution
+     * before versions printed compact, the first in CMS order. Whichever seeds first, compact keeps
+     * printing.
+     */
+    private void assertTheTemplateThatPrintedStaysSelected(List<String> seedOrder) throws Exception {
+        Map<String, String> contents = Map.of("compact", V2, "standard", V1);
+        contents.forEach((name, content) -> cms.write(FOLDER + "/" + name + ".print", bytes(content)));
+        // Every shipped template is parsed - recorded and given its artefact row - before any is seeded.
+        contents.forEach((name, content) -> current.put(name, releases.assign(ENTITY, LANG, name, "1.28.0", bytes(content))));
+        releases.invalidate(ENTITY, LANG);
+
+        for (String name : seedOrder) {
+            catalog.seed(ENTITY, LANG, name, "1.28.0", bytes(contents.get(name)));
+        }
+
+        assertEquals("compact@1.28.0", configuration.get(ENTITY + "/" + LANG));
+        assertEquals("compact@1.28.0", resolved());
+        assertEquals(Set.of("compact@1.28.0.print", "standard@1.28.0.print"), cms.names(FOLDER));
     }
 
     @Test

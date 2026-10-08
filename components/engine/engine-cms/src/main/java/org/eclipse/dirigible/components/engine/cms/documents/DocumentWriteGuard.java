@@ -16,8 +16,9 @@ import java.util.Optional;
  * Documents perspective: replaced by an upload, renamed or deleted. The CMS access grants decide
  * who may write a path; a guard decides that a particular document must not be changed by hand at
  * all - the canonical case being a shipped print template version, which is immutable and converged
- * back to its shipped bytes. Contribute an implementation as a Spring {@code @Component}; every one
- * is consulted, and the first refusal answers the request with 409 and its reason.
+ * back to its shipped bytes. A folder is renamed or deleted only when no document under it, at any
+ * depth, is refused. Contribute an implementation as a Spring {@code @Component}; every one is
+ * consulted, and the first refusal answers the request with 409 and its reason.
  */
 public interface DocumentWriteGuard {
 

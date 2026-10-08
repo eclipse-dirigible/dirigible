@@ -48,8 +48,8 @@ uploaded). The Print button asks which to use when several exist.
 All print-template knowledge lives in the print engine; **`CmsStore` and the generic CMS seed know
 nothing about templates, versions or the active one** - no marker files, no CMIS properties. (The
 Documents perspective knows one thing, through the generic `DocumentWriteGuard` SPI of engine-cms:
-`ShippedPrintTemplateGuard` refuses an upload over, a rename of or a delete of a shipped version,
-409 with the reason.) A language folder holds two kinds, told apart by the name alone
+`ShippedPrintTemplateGuard` refuses an upload over, a rename of or a delete of a shipped version -
+and of a folder holding one - 409 with the reason.) A language folder holds two kinds, told apart by the name alone
 (`PrintTemplateName`):
 
 ```
@@ -64,6 +64,10 @@ A document whose name is not a valid template name (`Invoice template.print`, `�
 dropped**: it is a tenant template under its sanitised name (`Invoice-template`, `template-<hash>`,
 `standard`) - the resolution before versions printed such files.
 
+- **Where**: a file is a shipped template when the tail of its path is
+  `doc/Templates/<Entity>/Print/<lang>/<file>.print` (a `/doc/` higher up, in the repository root
+  or a project name, does not matter), and its project - whose `project.json` gives the version - is
+  the first segment of the registry-relative location, however deep the `doc/` folder sits.
 - **Version** = the project's `project.json` `version` when valid, else the first 8 hex digits of the
   content SHA-256 - and then **`PrintTemplateReleases`** makes it immutable against the ledger
   `DIRIGIBLE_PRINT_TEMPLATE_VERSIONS` (every version this instance ever shipped, append-only, with
@@ -90,12 +94,15 @@ dropped**: it is a tenant template under its sanitised name (`Invoice-template`,
     printed: the first `.print` document in CMS order. Without a stored selection, a document other
     than the legacy copy that printed (`acme.print`) is selected - moved to its sanitised name first
     when it had none.
-  - The legacy `<name>.print` whose bytes the ledger knows becomes that version, unselected: an
-    unedited copy, however stale, is not a customisation, and the tenant gets the current release.
+  - The legacy `<name>.print` whose bytes the ledger knows becomes that version: an unedited copy,
+    however stale, is not a customisation, and the tenant gets the current release. Unselected for
+    the primary template; for another one that printed, the version is selected - otherwise the
+    outcome would depend on which template happened to seed first.
   - Any other legacy copy becomes `<name>-custom` with `<!-- derived-from: <name>@legacy -->` (BOM
     dropped), so every shipped version is flagged newer, and is selected when it is what printed.
   The ledger only knows releases this instance shipped through the catalogue - plus the bytes the
-  generic seed shipped last, recorded when the synchronizer retires that seed's row (below). A copy of
+  generic seed shipped last, recorded when the synchronizer retires that seed's row (below) unless
+  they equal the current bytes, which then keep the module's own version. A copy of
   an older release is indistinguishable from a customisation and is kept as one, flagged.
 - **Taking over from the generic seed.** On an upgraded instance every `.print` had a `cms-seed`
   definition and `DIRIGIBLE_CMS_SEEDS` row. `PrintTemplateSynchronizer.parseImpl` deletes the rows at
@@ -112,8 +119,11 @@ dropped**: it is a tenant template under its sanitised name (`Invoice-template`,
   this one prefix exists - and `/predefined` does not list it, or the shells' Save would write a stale
   selection back). It is read like every tenant override, from the thread-scoped `Configuration` the
   request filter / listener dispatch fill; `PrintFacade` loads it for a render outside both (a
-  snapshot on the BPM executor); the migration and the delete-the-active guard read the store
-  directly (`getStored`), the guard because the request's copy can be stale on another node. Keep
+  snapshot on the BPM executor). The migration reads the stored value past the per-node
+  `TenantConfigurationCache` (`getStored` → `TenantConfigurationService.readStoredForCurrentTenant`),
+  and the delete-the-active guard reads every layer resolution reads, fresh (`getEffective`: runtime,
+  stored, environment/deployment/module) - the cache has no TTL and another node's write does not
+  invalidate it. Keep
   the GET handlers off the store: reaching its lazy `CREATE TABLE` from a GET is what CodeQL reports
   as an unprotected state-changing request. **Resolution**: `template` request parameter →
   configuration (a missing name logs WARN and falls through) → the default above.

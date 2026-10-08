@@ -185,10 +185,12 @@ public class DocumentsService {
         requireCleanPath(name);
         assertNotHidden(path);
         assertWritable(path, request);
-        assertChangeable(path);
-        assertChangeable(childPath(parentPath(path), name));
-        cmsService.getObjectByPath(path)
-                  .rename(name);
+        CmisObject object = cmsService.getObjectByPath(path);
+        assertChangeable(object, path);
+        if (!isFolder(object)) {
+            assertChangeable(childPath(parentPath(path), name));
+        }
+        object.rename(name);
     }
 
     /**
@@ -205,9 +207,7 @@ public class DocumentsService {
             assertNotHidden(path);
             assertWritable(path, request);
             CmisObject object = cmsService.getObjectByPath(path);
-            if (!isFolder(object)) {
-                assertChangeable(path);
-            }
+            assertChangeable(object, path);
             if (isFolder(object) && forceDelete) {
                 deleteTree((CmisFolder) object);
             } else {
@@ -340,6 +340,23 @@ public class DocumentsService {
             if (refusal.isPresent()) {
                 throw new DocumentConflictException(path, refusal.get());
             }
+        }
+    }
+
+    /**
+     * Refuses a change to a document a {@link DocumentWriteGuard} protects - or to a folder holding one
+     * at any depth, since renaming or deleting the folder changes every document under it.
+     */
+    private void assertChangeable(CmisObject object, String path) throws IOException {
+        if (writeGuards.isEmpty()) {
+            return;
+        }
+        if (!isFolder(object)) {
+            assertChangeable(path);
+            return;
+        }
+        for (CmisObject child : ((CmisFolder) object).getChildren()) {
+            assertChangeable(child, childPath(path, child.getName()));
         }
     }
 

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.engine.cms.documents;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
+import org.eclipse.dirigible.components.engine.cms.CmisFolder;
 import org.eclipse.dirigible.components.engine.cms.ObjectType;
 import org.eclipse.dirigible.components.engine.cms.service.CmsService;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,6 +65,24 @@ class DocumentsServiceWriteGuardTest {
                 () -> documentsService.rename("/Templates/SalesInvoice/Print/en/mine.print", "standard@1.28.0.print", null));
 
         verify(document, never()).rename(anyString());
+    }
+
+    @Test
+    void aFolderHoldingAProtectedDocumentIsNeitherDeletedNorRenamed() throws Exception {
+        String folderPath = "/Templates/SalesInvoice/Print/en";
+        CmisFolder folder = mock(CmisFolder.class);
+        when(folder.getType()).thenReturn(ObjectType.FOLDER);
+        when(document.getName()).thenReturn("standard@1.28.0.print");
+        doReturn(List.of(document)).when(folder)
+                                   .getChildren();
+        when(cmsService.getObjectByPath(folderPath)).thenReturn(folder);
+
+        assertThrows(DocumentConflictException.class, () -> documentsService.delete(List.of(folderPath), true, null));
+        assertThrows(DocumentConflictException.class, () -> documentsService.rename(folderPath, "old", null));
+
+        verify(folder, never()).delete();
+        verify(folder, never()).rename(anyString());
+        verify(document, never()).delete();
     }
 
     @Test

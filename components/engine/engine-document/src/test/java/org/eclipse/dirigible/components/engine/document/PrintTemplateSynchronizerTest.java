@@ -18,12 +18,14 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
@@ -31,10 +33,12 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.engine.document.domain.CmsSeed;
 import org.eclipse.dirigible.components.engine.document.domain.PrintTemplateSeed;
 import org.eclipse.dirigible.components.engine.document.service.CmsSeedService;
 import org.eclipse.dirigible.components.engine.document.service.PrintTemplateSeedService;
 import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IResource;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -64,6 +68,49 @@ class PrintTemplateSynchronizerTest {
                                                          .orElseThrow();
 
         assertEquals("Invoice-template", location.name());
+    }
+
+    @Test
+    void theShapeIsMatchedOnTheTailAndTheProjectIsTheFirstSegment() {
+        PrintTemplateSynchronizer.ShippedLocation nested =
+                PrintTemplateSynchronizer.ShippedLocation.of("/acme/module1/doc/Templates/SalesInvoice/Print/en/standard.print")
+                                                         .orElseThrow();
+
+        assertEquals("acme", nested.project(), "project.json lives at the project root, however deep doc/ sits");
+        assertEquals("SalesInvoice", nested.entity());
+        assertTrue(
+                PrintTemplateSynchronizer.isShippedTemplate(
+                        "/home/doc/dirigible/target/registry/public/sales/doc/Templates/SalesInvoice/Print/en/standard.print"),
+                "a /doc/ in the repository root does not hide a print template");
+    }
+
+    @Test
+    void theRetiredGenericSeedsUnchangedBytesKeepTheModulesReleaseVersion() throws Exception {
+        byte[] content = "<document/>".getBytes(StandardCharsets.UTF_8);
+        String location = "/sales/doc/Templates/SalesInvoice/Print/en/standard.print";
+        PrintTemplateSeedService seedService = mock(PrintTemplateSeedService.class);
+        when(seedService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        CmsSeedService cmsSeedService = mock(CmsSeedService.class);
+        CmsSeed legacy = new CmsSeed(location, "standard.print", null);
+        legacy.setContent(content.clone());
+        when(cmsSeedService.findByLocation(location)).thenReturn(List.of(legacy));
+        PrintTemplateReleases releases = mock(PrintTemplateReleases.class);
+        when(releases.assign(anyString(), anyString(), anyString(), anyString(), any())).thenAnswer(
+                invocation -> invocation.getArgument(3));
+        IRepository repository = mock(IRepository.class);
+        IResource descriptor = mock(IResource.class);
+        when(descriptor.exists()).thenReturn(true);
+        when(descriptor.getContent()).thenReturn("{\"version\": \"1.28.0\"}".getBytes(StandardCharsets.UTF_8));
+        when(repository.getResource(anyString())).thenReturn(descriptor);
+        PrintTemplateSynchronizer synchronizer = new PrintTemplateSynchronizer(seedService, cmsSeedService,
+                mock(PrintTemplateCatalog.class), releases, repository, mock(TenantContext.class));
+
+        PrintTemplateSeed seed = synchronizer.parseImpl(location, content)
+                                             .get(0);
+
+        assertEquals("1.28.0", seed.getVersion());
+        verify(releases, times(1)).assign(anyString(), anyString(), anyString(), anyString(), any());
+        verify(cmsSeedService).delete(legacy);
     }
 
     @Test

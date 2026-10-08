@@ -372,11 +372,11 @@ class PrintTemplateCatalog {
                     "The print template [" + reference + "] is a shipped version - shipped versions are never deleted");
         }
         requireWritable(folder, name, request);
-        // The stored selection, not the request's cached copy: on another node, or after a store read
-        // error, the cached copy can be stale or empty, and the guard would let the active one go.
+        // The selection read fresh, past this node's configuration cache: on another node the cached
+        // copy can be stale, and the guard would let the active one go.
         PrintTemplateReleases.Snapshot shipped = releases.snapshot(entity, language);
-        if (active(folder, shipped, versionOrder(shipped), selection.getStored(entity, language)).filter(name::equals)
-                                                                                                 .isPresent()) {
+        if (active(folder, shipped, versionOrder(shipped), selection.getEffective(entity, language)).filter(name::equals)
+                                                                                                    .isPresent()) {
             throw new PrintTemplateException(Reason.CONFLICT,
                     "The print template [" + reference + "] is the active one - select another template before deleting it");
         }
@@ -452,7 +452,8 @@ class PrintTemplateCatalog {
      * moved to its sanitised name, so the selection names a stable file.</li>
      * <li>The legacy copy, {@code <name>.print}, whose bytes this instance shipped as some version,
      * becomes that version: an unedited copy, however old, is not a customisation, and a tenant who
-     * never chose gets the current version.</li>
+     * never chose gets the current version. When it printed and is not the primary template, that
+     * version is selected, so the outcome does not depend on which template seeds first.</li>
      * <li>Any other legacy copy is kept as {@code <name>-custom}, with a header recording that it
      * derives from {@code <name>@legacy} (so every shipped version is flagged as newer), and is
      * selected when it is what printed.</li>
@@ -474,8 +475,8 @@ class PrintTemplateCatalog {
         if (printed.isPresent() && !printed.get()
                                            .equals(legacy)) {
             PrintTemplateName kept = printed.get();
-            // Select before moving: should the move fail, the selection still resolves to the document
-            // under its sanitised name, and the next attempt moves it.
+            // Select before moving: should the move fail, the selection still resolves - folder() maps the
+            // sanitised name to the document under its original name, which it then simply keeps.
             selection.select(folder.entity(), folder.language(), kept.reference());
             String document = folder.files()
                                     .get(kept);
@@ -499,7 +500,13 @@ class PrintTemplateCatalog {
         Optional<String> shippedVersion = releases.versionOf(folder.entity(), folder.language(), name, legacyContent);
         if (shippedVersion.isPresent()) {
             PrintTemplateName version = PrintTemplateName.shipped(name, shippedVersion.get());
-            if (selectedLegacy) {
+            // An unedited copy of the primary template needs no selection: the default is that template's
+            // current version. Any other one that printed keeps printing - the default would switch the
+            // tenant to the primary template, depending on which template happened to seed first.
+            boolean printedOther = printed.filter(legacy::equals)
+                                          .isPresent()
+                    && !name.equals(primaryName(folder));
+            if (selectedLegacy || printedOther) {
                 selection.select(folder.entity(), folder.language(), version.reference());
             }
             cmsStore.move(legacyPath, version.fileName(), legacyContent);
@@ -609,6 +616,24 @@ class PrintTemplateCatalog {
         }
         return tenantTemplates(folder).stream()
                                       .findFirst();
+    }
+
+    /**
+     * The primary template of a folder: of the names the registry ships now, else of the shipped names
+     * present - the name {@link #defaultTemplate} prints by default.
+     */
+    private String primaryName(Folder folder) {
+        Set<String> shipped = new TreeSet<>(releases.snapshot(folder.entity(), folder.language())
+                                                    .current()
+                                                    .keySet());
+        if (shipped.isEmpty()) {
+            folder.files()
+                  .keySet()
+                  .stream()
+                  .filter(PrintTemplateName::isShipped)
+                  .forEach(name -> shipped.add(name.name()));
+        }
+        return primary(shipped).orElse(null);
     }
 
     private static Optional<String> primary(Set<String> sortedNames) {
