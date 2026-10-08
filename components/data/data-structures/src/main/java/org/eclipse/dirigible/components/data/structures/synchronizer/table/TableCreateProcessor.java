@@ -106,16 +106,7 @@ public class TableCreateProcessor {
                     args = ISqlKeywords.OPEN + length + ISqlKeywords.CLOSE;
                 }
             }
-            if (defaultValue != null) {
-                if ("".equals(defaultValue)) {
-                    if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
-                            || type.equals(DataType.CHARACTER_VARYING)) {
-                        args += " DEFAULT '" + defaultValue + "' ";
-                    }
-                } else {
-                    args += " DEFAULT " + defaultValue + " ";
-                }
-            }
+            args += ColumnDefaultClause.of(type, defaultValue);
             createTableBuilder.column(name, type, isPrimaryKey, isNullable, isUnique, autoincrement, false, false, args);
         }
         if (tableModel.getConstraints() != null) {

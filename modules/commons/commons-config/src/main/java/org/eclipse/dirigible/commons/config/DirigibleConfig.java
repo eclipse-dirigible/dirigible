@@ -108,9 +108,10 @@ public enum DirigibleConfig {
                                                      .tenant(12)), //
 
     /**
-     * The languages the Region & Language picker offers, comma-separated (e.g. {@code en,bg,fr}), the
-     * first one the default. Per tenant: each tenant decides which languages its users see; the modules
-     * carry whatever translations they ship and fall back to the default language for anything missing.
+     * The languages the Region &amp; Language picker offers, comma-separated (e.g. {@code en,bg,fr}),
+     * the first one the default. Per tenant: each tenant decides which languages its users see; the
+     * modules carry whatever translations they ship and fall back to the default language for anything
+     * missing.
      */
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en", meta().type(ConfigType.LIST)
                                                                          .tenant(8)), //

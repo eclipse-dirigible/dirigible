@@ -117,17 +117,7 @@ public class TableAlterProcessor {
                     }
                 }
             }
-            if (defaultValue != null) {
-                if ("".equals(defaultValue)) {
-                    if (type.equals(DataType.VARCHAR) || type.equals(DataType.CHAR) || type.equals(DataType.NVARCHAR)
-                            || type.equals(DataType.CHARACTER_VARYING) || type.equals(DataType.CHARACTER)) {
-                        args += " DEFAULT '" + defaultValue + "' ";
-                    }
-                } else {
-                    args += " DEFAULT " + defaultValue + " ";
-                }
-
-            }
+            args += ColumnDefaultClause.of(type, defaultValue);
 
             modelColumnNames.add(name.toUpperCase());
 
