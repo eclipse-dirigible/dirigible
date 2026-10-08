@@ -96,9 +96,10 @@ public class ${className}Generate {
             return "{\"error\": \"missing source id\"}";
         }
 #foreach($p in $promptFields)
-#if($p.required)
+#if($p.required && $p.defaultProp == "")
         // A required `prompt:` input is refused BEFORE anything is written - the dialog checks the same
-        // thing, and this is what makes the check hold for any other caller of the endpoint.
+        // thing, and this is what makes the check hold for any other caller of the endpoint. One that
+        // defaults to a source property is checked in create(), once the default is applied.
         if (req.values == null || req.values.get("${p.prop}") == null
                 || String.valueOf(req.values.get("${p.prop}")).isBlank()) {
             Response.setStatus(400);
@@ -241,15 +242,28 @@ public class ${className}Generate {
     #if($hasPrompt)
             // Declared input form (intent `prompt:` - issue #6685): the values the user supplied in the
             // action dialog, set on the target AFTER map/defaults (the parser rejects overlaps, so every
-            // property has exactly one writer). The required ones were already checked in run(), which is
-            // this method's only caller - a prompted create-from cannot be event-driven, there being
-            // nobody to answer. An absent optional input leaves the target's own default in place.
+            // property has exactly one writer). The required ones without a source default were already
+            // checked in run(), which is this method's only caller - a prompted create-from cannot be
+            // event-driven, there being nobody to answer. An absent optional input with no default leaves
+            // the target's own default in place.
     #foreach($p in $promptFields)
             {
                 Object raw = values == null ? null : values.get("${p.prop}");
                 if (!(raw == null || String.valueOf(raw).isBlank())) {
                     target.${p.prop} = ${p.expr};
+    #if($p.defaultProp != "")
+                } else {
+                    // An input left empty takes its declared default (intent `prompt: default:` - issue
+                    // #7748): the source's ${p.defaultProp}, read off the record this unit just loaded, so a
+                    // caller posting no value gets what the dialog pre-filled.
+                    target.${p.prop} = source.${p.defaultProp};
+    #end
                 }
+    #if($p.required && $p.defaultProp != "")
+                if (target.${p.prop} == null) {
+                    throw new org.eclipse.dirigible.sdk.db.ValidationException("missing required input [${p.prop}]");
+                }
+    #end
             }
     #end
     #end
@@ -328,6 +342,22 @@ public class ${className}Generate {
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
             }
     #end
+    #end
+    #if($hasLink)
+            // The link row back to the source (intent `link:` - issue #7748): a ${linkEntity} child of this
+            // ${fromEntity} pointing at the ${toEntity} just created, written in THIS unit of work and through
+            // its own repository, so its checks and the roll-ups over it run and a refusal takes the
+            // ${toEntity} back with it. The unit's events are published only once it commits, so a consumer
+            // of the ${toEntity}'s create event already sees this row - an auto-settlement finds the new
+            // payment fully allocated here instead of spreading it over the oldest open document.
+            gen.${fromGenFolder}.data.${linkJavaPerspective}.${linkEntity}Entity link =
+                    new gen.${fromGenFolder}.data.${linkJavaPerspective}.${linkEntity}Entity();
+            link.${linkParentFk} = sourceId;
+            link.${linkTargetFk} = saved.${toPk};
+    #foreach($a in $linkAssignments)
+            link.${a.linkProp} = saved.${a.targetProp};
+    #end
+            new gen.${fromGenFolder}.data.${linkJavaPerspective}.${linkEntity}Repository().save(link);
     #end
             return saved;
         });

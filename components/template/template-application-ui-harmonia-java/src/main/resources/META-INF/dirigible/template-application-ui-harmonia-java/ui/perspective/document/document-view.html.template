@@ -108,7 +108,7 @@
            Void on a paid invoice was answered with a 409 the user never saw (issue #7068) - and until
            that record has loaded, no status-guarded action is offered (issue #7605). -->
       <template x-for="action in recordActions()" :key="action.id">
-        <li x-h-menu-item @click="$store.customActions.trigger(action, id)">
+        <li x-h-menu-item @click="$store.customActions.trigger(action, id, record)">
           <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
         </li>
       </template>
@@ -186,7 +186,8 @@
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
-#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
+## `inlineCreate: false` (#7748) keeps it to existing rows: the plain picker, no "New" button.
+#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && $property.widgetInlineCreate != "false" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabelJs)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX" || $property.widgetType == "MULTISELECT")#set($span = "12")#end

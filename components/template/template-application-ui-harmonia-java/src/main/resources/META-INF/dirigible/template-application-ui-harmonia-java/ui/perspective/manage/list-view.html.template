@@ -470,7 +470,7 @@
             </template>
             <li x-h-menu-separator x-show="menuTasks.length &amp;&amp; menuActions.length"></li>
             <template x-for="action in menuActions" :key="action.id">
-              <li x-h-menu-item @click="$store.customActions.trigger(action, selectedId)"
+              <li x-h-menu-item @click="$store.customActions.trigger(action, selectedId, selected)"
                   x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
             </template>
             <li x-h-menu-separator x-show="(menuTasks.length || menuActions.length) &amp;&amp; menuHasRecordActions"></li>

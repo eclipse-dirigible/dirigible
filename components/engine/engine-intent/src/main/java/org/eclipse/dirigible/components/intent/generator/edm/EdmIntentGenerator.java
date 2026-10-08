@@ -622,6 +622,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putPickable(fkProperty, name, relation, info.propertyNames());
+                    putInlineCreate(fkProperty, relation);
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
@@ -643,6 +644,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
                 putPickable(fkProperty, name, relation, null);
+                putInlineCreate(fkProperty, relation);
                 putStatusSteps(fkProperty, model, entity, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
@@ -2182,6 +2184,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("widgetStatusSteps", steps.stream()
                                             .map(String::valueOf)
                                             .collect(Collectors.joining(",")));
+        }
+    }
+
+    /**
+     * Emit {@code inlineCreate: false} (issue #7748) as {@code widgetInlineCreate="false"}: the
+     * Harmonia templates then render the picker without its "New &lt;Entity&gt;" button in the form,
+     * the document header and the document item dialog. Nothing is emitted otherwise, so a model
+     * authored without the key is byte-identical.
+     */
+    private static void putInlineCreate(Map<String, Object> p, RelationIntent relation) {
+        if (relation.isInlineCreateDisabled()) {
+            p.put("widgetInlineCreate", "false");
         }
     }
 
