@@ -333,8 +333,8 @@ public class Configuration {
             String otherSpelling = ALIASES.get(key);
             if (otherSpelling != null) {
                 value = lookup(otherSpelling);
-                if (value != null && isMisspelling(otherSpelling) && ALIASES_LOGGED.add(otherSpelling)) {
-                    logger.warn("Configuration [{}] is a deprecated misspelling - rename it to [{}]", otherSpelling, key);
+                if (value != null) {
+                    warnMisspelling(otherSpelling);
                 }
             }
         }
@@ -342,15 +342,17 @@ public class Configuration {
     }
 
     /**
-     * Checks whether a key is the misspelled spelling of an alias pair.
+     * Warns once when a value was found under the misspelled key of an alias pair. Only the catalogue
+     * constants are logged, never the key the caller passed.
      *
-     * @param key the key
-     * @return true if the catalogue marks the key as an alias
+     * @param key the key the value was found under
      */
-    private static boolean isMisspelling(String key) {
-        return DirigibleConfig.fromKey(key)
-                              .map(DirigibleConfig::isAlias)
-                              .orElse(false);
+    private static void warnMisspelling(String key) {
+        DirigibleConfig.fromKey(key)
+                       .filter(DirigibleConfig::isAlias)
+                       .filter(misspelled -> ALIASES_LOGGED.add(misspelled.getKey()))
+                       .ifPresent(misspelled -> logger.warn("Configuration [{}] is a deprecated misspelling - rename it to [{}]",
+                               misspelled.getKey(), misspelled.getDeprecatedBy()));
     }
 
     /**
