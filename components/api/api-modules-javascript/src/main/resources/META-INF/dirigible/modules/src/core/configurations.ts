@@ -44,6 +44,49 @@
 */
 
 const Configuration = Java.type("org.eclipse.dirigible.commons.config.Configuration");
+const ConfigurationsFacade = Java.type("org.eclipse.dirigible.components.api.core.ConfigurationsFacade");
+
+/**
+ * A configuration group with the number of its keys and of the keys any source sets.
+ */
+export interface ConfigurationGroup {
+	id: string;
+	section: string;
+	label: string;
+	order: number;
+	total: number;
+	set: number;
+}
+
+/**
+ * A described configuration key. Every value is masked as "********" when the key is sensitive.
+ */
+export interface ConfigurationDescriptor {
+	key: string;
+	subgroup?: string;
+	type?: string;
+	defaultValue?: string;
+	/** The effective value. */
+	value?: string;
+	/** Where the effective value comes from. */
+	source: "runtime" | "environment" | "deployment" | "module" | "default" | "unset";
+	/** The value each source gives the key. */
+	values: { runtime?: string; environment?: string; deployment?: string; module?: string };
+	sensitive: boolean;
+	restartRequired?: boolean;
+	tenantOverridable: boolean;
+	deprecatedBy?: string;
+}
+
+/**
+ * A configuration group with its described keys.
+ */
+export interface ConfigurationDescriptorGroup {
+	group: string;
+	section: string;
+	label: string;
+	entries: ConfigurationDescriptor[];
+}
 
 export class Configurations {
 
@@ -82,6 +125,25 @@ export class Configurations {
 	 */
 	public static getKeys(): string[] {
 		return Configuration.getKeys();
+	}
+
+	/**
+	 * Retrieves the configuration groups, in display order, with the number of keys and of set keys in each.
+	 * @returns The groups.
+	 */
+	public static getGroups(): ConfigurationGroup[] {
+		return JSON.parse(ConfigurationsFacade.getGroups());
+	}
+
+	/**
+	 * Retrieves the described configuration keys, grouped: default, effective value, its source and the value
+	 * of each source. Sensitive values are masked.
+	 * @param group A group id (e.g. "database") or several; all groups when omitted.
+	 * @returns The groups that have keys.
+	 */
+	public static getDescriptors(group?: string | string[]): ConfigurationDescriptorGroup[] {
+		const groups = group === undefined ? null : Array.isArray(group) ? group.join(",") : group;
+		return JSON.parse(ConfigurationsFacade.getDescriptors(groups));
 	}
 
 	/**

@@ -10,10 +10,12 @@
 package org.eclipse.dirigible.components.configurations.service;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.StringTokenizer;
 
+import org.eclipse.dirigible.commons.config.ConfigDescriptors;
+import org.eclipse.dirigible.commons.config.ConfigGroup;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +31,16 @@ public class ConfigurationsService {
      * @return the list
      */
     public List<List<String>> findAll() {
+        return findAll(null);
+    }
+
+    /**
+     * Find all the keys of the given groups, in the shape of {@link #findAll()}.
+     *
+     * @param groups the groups to include; {@code null} or empty means every group
+     * @return the list
+     */
+    public List<List<String>> findAll(Collection<ConfigGroup> groups) {
 
         Map<String, String> runtimeVariables = Configuration.getRuntimeVariables();
         Map<String, String> environmentVariables = Configuration.getEnvironmentVariables();
@@ -37,6 +49,9 @@ public class ConfigurationsService {
 
         List<List<String>> result = new ArrayList<List<String>>();
         for (String parameter : Configuration.getConfigurationParameters()) {
+            if (!ConfigDescriptors.inGroups(parameter, groups)) {
+                continue;
+            }
             List<String> row = new ArrayList<String>();
             row.add(parameter);
             row.add(runtimeVariables.get(parameter));
@@ -91,6 +106,27 @@ public class ConfigurationsService {
         // }
 
         return result;
+    }
+
+    /**
+     * The configuration groups with their key counts.
+     *
+     * @return the groups, in display order
+     */
+    public List<ConfigDescriptors.GroupSummary> findGroups() {
+        return ConfigDescriptors.groups();
+    }
+
+    /**
+     * The described configuration keys, grouped, every value masked when sensitive.
+     *
+     * @param groups the groups to include; {@code null} or empty means every group
+     * @param query a text the key or its displayed value must contain; {@code null} matches every key
+     * @param onlySet whether to keep only the keys some source sets
+     * @return the groups that have matching keys
+     */
+    public List<ConfigDescriptors.Group> findDescriptors(Collection<ConfigGroup> groups, String query, boolean onlySet) {
+        return ConfigDescriptors.describe(groups, query, onlySet);
     }
 
 }

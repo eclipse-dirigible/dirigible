@@ -13,7 +13,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.ConfigDescriptors;
 import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
 
 /**
  * Decides which configuration keys a tenant is allowed to override through its per-tenant
@@ -61,6 +64,15 @@ class TenantConfigurationKeyPolicy {
             // The application's externally-reachable base URL (e.g. the {appUrl} notify token) -
             // per-tenant because a tenant may be served from its own subdomain/host.
             "DIRIGIBLE_APP_BASE_URL");
+
+    /**
+     * Tells the configuration descriptors which keys a tenant may override, so the platform view can
+     * flag them.
+     */
+    @PostConstruct
+    void registerWithDescriptors() {
+        ConfigDescriptors.setTenantOverridablePolicy(this::isInjectable);
+    }
 
     /**
      * The full list of configuration keys a tenant may override, in display order.

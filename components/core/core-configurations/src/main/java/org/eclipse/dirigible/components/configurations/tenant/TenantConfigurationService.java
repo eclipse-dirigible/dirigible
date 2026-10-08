@@ -10,11 +10,20 @@
 package org.eclipse.dirigible.components.configurations.tenant;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.ConfigDescriptors;
+import org.eclipse.dirigible.commons.config.ConfigGroup;
+import org.eclipse.dirigible.commons.config.ConfigGroups;
+import org.eclipse.dirigible.commons.config.SensitiveConfigs;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.configurations.domain.TenantConfiguration;
+import org.eclipse.dirigible.components.configurations.domain.TenantConfigurationDescriptor;
+import org.eclipse.dirigible.components.configurations.domain.TenantConfigurationGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -116,6 +125,70 @@ public class TenantConfigurationService {
                         .stream()
                         .map(key -> new TenantConfiguration(key, stored.get(key)))
                         .toList();
+    }
+
+    /**
+     * {@link #listPredefinedForCurrentTenant()} limited to the keys of the given groups.
+     *
+     * @param groups the groups to include; {@code null} or empty means every group
+     * @return one entry per allowed key in those groups, in the policy's display order
+     * @throws SQLException if the read fails
+     */
+    public List<TenantConfiguration> listPredefinedForCurrentTenant(Collection<ConfigGroup> groups) throws SQLException {
+        return listPredefinedForCurrentTenant().stream()
+                                               .filter(entry -> ConfigDescriptors.inGroups(entry.key(), groups))
+                                               .toList();
+    }
+
+    /**
+     * The groups that hold tenant-overridable keys, with the number of those keys and of the ones the
+     * current tenant sets.
+     *
+     * @return the groups, in display order
+     * @throws SQLException if the read fails
+     */
+    public List<ConfigDescriptors.GroupSummary> listGroupsForCurrentTenant() throws SQLException {
+        List<ConfigDescriptors.GroupSummary> result = new ArrayList<>();
+        for (TenantConfigurationGroup group : describeForCurrentTenant(null)) {
+            ConfigGroup configGroup = ConfigGroup.fromId(group.group())
+                                                 .orElse(ConfigGroup.OTHER);
+            int set = (int) group.entries()
+                                 .stream()
+                                 .filter(entry -> entry.value() != null)
+                                 .count();
+            result.add(
+                    new ConfigDescriptors.GroupSummary(
+                            configGroup.getId(), configGroup.getSection(), configGroup.getLabel(), configGroup.getOrder(), group.entries()
+                                                                                                                                .size(),
+                            set));
+        }
+        return result;
+    }
+
+    /**
+     * The tenant-overridable keys, grouped, each with the current tenant's value and the platform value
+     * it overrides. Every value is masked when sensitive.
+     *
+     * @param groups the groups to include; {@code null} or empty means every group
+     * @return the groups that hold overridable keys, in display order
+     * @throws SQLException if the read fails
+     */
+    public List<TenantConfigurationGroup> describeForCurrentTenant(Collection<ConfigGroup> groups) throws SQLException {
+        Map<ConfigGroup, List<TenantConfigurationDescriptor>> byGroup = new LinkedHashMap<>();
+        for (TenantConfiguration entry : listPredefinedForCurrentTenant(groups)) {
+            String key = entry.key();
+            byGroup.computeIfAbsent(ConfigGroups.resolve(key), group -> new ArrayList<>())
+                   .add(new TenantConfigurationDescriptor(key, ConfigGroups.subgroup(key), null, ConfigDescriptors.platformValue(key),
+                           SensitiveConfigs.mask(key, entry.value()), SensitiveConfigs.isSensitive(key)));
+        }
+        List<TenantConfigurationGroup> result = new ArrayList<>();
+        for (ConfigGroup group : ConfigGroup.values()) {
+            List<TenantConfigurationDescriptor> entries = byGroup.get(group);
+            if (entries != null) {
+                result.add(new TenantConfigurationGroup(group.getId(), group.getSection(), group.getLabel(), entries));
+            }
+        }
+        return result;
     }
 
     /**

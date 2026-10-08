@@ -63,9 +63,31 @@ document.addEventListener('alpine:init', () => {
     // /services/core/configurations/tenant; requires ADMINISTRATOR/OPERATOR (a 403 is surfaced as a
     // read-only notice). Each entry is { key, value }; an empty value means "not overridden".
     tenantConfig: [],
+    // The same entries, grouped as /services/core/configurations/tenant/descriptors answers them:
+    // [{ group, label, entries: [{ key, value, defaultValue, kind }] }]; defaultValue is the platform
+    // value the key falls back to.
+    tenantConfigGroups: [],
     tenantConfigLoading: false,
     tenantConfigSaving: false,
     tenantConfigError: null,
+
+    /** A localized heading for a configuration group, falling back to the server's label. */
+    tenantConfigGroupLabel(group) {
+      return window.T ? T('application-core:shell.settings.tenantConfigGroups.' + group.group, group.label) : group.label;
+    },
+
+    /** The input a key gets: 'boolean' (default / on / off) when its name or platform value says so, else 'text'. */
+    tenantConfigKind(entry) {
+      if (entry.type) return entry.type.toLowerCase() === 'boolean' ? 'boolean' : 'text';
+      const platform = (entry.defaultValue || '').toLowerCase();
+      return (/_ENABLED$/.test(entry.key) || platform === 'true' || platform === 'false') ? 'boolean' : 'text';
+    },
+
+    /** The "not overridden" option of a boolean key, naming the platform value it falls back to. */
+    tenantConfigDefaultLabel(entry) {
+      const label = window.T ? T('application-core:shell.settings.tenantConfigDefault', 'Platform default') : 'Platform default';
+      return entry.defaultValue ? label + ' (' + entry.defaultValue + ')' : label;
+    },
 
     /** A localized label for a predefined key, falling back to a title-cased form of its name. */
     tenantConfigLabel(key) {
@@ -97,21 +119,33 @@ document.addEventListener('alpine:init', () => {
       this.tenantConfigLoading = true;
       this.tenantConfigError = null;
       try {
-        const res = await fetch('/services/core/configurations/tenant/predefined', {
+        const res = await fetch('/services/core/configurations/tenant/descriptors', {
           credentials: 'same-origin',
           headers: { 'Accept': 'application/json' }
         });
         if (res.status === 403) {
           this.tenantConfig = [];
+          this.tenantConfigGroups = [];
           this.tenantConfigError = 'forbidden';
           return;
         }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        this.tenantConfig = data.map((e) => ({ key: e.key, value: e.value == null ? '' : e.value }));
+        this.tenantConfigGroups = data.map((g) => ({
+          group: g.group,
+          label: g.label,
+          entries: g.entries.map((e) => ({
+            key: e.key,
+            value: e.value == null ? '' : e.value,
+            defaultValue: e.defaultValue,
+            kind: this.tenantConfigKind(e)
+          }))
+        }));
+        this.tenantConfig = this.tenantConfigGroups.flatMap((g) => g.entries);
       } catch (e) {
         console.error('tenant-configuration: failed to load', e);
         this.tenantConfig = [];
+        this.tenantConfigGroups = [];
         this.tenantConfigError = 'load';
       } finally {
         this.tenantConfigLoading = false;
