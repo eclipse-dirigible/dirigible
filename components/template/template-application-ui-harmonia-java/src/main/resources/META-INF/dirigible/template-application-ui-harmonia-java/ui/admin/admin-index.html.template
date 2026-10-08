@@ -136,6 +136,9 @@
 
     <!-- The shared refusal gate (application-core): the ONLY path from a REST error body to the banner. -->
     <script src="/services/web/application-core/shell/js/services/apiError.js"></script>
+    <!-- The shared field behaviour (application-core): a wheel over a focused number input scrolls the
+         page instead of stepping the value (#7754). -->
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <script>
         // Generated metadata: every non-projection, non-report entity of this module with its full
         // column list and its power REST controller (the same API the application pages use).

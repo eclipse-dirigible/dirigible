@@ -436,6 +436,20 @@
     }, true);
   }
 
+  // A wheel over a FOCUSED number input steps its value and is swallowed by the browser, so a user who
+  // only meant to scroll saved a changed Amount (#7754). Blurring the input before the browser acts makes
+  // the wheel what it is over any other field: the page scrolls and the value stays as typed. Typing, the
+  // field's - / + buttons and the arrow keys still change it. Registered here because every surface with
+  // a number input loads this file - the shells, the generated pages and the standalone task form.
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('wheel', (event) => {
+      const input = event.target;
+      if (input && input.tagName === 'INPUT' && input.type === 'number' && input === document.activeElement) {
+        input.blur();
+      }
+    }, { capture: true, passive: true });
+  }
+
   // The Region & Language editing surface. Values mirror localStorage; a change persists and reloads
   // (like the language flag) so every already-rendered cell re-formats. Absent Alpine (standalone
   // form iframe) the store is simply never registered — the pure helpers above still work.
