@@ -37,6 +37,14 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-parsers-document</artifactId>
 		</dependency>
+
+		<!-- The CMIS folder contract names an OpenCMIS enum, so the fake CMS of CmsStoreTest needs it -->
+		<dependency>
+			<groupId>org.apache.chemistry.opencmis</groupId>
+			<artifactId>chemistry-opencmis-commons-api</artifactId>
+			<version>${chemistry.version}</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<properties>

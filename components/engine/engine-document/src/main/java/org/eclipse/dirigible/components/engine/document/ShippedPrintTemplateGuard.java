@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.document;
 
+import java.util.Arrays;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.engine.cms.documents.DocumentWriteGuard;
@@ -30,9 +31,12 @@ class ShippedPrintTemplateGuard implements DocumentWriteGuard {
         if (path == null) {
             return Optional.empty();
         }
-        String[] segments = path.replace('\\', '/')
-                                .replaceFirst("^/+", "")
-                                .split("/");
+        // The shape is matched on the canonical form - the Documents service hands it over so, and
+        // a backend collapses doubled separators and dot segments itself.
+        String[] segments = Arrays.stream(path.replace('\\', '/')
+                                              .split("/"))
+                                  .filter(segment -> !segment.isEmpty() && !".".equals(segment))
+                                  .toArray(String[]::new);
         if (segments.length != 5 || !"Templates".equals(segments[0]) || !"Print".equals(segments[2])) {
             return Optional.empty();
         }

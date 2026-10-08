@@ -70,9 +70,10 @@
                         <bk-option ng-repeat="lang in languages track by lang.code" text="{{lang.code}}" value="lang.code"></bk-option>
                     </bk-select>
                     <span style="flex: 1 1 auto"></span>
+                    <bk-button label="Use default" glyph="sap-icon--reset" ng-disabled="!selectionStored" title="Clear the selection: the newest shipped version prints, and every release switches to its own" ng-click="useDefault()"></bk-button>
                     <bk-button label="Compare" glyph="sap-icon--compare" ng-disabled="comparing().length !== 2" title="Select two templates to compare" ng-click="compare()"></bk-button>
                 </div>
-                <span class="fd-text bk-text--subtitle">The active template prints when a document is printed without choosing one. Its selection is the tenant configuration <code>{{selectionKey()}}</code>.</span>
+                <span class="fd-text bk-text--subtitle">The active template prints when a document is printed without choosing one. Its selection is the tenant configuration <code>{{selectionKey()}}</code>; without one the default prints, and each release switches to its newest version.</span>
                 <table bk-table display-mode="compact" outer-borders="none">
                     <thead bk-table-header interactive="false">
                         <tr bk-table-row>
@@ -95,6 +96,7 @@
                             <td bk-table-cell>{{template.derivedFrom}}</td>
                             <td bk-table-cell>
                                 <span ng-if="template.active" bk-object-status status="positive" text="Active"></span>
+                                <span ng-if="template.defaultTemplate && !template.active" bk-object-status text="Default"></span>
                                 <span ng-if="template.newer" bk-object-status status="informative" text="New"></span>
                             </td>
                             <td bk-table-cell fit-content="true">

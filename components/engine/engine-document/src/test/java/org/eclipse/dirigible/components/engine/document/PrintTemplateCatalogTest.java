@@ -213,8 +213,8 @@ class PrintTemplateCatalogTest {
                              .source();
         assertEquals("<!-- derived-from: standard@legacy -->\n" + V2, kept);
         assertEquals(
-                List.of(new PrintTemplateCatalog.Entry("standard@1.28.0", "shipped", "1.28.0", null, false, true),
-                        new PrintTemplateCatalog.Entry("standard-custom", "tenant", null, "standard@legacy", true, false)),
+                List.of(new PrintTemplateCatalog.Entry("standard@1.28.0", "shipped", "1.28.0", null, false, true, true),
+                        new PrintTemplateCatalog.Entry("standard-custom", "tenant", null, "standard@legacy", true, false, false)),
                 catalog.list(ENTITY, LANG, true));
     }
 
@@ -526,9 +526,9 @@ class PrintTemplateCatalogTest {
         configuration.put(ENTITY + "/" + LANG, "acme");
 
         assertEquals(
-                List.of(new PrintTemplateCatalog.Entry("standard@1.30.0", "shipped", "1.30.0", null, false, true),
-                        new PrintTemplateCatalog.Entry("standard@1.28.0", "shipped", "1.28.0", null, false, false),
-                        new PrintTemplateCatalog.Entry("acme", "tenant", null, "standard@1.28.0", true, false)),
+                List.of(new PrintTemplateCatalog.Entry("standard@1.30.0", "shipped", "1.30.0", null, false, true, true),
+                        new PrintTemplateCatalog.Entry("standard@1.28.0", "shipped", "1.28.0", null, false, false, false),
+                        new PrintTemplateCatalog.Entry("acme", "tenant", null, "standard@1.28.0", true, false, false)),
                 catalog.list(ENTITY, LANG, true));
         List<PrintTemplateCatalog.Entry> light = catalog.list(ENTITY, LANG, false);
         assertNull(light.get(2)

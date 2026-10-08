@@ -23,6 +23,8 @@ import org.eclipse.dirigible.components.engine.cms.ObjectType;
 import org.eclipse.dirigible.components.engine.cms.service.CmsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -51,6 +53,14 @@ public class DocumentsService {
     private final DocumentAccessEvaluator accessEvaluator;
     private final ContentTypeResolver contentTypeResolver;
     private final List<DocumentWriteGuard> writeGuards;
+
+    @Autowired
+    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver,
+            ObjectProvider<DocumentWriteGuard> writeGuards) {
+        // An assembly without a guard is fine - a plain List would fail the context start
+        this(cmsService, accessEvaluator, contentTypeResolver, writeGuards.orderedStream()
+                                                                          .toList());
+    }
 
     DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver,
             List<DocumentWriteGuard> writeGuards) {
@@ -136,7 +146,7 @@ public class DocumentsService {
     public String upload(String folderPath, String name, String contentType, int size, InputStream content, boolean overwrite,
             HttpServletRequest request) throws IOException {
         requireCleanPath(folderPath);
-        requireCleanPath(name);
+        requireCleanName(name);
         CmisFolder folder = folderOrRoot(folderPath);
         assertWritable(folder.getPath(), request);
         assertChangeable(childPath(folder.getPath(), name));
@@ -164,7 +174,7 @@ public class DocumentsService {
      */
     public FolderDto createFolder(String parentPath, String name, HttpServletRequest request) throws IOException {
         requireCleanPath(parentPath);
-        requireCleanPath(name);
+        requireCleanName(name);
         CmisFolder parent = folderOrRoot(parentPath);
         assertWritable(parent.getPath(), request);
         assertNotHidden(childPath(parent.getPath(), name));
@@ -182,13 +192,14 @@ public class DocumentsService {
      */
     public void rename(String path, String name, HttpServletRequest request) throws IOException {
         requireCleanPath(path);
-        requireCleanPath(name);
+        requireCleanName(name);
         assertNotHidden(path);
         assertWritable(path, request);
         CmisObject object = cmsService.getObjectByPath(path);
-        assertChangeable(object, path);
+        String canonical = canonicalPath(path);
+        assertChangeable(object, canonical);
         if (!isFolder(object)) {
-            assertChangeable(childPath(parentPath(path), name));
+            assertChangeable(childPath(parentPath(canonical), name));
         }
         object.rename(name);
     }
@@ -207,7 +218,7 @@ public class DocumentsService {
             assertNotHidden(path);
             assertWritable(path, request);
             CmisObject object = cmsService.getObjectByPath(path);
-            assertChangeable(object, path);
+            assertChangeable(object, canonicalPath(path));
             if (isFolder(object) && forceDelete) {
                 deleteTree((CmisFolder) object);
             } else {
@@ -293,6 +304,45 @@ public class DocumentsService {
             }
         }
         return path;
+    }
+
+    /**
+     * Rejects a document or folder name that is not a single path segment: a separator in it would
+     * address another path than the one the checks saw, and a dot segment is not a name.
+     *
+     * @param name the requested name
+     * @return the same name
+     */
+    static String requireCleanName(String name) {
+        requireCleanPath(name);
+        if (name == null || name.isBlank() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || ".".equals(name) || "..".equals(name)) {
+            throw new DocumentInvalidPathException();
+        }
+        return name;
+    }
+
+    /**
+     * The path in the one form the write guards see: forward slashes, no empty or {@code .} segments,
+     * never a {@code ..} segment. The CMS backends collapse {@code //} and resolve dot segments
+     * themselves, so a guard matching the raw request path could be bypassed by one spelt differently.
+     *
+     * @param path the requested path
+     * @return the canonical absolute path
+     */
+    static String canonicalPath(String path) {
+        StringBuilder canonical = new StringBuilder();
+        for (String segment : path.replace('\\', '/')
+                                  .split("/")) {
+            if (segment.isEmpty() || ".".equals(segment)) {
+                continue;
+            }
+            if ("..".equals(segment)) {
+                throw new DocumentInvalidPathException();
+            }
+            canonical.append('/')
+                     .append(segment);
+        }
+        return canonical.isEmpty() ? "/" : canonical.toString();
     }
 
     /** Whether the path is one the Documents surface never exposes. */

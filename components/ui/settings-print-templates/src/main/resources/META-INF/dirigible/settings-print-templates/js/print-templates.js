@@ -18,6 +18,9 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
     $scope.documentTypes = [];
     $scope.languages = [];
     $scope.templates = [];
+    // Whether the tenant stored a selection for the chosen language - without one the newest shipped
+    // version prints, and every release switches to its own; "Use default" clears it.
+    $scope.selectionStored = false;
     $scope.selected = { entity: '', language: '' };
     $scope.editor = null;
     $scope.diff = null;
@@ -104,6 +107,19 @@ angular.module('printTemplates', ['blimpKit', 'platformView']).controller('Print
         $http.get(`${templatesUrl()}?${lang()}&details=true`).then((response) => {
             $scope.templates = response.data.map((template) => ({ ...template, compare: false }));
         }, (response) => showError('Unable to load the print templates', response));
+        $http.get(CONFIGURATION_API).then((response) => {
+            const key = $scope.selectionKey();
+            $scope.selectionStored = (response.data || []).some((each) => each.key === key && each.value);
+        }, (response) => {
+            console.error(response);
+            $scope.selectionStored = false;
+        });
+    };
+
+    $scope.useDefault = () => {
+        $http.delete(`${CONFIGURATION_API}?key=${encodeURIComponent($scope.selectionKey())}`).then(() => {
+            $scope.load();
+        }, (response) => showError('Unable to clear the active print template', response));
     };
 
     $scope.comparing = () => $scope.templates.filter((template) => template.compare);

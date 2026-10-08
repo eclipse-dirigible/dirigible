@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.eclipse.dirigible.components.engine.document.domain.PrintTemplateVersion;
 import org.eclipse.dirigible.components.engine.document.service.PrintTemplateSeedService;
@@ -52,6 +53,8 @@ class PrintTemplateReleases {
     private final PrintTemplateSeedService seedService;
     private final PrintTemplateVersionService versionService;
     private final Map<String, Snapshot> cache = new ConcurrentHashMap<>();
+    /** Bumped by every invalidation: a snapshot loaded across one is returned but not cached. */
+    private final AtomicLong generation = new AtomicLong();
 
     PrintTemplateReleases(PrintTemplateSeedService seedService, PrintTemplateVersionService versionService) {
         this.seedService = seedService;
@@ -96,8 +99,11 @@ class PrintTemplateReleases {
         }
         // Read outside the map's locks: two concurrent misses read twice, which is cheaper than a
         // print waiting on another key's database round trip.
+        long before = generation.get();
         Snapshot loaded = load(entity, language, now);
-        cache.put(key, loaded);
+        if (generation.get() == before) {
+            cache.put(key, loaded);
+        }
         return loaded;
     }
 
@@ -157,6 +163,7 @@ class PrintTemplateReleases {
      * @param language the language code
      */
     void invalidate(String entity, String language) {
+        generation.incrementAndGet();
         cache.remove(key(entity, language));
     }
 

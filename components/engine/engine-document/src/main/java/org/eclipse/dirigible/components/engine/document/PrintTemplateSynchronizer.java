@@ -96,7 +96,12 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
     private final IRepository repository;
     private final TenantContext tenantContext;
 
-    /** The tenants whose seed of an artefact failed, by artefact key, until each one succeeds. */
+    /**
+     * The tenants whose seed of an artefact failed in the current fan-out, by artefact key: a later
+     * tenant's success must not hide an earlier tenant's failure. Reset by every {@link #complete},
+     * which fans out over the tenants provisioned now - a tenant that failed before is either retried
+     * in it or no longer exists, and neither may pin the artefact FAILED.
+     */
     private final Map<String, Set<String>> failedTenants = new ConcurrentHashMap<>();
 
     private SynchronizerCallback callback;
@@ -143,7 +148,7 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
             int doc = segments.length - 6;
             if (doc < 1 || !DOC_FOLDER.equals(segments[doc]) || !TEMPLATES_SEGMENT.equals(segments[doc + 1])
                     || !PRINT_SEGMENT.equals(segments[doc + 3]) || !PrintTemplateCatalog.isSegment(segments[doc + 2])
-                    || !PrintTemplateCatalog.isSegment(segments[doc + 4])) {
+                    || !PrintTemplateCatalog.isLanguage(segments[doc + 4])) {
                 return Optional.empty();
             }
             String fileName = segments[doc + 5];
@@ -281,6 +286,20 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         artefact.setLifecycle(lifecycle);
         artefact.setError(error);
         getService().save(artefact);
+    }
+
+    @Override
+    public boolean complete(TopologyWrapper<PrintTemplateSeed> wrapper, ArtefactPhase flow) {
+        newFanOut(wrapper.getArtefact()
+                         .getKey());
+        return super.complete(wrapper, flow);
+    }
+
+    /**
+     * Forgets the failures of the previous fan-out over the tenants: the one starting now retries them.
+     */
+    void newFanOut(String key) {
+        failedTenants.remove(key);
     }
 
     @Override

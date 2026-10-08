@@ -49,7 +49,9 @@ All print-template knowledge lives in the print engine; **`CmsStore` and the gen
 nothing about templates, versions or the active one** - no marker files, no CMIS properties. (The
 Documents perspective knows one thing, through the generic `DocumentWriteGuard` SPI of engine-cms:
 `ShippedPrintTemplateGuard` refuses an upload over, a rename of or a delete of a shipped version -
-and of a folder holding one - 409 with the reason.) A language folder holds two kinds, told apart by the name alone
+and of a folder holding one - 409 with the reason. `DocumentsService` hands the guards the canonical
+path - no `//`, no `.`, never `..`, and a name is one segment - because the backends collapse those
+themselves, so a guard matching the raw request path could be bypassed by another spelling of it.) A language folder holds two kinds, told apart by the name alone
 (`PrintTemplateName`):
 
 ```
@@ -151,12 +153,22 @@ dropped**: it is a tenant template under its sanitised name (`Invoice-template`,
   a shipped or the active one); `POST /{entity}/templates/{name}/duplicate?lang=&as=` (the copy is
   parse-checked). Reading a source and every write are ADMINISTRATOR/OPERATOR, **and the CMS access
   grants of the template's path apply on top** (`DocumentAccessEvaluator`, 403), as in the Documents
-  perspective. The active selection is written through `PUT /services/core/configurations/tenant`,
-  not here. The IDE page is `components/ui/settings-print-templates` (Settings → Print Templates).
+  perspective. Printing (`POST /{entity}?template=`) and the catalogue listing read templates as the
+  engine, for every user: the print dialog offers the tenant's templates to everyone who may print,
+  so a READ grant on the folder restricts the source, not the rendered output. The active selection
+  is written through `PUT /services/core/configurations/tenant`, not here, and cleared with its
+  `DELETE ?key=` ("Use default" on the page) - once a selection is stored, newer releases are only
+  flagged `newer`, never applied, until it is cleared. **Known limit:** the selection is read through
+  the tenant configuration cache, which is per node and invalidated by the writing node only (see
+  `.claude/docs/tenants.md`); on a multi-node instance another node prints the old layout until its
+  cache reloads. Only the delete guard reads past the cache. The IDE page is `components/ui/settings-print-templates` (Settings → Print Templates).
   The generated pages share one Print implementation, `application-core/shell/js/components/printActions.js`:
-  the dialog opens for more than one language or more than one layout, where a layout is a tenant
-  template or the shipped default (older shipped versions are pinned in Settings, not offered per
-  print), and Print waits while a language's layouts load and drops a stale response.
+  the dialog opens for more than one language or more than one tenant template, and lists the
+  tenant templates, the active one and the shipped default (older shipped versions are pinned in
+  Settings, not offered per print; the shipped default alone never opens the dialog, so one custom
+  layout still prints directly). A print names its template only when the user picked another than
+  the active one, so the server resolves the selection itself. Print waits while a language's
+  layouts load and drops a stale response.
 
 **The client feeds this endpoint from a server-side feeder, not from its own screen state.** The
 Harmonia document/manage page first GETs the generated `…PrintFeeder/{id}` (client-Java), which

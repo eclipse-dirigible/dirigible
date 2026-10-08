@@ -58,7 +58,7 @@ public class PrintTemplateVersion {
     private String contentHash;
 
     /** When this instance first shipped the version. */
-    @Column(name = "PRINT_TEMPLATE_SHIPPED_AT")
+    @Column(name = "PRINT_TEMPLATE_SHIPPED_AT", columnDefinition = "TIMESTAMP")
     private Instant shippedAt;
 
     /** For JPA. */

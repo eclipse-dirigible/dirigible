@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.engine.cms.documents;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -83,6 +84,40 @@ class DocumentsServiceWriteGuardTest {
         verify(folder, never()).delete();
         verify(folder, never()).rename(anyString());
         verify(document, never()).delete();
+    }
+
+    @Test
+    void aProtectedDocumentIsNotReachedThroughAnotherSpellingOfItsPath() throws Exception {
+        // The backends collapse doubled separators and dot segments; the guard must see the same path.
+        assertThrows(DocumentConflictException.class,
+                () -> documentsService.delete(List.of("/Templates//SalesInvoice/./Print/en/standard@1.28.0.print"), false, null));
+        assertThrows(DocumentConflictException.class,
+                () -> documentsService.rename("\\Templates\\SalesInvoice\\Print\\en\\standard@1.28.0.print", "mine.print", null));
+        assertThrows(DocumentInvalidPathException.class,
+                () -> documentsService.delete(List.of("/Templates/Other/../SalesInvoice/Print/en/standard@1.28.0.print"), false, null));
+
+        verify(document, never()).rename(anyString());
+        verify(document, never()).delete();
+    }
+
+    @Test
+    void aNameIsASingleSegmentSoItCannotAddressAProtectedDocumentElsewhere() throws Exception {
+        CmisFolder folder = mock(CmisFolder.class);
+        when(folder.getType()).thenReturn(ObjectType.FOLDER);
+        when(folder.getPath()).thenReturn("/Templates/SalesInvoice/Print/en");
+        when(cmsService.getObjectByPath("/Templates/SalesInvoice/Print/en")).thenReturn(folder);
+
+        for (String name : List.of("/standard@1.28.0.print", "./standard@1.28.0.print", "..", "a/b")) {
+            assertThrows(DocumentInvalidPathException.class,
+                    () -> documentsService.upload("/Templates/SalesInvoice/Print/en", name, null, 0, null, true, null));
+            assertThrows(DocumentInvalidPathException.class,
+                    () -> documentsService.rename("/Templates/SalesInvoice/Print/en/mine.print", name, null));
+            assertThrows(DocumentInvalidPathException.class,
+                    () -> documentsService.createFolder("/Templates/SalesInvoice/Print/en", name, null));
+        }
+
+        verify(cmsService, never()).createDocument(any(), anyString(), any(), anyInt(), any());
+        verify(document, never()).rename(anyString());
     }
 
     @Test

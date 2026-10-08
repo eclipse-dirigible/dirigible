@@ -29,6 +29,11 @@ class ShippedPrintTemplateGuardTest {
                         .isPresent());
         assertTrue(guard.refusal("Templates/SalesInvoice/Print/bg/standard@a1b2c3d4.print")
                         .isPresent());
+        // The backends collapse doubled separators and dot segments, so the guard matches past them.
+        assertTrue(guard.refusal("/Templates//SalesInvoice/./Print/en/standard@1.28.0.print")
+                        .isPresent());
+        assertTrue(guard.refusal("\\Templates\\SalesInvoice\\Print\\en\\standard@1.28.0.print")
+                        .isPresent());
     }
 
     @Test

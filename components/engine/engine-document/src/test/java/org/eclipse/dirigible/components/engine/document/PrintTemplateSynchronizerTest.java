@@ -168,6 +168,48 @@ class PrintTemplateSynchronizerTest {
         verify(callback).registerState(synchronizer, wrapper, ArtefactLifecycle.CREATED);
     }
 
+    @Test
+    void aTenantThatIsGoneByTheNextFanOutNoLongerPinsTheSeedFailed() throws Exception {
+        PrintTemplateCatalog catalog = mock(PrintTemplateCatalog.class);
+        TenantContext tenantContext = mock(TenantContext.class);
+        SynchronizerCallback callback = mock(SynchronizerCallback.class);
+        PrintTemplateSynchronizer synchronizer = new PrintTemplateSynchronizer(mock(PrintTemplateSeedService.class),
+                mock(CmsSeedService.class), catalog, mock(PrintTemplateReleases.class), mock(IRepository.class), tenantContext);
+        synchronizer.setCallback(callback);
+        PrintTemplateSeed seed = new PrintTemplateSeed();
+        seed.setLocation("/sales/doc/Templates/SalesInvoice/Print/en/standard.print");
+        seed.setName("standard.print");
+        seed.setType(PrintTemplateSeed.ARTEFACT_TYPE);
+        seed.setEntityName("SalesInvoice");
+        seed.setLanguage("en");
+        seed.setTemplateName("standard");
+        seed.setVersion("1.28.0");
+        seed.setContent(new byte[0]);
+        seed.updateKey();
+        TopologyWrapper<PrintTemplateSeed> wrapper = new TopologyWrapper<>(seed, new HashMap<>(), synchronizer);
+
+        // First fan-out: t1 fails, t2 succeeds - FAILED, naming t1.
+        seed.setLifecycle(ArtefactLifecycle.NEW);
+        actAs(tenantContext, "t1");
+        doThrow(new IOException("CMS not reachable")).when(catalog)
+                                                     .seed(anyString(), anyString(), anyString(), anyString(), any());
+        assertFalse(synchronizer.completeImpl(wrapper, ArtefactPhase.CREATE));
+        reset(catalog);
+        seed.setLifecycle(ArtefactLifecycle.NEW);
+        actAs(tenantContext, "t2");
+        assertTrue(synchronizer.completeImpl(wrapper, ArtefactPhase.CREATE));
+        verify(callback).registerState(eq(synchronizer), eq(wrapper), eq(ArtefactLifecycle.FAILED),
+                eq("The seed has not succeeded for the tenant(s) [t1] yet"));
+
+        // The START retry fans out over the tenants provisioned now, and t1 is gone: nothing is owed
+        // to it any more, so t2's success is the artefact's state.
+        synchronizer.newFanOut(seed.getKey());
+        seed.setLifecycle(ArtefactLifecycle.FAILED);
+        actAs(tenantContext, "t2");
+        assertTrue(synchronizer.completeImpl(wrapper, ArtefactPhase.START));
+        verify(callback).registerState(synchronizer, wrapper, ArtefactLifecycle.CREATED);
+    }
+
     private static void actAs(TenantContext tenantContext, String tenantId) {
         Tenant tenant = mock(Tenant.class);
         when(tenant.getId()).thenReturn(tenantId);

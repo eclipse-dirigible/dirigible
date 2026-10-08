@@ -24,11 +24,16 @@
  * read-only Snapshot panel serves every stored version (Open + Download), so a live re-render after
  * master-data changes is acceptable.
  *
- * When the dialog opens: with more than one template language, or more than one layout to choose
- * from in the chosen language. A layout is a template of the tenant's own or the shipped version
- * that prints by default; the other shipped versions accumulate with every release and are pinned
- * in Settings > Print Templates, not chosen per print - listing them would open the dialog on
- * every print once a second release has shipped.
+ * When the dialog opens: with more than one template language, or more than one tenant template in
+ * the chosen language - a real choice the tenant authored. The dialog then lists the tenant's own
+ * templates, the active one and the shipped version that prints by default; the shipped default
+ * alone never opens it, so a tenant with one custom layout still prints directly. The other shipped
+ * versions accumulate with every release and are pinned in Settings > Print Templates, not chosen
+ * per print - listing them would open the dialog on every print once a second release has shipped.
+ *
+ * A print names its template only when the user picked one: without a pick the server resolves the
+ * tenant's active template itself, so a selection changed between the listing and the print never
+ * turns into a 404.
  */
 function printActions(options) {
   const base = '/services/print/' + encodeURIComponent(options.entity);
@@ -38,6 +43,8 @@ function printActions(options) {
     printLang: '',
     printLayouts: [],
     printTemplate: '',
+    // The template the server prints when none is named - what the dialog preselects.
+    printActiveTemplate: '',
     // While the layouts of a language are being read: Print waits, so it never sends one language
     // with another language's layout.
     printLoading: false,
@@ -54,14 +61,15 @@ function printActions(options) {
       } catch (e) {
         console.error('Print languages lookup failed', e);
       }
-      this.printBusy = false;
       // The Region & Language setting only pre-sorts its language first as the suggested default;
       // zero languages still attempts the default, which the server answers with a clear 404.
       const configured = (Alpine.store('locale') || {}).value;
       this.printLanguages = languages.slice().sort((a, b) =>
         (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
       await this.selectPrintLanguage(languages.length ? this.printLanguages[0].code : 'en');
-      if (this.printLanguages.length > 1 || this.printLayouts.length > 1) {
+      // Busy until the layouts are known too: a second click meanwhile would start a second flow.
+      this.printBusy = false;
+      if (this.printLanguages.length > 1 || this.printLayouts.filter((t) => t.kind === 'tenant').length > 1) {
         // A real choice: ALWAYS ask (auto-printing the configured language here suppressed the
         // dialog entirely, since the locale store always resolves to a value - a shipped regression).
         // The layout is preselected to the one the tenant prints with.
@@ -87,9 +95,10 @@ function printActions(options) {
       if (request !== this._printLayoutsRequest) {
         return;
       }
-      this.printLayouts = templates.filter((t) => t.kind === 'tenant' || t.active);
+      this.printLayouts = templates.filter((t) => t.kind === 'tenant' || t.active || t.defaultTemplate);
       const active = templates.find((t) => t.active);
-      this.printTemplate = active ? active.name : '';
+      this.printActiveTemplate = active ? active.name : '';
+      this.printTemplate = this.printActiveTemplate;
       this.printLoading = false;
     },
 
@@ -108,15 +117,16 @@ function printActions(options) {
         // multilingual overlay reads Accept-Language, so without this the nomenclature values (Payment
         // Method, Status, ...) would render in the UI locale while the template is in the print language.
         const payload = await App.services.api.get(options.feeder + encodeURIComponent(this.id), { baseUrl: '', language: lang });
+        const picked = template && template !== this.printActiveTemplate ? template : '';
         const response = await fetch(base + '?lang=' + encodeURIComponent(lang)
-          + (template ? '&template=' + encodeURIComponent(template) : ''), {
+          + (picked ? '&template=' + encodeURIComponent(picked) : ''), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
         if (!response.ok) {
           this.printError = response.status === 404
-            ? 'No print template found. Publish the project or upload one via Documents.'
+            ? 'No print template found. Publish the project or add one in Settings > Print Templates.'
             : 'Print failed (' + response.status + ')';
           return;
         }

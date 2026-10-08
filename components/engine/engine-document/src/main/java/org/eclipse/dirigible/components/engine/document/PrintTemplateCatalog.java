@@ -90,6 +90,9 @@ class PrintTemplateCatalog {
      */
     private static final Pattern SEGMENT = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,254}");
 
+    /** A language code: a segment no longer than the ledger's language column. */
+    private static final Pattern LANGUAGE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
+
     /**
      * The header a duplicate records its origin in - plain template content (the parser skips
      * comments), not CMS metadata.
@@ -119,8 +122,10 @@ class PrintTemplateCatalog {
      *        the listing reads the tenant templates
      * @param active whether this template prints when no other is requested
      * @param newer whether this shipped version is newer than the active layout's version
+     * @param defaultTemplate whether this template prints when the tenant has no selection - the
+     *        shipped default a print dialog offers beside the tenant's own templates
      */
-    record Entry(String name, String kind, String version, String derivedFrom, boolean active, boolean newer) {
+    record Entry(String name, String kind, String version, String derivedFrom, boolean active, boolean newer, boolean defaultTemplate) {
     }
 
     /**
@@ -212,6 +217,7 @@ class PrintTemplateCatalog {
         PrintTemplateReleases.Snapshot shipped = releases.snapshot(entity, language);
         Comparator<PrintTemplateName> order = versionOrder(shipped);
         Optional<PrintTemplateName> active = active(folder, shipped, order, selection.get(entity, language));
+        Optional<PrintTemplateName> fallback = defaultTemplate(folder, shipped, order);
 
         Map<PrintTemplateName, String> derivedFrom = new LinkedHashMap<>();
         for (PrintTemplateName tenant : tenantTemplates(folder)) {
@@ -230,12 +236,14 @@ class PrintTemplateCatalog {
                                     .orElse(false);
             entries.add(new Entry(version.reference(), "shipped", version.version(), null, active.filter(version::equals)
                                                                                                  .isPresent(),
-                    newer));
+                    newer, fallback.filter(version::equals)
+                                   .isPresent()));
         }
-        derivedFrom.forEach(
-                (tenant, origin) -> entries.add(new Entry(tenant.reference(), "tenant", null, origin, active.filter(tenant::equals)
-                                                                                                            .isPresent(),
-                        false)));
+        derivedFrom.forEach((tenant,
+                origin) -> entries.add(new Entry(tenant.reference(), "tenant", null, origin, active.filter(tenant::equals)
+                                                                                                   .isPresent(),
+                        false, fallback.filter(tenant::equals)
+                                       .isPresent())));
         return entries;
     }
 
@@ -704,7 +712,9 @@ class PrintTemplateCatalog {
      */
     private Folder folder(String entity, String language) throws IOException, PrintTemplateException {
         requireSegment("document type", entity);
-        requireSegment("language", language);
+        if (!isLanguage(language)) {
+            throw new PrintTemplateException(Reason.INVALID, "[" + language + "] is not a valid language");
+        }
         String path = printFolderPath(entity) + SEPARATOR + language;
         List<String> documents = cmsStore.listDocuments(path);
         Map<PrintTemplateName, String> files = new LinkedHashMap<>();
@@ -814,6 +824,17 @@ class PrintTemplateCatalog {
     static boolean isSegment(String value) {
         return value != null && SEGMENT.matcher(value)
                                        .matches();
+    }
+
+    /**
+     * Whether a value is a valid language code - a segment short enough for the ledger's column.
+     *
+     * @param value the value
+     * @return true for a plain name of at most 64 characters
+     */
+    static boolean isLanguage(String value) {
+        return value != null && LANGUAGE.matcher(value)
+                                        .matches();
     }
 
     private static String printFolderPath(String entity) {

@@ -205,10 +205,10 @@ class PrintEndpoint extends BaseEndpoint {
     @PutMapping(value = "/{entity}/templates/{name}", consumes = MediaType.TEXT_PLAIN_VALUE)
     @RolesAllowed({Roles.RoleNames.ADMINISTRATOR, Roles.RoleNames.OPERATOR})
     ResponseEntity<Void> writeTemplate(@PathVariable("entity") String entity, @PathVariable("name") String name,
-            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestBody String source,
+            @RequestParam(name = "lang", defaultValue = DEFAULT_LANGUAGE) String language, @RequestBody(required = false) String source,
             HttpServletRequest request) {
         try {
-            catalog.write(entity, language, name, source, request);
+            catalog.write(entity, language, name, source == null ? "" : source, request);
             return ResponseEntity.noContent()
                                  .build();
         } catch (PrintTemplateException e) {
