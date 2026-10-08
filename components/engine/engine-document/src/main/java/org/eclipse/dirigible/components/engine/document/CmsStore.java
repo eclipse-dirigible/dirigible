@@ -23,7 +23,6 @@ import org.springframework.stereotype.Component;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -36,9 +35,9 @@ import java.util.Optional;
  * {@code doc/} folder into the (tenant-scoped) CMS at the mirrored path, <b>create-if-absent</b>:
  * an already existing document is a user customization and is never overwritten. Generic — any
  * path, any content.</li>
- * <li><b>Print reads</b> — {@link #listLanguages(String)} / {@link #findTemplate(String, String)}
- * resolve print templates under {@code Templates/<EntityName>/Print/<language>/} for the print
- * endpoint.</li>
+ * <li><b>Plain file operations</b> — list, read, write, rename and delete documents and folders.
+ * The CMS stays a plain file store: what a print template, a version or the active layout is, is
+ * {@link PrintTemplateCatalog}'s knowledge, built on these operations.</li>
  * <li><b>Binary reads</b> — {@link #readDocument(String, long)} reads any document's raw bytes and
  * media type, bounded, for an image a print template embeds.</li>
  * </ul>
@@ -48,9 +47,6 @@ class CmsStore {
 
     private static final Logger logger = LoggerFactory.getLogger(CmsStore.class);
 
-    private static final String TEMPLATES_ROOT = "Templates";
-    private static final String PRINT_SEGMENT = "Print";
-    private static final String TEMPLATE_EXTENSION = ".print";
     private static final String PATH_SEPARATOR = "/";
     private static final String DEFAULT_MEDIA_TYPE = "application/octet-stream";
 
@@ -64,7 +60,7 @@ class CmsStore {
      * @throws IOException on CMS access failure
      */
     void seed(String cmsPath, byte[] content) throws IOException {
-        String normalized = cmsPath.startsWith(PATH_SEPARATOR) ? cmsPath : PATH_SEPARATOR + cmsPath;
+        String normalized = normalize(cmsPath);
         int lastSeparator = normalized.lastIndexOf(PATH_SEPARATOR);
         String folderPath = normalized.substring(0, lastSeparator);
         String documentName = normalized.substring(lastSeparator + 1);
@@ -80,71 +76,97 @@ class CmsStore {
     }
 
     /**
-     * Lists the language codes for which the given entity has print templates — the child folder names
-     * of {@code Templates/<EntityName>/Print}.
+     * Lists the names of the folders directly under the given folder.
      *
-     * @param entityName the domain entity name
-     * @return the language codes, empty when the folder is missing
+     * @param folderPath the absolute CMS folder path
+     * @return the child folder names, empty when the folder is missing
      * @throws IOException on CMS access failure
      */
-    List<String> listLanguages(String entityName) throws IOException {
-        CmisSession session = CmisSessionFactory.getSession();
-        Optional<CmisFolder> printFolder = findFolder(session, printFolderPath(entityName));
-        if (printFolder.isEmpty()) {
-            return List.of();
-        }
-        List<String> languages = new ArrayList<>();
-        for (CmisObject child : printFolder.get()
-                                           .getChildren()) {
-            if (child instanceof CmisFolder) {
-                // The S3 CMS names a child folder with its trailing separator (en/) while the
-                // internal CMS does not - normalize so the language CODE contract is backend-neutral.
-                String code = child.getName();
-                while (code.endsWith(PATH_SEPARATOR)) {
-                    code = code.substring(0, code.length() - 1);
-                }
-                if (!code.isEmpty()) {
-                    languages.add(code);
-                }
-            }
-        }
-        return languages;
+    List<String> listFolders(String folderPath) throws IOException {
+        return listChildren(folderPath, CmisFolder.class);
     }
 
     /**
-     * Finds the print template for the given entity and language — the first {@code .print} document
-     * (or any document as fallback) under {@code Templates/<EntityName>/Print/<language>}.
+     * Lists the names of the documents directly under the given folder.
      *
-     * @param entityName the domain entity name
-     * @param language the language code
-     * @return the template source, empty when no template exists
+     * @param folderPath the absolute CMS folder path
+     * @return the child document names, empty when the folder is missing
      * @throws IOException on CMS access failure
      */
-    Optional<String> findTemplate(String entityName, String language) throws IOException {
+    List<String> listDocuments(String folderPath) throws IOException {
+        return listChildren(folderPath, CmisDocument.class);
+    }
+
+    /**
+     * Reads a document's whole content.
+     *
+     * @param cmsPath the absolute CMS path
+     * @return the content, empty when the path names no document
+     * @throws IOException on CMS access failure other than absence
+     */
+    Optional<byte[]> read(String cmsPath) throws IOException {
+        Optional<CmisDocument> document = findDocument(CmisSessionFactory.getSession(), normalize(cmsPath));
+        if (document.isEmpty()) {
+            return Optional.empty();
+        }
+        try (InputStream inputStream = document.get()
+                                               .getContentStream()
+                                               .getStream()) {
+            return Optional.of(inputStream.readAllBytes());
+        }
+    }
+
+    /**
+     * Writes a document, replacing an existing one at the same path. Missing parent folders are
+     * created.
+     *
+     * @param cmsPath the absolute CMS path
+     * @param content the raw content
+     * @throws IOException on CMS access failure
+     */
+    void write(String cmsPath, byte[] content) throws IOException {
+        String normalized = normalize(cmsPath);
         CmisSession session = CmisSessionFactory.getSession();
-        Optional<CmisFolder> languageFolder = findFolder(session, printFolderPath(entityName) + PATH_SEPARATOR + language);
-        if (languageFolder.isEmpty()) {
-            return Optional.empty();
+        Optional<CmisDocument> existing = findDocument(session, normalized);
+        if (existing.isPresent()) {
+            existing.get()
+                    .delete();
         }
-        CmisDocument template = null;
-        for (CmisObject child : languageFolder.get()
-                                              .getChildren()) {
-            if (child instanceof CmisDocument document) {
-                if (child.getName()
-                         .toLowerCase()
-                         .endsWith(TEMPLATE_EXTENSION)) {
-                    template = document;
-                    break;
-                }
-                if (template == null) {
-                    template = document;
-                }
-            }
+        int lastSeparator = normalized.lastIndexOf(PATH_SEPARATOR);
+        String folderPath = normalized.substring(0, lastSeparator);
+        CmisFolder folder = folderPath.isEmpty() ? session.getRootFolder() : ensureFolder(session, folderPath);
+        createDocument(session, folder, normalized.substring(lastSeparator + 1), content);
+    }
+
+    /**
+     * Renames a document within its folder.
+     *
+     * @param cmsPath the absolute CMS path of the document
+     * @param newName the new document name
+     * @throws IOException on CMS access failure, or when the path names no document
+     */
+    void rename(String cmsPath, String newName) throws IOException {
+        String normalized = normalize(cmsPath);
+        CmisDocument document = findDocument(CmisSessionFactory.getSession(), normalized).orElseThrow(
+                () -> new IOException("CMS document [" + normalized + "] does not exist"));
+        document.rename(newName);
+    }
+
+    /**
+     * Deletes a document.
+     *
+     * @param cmsPath the absolute CMS path
+     * @return true if a document was deleted, false when the path names none
+     * @throws IOException on CMS access failure
+     */
+    boolean delete(String cmsPath) throws IOException {
+        Optional<CmisDocument> document = findDocument(CmisSessionFactory.getSession(), normalize(cmsPath));
+        if (document.isEmpty()) {
+            return false;
         }
-        if (template == null) {
-            return Optional.empty();
-        }
-        return Optional.of(readContent(template));
+        document.get()
+                .delete();
+        return true;
     }
 
     /**
@@ -161,7 +183,7 @@ class CmsStore {
      * @throws IOException on CMS access failure other than absence
      */
     Optional<Content> readDocument(String cmsPath, long maxBytes) throws IOException {
-        String normalized = cmsPath.startsWith(PATH_SEPARATOR) ? cmsPath : PATH_SEPARATOR + cmsPath;
+        String normalized = normalize(cmsPath);
         CmisSession session = CmisSessionFactory.getSession();
         CmisObject object;
         try {
@@ -201,8 +223,43 @@ class CmsStore {
     record Content(byte[] content, String mediaType) {
     }
 
-    private String printFolderPath(String entityName) {
-        return PATH_SEPARATOR + TEMPLATES_ROOT + PATH_SEPARATOR + entityName + PATH_SEPARATOR + PRINT_SEGMENT;
+    private static String normalize(String cmsPath) {
+        return cmsPath.startsWith(PATH_SEPARATOR) ? cmsPath : PATH_SEPARATOR + cmsPath;
+    }
+
+    private <T extends CmisObject> List<String> listChildren(String folderPath, Class<T> kind) throws IOException {
+        Optional<CmisFolder> folder = findFolder(CmisSessionFactory.getSession(), normalize(folderPath));
+        if (folder.isEmpty()) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>();
+        for (CmisObject child : folder.get()
+                                      .getChildren()) {
+            if (kind.isInstance(child)) {
+                // The S3 CMS names a child folder with its trailing separator (en/) while the
+                // internal CMS does not - normalize so the names are backend-neutral.
+                String name = child.getName();
+                while (name.endsWith(PATH_SEPARATOR)) {
+                    name = name.substring(0, name.length() - 1);
+                }
+                if (!name.isEmpty()) {
+                    names.add(name);
+                }
+            }
+        }
+        return names;
+    }
+
+    private Optional<CmisDocument> findDocument(CmisSession session, String path) {
+        try {
+            if (session.getObjectByPath(path) instanceof CmisDocument document) {
+                return Optional.of(document);
+            }
+            return Optional.empty();
+        } catch (IOException ex) {
+            logger.debug("CMS document [{}] does not exist", LoggedPath.of(path), ex);
+            return Optional.empty();
+        }
     }
 
     /**
@@ -294,12 +351,5 @@ class CmsStore {
             return "image/svg+xml";
         }
         return DEFAULT_MEDIA_TYPE;
-    }
-
-    private String readContent(CmisDocument document) throws IOException {
-        try (InputStream inputStream = document.getContentStream()
-                                               .getStream()) {
-            return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-        }
     }
 }

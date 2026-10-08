@@ -217,6 +217,9 @@ document.addEventListener('alpine:init', () => {
     // Print (renders the CMS-seeded .print template server-side to PDF)
     printLangOpen: false,
     printLanguages: [],
+    printLang: '',
+    printTemplates: [],
+    printTemplate: '',
     printBusy: false,
     printError: null,
 
@@ -272,21 +275,39 @@ document.addEventListener('alpine:init', () => {
         console.error('Print languages lookup failed', e);
       }
       this.printBusy = false;
-      if (languages.length > 1) {
-        // Several templates: ALWAYS ask (auto-printing the configured language here suppressed the
-        // dialog entirely, since the locale store always resolves to a value - a shipped regression).
-        // The Region & Language setting only pre-sorts its language first as the suggested default.
-        const configured = (Alpine.store('locale') || {}).value;
-        this.printLanguages = languages.slice().sort((a, b) =>
-          (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
+      // The Region & Language setting only pre-sorts its language first as the suggested default;
+      // zero languages still attempts the default, which the server answers with a clear 404.
+      const configured = (Alpine.store('locale') || {}).value;
+      this.printLanguages = languages.slice().sort((a, b) =>
+        (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
+      await this.selectPrintLanguage(languages.length ? this.printLanguages[0].code : 'en');
+      if (this.printLanguages.length > 1 || this.printTemplates.length > 1) {
+        // Several languages or layouts: ALWAYS ask (auto-printing the configured language here
+        // suppressed the dialog entirely, since the locale store always resolves to a value - a
+        // shipped regression). The layout is preselected to the one the tenant prints with.
         this.printLangOpen = true;
       } else {
-        // zero languages still attempts the default: the server answers with a clear 404
-        await this.printDoc(languages.length === 1 ? languages[0].code : 'en');
+        await this.printDoc(this.printLang, this.printTemplate);
       }
     },
 
-    async printDoc(lang) {
+    // The layouts of a print language - the tenant's print template catalogue (#7755) - with the
+    // active one preselected: the layout the tenant configured, else the newest shipped version.
+    // Picking another prints this one document with it; the tenant default stays as it is.
+    async selectPrintLanguage(lang) {
+      this.printLang = lang;
+      let templates = [];
+      try {
+        templates = (await App.services.api.get('/services/print/${name}/templates?lang=' + encodeURIComponent(lang), { baseUrl: '' })) || [];
+      } catch (e) {
+        console.error('Print templates lookup failed', e);
+      }
+      this.printTemplates = templates;
+      const active = templates.find((t) => t.active);
+      this.printTemplate = active ? active.name : '';
+    },
+
+    async printDoc(lang, template) {
       this.printError = null;
       this.printBusy = true;
       try {
@@ -299,7 +320,8 @@ document.addEventListener('alpine:init', () => {
         // Method, Status, ...) would render in the UI locale while the template is in the print language.
         const payload = await App.services.api.get(
           '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '', language: lang });
-        const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
+        const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang)
+          + (template ? '&template=' + encodeURIComponent(template) : ''), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

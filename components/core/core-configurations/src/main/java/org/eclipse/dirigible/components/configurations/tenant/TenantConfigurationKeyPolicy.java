@@ -19,11 +19,13 @@ import org.springframework.stereotype.Component;
  * Decides which configuration keys a tenant is allowed to override through its per-tenant
  * configuration.
  * <p>
- * This is an explicit white-list of full configuration keys (exact match, no wildcards). A key is
- * injectable only when it is one of {@link #ALLOWED_KEYS}; everything else is stored but inert, so
+ * This is an explicit white-list of full configuration keys (exact match, no wildcards), plus a
+ * short list of key prefixes for settings that exist once per platform object rather than once per
+ * tenant. A key is injectable only when it is one of {@link #ALLOWED_KEYS} or starts with one of
+ * {@link #ALLOWED_PREFIXES} (and names something after it); everything else is stored but inert, so
  * a tenant can never shadow infrastructure keys (database, repository, security, multi-tenancy
- * plumbing, ...). For now only the branding properties are exposed; add concrete keys to
- * {@link #ALLOWED_KEYS} as more become safe to override per tenant.
+ * plumbing, ...). Add concrete keys to {@link #ALLOWED_KEYS} as more become safe to override per
+ * tenant; add a prefix only for a family of keys whose members cannot be enumerated in advance.
  */
 @Component
 class TenantConfigurationKeyPolicy {
@@ -63,12 +65,41 @@ class TenantConfigurationKeyPolicy {
             "DIRIGIBLE_APP_BASE_URL");
 
     /**
+     * The key prefixes a tenant may override every member of. Each prefix names a family of keys whose
+     * members follow the objects the tenant's applications declare, so they cannot be listed here.
+     */
+    private static final List<String> ALLOWED_PREFIXES = List.of( //
+            // The print template a document type prints with, per language:
+            // DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG> = acme-blue | standard@1.28.0. One key per
+            // document type and language the tenant chose a layout for (engine-document).
+            "DIRIGIBLE_PRINT_TEMPLATE_");
+
+    /**
      * The full list of configuration keys a tenant may override, in display order.
      *
      * @return the allowed keys
      */
     List<String> allowedKeys() {
         return ALLOWED_KEYS;
+    }
+
+    /**
+     * Checks whether a key belongs to one of the allowed key families, as opposed to being one of the
+     * exact allowed keys.
+     *
+     * @param key the configuration key
+     * @return true if the key starts with an allowed prefix and names something after it
+     */
+    boolean isPrefixed(String key) {
+        if (key == null) {
+            return false;
+        }
+        for (String prefix : ALLOWED_PREFIXES) {
+            if (key.length() > prefix.length() && key.startsWith(prefix)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -88,13 +119,13 @@ class TenantConfigurationKeyPolicy {
     }
 
     /**
-     * Checks whether a single key is one of the allowed keys.
+     * Checks whether a single key is one of the allowed keys or a member of an allowed key family.
      *
      * @param key the configuration key
      * @return true if the tenant may override the key
      */
     boolean isInjectable(String key) {
-        return key != null && ALLOWED_KEYS.contains(key);
+        return key != null && (ALLOWED_KEYS.contains(key) || isPrefixed(key));
     }
 
 }

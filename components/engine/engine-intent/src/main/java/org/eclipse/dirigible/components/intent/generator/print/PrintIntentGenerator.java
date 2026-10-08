@@ -32,11 +32,11 @@ import org.springframework.stereotype.Component;
  * Emits one standard print template per document (header-items) entity — the document-template DSL
  * counterpart of the entity's Harmonia document view. The file is written into the project's
  * {@code doc/} folder at the exact path it must occupy in the CMS
- * ({@code doc/Templates/<Entity>/Print/en/standard.print}): on publish the generic
- * {@code CmsSeedSynchronizer} mirrors everything under {@code doc/} into the tenant-scoped CMS
- * (create-if-absent), so this becomes {@code Templates/<Entity>/Print/en/standard.print} where
- * business users download and upload customizations through the Documents perspective; the
- * generated file is only the never-customized default.
+ * ({@code doc/Templates/<Entity>/Print/en/standard.print}): on publish engine-document's
+ * {@code PrintTemplateSynchronizer} seeds it into every tenant's CMS as the immutable version
+ * {@code Templates/<Entity>/Print/en/standard@<version>.print}, beside the versions shipped before;
+ * a tenant customises a duplicate of it and selects which layout prints (Settings → Print
+ * Templates).
  *
  * <p>
  * The template is written <b>once and never regenerated over</b> (via

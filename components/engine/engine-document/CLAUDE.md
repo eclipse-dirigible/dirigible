@@ -22,7 +22,13 @@ path under `doc/` (the `Templates/<Entity>/Print/en/standard.print` convention n
 generator, not the synchronizer). Do **not** drop model artefacts (`.csvim`, `.bpmn`, …) under `doc/`
 expecting their normal engines — under `doc/` they are opaque content.
 
-Three rules that must never regress:
+**Print templates are the exception: they are versions of a catalogue, not plain seeds (#7755).**
+`doc/Templates/<Entity>/Print/<lang>/<name>.print` is seeded by `PrintTemplateSynchronizer`
+(`SynchronizersOrder.PRINT_TEMPLATE = 525`, multitenant), and `CmsSeedSynchronizer.isAccepted` skips
+exactly that shape (`PrintTemplateSynchronizer.isShippedTemplate`), so the two never both seed one
+file. See "The print template catalogue" below.
+
+Three rules that must never regress (for the generic seed - the catalogue has its own, below):
 
 1. **Create-if-absent, never overwrite.** The CMS copy is the business user's customization
    surface (download/edit/upload through the Documents perspective). A re-publish or regeneration
@@ -37,15 +43,54 @@ Multilanguage is folder-based: additional languages are simply more
 `doc/Templates/<Entity>/Print/<lang>/` files (only `en` is generated; the others are authored or
 uploaded). The Print button asks which to use when several exist.
 
+## The print template catalogue (`PrintTemplateCatalog`)
+
+All print-template knowledge lives in the print engine; **`CmsStore`, the generic CMS seed and the
+Documents perspective know nothing about templates, versions or the active one** - no marker files,
+no CMIS properties. A language folder holds two kinds, told apart by the name alone
+(`PrintTemplateName`):
+
+```
+Templates/SalesInvoice/Print/en/
+  standard@1.28.0.print     shipped version - immutable, written only by the synchronizer
+  standard@1.30.0.print     shipped version
+  acme-blue.print           tenant template - editable, records <!-- derived-from: standard@1.28.0 -->
+```
+
+- **Version** = the project's `project.json` `version` when valid, else the first 8 hex digits of the
+  content SHA-256. Per tenant the seed adds `<name>@<version>.print` when missing, **converges** an
+  existing one whose bytes drifted (immutability by convergence, not CMS permissions), adds nothing
+  when the newest shipped version already has the same bytes, and never touches a tenant template.
+- **Migration**: the first seed per tenant renames a legacy `<name>.print` (the create-if-absent
+  era) to the version when its bytes equal the shipped ones, else to `<name>-custom` and selects it -
+  no tenant loses a layout and no tenant's output changes. "First" = no `<name>@*` exists yet; after
+  that a `<name>.print` is the tenant's own.
+- **Selection** is the tenant configuration `DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG>`
+  (`PrintTemplateSelection`; the key policy admits the family by prefix). It is read through
+  `TenantConfigurationService` directly, so a render outside a request (`attach: print`, a snapshot)
+  follows it too. **Resolution**: `template` request parameter → configuration (a missing name logs
+  WARN and falls through) → newest shipped version → the first tenant template (a language the tenant
+  uploaded itself). Newest: a release version (`\d+.\d+...`) beats a hash, release versions compare
+  numerically, and among hashes the one the registry ships now (`PrintTemplateSeed` rows) wins.
+- The artefact table is `DIRIGIBLE_PRINT_TEMPLATE_SEEDS` (content inline binary, as for `CmsSeed`).
+  Deleting the shipped file removes the row only; its versions stay in every tenant's catalogue.
+
 ## Endpoints
 
 - `GET /services/print/{entity}/languages` → `[{"code":"en","name":"English"}, ...]` — the child
   folders of `Templates/{entity}/Print`, display names via `Locale.forLanguageTag(code)
   .getDisplayLanguage(Locale.ENGLISH)` (code fallback). Empty array when the folder is missing.
-- `POST /services/print/{entity}?lang=en` with `{"document": {...}, "items": [...]}` →
-  `application/pdf` (inline). Resolves the first `*.print` under `Templates/{entity}/Print/{lang}/`
-  (404 with a clear message when absent), then `DocumentParser → DataBinder → XslFoRenderer →
-  PDFFacade.generate(fo, "<data/>")`.
+- `POST /services/print/{entity}?lang=en&template=` with `{"document": {...}, "items": [...]}` →
+  `application/pdf` (inline). Resolves the template through the catalogue (404 with a clear message
+  when absent), then `DocumentParser → DataBinder → XslFoRenderer → PDFFacade.generate(fo, "<data/>")`.
+- `GET /services/print/document-types`; `GET /{entity}/templates?lang=` (the catalogue: name, kind,
+  version, derivedFrom, active, newer); `GET|PUT|DELETE /{entity}/templates/{name}?lang=` (raw
+  content / write a tenant template - 409 for a shipped version, 400 when it does not parse / delete
+  - 409 for a shipped or the active one); `POST /{entity}/templates/{name}/duplicate?lang=&as=`.
+  Writes are ADMINISTRATOR/OPERATOR. The active selection is written through
+  `PUT /services/core/configurations/tenant`, not here. The IDE page is
+  `components/ui/settings-print-templates` (Settings → Print Templates); the generated Print dialog
+  offers the layouts of the chosen language, preselected to the active one.
 
 **The client feeds this endpoint from a server-side feeder, not from its own screen state.** The
 Harmonia document/manage page first GETs the generated `…PrintFeeder/{id}` (client-Java), which
@@ -72,10 +117,11 @@ formats in the form money pattern `### ### ### ##0.00`).
   to accept any regular file whose path contains a `/doc/` segment (and `getFileExtension()` returns
   `""`, unused since the override replaces the default extension match). The CMS path is the
   location from `/doc/` down (`toCmsPath`).
-- `CmsStore` is the **only** CMS surface, with two sides: **seed** — `seed(cmsPath, bytes)` (generic,
-  create-if-absent, `ensureFolder` walks/creates one level at a time since the engine
+- `CmsStore` is the **only** CMS surface, and a plain file store: **seed** — `seed(cmsPath, bytes)`
+  (generic, create-if-absent, `ensureFolder` walks/creates one level at a time since the engine
   `CmisFolder.createFolder` is single-level; a media type is inferred from the file extension); and
-  **print reads** — `listLanguages` / `findTemplate` (used by `PrintEndpoint`). A missing path is the
+  generic `listFolders` / `listDocuments` / `read` / `write` / `rename` / `delete` that
+  `PrintTemplateCatalog` builds on. A missing path is the
   `IOException` `getObjectByPath` throws (logged at DEBUG with the throwable). Writes go through the
   raw engine-cms interfaces (`CmisSessionFactory.getSession()`), which bypass CMS role checks —
   correct for a server-side seeder, same as `data-processes`' `BaseExportTask`.

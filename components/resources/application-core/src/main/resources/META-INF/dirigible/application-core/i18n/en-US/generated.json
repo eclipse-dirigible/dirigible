@@ -45,6 +45,7 @@
       "deleteLineConfirm": "Delete this line item? This cannot be undone.",
       "fillMonthHint": "One line is created for every working day (Mon-Fri) of the picked month; days that already have a line are skipped.",
       "printLanguage": "Choose the template language.",
+      "printLayout": "Choose the layout.",
       "noDataTitle": "No data",
       "reportNoRows": "The {{name}} report returned no rows.",
       "detailSelectRecord": "Select a record to get a list of it's details.",

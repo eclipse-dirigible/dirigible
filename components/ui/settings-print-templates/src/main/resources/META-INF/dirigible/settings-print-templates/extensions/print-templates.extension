@@ -1,0 +1,5 @@
+{
+    "module": "settings-print-templates/configs/print-templates.js",
+    "extensionPoint": "platform-settings",
+    "description": "Print templates settings view"
+}

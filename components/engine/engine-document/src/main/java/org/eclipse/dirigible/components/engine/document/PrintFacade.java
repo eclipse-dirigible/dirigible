@@ -23,7 +23,8 @@ import com.google.gson.reflect.TypeToken;
  * Server-side print rendering for callers that already hold the data — chiefly the generated
  * snapshot delegate, which renders a document to an immutable PDF copy on issue. It is the
  * server-initiated counterpart to {@code PrintEndpoint}: where the endpoint takes the data the
- * browser POSTs, this resolves the entity's CMS print template for the language and renders the
+ * browser POSTs, this resolves the entity's active print template for the language (the tenant's
+ * selection, else the newest shipped version - see {@link PrintTemplateCatalog}) and renders the
  * supplied data map to PDF.
  *
  * <p>
@@ -39,11 +40,11 @@ public class PrintFacade {
     private static final Gson GSON = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
                                                       .create();
 
-    private final CmsStore cmsStore;
+    private final PrintTemplateCatalog catalog;
     private final PrintImageResolver imageResolver;
 
-    PrintFacade(CmsStore cmsStore, PrintImageResolver imageResolver) {
-        this.cmsStore = cmsStore;
+    PrintFacade(PrintTemplateCatalog catalog, PrintImageResolver imageResolver) {
+        this.catalog = catalog;
         this.imageResolver = imageResolver;
     }
 
@@ -57,9 +58,13 @@ public class PrintFacade {
      * @throws IOException if no template exists for the entity/language or the CMS read fails
      */
     public byte[] renderToPdf(String entity, String language, Map<String, Object> data) throws IOException {
-        String template = cmsStore.findTemplate(entity, language)
-                                  .orElseThrow(() -> new IOException(
-                                          "No print template for entity [" + entity + "] and language [" + language + "]"));
+        String template;
+        try {
+            template = catalog.resolve(entity, language, null)
+                              .source();
+        } catch (PrintTemplateException e) {
+            throw new IOException(e.getMessage(), e);
+        }
         return PrintRenderer.renderPdf(template, language, data, imageResolver);
     }
 

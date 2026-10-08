@@ -104,4 +104,9 @@ public interface SynchronizersOrder {
     /** The CMS seed (files under a project's {@code doc/} folder, seeded into the CMS). */
     int CMS_SEED = 520;
 
+    /**
+     * The shipped print templates (seeded into the CMS as versions of the print template catalogue).
+     */
+    int PRINT_TEMPLATE = 525;
+
 }

@@ -159,6 +159,7 @@
         <module>ui/perspective-processes</module>
         <module>ui/perspective-tracing</module>
         <module>ui/settings-locale</module>
+        <module>ui/settings-print-templates</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
         <module>ui/view-projects</module>
@@ -918,6 +919,12 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-settings-locale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-settings-print-templates</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

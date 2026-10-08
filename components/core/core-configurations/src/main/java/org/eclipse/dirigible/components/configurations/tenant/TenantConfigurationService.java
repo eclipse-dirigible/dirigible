@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.configurations.tenant;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -103,19 +104,25 @@ public class TenantConfigurationService {
 
     /**
      * Lists the predefined (allow-listed) configuration keys together with the current tenant's stored
-     * value for each - {@code value} is {@code null} when the tenant has not set that key. This is what
-     * the settings UI renders: the fixed set of overridable properties, not just the ones already
-     * stored.
+     * value for each - {@code value} is {@code null} when the tenant has not set that key - followed by
+     * the stored members of the allowed key families (e.g. {@code DIRIGIBLE_PRINT_TEMPLATE_*}), which
+     * cannot be listed before the tenant sets them. This is what the settings UI renders: the fixed set
+     * of overridable properties, not just the ones already stored.
      *
-     * @return one entry per allowed key, in the policy's display order
+     * @return one entry per allowed key in the policy's display order, then the stored family members
      * @throws SQLException if the read fails
      */
     public List<TenantConfiguration> listPredefinedForCurrentTenant() throws SQLException {
         Map<String, String> stored = load();
-        return keyPolicy.allowedKeys()
-                        .stream()
-                        .map(key -> new TenantConfiguration(key, stored.get(key)))
-                        .toList();
+        List<TenantConfiguration> predefined = new ArrayList<>();
+        keyPolicy.allowedKeys()
+                 .forEach(key -> predefined.add(new TenantConfiguration(key, stored.get(key))));
+        stored.entrySet()
+              .stream()
+              .filter(entry -> keyPolicy.isPrefixed(entry.getKey()))
+              .sorted(Map.Entry.comparingByKey())
+              .forEach(entry -> predefined.add(new TenantConfiguration(entry.getKey(), entry.getValue())));
+        return predefined;
     }
 
     /**
