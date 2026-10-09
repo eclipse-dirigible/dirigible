@@ -371,7 +371,7 @@ Process Inbox (`/inbox`) and Documents (`/documents`).
 
 ### Embedding (Phase 1 — no CDN)
 
-Alpine `3.17.4`, Harmonia `3.5.1`, Lucide `1.48.0` and Pinecone Router `7.6.0` are **webjars** (served
+Alpine `3.17.4`, Harmonia `3.6.0`, Lucide `1.48.0` and Pinecone Router `7.6.0` are **webjars** (served
 version-less via webjars-locator at `/webjars/...`; the versions are the `*.version` properties in the
 root pom). The chart.js webjar was dropped with the AngularJS dashboard shell (reports use Harmonia's
 native `x-h-chart-*`), and the once-vendored Pinecone Router copy under `application-core/.../vendor/`

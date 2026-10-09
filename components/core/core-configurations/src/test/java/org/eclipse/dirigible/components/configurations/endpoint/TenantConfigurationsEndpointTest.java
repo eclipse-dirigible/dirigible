@@ -44,6 +44,7 @@ public class TenantConfigurationsEndpointTest {
         service = mock(TenantConfigurationService.class);
         when(service.listForCurrentTenant()).thenReturn(STORED);
         when(service.listPredefinedForCurrentTenant()).thenReturn(STORED);
+        when(service.listPredefinedForCurrentTenant(any())).thenReturn(STORED);
         endpoint = new TenantConfigurationsEndpoint(service);
     }
 
@@ -55,7 +56,13 @@ public class TenantConfigurationsEndpointTest {
 
     @Test
     public void findPredefinedMasksSensitiveValues() {
-        assertMasked(endpoint.findPredefined()
+        assertMasked(endpoint.findPredefined(null)
+                             .getBody());
+    }
+
+    @Test
+    public void findPredefinedOfAGroupMasksSensitiveValues() {
+        assertMasked(endpoint.findPredefined(List.of("branding"))
                              .getBody());
     }
 

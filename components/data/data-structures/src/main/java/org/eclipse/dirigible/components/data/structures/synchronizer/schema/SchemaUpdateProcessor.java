@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.data.structures.synchronizer.schema;
 
-import java.sql.Connection;
 import java.sql.SQLException;
 
 import org.eclipse.dirigible.components.data.structures.domain.Schema;
@@ -34,57 +33,57 @@ public class SchemaUpdateProcessor {
     private static final Logger logger = LoggerFactory.getLogger(SchemaUpdateProcessor.class);
 
     /**
-     * Execute the corresponding statement.
+     * Execute the corresponding statement. A refused table is logged and skipped, the next one starts
+     * on a usable connection, and the refused tables are reported once every other table, foreign key
+     * and view had its turn (#7766).
      *
-     * @param connection the connection
+     * @param connection the connection of the schema pass
      * @param schemaModel the schema model
-     * @throws SQLException the SQL exception
+     * @throws SQLException naming the refused tables, or when no connection can be acquired
      */
-    public static void execute(Connection connection, Schema schemaModel) throws SQLException {
+    public static void execute(SchemaPassConnection connection, Schema schemaModel) throws SQLException {
+        RefusedTables refusedTables = new RefusedTables();
 
         for (Table tableModel : schemaModel.getTables()) {
             try {
-                if (!SqlFactory.getNative(connection)
-                               .existsTable(connection, tableModel.getName())) {
-                    try {
-                        TableCreateProcessor.execute(connection, tableModel, true);
-                    } catch (Exception e) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error(e.getMessage(), e);
-                        }
-                    }
+                if (!SqlFactory.getNative(connection.get())
+                               .existsTable(connection.get(), tableModel.getName())) {
+                    TableCreateProcessor.execute(connection.get(), tableModel, true);
                 } else {
-                    TableAlterProcessor.execute(connection, tableModel);
+                    TableAlterProcessor.execute(connection.get(), tableModel);
                 }
-            } catch (SQLException e) {
-                if (logger.isErrorEnabled()) {
-                    logger.error(e.getMessage(), e);
-                }
+            } catch (SQLException | RuntimeException e) {
+                logger.error("Failed to create or alter table [{}] of schema [{}]", tableModel.getName(), schemaModel.getName(), e);
+                refusedTables.add(tableModel.getName(), e);
+                connection.recoverAfterRefusal();
             }
         }
 
         for (Table tableModel : schemaModel.getTables()) {
             try {
-                TableForeignKeysDropProcessor.execute(connection, tableModel);
-                TableForeignKeysCreateProcessor.execute(connection, tableModel);
+                TableForeignKeysDropProcessor.execute(connection.get(), tableModel);
+                TableForeignKeysCreateProcessor.execute(connection.get(), tableModel);
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(e.getMessage(), e);
                 }
+                connection.recoverAfterRefusal();
             }
         }
 
         for (View viewModel : schemaModel.getViews()) {
             try {
-                ViewDropProcessor.execute(connection, viewModel);
-                ViewCreateProcessor.execute(connection, viewModel);
+                ViewDropProcessor.execute(connection.get(), viewModel);
+                ViewCreateProcessor.execute(connection.get(), viewModel);
             } catch (SQLException e) {
                 if (logger.isErrorEnabled()) {
                     logger.error(e.getMessage(), e);
                 }
+                connection.recoverAfterRefusal();
             }
         }
 
+        refusedTables.throwIfAny(schemaModel);
     }
 
 }

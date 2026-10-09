@@ -4,6 +4,7 @@
   "description": "Eclipse Dirigible CLI",
   "type": "module",
   "scripts": {
+    "postinstall": "node postinstall.js",
     "dirigible": "node ./bin/dirigible.js"
   },
   "bin": {
@@ -14,7 +15,9 @@
     "url": "git+https://github.com/eclipse-dirigible/dirigible.git"
   },
   "files": [
-    "bin"
+    "bin",
+    "lib",
+    "postinstall.js"
   ],
   "keywords": [
     "dirigible-cli",

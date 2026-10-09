@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.data.structures.service.SchemaService;
 import org.eclipse.dirigible.components.data.structures.service.TableService;
 import org.eclipse.dirigible.components.data.structures.service.ViewService;
 import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaCreateProcessor;
+import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaPassConnection;
 import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaUpdateProcessor;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
@@ -38,7 +39,6 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -588,16 +588,21 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
             return false;
         }
 
-        try (Connection connection = dataSource.getConnection()) {
+        try (SchemaPassConnection connection = new SchemaPassConnection(dataSource)) {
             switch (flow) {
                 case CREATE:
-                    if (schema.getLifecycle()
-                              .equals(ArtefactLifecycle.NEW)) {
+                    // A FAILED schema is retried, as a FAILED view is (#6942): CREATED-with-error parked
+                    // a schema whose tables the database refused, so nothing ever attempted them again
+                    // (#7766).
+                    if (ArtefactLifecycle.NEW.equals(schema.getLifecycle()) || ArtefactLifecycle.FAILED.equals(schema.getLifecycle())) {
                         try {
                             executeSchemaCreate(connection, schema);
                             callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
-                        } catch (Exception e) {
-                            callback.registerState(this, wrapper, ArtefactLifecycle.CREATED, e);
+                        } catch (SQLException | RuntimeException e) {
+                            logger.error("Failed to create schema [{}]", schema.getName(), e);
+                            callback.addError(e.getMessage());
+                            callback.registerState(this, wrapper, ArtefactLifecycle.FAILED, e);
+                            return false;
                         }
                     }
                     break;
@@ -639,7 +644,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * @param schemaModel the schema model
      * @throws SQLException the SQL exception
      */
-    public void executeSchemaCreate(Connection connection, Schema schemaModel) throws SQLException {
+    public void executeSchemaCreate(SchemaPassConnection connection, Schema schemaModel) throws SQLException {
         SchemaCreateProcessor.execute(connection, schemaModel);
     }
 
@@ -650,12 +655,12 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * @param schemaModel the schema model
      * @throws SQLException the SQL exception
      */
-    public void executeSchemaUpdate(Connection connection, Schema schemaModel) throws SQLException {
+    public void executeSchemaUpdate(SchemaPassConnection connection, Schema schemaModel) throws SQLException {
         if (logger.isInfoEnabled()) {
             logger.info("Processing Update Schema: " + schemaModel.getName());
         }
-        if (SqlFactory.getNative(connection)
-                      .existsSchema(connection, schemaModel.getName())) {
+        if (SqlFactory.getNative(connection.get())
+                      .existsSchema(connection.get(), schemaModel.getName())) {
             SchemaUpdateProcessor.execute(connection, schemaModel);
         } else {
             executeSchemaCreate(connection, schemaModel);
@@ -669,7 +674,7 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
      * @param schemaModel the schema model
      * @throws SQLException the SQL exception
      */
-    public void executeSchemaDrop(Connection connection, Schema schemaModel) throws SQLException {
+    public void executeSchemaDrop(SchemaPassConnection connection, Schema schemaModel) throws SQLException {
         // SchemaDropProcessor.execute(connection, schemaModel);
     }
 

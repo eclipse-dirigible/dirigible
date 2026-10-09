@@ -25,6 +25,31 @@ jobs:
       - name: Validate Java code formatting
         run: mvn -T 1C formatter:validate
 
+  # npm refuses a large package (E413), and only the release publishes it: #7708 grew the CLI jar
+  # the package then bundled to 352 MB and the 14.77.0 release was the first to notice (#7771).
+  # The packages download their jars at install, so anything near the limit is a regression.
+  npm-package-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+
+      - name: Check the npm package sizes
+        run: |
+          limit=1048576
+          for package in npm/dirigible npm/dirigible-cli; do
+            size=$(cd "$package" && npm pack --dry-run --json --ignore-scripts | node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(0, "utf8"))[0].unpackedSize))')
+            echo "$package: $size bytes unpacked"
+            if [ "$size" -gt "$limit" ]; then
+              echo "::error title=npm package too large::$package unpacks to $size bytes, above $limit - a jar must be downloaded at install, not bundled (#7771)"
+              exit 1
+            fi
+          done
+
   # The release build runs the default profile's attach-javadocs execution, which fails on any Javadoc
   # error (a bare "&" in a comment stopped the 14.77.0 release, run 37765397470). Every other build
   # skips Javadoc, so the release was the first to see it. This runs the same execution without the

@@ -9,28 +9,19 @@
  */
 package org.eclipse.dirigible.components.configurations.service;
 
-import java.util.regex.Pattern;
+import org.eclipse.dirigible.commons.config.SensitiveConfigs;
 
 /**
  * Classifies configuration keys as sensitive and masks their values before they leave the server.
  * Every configuration endpoint that returns values passes them through
  * {@link #mask(String, String)}, so a secret never travels in a response body, whichever source
- * (runtime, environment, deployment, module, tenant) it was set in.
+ * (runtime, environment, deployment, module, tenant) it was set in. The classification itself is
+ * {@link SensitiveConfigs}, shared with the configuration descriptors.
  */
 public final class SensitiveConfigurations {
 
     /** The value returned in place of a set sensitive value. */
-    public static final String MASK = "********";
-
-    /**
-     * Key names that carry a credential: passwords, secrets, API keys, tokens and signing keys, the
-     * base64 basic-auth user, and client/broker URIs, which embed {@code user:password@host}.
-     * {@code TOKEN} matches only as the last segment, so {@code *_MAX_TOKENS} or {@code *_TOKEN_URL}
-     * stay readable.
-     */
-    private static final Pattern SENSITIVE_KEY =
-            Pattern.compile("PASSWORD|PASSWD|SECRET|API_KEY|(^|_)TOKEN$|_KEY$|CLIENT_URI$|BROKER_URL$|^DIRIGIBLE_BASIC_USERNAME$",
-                    Pattern.CASE_INSENSITIVE);
+    public static final String MASK = SensitiveConfigs.MASK;
 
     private SensitiveConfigurations() {}
 
@@ -41,8 +32,7 @@ public final class SensitiveConfigurations {
      * @return true if the value must never be returned in clear
      */
     public static boolean isSensitive(String key) {
-        return key != null && SENSITIVE_KEY.matcher(key)
-                                           .find();
+        return SensitiveConfigs.isSensitive(key);
     }
 
     /**
@@ -54,10 +44,7 @@ public final class SensitiveConfigurations {
      * @return {@link #MASK}, the value itself, or {@code null}
      */
     public static String mask(String key, String value) {
-        if (value == null || !isSensitive(key)) {
-            return value;
-        }
-        return MASK;
+        return SensitiveConfigs.mask(key, value);
     }
 
     /**
@@ -69,7 +56,7 @@ public final class SensitiveConfigurations {
      * @return true if the write should keep the stored value
      */
     public static boolean isMaskEcho(String key, String value) {
-        return MASK.equals(value) && isSensitive(key);
+        return SensitiveConfigs.isMaskEcho(key, value);
     }
 
 }

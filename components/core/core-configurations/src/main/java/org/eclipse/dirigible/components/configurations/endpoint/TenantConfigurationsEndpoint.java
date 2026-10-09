@@ -12,8 +12,10 @@ package org.eclipse.dirigible.components.configurations.endpoint;
 import java.sql.SQLException;
 import java.util.List;
 
+import org.eclipse.dirigible.commons.config.ConfigDescriptors;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.configurations.domain.TenantConfiguration;
+import org.eclipse.dirigible.components.configurations.domain.TenantConfigurationGroup;
 import org.eclipse.dirigible.components.configurations.service.SensitiveConfigurations;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.springframework.http.HttpStatus;
@@ -64,12 +66,49 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
      * Lists the predefined (overridable) configuration keys with the current tenant's value for each
      * ({@code value} is {@code null} when unset). This is the fixed set the settings UI renders.
      *
+     * @param group the group ids to keep (repeatable or comma-separated); all keys when absent
      * @return the predefined entries
      */
     @GetMapping("/predefined")
-    public ResponseEntity<List<TenantConfiguration>> findPredefined() {
+    public ResponseEntity<List<TenantConfiguration>> findPredefined(@RequestParam(name = "group", required = false) List<String> group) {
         try {
-            return ResponseEntity.ok(masked(tenantConfigurationService.listPredefinedForCurrentTenant()));
+            if (group == null || group.isEmpty()) {
+                return ResponseEntity.ok(masked(tenantConfigurationService.listPredefinedForCurrentTenant()));
+            }
+            return ResponseEntity.ok(
+                    masked(tenantConfigurationService.listPredefinedForCurrentTenant(ConfigurationsEndpoint.groups(group))));
+        } catch (SQLException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
+        }
+    }
+
+    /**
+     * The groups holding tenant-overridable keys, with the number of those keys and of the ones the
+     * current tenant sets.
+     *
+     * @return the groups, in display order
+     */
+    @GetMapping("/groups")
+    public ResponseEntity<List<ConfigDescriptors.GroupSummary>> findGroups() {
+        try {
+            return ResponseEntity.ok(tenantConfigurationService.listGroupsForCurrentTenant());
+        } catch (SQLException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
+        }
+    }
+
+    /**
+     * The tenant-overridable keys, grouped, each with the tenant's value and the platform value it
+     * overrides.
+     *
+     * @param group the group ids to keep (repeatable or comma-separated); all groups when absent
+     * @return the groups
+     */
+    @GetMapping("/descriptors")
+    public ResponseEntity<List<TenantConfigurationGroup>> findDescriptors(
+            @RequestParam(name = "group", required = false) List<String> group) {
+        try {
+            return ResponseEntity.ok(tenantConfigurationService.describeForCurrentTenant(ConfigurationsEndpoint.groups(group)));
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
         }

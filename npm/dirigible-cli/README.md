@@ -22,6 +22,10 @@ workflows.
 There are two primary ways to install and use the Dirigible CLI: globally for system-wide access, or locally as a
 development dependency for project-specific use.
 
+The CLI JAR is not part of the package: the install downloads the `dirigible-cli` executable JAR of the same version from
+Maven Central and verifies its SHA-256 checksum. When the install skips scripts (`--ignore-scripts`, pnpm) or the
+download fails, the first run of `dirigible` downloads it instead.
+
 ### 1. Global Installation (Recommended for CLI Tools)
 
 Install the CLI globally using `npm` to run the `dirigible` command directly from any directory in your terminal.

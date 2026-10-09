@@ -16,7 +16,9 @@ document.addEventListener('alpine:init', () => {
     state: 'loading',
     error: null,
     items: [],
-    // Config object for x-h-slot-picker (shorthand start/end/step + disabled weekdays).
+    // Config object for x-h-slot-picker (shorthand start/end/step + disabled weekdays). fillEmptyDays
+    // gives every day `slots` does not list - all of them while nothing is booked - the shorthand
+    // schedule; without it an empty `slots` array means no slots at all (Harmonia 3.6.0+).
     slotCfg: {
       start: '${slotOpen}',
       end: '${slotClose}',
@@ -24,6 +26,7 @@ document.addEventListener('alpine:init', () => {
 #if($slotDisabledDays)
       disabledDays: [${slotDisabledDays}],
 #end
+      fillEmptyDays: true,
       slots: []
     },
 

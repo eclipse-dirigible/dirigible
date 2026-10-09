@@ -29,7 +29,7 @@ Area-specific guidance. **Read the file before changing anything in the area it 
 | Topic | Read before touching |
 | ----- | -------------------- |
 | [`intent-dsl-features.md`](.claude/docs/intent-dsl-features.md) | any intent DSL construct: `engine-intent`, its generators, the templates it drives |
-| [`harmonia-ui.md`](.claude/docs/harmonia-ui.md) | `template-application-ui-harmonia-java`, `template-form-builder-harmonia`, `application-core/shell/` |
+| [`harmonia-ui.md`](.claude/docs/harmonia-ui.md) | `template-application-ui-harmonia-java`, `template-form-builder-harmonia`, `application-core/shell/`, any `x-h-*` markup, a `harmonia.version` bump, or a suspected Harmonia bug (it is fixed upstream, never here) |
 | [`shells.md`](.claude/docs/shells.md) | `resources-application`, `resources-builder`, `resources-monitoring`, perspective groups |
 | [`blimpkit.md`](.claude/docs/blimpkit.md) | AngularJS IDE views/perspectives (`components/ui/*`, `bk-*` markup, `platform-links`) |
 | [`tenants.md`](.claude/docs/tenants.md) | `core-tenants`, tenant resolution/selection, `security-oauth2`, tenant configuration |

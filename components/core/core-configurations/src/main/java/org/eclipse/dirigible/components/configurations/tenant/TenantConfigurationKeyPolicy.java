@@ -13,8 +13,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.ConfigDescriptors;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.springframework.stereotype.Component;
+
+import jakarta.annotation.PostConstruct;
 
 /**
  * Decides which configuration keys a tenant is allowed to override through its per-tenant
@@ -48,6 +51,15 @@ class TenantConfigurationKeyPolicy {
             // DIRIGIBLE_PRINT_TEMPLATE_<ENTITY>_<LANG> = acme-blue | standard@1.28.0. One key per
             // document type and language the tenant chose a layout for (engine-document).
             "DIRIGIBLE_PRINT_TEMPLATE_");
+
+    /**
+     * Tells the configuration descriptors which keys a tenant may override, so the platform view can
+     * flag them.
+     */
+    @PostConstruct
+    void registerWithDescriptors() {
+        ConfigDescriptors.setTenantOverridablePolicy(this::isInjectable);
+    }
 
     /**
      * The full list of configuration keys a tenant may override, in display order.

@@ -25,77 +25,154 @@
 
     <body class="bk-vbox">
         <bk-bar compact="true">
-            <bk-bar-middle>
+            <bk-bar-left>
                 <bk-bar-element full-width="true" style="max-width: 480px">
-                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+                    <bk-input type="search" placeholder="Search all groups" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
                 </bk-bar-element>
-            </bk-bar-middle>
+            </bk-bar-left>
+            <bk-bar-right>
+                <bk-bar-element>
+                    <bk-checkbox id="cfgOnlySet" compact="true" ng-model="filters.onlySet" ng-change="refresh()"></bk-checkbox>
+                    <bk-checkbox-label for="cfgOnlySet" compact="true">Only set</bk-checkbox-label>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-checkbox id="cfgAllSources" compact="true" ng-model="filters.allSources"></bk-checkbox>
+                    <bk-checkbox-label for="cfgAllSources" compact="true">Show all sources</bk-checkbox-label>
+                </bk-bar-element>
+            </bk-bar-right>
         </bk-bar>
-        <div bk-scrollbar class="bk-full-height">
-            <table bk-table display-mode="compact" outer-borders="none">
-                <thead bk-table-header sticky="true" interactive="false">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>#</th>
-                        <th bk-table-header-cell>Name</th>
-                        <th bk-table-header-cell>Runtime</th>
-                        <th bk-table-header-cell>Environment</th>
-                        <th bk-table-header-cell>Deployment</th>
-                        <th bk-table-header-cell>Module</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="config in configurations track by config.num" hoverable="true" activable="false" ng-hide="config.hidden">
-                        <td bk-table-cell fit-content="true">{{::config.num}}</td>
-                        <td bk-table-cell>{{::config.name}}</td>
-                        <td bk-table-cell>{{::config.runtime}}</td>
-                        <td bk-table-cell>{{::config.env}}</td>
-                        <td bk-table-cell>{{::config.deployment}}</td>
-                        <td bk-table-cell>{{::config.module}}</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="bk-hbox bk-stretch" style="min-height: 0">
+            <div bk-scrollbar class="bk-full-height bk-border--right" style="width: 240px; flex-shrink: 0">
+                <bk-list compact="true" no-border="true">
+                    <bk-list-item interactive="true" ng-click="selectGroup(null)" selected="!selectedGroup">
+                        <bk-list-title>All groups</bk-list-title>
+                        <bk-list-secondary>{{totals.set}} / {{totals.total}}</bk-list-secondary>
+                    </bk-list-item>
+                    <bk-list-item ng-repeat="item in navItems track by item.key" interactive="!!item.group" ng-click="item.group && selectGroup(item.group.id)"
+                        selected="!!item.group && selectedGroup === item.group.id">
+                        <bk-list-title ng-if="!item.group" class="bk-text--subtitle bk-font--small">{{item.label}}</bk-list-title>
+                        <bk-list-title ng-if="item.group">{{item.group.label}}</bk-list-title>
+                        <bk-list-secondary ng-if="item.group">{{item.group.set}} / {{item.group.total}}</bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+            </div>
+            <div bk-scrollbar class="bk-full-height bk-stretch">
+                <table bk-table display-mode="compact" outer-borders="none">
+                    <thead bk-table-header sticky="true" interactive="false">
+                        <tr bk-table-row>
+                            <th bk-table-header-cell>Name</th>
+                            <th bk-table-header-cell>Effective</th>
+                            <th bk-table-header-cell>Source</th>
+                            <th bk-table-header-cell>Default</th>
+                            <th bk-table-header-cell ng-if="filters.allSources">Runtime</th>
+                            <th bk-table-header-cell ng-if="filters.allSources">Environment</th>
+                            <th bk-table-header-cell ng-if="filters.allSources">Deployment</th>
+                            <th bk-table-header-cell ng-if="filters.allSources">Module</th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body ng-repeat="group in visibleGroups track by group.group">
+                        <tr bk-table-row>
+                            <td bk-table-cell colspan="8"><b>{{::group.label}}</b> <span class="bk-text--subtitle">{{group.entries.length}}</span></td>
+                        </tr>
+                        <tr bk-table-row ng-repeat="entry in group.entries track by entry.key" hoverable="true" activable="false">
+                            <td bk-table-cell>
+                                {{::entry.key}}
+                                <span ng-if="::entry.subgroup" class="bk-text--subtitle"> &middot; {{::entry.subgroup}}</span>
+                                <span ng-if="::entry.deprecatedBy" bk-object-status status="critical" text="deprecated: {{::entry.deprecatedBy}}"></span>
+                                <span ng-if="::entry.tenantOverridable" bk-object-status status="informative" text="tenant"></span>
+                            </td>
+                            <td bk-table-cell>{{::entry.value}}</td>
+                            <td bk-table-cell><span bk-object-status status="{{::sourceStatus(entry.source)}}" text="{{::entry.source}}"></span></td>
+                            <td bk-table-cell class="bk-text--subtitle">{{::entry.defaultValue}}</td>
+                            <td bk-table-cell ng-if="filters.allSources">{{::entry.values.runtime}}</td>
+                            <td bk-table-cell ng-if="filters.allSources">{{::entry.values.environment}}</td>
+                            <td bk-table-cell ng-if="filters.allSources">{{::entry.values.deployment}}</td>
+                            <td bk-table-cell ng-if="filters.allSources">{{::entry.values.module}}</td>
+                        </tr>
+                    </tbody>
+                    <tbody bk-table-body ng-if="loaded && visibleGroups.length === 0">
+                        <tr bk-table-row>
+                            <td bk-table-cell colspan="8" class="bk-text--subtitle">{{filters.onlySet ? 'Nothing is set here. Clear "Only set" to see every key.' : 'No matching keys.'}}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         <script type="text/javascript">
             angular.module('configurations', ['platformView', 'blimpKit']).controller('ConfigurationsController', ($timeout, $scope, $http) => {
                 $scope.searchField = { text: '' };
-                $scope.configurations = [];
-                $scope.showAll = () => {
-                    for (let i = 0; i < $scope.configurations.length; i++) {
-                        $scope.configurations[i].hidden = false;
+                $scope.filters = { onlySet: true, allSources: false };
+                $scope.sectionLabels = {
+                    platform: 'Platform',
+                    security: 'Security',
+                    data: 'Data',
+                    processing: 'Processing',
+                    integration: 'Integration',
+                    development: 'Development',
+                    other: 'Other'
+                };
+                $scope.navItems = [];
+                $scope.totals = { set: 0, total: 0 };
+                $scope.selectedGroup = null;
+                $scope.visibleGroups = [];
+                $scope.loaded = false;
+                let descriptors = [];
+
+                $scope.sourceStatus = (source) => {
+                    switch (source) {
+                        case 'runtime': return 'critical';
+                        case 'environment': return 'positive';
+                        case 'deployment': return 'informative';
+                        case 'module': return 'informative';
+                        default: return '';
                     }
+                };
+
+                // The search runs across every group and ignores the group selection, so a match in another group is never hidden.
+                $scope.refresh = () => {
+                    const text = $scope.searchField.text.trim().toLowerCase();
+                    $scope.visibleGroups = descriptors
+                        .filter((group) => text || !$scope.selectedGroup || group.group === $scope.selectedGroup)
+                        .map((group) => ({
+                            group: group.group,
+                            label: group.label,
+                            entries: group.entries.filter((entry) => (!$scope.filters.onlySet || (entry.source !== 'default' && entry.source !== 'unset'))
+                                && (!text || entry.key.toLowerCase().includes(text) || (entry.value && entry.value.toLowerCase().includes(text))))
+                        }))
+                        .filter((group) => group.entries.length);
+                };
+
+                $scope.selectGroup = (id) => {
+                    $scope.selectedGroup = id;
+                    $scope.refresh();
                 };
 
                 let to = 0;
                 $scope.search = (event) => {
                     if (to) $timeout.cancel(to);
                     if (event.originalEvent.key === 'Escape') {
-                        $scope.showAll();
-                        return;
+                        $scope.searchField.text = '';
                     }
-                    to = $timeout(() => {
-                        for (let i = 0; i < $scope.configurations.length; i++) {
-                            const allValues = Object.values($scope.configurations[i]).join('').toLowerCase();
-                            if (allValues.includes($scope.searchField.text.toLowerCase())) {
-                                $scope.configurations[i].hidden = false;
-                            } else {
-                                $scope.configurations[i].hidden = true;
-                            }
-                        }
-                    }, 200);
+                    to = $timeout($scope.refresh, 200);
                 };
 
-                $http.get('/services/core/configurations').then((response) => {
-                    for (let i = 0; i < response.data.length; i++) {
-                        $scope.configurations.push({
-                            num: i + 1,
-                            name: response.data[i][0],
-                            runtime: response.data[i][1],
-                            env: response.data[i][2],
-                            deployment: response.data[i][3],
-                            module: response.data[i][4],
-                            hidden: false
-                        });
-                    }
+                $http.get('/services/core/configurations/groups').then((response) => {
+                    $scope.navItems = [];
+                    response.data.forEach((group, index) => {
+                        if (index === 0 || group.section !== response.data[index - 1].section) {
+                            $scope.navItems.push({ key: 'section:' + group.section, label: $scope.sectionLabels[group.section] || group.section });
+                        }
+                        $scope.navItems.push({ key: 'group:' + group.id, group: group });
+                    });
+                    $scope.totals = response.data.reduce((totals, group) => ({ set: totals.set + group.set, total: totals.total + group.total }), { set: 0, total: 0 });
+                }, (error) => {
+                    console.error(error);
+                });
+
+                $http.get('/services/core/configurations/descriptors').then((response) => {
+                    descriptors = response.data;
+                    $scope.loaded = true;
+                    $scope.refresh();
                 }, (error) => {
                     console.error(error);
                 });

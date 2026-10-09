@@ -1,11 +1,16 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import { ensureCliJar } from '../lib/cli-jar.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const cliJarPath = path.join(__dirname, './dirigible-cli.jar');
+// downloaded by postinstall.js, or here on the first run when the install skipped it
+let cliJarPath;
+try {
+    cliJarPath = await ensureCliJar();
+} catch (error) {
+    console.error(`❌ ${error.message}`);
+    process.exit(1);
+}
 
 // resolve dirigible jar from package @dirigiblelabs/dirigible
 const require = createRequire(import.meta.url);
