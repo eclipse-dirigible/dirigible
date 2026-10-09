@@ -144,8 +144,8 @@ The canonical package is `@aerokit/sdk` — submodules are imported as `@aerokit
 - `@aerokit/sdk/cms` — Content management (CMIS + S3 + SharePoint).
 - `@aerokit/sdk/s3` — Amazon S3 client.
 - `@aerokit/sdk/mongodb` — MongoDB driver.
-- `@aerokit/sdk/qldb` — Amazon QLDB.
-- `@aerokit/sdk/etcd` — etcd client.
+- `@aerokit/sdk/qldb` — Amazon QLDB (the driver is an add-on, not in the default bundle — see `components/api/api-qldb-driver/README.md`).
+- `@aerokit/sdk/etcd` — etcd client (the client library is an add-on, not in the default bundle — see `components/api/api-etcd-client/README.md`).
 - `@aerokit/sdk/redis` — Redis client.
 - `@aerokit/sdk/cache` — In-process / shared cache.
 
@@ -320,7 +320,7 @@ Each facade is a Spring component or a static utility that exposes platform capa
 | `GlobalsFacade` | api-core | `@aerokit/sdk/core/globals` — process-wide variables. |
 | `DatabaseFacade` | api-database | `@aerokit/sdk/db/database` — connections / queries / updates. |
 | `DataStoreFacade` | api-database | `@aerokit/sdk/db/store` — Hibernate-backed entity store (dynamic map mode). |
-| `EtcdFacade` | api-etcd | `@aerokit/sdk/etcd/client` — etcd K/V client. |
+| `EtcdFacade` | api-etcd | `@aerokit/sdk/etcd/client` — etcd K/V client (jetcd is the `api-etcd-client` add-on; without it every call throws `EtcdNotAvailableException`). |
 | `ExtensionsFacade` | api-extensions | `@aerokit/sdk/extensions/*` — discover and call `.extension` providers. |
 | `GitFacade` | api-git | `@aerokit/sdk/git/client` — clone / pull / push / commit / log. |
 | `HttpClientFacade`, `HttpClientAsyncFacade` | api-http | `@aerokit/sdk/http/client` and `client-async`. |

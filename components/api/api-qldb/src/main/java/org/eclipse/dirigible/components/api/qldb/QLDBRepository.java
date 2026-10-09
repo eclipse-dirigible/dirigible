@@ -9,173 +9,76 @@
  */
 package org.eclipse.dirigible.components.api.qldb;
 
-import com.amazon.ion.*;
-import com.amazon.ion.system.IonSystemBuilder;
-import com.fasterxml.jackson.dataformat.ion.IonObjectMapper;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.stereotype.Repository;
-import software.amazon.awssdk.services.qldbsession.QldbSessionClient;
-import software.amazon.qldb.*;
-
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
+/**
+ * A table of an Amazon QLDB ledger, behind {@code @aerokit/sdk/qldb} and
+ * {@code org.eclipse.dirigible.sdk.qldb.Qldb}.
+ * <p>
+ * The QLDB driver is an add-on that the default bundle does not ship (#7783): add
+ * {@code org.eclipse.dirigible:dirigible-components-api-qldb-driver} ({@code <type>pom</type>}) to
+ * the application. Without it the constructor throws {@link QldbNotAvailableException}. The
+ * signatures here carry no driver type, so the JavaScript host can introspect the class either way.
+ */
 public class QLDBRepository {
     public static final String DOCUMENT_ID_FIELD = "documentId";
-    private static final IonSystem ION_SYSTEM = IonSystemBuilder.standard()
-                                                                .build();
+
+    /** The class whose presence means the driver is bundled. */
+    static final String DRIVER_CLASS = "software.amazon.qldb.QldbDriver";
+
     private final String tableName;
     private final String ledgerName;
-    private final QldbDriver qldbDriver;
+    private final Ledger ledger;
 
+    /**
+     * Opens a table of a ledger.
+     *
+     * @param ledgerName the ledger name
+     * @param tableName the table name
+     * @throws QldbNotAvailableException when the QLDB driver is not bundled
+     */
     public QLDBRepository(String ledgerName, String tableName) {
+        requireDriver();
         this.ledgerName = ledgerName;
         this.tableName = tableName;
-        this.qldbDriver = QldbDriver.builder()
-                                    .ledger(ledgerName)
-                                    .transactionRetryPolicy(RetryPolicy.builder()
-                                                                       .maxRetries(3)
-                                                                       .build())
-                                    .sessionClientBuilder(QldbSessionClient.builder())
-                                    .build();
+        this.ledger = new DriverLedger(ledgerName, tableName);
     }
 
     public void createTable() {
-        qldbDriver.execute(txn -> {
-            txn.execute("CREATE TABLE " + tableName);
-            txn.execute("CREATE INDEX ON " + tableName + "(id)");
-        });
+        ledger.createTable();
     }
 
     public void dropTable() {
-        qldbDriver.execute(txn -> {
-            txn.execute("DROP TABLE " + tableName);
-        });
+        ledger.dropTable();
     }
 
     public Map<String, Object> insert(Object entry) {
-        return qldbDriver.execute(txn -> {
-            IonValue ionEntry = serialize(entry);
-            String insertIntoStatement = buildInsertIntoSqlStatement();
-            Result result = txn.execute(insertIntoStatement, ionEntry);
-            String documentId = getIdFromIonValue(result.iterator()
-                                                        .next());
-            Map<String, Object> createdEntry = deserialize(ionEntry);
-            createdEntry.put(DOCUMENT_ID_FIELD, documentId);
-            return createdEntry;
-        });
-    }
-
-    private String buildInsertIntoSqlStatement() {
-        return "INSERT INTO " + tableName + " ?";
-    }
-
-    private String getIdFromIonValue(IonValue value) {
-        IonStruct struct = (IonStruct) value;
-        IonValue documentId = struct.get(DOCUMENT_ID_FIELD);
-        return ((IonString) documentId).stringValue();
+        return ledger.insert(entry);
     }
 
     public List<Map<String, Object>> getAll() {
-        return qldbDriver.execute(txn -> {
-            String selectAllStatement = buildSelectAllStatement();
-            Result transactionResult = txn.execute(selectAllStatement);
-            return ionValuesToList(transactionResult);
-        });
-    }
-
-    private String buildSelectAllStatement() {
-        return "SELECT * FROM " + tableName + " BY " + DOCUMENT_ID_FIELD;
-    }
-
-    private List<Map<String, Object>> ionValuesToList(Result ionValues) {
-        return StreamSupport.stream(ionValues.spliterator(), false)
-                            .map(this::deserialize)
-                            .collect(Collectors.toList());
+        return ledger.getAll();
     }
 
     public Map<String, Object> getById(String id) {
-        return qldbDriver.execute(txn -> {
-            IonValue ionId = stringToIonValue(id);
-            String getByIdStatement = buildGetByIdStatement();
-            Result transactionResult = txn.execute(getByIdStatement, ionId);
-            return getExactlyOneItemFromResult(transactionResult);
-        });
-    }
-
-    private String buildGetByIdStatement() {
-        return "SELECT * FROM " + tableName + " BY " + DOCUMENT_ID_FIELD + " WHERE " + DOCUMENT_ID_FIELD + " = ?";
-    }
-
-    private Map<String, Object> getExactlyOneItemFromResult(Result result) {
-        List<Map<String, Object>> entries = ionValuesToList(result);
-        if (entries.size() > 1) {
-            throw new IllegalStateException("More than one element found from getById()");
-        }
-        return entries.get(0);
-    }
-
-    private IonValue stringToIonValue(String string) {
-        return ION_SYSTEM.newString(string);
+        return ledger.getById(id);
     }
 
     public Map<String, Object> update(Map<String, Object> identifiableEntry) {
-        return qldbDriver.execute(txn -> {
-            IonValue serializedEntry = serialize(identifiableEntry);
-            String stringId = getDocumentIdFromIdentifiableEntry(identifiableEntry);
-            IonValue ionId = stringToIonValue(stringId);
-            List<IonValue> parameters = List.of(serializedEntry, ionId);
-            String updateStatement = buildUpdateSqlStatement();
-            txn.execute(updateStatement, parameters);
-            return identifiableEntry;
-        });
-    }
-
-    private String getDocumentIdFromIdentifiableEntry(Map<String, Object> identifiableEntry) {
-        String stringId = (String) identifiableEntry.get(DOCUMENT_ID_FIELD);
-        if (stringId == null) {
-            throw new QLDBRepositoryException("Argument identifiableEntry must have a documentId field set");
-        }
-        return stringId;
-    }
-
-    private String buildUpdateSqlStatement() {
-        return "UPDATE " + tableName + " AS t BY pid SET t = ? WHERE pid = ?";
+        return ledger.update(identifiableEntry);
     }
 
     public String delete(String entryId) {
-        return qldbDriver.execute(txn -> {
-            IonValue ionId = stringToIonValue(entryId);
-            String deleteStatement = buildDeleteSqlStatement();
-            Result result = txn.execute(deleteStatement, ionId);
-            return getIdFromIonValue(result.iterator()
-                                           .next());
-        });
+        return ledger.delete(entryId);
     }
 
     public String delete(Map<String, Object> identifiableEntry) {
-        String stringId = getDocumentIdFromIdentifiableEntry(identifiableEntry);
-        return delete(stringId);
-    }
-
-    private String buildDeleteSqlStatement() {
-        return "DELETE FROM " + tableName + " BY " + DOCUMENT_ID_FIELD + " WHERE " + DOCUMENT_ID_FIELD + " = ?";
+        return delete(documentIdOf(identifiableEntry));
     }
 
     public List<Map<String, Object>> getHistory() {
-        Result history = qldbDriver.execute(txn -> {
-            String getHistoryStatement = buildGetHistorySqlStatement();
-            return txn.execute(getHistoryStatement);
-        });
-        return ionValuesToList(history);
-    }
-
-    private String buildGetHistorySqlStatement() {
-        return "SELECT * FROM history(" + tableName + ") AS h\n";
+        return ledger.getHistory();
     }
 
     public String getLedgerName() {
@@ -186,24 +89,46 @@ public class QLDBRepository {
         return tableName;
     }
 
-    private IonValue serialize(Object entry) {
+    static String documentIdOf(Map<String, Object> identifiableEntry) {
+        String stringId = (String) identifiableEntry.get(DOCUMENT_ID_FIELD);
+        if (stringId == null) {
+            throw new QLDBRepositoryException("Argument identifiableEntry must have a documentId field set");
+        }
+        return stringId;
+    }
+
+    /**
+     * Checks that the QLDB driver is on the classpath.
+     *
+     * @throws QldbNotAvailableException when it is not
+     */
+    private static void requireDriver() {
         try {
-            return IonObjectMapper.builder()
-                                  .build()
-                                  .writeValueAsIonValue(entry);
-        } catch (IOException e) {
-            throw new QLDBRepositoryException("Could not serialize entry to IonValue", e);
+            Class.forName(DRIVER_CLASS, false, QLDBRepository.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new QldbNotAvailableException(e);
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> deserialize(IonValue entry) {
-        try {
-            return IonObjectMapper.builder()
-                                  .build()
-                                  .readValue(entry, Map.class);
-        } catch (IOException e) {
-            throw new QLDBRepositoryException("Could not deserialize IonValue to Map<String, Object>", e);
-        }
+    /**
+     * The ledger operations, implemented on the driver by {@link DriverLedger}.
+     */
+    interface Ledger {
+
+        void createTable();
+
+        void dropTable();
+
+        Map<String, Object> insert(Object entry);
+
+        List<Map<String, Object>> getAll();
+
+        Map<String, Object> getById(String id);
+
+        Map<String, Object> update(Map<String, Object> identifiableEntry);
+
+        String delete(String entryId);
+
+        List<Map<String, Object>> getHistory();
     }
 }

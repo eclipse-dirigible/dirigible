@@ -38,7 +38,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `core/globals`                       | `sdk.core.Globals`                                             |       |
 | `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. The user and schema DDL on it is **Java-only** - `createUser`, `setUserPassword`, `dropUser`, `existsUser`, `createSchema`, `dropSchema`, `existsSchema`, dialect-translated like the sequence DDL beside it, with no TS counterpart. `existsUser` is implemented for PostgreSQL, H2 and MSSQL and throws `SQLFeatureNotSupportedException` elsewhere. |
 | `db/store`                           | `sdk.db.Store`                                                 | Dynamic-entity Hibernate store. For typed `@Entity` CRUD on client classes, resolve `JavaEntityStore` via `BeanProvider`. |
-| `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. |
+| `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. jetcd is the `api-etcd-client` add-on (`<type>pom</type>`); without it: `EtcdNotAvailableException`. |
 | `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer `List<...>` collection injection or `Extensions.find(Class<T>)`; see "Extension points" below. |
 | `git/client`                         | `sdk.git.Git`                                                  |       |
 | `http/client`                        | `sdk.http.HttpClient`                                          | Options passed as JSON, same shape as TS. |
@@ -73,7 +73,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `platform/registry`                  | `sdk.platform.Registry`                                        |       |
 | `platform/repository`                | `sdk.platform.Repository`                                      |       |
 | `platform/workspace`                 | `sdk.platform.Workspace`                                       | Returns the platform `Workspace` / `File` domain objects directly. |
-| `qldb`                               | `sdk.qldb.Qldb`                                                | `open(ledger, table)` returns the platform `QLDBRepository`. |
+| `qldb`                               | `sdk.qldb.Qldb`                                                | `open(ledger, table)` returns the platform `QLDBRepository`. The driver is the `api-qldb-driver` add-on (`<type>pom</type>`); without it: `QldbNotAvailableException`. |
 | `rabbitmq/producer`                  | `sdk.rabbitmq.Producer`                                        |       |
 | `rabbitmq/consumer`                  | `sdk.rabbitmq.Consumer`                                        |       |
 | `redis/client`                       | `sdk.redis.Client`                                             | Returns the raw `redis.clients.jedis.Jedis`. |

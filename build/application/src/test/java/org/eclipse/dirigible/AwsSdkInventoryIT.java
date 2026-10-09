@@ -34,15 +34,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Pins the AWS SDK v2 inventory of the executable jar (#7397).
  *
  * <p>
- * The platform reaches the SDK through two independent chains - {@code api-s3} through
- * {@code s3-transfer-manager} and {@code api-qldb} through the QLDB driver - and Maven mediates
- * them per artifact. Left to that, the jar shipped {@code aws-json-protocol} and
- * {@code apache-client} from the 2.15.x line under a 2.54.x {@code sdk-core}: a mix on which no
- * client works, which fails as a {@code NoSuchMethodError}/{@code NoClassDefFoundError} naming no
- * version, and which makes a user project's own AWS service module undeclarable - every coordinate
- * of the provided-BOM is pruned from its resolution graph, so it links against whatever the
- * platform ships. The BOM the root pom imports is what keeps the line single; these tests are what
- * notices when a new dependency breaks it again.
+ * The platform reaches the SDK through {@code api-s3} ({@code s3-transfer-manager}), and an
+ * application that adds the QLDB add-on ({@code api-qldb-driver}, #7783) through the QLDB driver as
+ * well - and Maven mediates the chains per artifact. Left to that, the jar shipped
+ * {@code aws-json-protocol} and {@code apache-client} from the 2.15.x line under a 2.54.x
+ * {@code sdk-core}: a mix on which no client works, which fails as a
+ * {@code NoSuchMethodError}/{@code NoClassDefFoundError} naming no version, and which makes a user
+ * project's own AWS service module undeclarable - every coordinate of the provided-BOM is pruned
+ * from its resolution graph, so it links against whatever the platform ships. The BOM the root pom
+ * imports is what keeps the line single; these tests are what notices when a new dependency breaks
+ * it again.
  */
 class AwsSdkInventoryIT {
 
@@ -52,9 +53,9 @@ class AwsSdkInventoryIT {
     /**
      * The artifacts exempt from the single-line rule. AWS discontinued QLDB and stopped publishing
      * {@code qldbsession}, so the AWS SDK BOM no longer manages it and no version of it exists on the
-     * current line; {@code api-qldb} pins the last one AWS published. It is a leaf service client that
-     * nothing else links against, which is what makes the exemption harmless. Adding to this set is a
-     * deliberate act - any other straggler is the defect above.
+     * current line; the {@code api-qldb-driver} add-on pins the last one AWS published. It is a leaf
+     * service client that nothing else links against, which is what makes the exemption harmless.
+     * Adding to this set is a deliberate act - any other straggler is the defect above.
      */
     private static final Set<String> OFF_LINE_BY_DESIGN = Set.of("qldbsession");
 

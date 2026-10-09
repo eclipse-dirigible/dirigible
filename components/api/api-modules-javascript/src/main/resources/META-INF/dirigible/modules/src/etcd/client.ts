@@ -11,6 +11,11 @@
  * - Get values from Etcd keys with options for string or byte array formats.
  * - Retrieve metadata about the Etcd cluster and key-value store through response headers.
  * - Delete keys from Etcd.
+ *
+ * ### Availability
+ * The etcd client library (jetcd) is an add-on that the default bundle does not ship: the application adds
+ * `org.eclipse.dirigible:dirigible-components-api-etcd-client` (`<type>pom</type>`). Without it, every call
+ * throws `EtcdNotAvailableException` naming that artifact.
  * 
  * ### Use Cases
  * - Storing configuration data or application state in Etcd for distributed applications.

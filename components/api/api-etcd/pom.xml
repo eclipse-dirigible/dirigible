@@ -10,7 +10,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <name>Components - API - Core</name>
+    <name>Components - API - etcd</name>
     <artifactId>dirigible-components-api-etcd</artifactId>
     <packaging>jar</packaging>
 
@@ -21,31 +21,13 @@
             <artifactId>dirigible-components-api-modules-javascript</artifactId>
         </dependency>
 
-        <!-- Etcd dependencies -->
+        <!-- The client library is an add-on (#7783): optional, so the default bundle does not ship it and
+             EtcdFacade throws EtcdNotAvailableException until an application adds the artifact. -->
         <dependency>
-            <groupId>io.etcd</groupId>
-            <artifactId>jetcd-core</artifactId>
-            <version>${jetcd.core.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>com.google.protobuf</groupId>
-                    <artifactId>protobuf-java</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>com.google.protobuf</groupId>
-                    <artifactId>protobuf-java-util</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java</artifactId>
-            <version>${protobuf-java.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.protobuf</groupId>
-            <artifactId>protobuf-java-util</artifactId>
-            <version>${protobuf-java.version}</version>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-etcd-client</artifactId>
+            <type>pom</type>
+            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>io.etcd</groupId>
@@ -59,14 +41,11 @@
             <version>0.8.7</version>
             <scope>test</scope>
         </dependency>
-        <!-- / Etcd dependencies -->
     </dependencies>
 
     <properties>
         <license.header.location>../../../licensing-header.txt</license.header.location>
         <parent.pom.folder>../../../</parent.pom.folder>
-
-        <protobuf-java.version>4.36.2</protobuf-java.version>
     </properties>
 
 </project>

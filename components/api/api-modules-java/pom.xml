@@ -104,6 +104,15 @@
             <artifactId>dirigible-components-api-etcd</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- sdk.etcd.Client hands back jetcd types; the client library itself is an add-on (#7783), so
+            it is optional here too and does not reach the default bundle through this module. -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-etcd-client</artifactId>
+            <version>${project.version}</version>
+            <type>pom</type>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-extensions</artifactId>

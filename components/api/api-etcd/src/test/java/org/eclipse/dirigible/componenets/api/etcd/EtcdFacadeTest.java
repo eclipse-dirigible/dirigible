@@ -74,7 +74,7 @@ public class EtcdFacadeTest {
      */
     @Test
     public void getClient() throws ExecutionException, InterruptedException {
-        KV etcdClient = EtcdFacade.getClient();
+        KV etcdClient = (KV) EtcdFacade.getClient();
         assertNotNull(etcdClient);
 
         ByteSequence key = ByteSequence.from("foo", Charsets.UTF_8);
@@ -106,7 +106,7 @@ public class EtcdFacadeTest {
     @Test
     public void stringToByteSequence() {
         String s = "foo";
-        ByteSequence bs = EtcdFacade.stringToByteSequence(s);
+        ByteSequence bs = (ByteSequence) EtcdFacade.stringToByteSequence(s);
 
         assertNotNull(bs);
         assertEquals(bs.toString(Charsets.UTF_8), s);
@@ -118,7 +118,7 @@ public class EtcdFacadeTest {
     @Test
     public void byteArrayToByteSequence() {
         byte[] arr = {100, 100, 100};
-        ByteSequence bs = EtcdFacade.byteArrayToByteSequence(arr);
+        ByteSequence bs = (ByteSequence) EtcdFacade.byteArrayToByteSequence(arr);
 
         assertNotNull(bs);
         assertArrayEquals(bs.getBytes(), arr);

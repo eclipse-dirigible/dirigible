@@ -10,16 +10,15 @@
 package org.eclipse.dirigible.components.api.etcd;
 
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import com.google.common.base.Charsets;
-import io.etcd.jetcd.ByteSequence;
-import io.etcd.jetcd.Client;
-import io.etcd.jetcd.KV;
 
 /**
  * The Class EtcdFacade.
+ * <p>
+ * The etcd client library (jetcd) is an add-on that the default bundle does not ship (#7783). The
+ * signatures here therefore carry no jetcd type - Spring and the JavaScript host introspect them
+ * whether or not the library is present - and every call throws {@link EtcdNotAvailableException}
+ * when it is absent. The values are jetcd's {@code KV} and {@code ByteSequence} when it is present.
  */
 @Component
 public class EtcdFacade {
@@ -35,54 +34,69 @@ public class EtcdFacade {
     private static final String CLIENT_ENDPOINT = "http://localhost:2379";
 
     /**
-     * The Constant logger.
+     * The class whose presence means the client library is bundled.
      */
-    private static final Logger logger = LoggerFactory.getLogger(EtcdFacade.class);
+    static final String CLIENT_LIBRARY_CLASS = "io.etcd.jetcd.Client";
 
     /**
      * Gets the etcd client.
      *
-     * @return the etcd client object
+     * @return the etcd client object, a jetcd {@code KV}
+     * @throws EtcdNotAvailableException when the etcd client library is not bundled
      */
-    public static KV getClient() {
-
+    public static Object getClient() {
+        requireClientLibrary();
         String clientEndpoint = Configuration.get(DIRIGIBLE_ETCD_CLIENT_ENDPOINT, CLIENT_ENDPOINT);
-
-        Client client = Client.builder()
-                              .endpoints(clientEndpoint)
-                              .build();
-
-        return client.getKVClient();
+        return JetcdClient.getClient(clientEndpoint);
     }
 
     /**
      * Converts a string to etcd byte sequence.
      *
      * @param str the string to be converted
-     * @return the ByteSequence of the string
+     * @return the jetcd {@code ByteSequence} of the string
+     * @throws EtcdNotAvailableException when the etcd client library is not bundled
      */
-    public static ByteSequence stringToByteSequence(String str) {
-        return ByteSequence.from(str, Charsets.UTF_8);
+    public static Object stringToByteSequence(String str) {
+        requireClientLibrary();
+        return JetcdClient.stringToByteSequence(str);
     }
 
     /**
      * Converts a byte array to etcd byte sequence.
      *
      * @param arr the byte array to be converted
-     * @return the ByteSequence of the byte array
+     * @return the jetcd {@code ByteSequence} of the byte array
+     * @throws EtcdNotAvailableException when the etcd client library is not bundled
      */
-    public static ByteSequence byteArrayToByteSequence(byte[] arr) {
-        return ByteSequence.from(arr);
+    public static Object byteArrayToByteSequence(byte[] arr) {
+        requireClientLibrary();
+        return JetcdClient.byteArrayToByteSequence(arr);
     }
 
     /**
      * Converts an etcd byte sequence to string.
      *
-     * @param value the byte sequence to be converted
+     * @param value the jetcd {@code ByteSequence} to be converted
      * @return the string of the byte sequence
+     * @throws EtcdNotAvailableException when the etcd client library is not bundled
      */
-    public static String byteSequenceToString(ByteSequence value) {
-        return value.toString(Charsets.UTF_8);
+    public static String byteSequenceToString(Object value) {
+        requireClientLibrary();
+        return JetcdClient.byteSequenceToString(value);
+    }
+
+    /**
+     * Checks that the etcd client library is on the classpath.
+     *
+     * @throws EtcdNotAvailableException when it is not
+     */
+    private static void requireClientLibrary() {
+        try {
+            Class.forName(CLIENT_LIBRARY_CLASS, false, EtcdFacade.class.getClassLoader());
+        } catch (ClassNotFoundException | LinkageError e) {
+            throw new EtcdNotAvailableException(e);
+        }
     }
 
 }

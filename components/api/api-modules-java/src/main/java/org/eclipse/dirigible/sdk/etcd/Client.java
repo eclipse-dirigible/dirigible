@@ -21,21 +21,26 @@ import org.eclipse.dirigible.components.api.etcd.EtcdFacade;
  * etcd keys and values are byte sequences; the {@code toBytes} / {@code toString} helpers here
  * convert between Java {@link String} / {@code byte[]} and jetcd {@link ByteSequence} so callers
  * don't have to import jetcd's encoding helpers directly.
+ * <p>
+ * The jetcd client library is an add-on that the default bundle does not ship (#7783): add
+ * {@code org.eclipse.dirigible:dirigible-components-api-etcd-client} ({@code <type>pom</type>}) to
+ * the application. Without it every method here throws
+ * {@link org.eclipse.dirigible.components.api.etcd.EtcdNotAvailableException}.
  */
 public final class Client {
 
     private Client() {}
 
     public static KV getClient() {
-        return EtcdFacade.getClient();
+        return (KV) EtcdFacade.getClient();
     }
 
     public static ByteSequence toBytes(String value) {
-        return EtcdFacade.stringToByteSequence(value);
+        return (ByteSequence) EtcdFacade.stringToByteSequence(value);
     }
 
     public static ByteSequence toBytes(byte[] value) {
-        return EtcdFacade.byteArrayToByteSequence(value);
+        return (ByteSequence) EtcdFacade.byteArrayToByteSequence(value);
     }
 
     public static String toString(ByteSequence value) {
