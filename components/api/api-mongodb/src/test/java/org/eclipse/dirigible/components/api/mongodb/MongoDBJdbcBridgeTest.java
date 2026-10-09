@@ -21,6 +21,7 @@ import java.util.Properties;
 
 import org.bson.Document;
 import org.eclipse.dirigible.mongodb.jdbc.Driver;
+import org.eclipse.dirigible.mongodb.jdbc.MongoDBConnection;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -89,9 +90,13 @@ class MongoDBJdbcBridgeTest {
 
         try (Connection connection = driver.connect(jdbcUrl(), new Properties())) {
             assertFalse(connection.isClosed());
-            // the database name comes out of the connection string - the parsing this module does
-            // for itself, and the part the 3.12 MongoClientURI used to do
-            assertEquals(DB, connection.getCatalog());
+            // The database name comes out of the connection string - the part the 3.12
+            // MongoClientURI used to do and ConnectionString does now. It is read back through
+            // getMongoDatabase() and NOT through getCatalog(), which this bridge has always
+            // answered with null (on 3.12 too) - asserting the name there tested the JDBC
+            // method rather than the parsing this change is about.
+            assertEquals(DB, ((MongoDBConnection) connection).getMongoDatabase()
+                                                             .getName());
         }
     }
 
