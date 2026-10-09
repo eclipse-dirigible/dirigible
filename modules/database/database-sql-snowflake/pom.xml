@@ -26,11 +26,6 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-database-sql</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>net.snowflake</groupId>
-			<artifactId>snowflake-jdbc</artifactId>
-			<version>${snowflake.version}</version>
-		</dependency>
 	</dependencies>
 
 	<properties>
