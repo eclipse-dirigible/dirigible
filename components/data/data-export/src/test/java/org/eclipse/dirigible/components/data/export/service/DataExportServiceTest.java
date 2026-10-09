@@ -74,7 +74,8 @@ public class DataExportServiceTest {
      */
     @BeforeEach
     public void setup() {
-        DataSource datasource = new DataSource("/test/TestDB.datasource", "TestDB", "", "org.h2.Driver", "jdbc:h2:~/test", "sa", "");
+        DataSource datasource =
+                new DataSource("/test/TestDB.datasource", "TestDB", "", "org.h2.Driver", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", "sa", "");
         datasourceRepository.save(datasource);
     }
 

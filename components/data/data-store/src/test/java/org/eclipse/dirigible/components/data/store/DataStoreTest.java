@@ -99,7 +99,8 @@ public class DataStoreTest {
         // SystemDB and saving it again violates its unique key
         datasourceRepository.findByName("StoreDB")
                             .ifPresent(datasourceRepository::delete);
-        DataSource datasource = new DataSource("/test/StoreDB.datasource", "StoreDB", "", "org.h2.Driver", "jdbc:h2:~/StoreDB", "sa", "");
+        DataSource datasource = new DataSource("/test/StoreDB.datasource", "StoreDB", "", "org.h2.Driver",
+                "jdbc:h2:mem:StoreDB;DB_CLOSE_DELAY=-1", "sa", "");
         datasourceRepository.save(datasource);
         dataSource = datasourcesManager.getDataSource("StoreDB");
         assertNotNull(dataSource);
