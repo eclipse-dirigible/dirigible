@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.sdk.utils;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Quick JSON serialization helpers around Jackson's default {@link ObjectMapper}. Convenient when
@@ -31,7 +31,7 @@ public final class Converter {
     public static String toJson(Object input) {
         try {
             return MAPPER.writeValueAsString(input);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalArgumentException("Failed to serialize to JSON: " + input, ex);
         }
     }
@@ -39,7 +39,7 @@ public final class Converter {
     public static <T> T fromJson(String input, Class<T> type) {
         try {
             return MAPPER.readValue(input, type);
-        } catch (JsonProcessingException ex) {
+        } catch (JacksonException ex) {
             throw new IllegalArgumentException("Failed to parse JSON to " + type.getName(), ex);
         }
     }

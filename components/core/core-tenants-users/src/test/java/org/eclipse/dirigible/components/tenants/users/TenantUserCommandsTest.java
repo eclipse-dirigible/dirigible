@@ -37,8 +37,8 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 class TenantUserCommandsTest {
 
@@ -89,8 +89,7 @@ class TenantUserCommandsTest {
         JsonNode json = new ObjectMapper().readTree(new ObjectMapper().writeValueAsString(request));
         assertFalse(json.has("expectedRevision"), "an invite carries no expected revision");
         List<String> order = new ArrayList<>();
-        json.fieldNames()
-            .forEachRemaining(order::add);
+        order.addAll(json.propertyNames());
         assertEquals(List.of("requestId", "type", "version", "action", "tenantId", "appId", "email", "roles", "requestedBy", "requestedAt"),
                 order, "the contract's field order");
     }

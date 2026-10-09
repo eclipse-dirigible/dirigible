@@ -28,8 +28,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Reflects a {@link ControllerEntry} into a minimal OpenAPI 3.0 fragment and persists it through
@@ -83,7 +83,7 @@ public class JavaControllerOpenApiPublisher {
             artefact.setContent(json);
             artefact.updateKey();
             openAPIService.save(artefact);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             LOGGER.warn("Failed to build OpenAPI fragment for controller [{}]: {}", entry.fqn(), e.getMessage());
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to persist OpenAPI fragment for controller [{}]: {}", entry.fqn(), e.getMessage(), e);

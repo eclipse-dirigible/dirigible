@@ -9,10 +9,10 @@
  */
 package org.eclipse.dirigible.commons.utils.xml2json;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 
@@ -139,7 +139,10 @@ public class Xml2Json2 {
         }
 
         // Get the single root key (e.g., "a")
-        String rootName = rootJson.fieldNames()
+        // Jackson 3 renamed the field accessors to property ones; propertyNames() is a Collection
+        // rather than an Iterator, so the single root key is its first element.
+        String rootName = rootJson.propertyNames()
+                                  .iterator()
                                   .next();
         JsonNode contentJson = rootJson.get(rootName);
 
@@ -168,8 +171,8 @@ public class Xml2Json2 {
      */
     private static void convertJsonToXmlElement(JsonNode jsonNode, Element xmlElement, Document doc) {
         if (jsonNode.isObject()) {
-            jsonNode.fields()
-                    .forEachRemaining(entry -> {
+            jsonNode.properties()
+                    .forEach(entry -> {
                         String key = entry.getKey();
                         JsonNode value = entry.getValue();
 

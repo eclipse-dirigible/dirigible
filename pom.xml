@@ -930,9 +930,21 @@
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
         </dependency>
+        <!-- Jackson 3 (#7790). Spring Boot 4 moved to tools.jackson, so jackson-core/jackson-databind
+             3.x are on the classpath through the Spring Boot BOM - but this block declared the 2.x
+             jackson-databind for EVERY module, so both lines shipped. The platform's own code is on
+             3.x now; this declaration is what the modules/ tree (which gets no Spring starter) needs
+             to see it. The 2.x line still arrives transitively from third parties - see the comment
+             on jackson-annotations below. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!-- Annotations stayed on the 2.x coordinates by design in Jackson 3, so @JsonIgnore and
+             friends keep this import. Managed by the Spring Boot BOM. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
-            <artifactId>jackson-databind</artifactId>
+            <artifactId>jackson-annotations</artifactId>
         </dependency>
 
         <dependency>

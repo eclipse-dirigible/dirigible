@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.components.ide.debug.java;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
