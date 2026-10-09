@@ -12,108 +12,85 @@ package org.eclipse.dirigible.cli.generate;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.List;
 
+import org.eclipse.dirigible.cli.util.ProcessManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.beans.factory.support.StaticListableBeanFactory;
-import org.springframework.boot.info.BuildProperties;
 
 /**
- * {@code generate} regenerates a project from its intent without a running platform, and
- * {@code --check} tells a project whose committed files are its regeneration from one whose are not
- * (#7642).
+ * {@code generate} runs the platform jar's headless generate and ends with its exit code - the CLI
+ * carries no generator of its own (#7793).
  */
 class GenerateCommandsTest {
 
-    private static final String SAMPLE = "regeneration-sample";
-    private static final String INTENT = "app.intent";
-
     @TempDir
-    Path workspace;
+    Path folder;
 
-    /** A check is only as good as the output is stable: two regenerations write the same bytes. */
-    @Test
-    void twoRegenerationsAreByteIdentical() throws IOException {
-        Path project = sample();
+    /** Records the command instead of starting it. */
+    private static final class RecordingProcessManager extends ProcessManager {
 
-        Map<String, byte[]> first = regenerate(project);
-        Map<String, byte[]> second = regenerate(project);
+        private final int exitCode;
+        private List<String> command;
 
-        assertThat(first).as("the regeneration writes the generated code")
-                         .containsKey("gen/regen/api/ticket/TicketController.java");
-        assertThat(second.keySet()).isEqualTo(first.keySet());
-        first.forEach((file, content) -> assertThat(second.get(file)).as(file)
-                                                                     .isEqualTo(content));
+        RecordingProcessManager(int exitCode) {
+            this.exitCode = exitCode;
+        }
+
+        @Override
+        public int startSynchronously(String... commandArgs) {
+            command = List.of(commandArgs);
+            return exitCode;
+        }
     }
 
     @Test
-    void aRegeneratedProjectHasNoDriftAndAnEditedIntentHas() throws IOException {
-        Path project = sample();
+    void aCheckRunsThePlatformJarAndEndsWithItsExitCode() throws IOException {
+        Path jar = Files.createFile(folder.resolve("dirigible-application-executable.jar"));
+        Path project = Files.createDirectories(folder.resolve("project"));
+        RecordingProcessManager processManager = new RecordingProcessManager(1);
         CommandExitCode exitCode = new CommandExitCode();
-        GenerateCommands commands = commands(exitCode);
 
-        String written = commands.generate(project.toString(), null, false);
-        assertThat(exitCode.getExitCode()).as(written)
-                                          .isZero();
-        assertThat(project.resolve("gen/regen/data/ticket/TicketEntity.java")).exists();
+        new GenerateCommands(exitCode, processManager).generate(jar.toString(), project.toString(), null, true);
 
-        String clean = commands.generate(project.toString(), null, true);
-        assertThat(exitCode.getExitCode()).as(clean)
-                                          .isZero();
-        assertThat(clean).contains("No drift");
-
-        Path intent = project.resolve(INTENT);
-        Files.writeString(intent, Files.readString(intent, StandardCharsets.UTF_8)
-                                       .replace("required: true, length: 200", "required: true, length: 250"),
-                StandardCharsets.UTF_8);
-        String drift = commands.generate(project.toString(), null, true);
-        assertThat(exitCode.getExitCode()).as(drift)
-                                          .isEqualTo(GenerateCommands.EXIT_DRIFT);
-        assertThat(drift).contains("--- a/gen/regen/data/ticket/TicketEntity.java", "-    @Column(name = \"TICKET_SUBJECT\", length = 200",
-                "+    @Column(name = \"TICKET_SUBJECT\", length = 250");
-        assertThat(Files.readString(project.resolve("gen/regen/data/ticket/TicketEntity.java"),
-                StandardCharsets.UTF_8)).as("a check writes nothing")
-                                        .contains("length = 200");
+        assertThat(processManager.command).containsExactly("java", "-Dloader.main=" + GenerateCommands.GENERATE_MAIN, "-jar",
+                jar.toAbsolutePath()
+                   .toString(),
+                "--project", project.toAbsolutePath()
+                                    .toString(),
+                "--check");
+        assertThat(exitCode.getExitCode()).as("the drift exit code of the platform")
+                                          .isEqualTo(1);
     }
 
     @Test
-    void aFolderWithoutAnIntentIsRefused() throws IOException {
+    void anOutputFolderIsPassedOnAndAWriteIsNotACheck() throws IOException {
+        Path jar = Files.createFile(folder.resolve("dirigible-application-executable.jar"));
+        Path out = folder.resolve("out");
+        RecordingProcessManager processManager = new RecordingProcessManager(0);
         CommandExitCode exitCode = new CommandExitCode();
 
-        String report = commands(exitCode).generate(Files.createDirectories(workspace.resolve("empty"))
-                                                         .toString(),
-                null, true);
+        new GenerateCommands(exitCode, processManager).generate(jar.toString(), null, out.toString(), false);
 
+        assertThat(processManager.command).containsSubsequence("--out", out.toAbsolutePath()
+                                                                           .toString())
+                                          .doesNotContain("--check", "--project");
+        assertThat(exitCode.getExitCode()).isZero();
+    }
+
+    @Test
+    void withoutThePlatformJarNothingRuns() {
+        RecordingProcessManager processManager = new RecordingProcessManager(0);
+        CommandExitCode exitCode = new CommandExitCode();
+
+        String report = new GenerateCommands(exitCode, processManager).generate(folder.resolve("missing.jar")
+                                                                                      .toString(),
+                null, null, true);
+
+        assertThat(processManager.command).isNull();
         assertThat(exitCode.getExitCode()).isEqualTo(GenerateCommands.EXIT_GENERATION_FAILED);
-        assertThat(report).contains("No *.intent file");
-    }
-
-    private static GenerateCommands commands(CommandExitCode exitCode) {
-        return new GenerateCommands(exitCode, new StaticListableBeanFactory().getBeanProvider(BuildProperties.class));
-    }
-
-    private static Map<String, byte[]> regenerate(Path project) throws IOException {
-        try (IntentRegeneration regeneration = new IntentRegeneration()) {
-            Path regenerated = regeneration.regenerate(project);
-            Map<String, byte[]> files = new LinkedHashMap<>();
-            for (String file : GenerationDrift.filesOf(regenerated)) {
-                files.put(file, Files.readAllBytes(regenerated.resolve(file)));
-            }
-            return files;
-        }
-    }
-
-    private Path sample() throws IOException {
-        Path project = Files.createDirectories(workspace.resolve(SAMPLE));
-        try (InputStream in = GenerateCommandsTest.class.getResourceAsStream("/" + SAMPLE + "/" + INTENT)) {
-            Files.write(project.resolve(INTENT), in.readAllBytes());
-        }
-        return project;
+        assertThat(report).contains("--dirigibleJarPath");
     }
 }

@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.cli.generate;
+package org.eclipse.dirigible.generate;
 
 /** The intent could not be generated: it was refused, or one of its code generations failed. */
 class GenerationFailedException extends RuntimeException {

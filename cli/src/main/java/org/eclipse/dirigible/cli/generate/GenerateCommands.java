@@ -9,158 +9,86 @@
  */
 package org.eclipse.dirigible.cli.generate;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.info.BuildProperties;
+import org.eclipse.dirigible.cli.util.ProcessManager;
 import org.springframework.shell.core.command.annotation.Command;
 import org.springframework.shell.core.command.annotation.Option;
 import org.springframework.stereotype.Component;
 
 /**
- * {@code generate}: regenerates a project from its {@code *.intent} without a running platform
- * (#7642), and with {@code --check} reports how its committed files drift from the regeneration -
- * the pull-request gate a module repository runs against the platform version it pins.
- *
- * <p>
- * Exit codes: 0 when the project is regenerated, or with {@code --check} when nothing drifts; 1
- * when {@code --check} finds drift; 2 when the intent cannot be generated at all.
+ * {@code generate}: regenerates a project from its {@code *.intent} without a running platform, or
+ * checks it for drift (#7642). The generator is the platform's own, so it runs from the platform
+ * jar - the CLI stays a launcher and does not carry the platform (#7793).
  */
 @Component
 public class GenerateCommands {
 
-    /** {@code --check} found committed files that differ from the regeneration. */
-    static final int EXIT_DRIFT = 1;
+    /** The platform jar's headless generate entry point. */
+    static final String GENERATE_MAIN = "org.eclipse.dirigible.generate.HeadlessGenerate";
 
-    /** The intent was refused, or one of its code generations failed. */
+    /** The platform jar is missing, or the generate process could not be started. */
     static final int EXIT_GENERATION_FAILED = 2;
 
     private final CommandExitCode exitCode;
-    private final String platformVersion;
+    private final ProcessManager processManager;
 
-    GenerateCommands(CommandExitCode exitCode, ObjectProvider<BuildProperties> buildProperties) {
+    GenerateCommands(CommandExitCode exitCode, ProcessManager processManager) {
         this.exitCode = exitCode;
-        BuildProperties build = buildProperties.getIfAvailable();
-        this.platformVersion = build == null ? "unknown" : build.getVersion();
+        this.processManager = processManager;
     }
 
     /**
-     * Regenerates a project, or checks it for drift.
+     * Regenerates a project, or checks it for drift. The exit code is the platform's: 0, 1 on drift, 2
+     * when the intent cannot be generated.
      *
+     * @param dirigibleJarPathOption the platform jar
      * @param projectOption the project folder, the working directory when absent
      * @param outOption where to write the regenerated project, the project itself when absent
      * @param check whether to compare instead of write
-     * @return the report
-     * @throws IOException when the project cannot be read or the output written
+     * @return what went wrong before the platform ran, empty otherwise - the platform prints its own
+     *         report
      */
     @Command(name = "generate",
             description = "Regenerate a project from its *.intent without a running platform; with --check, report drift from the committed files.")
-    public String generate(
+    public String generate(@Option(longName = "dirigibleJarPath",
+            description = "Path to the Eclipse Dirigible fat/uber jar. This value is automatically resolved when the CLI is installed via npm.") String dirigibleJarPathOption,
             @Option(longName = "project",
                     description = "The project folder. If not specified, the working directory is used.") String projectOption,
             @Option(longName = "out",
                     description = "Where to write the regenerated project. If not specified, the project itself.") String outOption,
             @Option(longName = "check", defaultValue = "false",
-                    description = "Write nothing; print the unified diff of every committed file the regeneration changes or drops, and exit 1 if there is one.") boolean check)
-            throws IOException {
-        Path project = Path.of(isBlank(projectOption) ? System.getProperty("user.dir") : projectOption)
-                           .toAbsolutePath()
-                           .normalize();
-        if (!Files.isDirectory(project)) {
+                    description = "Write nothing; print the unified diff of every committed file the regeneration changes or drops, and exit 1 if there is one.") boolean check) {
+        if (isBlank(dirigibleJarPathOption) || !Files.isRegularFile(Path.of(dirigibleJarPathOption))) {
             exitCode.set(EXIT_GENERATION_FAILED);
-            return "No project folder at [" + project + "]";
+            return "No Eclipse Dirigible jar at [" + dirigibleJarPathOption + "] - pass --dirigibleJarPath";
         }
-        StringBuilder report = new StringBuilder("Eclipse Dirigible ").append(platformVersion)
-                                                                      .append(" - generate ")
-                                                                      .append(project)
-                                                                      .append('\n');
-        try (IntentRegeneration regeneration = new IntentRegeneration()) {
-            Path regenerated = regeneration.regenerate(project);
-            GenerationDrift drift = GenerationDrift.between(project, regenerated);
-            if (check) {
-                reportDrift(report, drift);
-            } else {
-                Path out = isBlank(outOption) ? project
-                        : Path.of(outOption)
-                              .toAbsolutePath()
-                              .normalize();
-                Written written = write(drift, regenerated, project, out);
-                report.append("Regenerated into [")
-                      .append(out)
-                      .append("]: ")
-                      .append(written.files())
-                      .append(" file(s) written, ")
-                      .append(written.removed())
-                      .append(" removed\n");
-            }
-        } catch (GenerationFailedException e) {
-            exitCode.set(EXIT_GENERATION_FAILED);
-            report.append(e.getMessage())
-                  .append('\n');
+        List<String> command = new ArrayList<>(List.of("java", "-Dloader.main=" + GENERATE_MAIN, "-jar", Path.of(dirigibleJarPathOption)
+                                                                                                             .toAbsolutePath()
+                                                                                                             .toString()));
+        if (!isBlank(projectOption)) {
+            command.add("--project");
+            command.add(absolute(projectOption));
         }
-        return report.toString();
+        if (!isBlank(outOption)) {
+            command.add("--out");
+            command.add(absolute(outOption));
+        }
+        if (check) {
+            command.add("--check");
+        }
+        exitCode.set(processManager.startSynchronously(command.toArray(String[]::new)));
+        return "";
     }
 
-    private void reportDrift(StringBuilder report, GenerationDrift drift) {
-        if (drift.isClean()) {
-            report.append("No drift: every committed file is what the intent generates (")
-                  .append(drift.uncommitted()
-                               .size())
-                  .append(" generated file(s) are not committed)\n");
-            return;
-        }
-        exitCode.set(EXIT_DRIFT);
-        report.append("Drift: ")
-              .append(drift.changed()
-                           .size())
-              .append(" committed file(s) differ from the regeneration, ")
-              .append(drift.removed()
-                           .size())
-              .append(" are no longer generated\n")
-              .append(drift.diff());
-    }
-
-    /** What a write did: the files it wrote and the files it removed. */
-    private record Written(int files, int removed) {
-    }
-
-    /**
-     * Writes the regeneration. Into the project itself the regeneration is applied - what it changes or
-     * adds is written and what it no longer produces is deleted, as the IDE's Generate does; anywhere
-     * else the regenerated project is copied whole.
-     */
-    private static Written write(GenerationDrift drift, Path regenerated, Path project, Path out) throws IOException {
-        if (out.equals(project)) {
-            for (String file : drift.changed()) {
-                copy(regenerated.resolve(file), project.resolve(file));
-            }
-            for (String file : drift.uncommitted()) {
-                copy(regenerated.resolve(file), project.resolve(file));
-            }
-            for (String file : drift.removed()) {
-                Files.delete(project.resolve(file));
-            }
-            return new Written(drift.changed()
-                                    .size()
-                    + drift.uncommitted()
-                           .size(),
-                    drift.removed()
-                         .size());
-        }
-        Set<String> files = GenerationDrift.filesOf(regenerated);
-        for (String file : files) {
-            copy(regenerated.resolve(file), out.resolve(file));
-        }
-        return new Written(files.size(), 0);
-    }
-
-    private static void copy(Path from, Path to) throws IOException {
-        Files.createDirectories(to.getParent());
-        Files.copy(from, to, StandardCopyOption.REPLACE_EXISTING);
+    private static String absolute(String path) {
+        return Path.of(path)
+                   .toAbsolutePath()
+                   .normalize()
+                   .toString();
     }
 
     private static boolean isBlank(String value) {

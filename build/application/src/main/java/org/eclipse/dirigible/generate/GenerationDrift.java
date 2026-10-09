@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.cli.generate;
+package org.eclipse.dirigible.generate;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

@@ -1,7 +1,8 @@
 name: Dirigible regeneration check
 description: >
   Fails when a project's committed generated files are not what its *.intent generates on the pinned
-  Eclipse Dirigible release - `dirigible-cli generate --check`, with no platform booted (#7642).
+  Eclipse Dirigible release - `generate --check`, with no platform booted (#7642), run from the
+  platform jar (#7793).
 
 inputs:
   projects:
@@ -9,12 +10,14 @@ inputs:
     required: true
   platform-version:
     description: >
-      The Eclipse Dirigible release the projects pin. Its dirigible-cli executable jar is downloaded
-      from Maven Central. Ignored when cli-jar is given.
+      The Eclipse Dirigible release the projects pin. Its dirigible-application executable jar is
+      downloaded from Maven Central. Ignored when dirigible-jar is given.
     required: false
     default: ''
-  cli-jar:
-    description: A dirigible-cli executable jar to use instead of downloading one; a shell glob is allowed.
+  dirigible-jar:
+    description: >
+      A dirigible-application executable jar to use instead of downloading one; a shell glob is
+      allowed.
     required: false
     default: ''
   java-version:
@@ -36,21 +39,32 @@ runs:
       env:
         PROJECTS: ${{ inputs.projects }}
         PLATFORM_VERSION: ${{ inputs.platform-version }}
-        CLI_JAR: ${{ inputs.cli-jar }}
+        DIRIGIBLE_JAR: ${{ inputs.dirigible-jar }}
       run: |
         set -uo pipefail
-        if [ -n "$CLI_JAR" ]; then
-          jar=$(ls $CLI_JAR | head -n 1)
+        central=https://repo1.maven.org/maven2/org/eclipse/dirigible
+        if [ -n "$DIRIGIBLE_JAR" ]; then
+          jar=$(ls $DIRIGIBLE_JAR | head -n 1)
         elif [ -n "$PLATFORM_VERSION" ]; then
-          jar="$RUNNER_TEMP/dirigible-cli-$PLATFORM_VERSION-executable.jar"
-          curl -fsSL -o "$jar" \
-            "https://repo1.maven.org/maven2/org/eclipse/dirigible/dirigible-cli/$PLATFORM_VERSION/dirigible-cli-$PLATFORM_VERSION-executable.jar"
+          jar="$RUNNER_TEMP/dirigible-application-$PLATFORM_VERSION-executable.jar"
+          curl -fsSL -o "$jar" "$central/dirigible-application/$PLATFORM_VERSION/dirigible-application-$PLATFORM_VERSION-executable.jar"
         else
-          echo "::error::Either platform-version or cli-jar is required"
+          echo "::error::Either platform-version or dirigible-jar is required"
           exit 2
         fi
         if [ ! -f "$jar" ]; then
-          echo "::error::No dirigible-cli jar at [$jar]"
+          echo "::error::No dirigible-application jar at [$jar]"
+          exit 2
+        fi
+        if unzip -l "$jar" 'BOOT-INF/classes/org/eclipse/dirigible/generate/HeadlessGenerate.class' > /dev/null 2>&1; then
+          generate=(java -Dloader.main=org.eclipse.dirigible.generate.HeadlessGenerate -jar "$jar")
+        elif [ -n "$PLATFORM_VERSION" ]; then
+          # a release before #7793 carries the generator in its dirigible-cli jar
+          jar="$RUNNER_TEMP/dirigible-cli-$PLATFORM_VERSION-executable.jar"
+          curl -fsSL -o "$jar" "$central/dirigible-cli/$PLATFORM_VERSION/dirigible-cli-$PLATFORM_VERSION-executable.jar" || exit 2
+          generate=(java -jar "$jar" generate)
+        else
+          echo "::error::[$jar] has no headless generate - it predates #7793"
           exit 2
         fi
         failed=0
@@ -58,7 +72,7 @@ runs:
         for project in $PROJECTS; do
           checked=$((checked + 1))
           echo "::group::$project"
-          java -jar "$jar" generate --project "$project" --check
+          "${generate[@]}" --project "$project" --check
           status=$?
           echo "::endgroup::"
           if [ "$status" -eq 1 ]; then
