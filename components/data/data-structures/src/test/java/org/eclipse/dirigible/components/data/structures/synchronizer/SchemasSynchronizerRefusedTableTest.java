@@ -23,6 +23,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -126,9 +127,9 @@ class SchemasSynchronizerRefusedTableTest {
         for (Connection connection : opened) {
             connection.close();
         }
-        keeper.createStatement()
-              .execute("DROP ALL OBJECTS");
-        keeper.close();
+        try (Connection database = keeper; Statement statement = database.createStatement()) {
+            statement.execute("DROP ALL OBJECTS");
+        }
     }
 
     /**
@@ -213,7 +214,7 @@ class SchemasSynchronizerRefusedTableTest {
                         return DatabaseSystem.H2;
                     }
                     if ("isOfType".equals(method.getName())) {
-                        return DatabaseSystem.H2.equals(args[0]);
+                        return args != null && DatabaseSystem.H2.equals(args[0]);
                     }
                     if (refusing.get() && "prepareStatement".equals(method.getName()) && args != null && args[0] instanceof String sql
                             && sql.contains(REFUSED_TABLE)) {
