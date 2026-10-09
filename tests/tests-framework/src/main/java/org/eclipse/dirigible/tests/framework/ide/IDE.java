@@ -205,11 +205,6 @@ public class IDE {
         assertStatusBarMessage(publishedMessage);
     }
 
-    public void openSpringBootAdmin() {
-        browser.openPath("/spring-admin");
-        login();
-    }
-
     public void login() {
         login(true);
     }

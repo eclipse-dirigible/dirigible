@@ -57,7 +57,6 @@ class HttpSecurityURIConfiguratorTest {
     @Test
     void operationalInfrastructureStaysOperatorOnly() {
         assertEquals(Set.of("OPERATOR"), requiredRoles("/actuator/metrics"));
-        assertEquals(Set.of("OPERATOR"), requiredRoles("/spring-admin/applications"));
     }
 
     @Test

@@ -642,7 +642,6 @@ Stable URL roots (`BaseEndpoint.PREFIX_ENDPOINT_*`):
 | `/odata/v2/...` | OData services. |
 | `/websockets/...` | WebSocket endpoints (incl. `/websockets/ide/java-debug?workspace=<name>`). |
 | `/swagger-ui/index.html`, `/api-docs` | Swagger UI + OpenAPI document. |
-| `/spring-admin/` | Spring Boot Admin (server profile enabled). |
 | `/actuator/health/readiness`, `/actuator/health/liveness` | Health probes. |
 | `/` | Redirects to `DIRIGIBLE_HOME_URL` (default `services/web/shell-ide/`). |
 
@@ -730,7 +729,6 @@ Notable env-vars (non-exhaustive — full list lives in the source):
 
 ## 13. Observability
 
-- **Spring Boot Admin** at `/spring-admin/`.
 - **Actuator probes** at `/actuator/health/readiness`, `/actuator/health/liveness`.
 - **OpenTelemetry** via `engine-open-telemetry` + Camel OpenTelemetry; configurable per the OTLP convention. Companion config under `open-telemetry/`.
 - **Logs** — live in `components/ide/ide-logs` (REST: `LogsEndpoint`, `LogsConfigurationsEndpoint`; UI: `view-logs`, `view-loggers`).
