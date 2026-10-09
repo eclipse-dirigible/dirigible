@@ -16,7 +16,7 @@ Source-of-truth pointers are included in each section so generated docs can cite
   - **JavaScript** — ES6+ syntax over GraalJS; synchronous programming model (in contrast to Node.js); CommonJS + ESM supported.
   - **TypeScript** — transpiled at the platform; full strong typing via tsconfig at the project root.
   - **Java** — client `.java` compiled in-process by `engine-java`.
-  - **Declarative artefacts** — XML / JSON / YAML / Markdown / Confluence wiki (see §2).
+  - **Declarative artefacts** — XML / JSON / YAML, plus Markdown / Confluence wiki with the `engine-wiki` add-on (see §2).
 - **Default UI.** `http://localhost:8080`, login `admin` / `admin`.
 - **License.** Eclipse Public License 2.0.
 
@@ -60,6 +60,8 @@ Use this table as the canonical list of file extensions and the runtime behavior
 | `*.csvim`, `*.csv` | CSV import model + data files | `CsvimSynchronizer` (data-csvim) |
 
 ### 2.3 Documentation / wiki artefacts
+
+Add-on: provided by `engine-wiki`, which is not in the default bundle (see `components/engine/engine-wiki/README.md`).
 
 | Extension | Purpose | Synchronizer |
 | --------- | ------- | ------------ |
@@ -127,7 +129,7 @@ The platform is composed by what lands on the classpath — `build/application` 
 | `engine-proxy` | HTTP reverse-proxy routes. |
 | `engine-security` | Declarative `.access` / `.roles` enforcement; integrates with Spring Security. |
 | `engine-template`, `engine-template-javascript`, `engine-template-mustache`, `engine-template-velocity` | Template-language runtimes for generation. |
-| `engine-wiki` | Markdown and Confluence rendering. |
+| `engine-wiki` | Markdown and Confluence rendering at `/services/wiki`. An add-on, not in the default bundle — see `components/engine/engine-wiki/README.md`. |
 | `engine-open-telemetry` | OpenTelemetry trace/metric export (Camel-aware). |
 
 ---
