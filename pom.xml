@@ -1083,22 +1083,11 @@
                 <artifactId>ag-grid-community__infinite-row-model</artifactId>
                 <version>27.1.0</version>
             </dependency>
-            <!-- via bpmn-visualization (${bpmn-visualization.version}); strnum through fast-xml-parser -->
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>typed-mxgraph__typed-mxgraph</artifactId>
-                <version>1.0.8</version>
-            </dependency>
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>es-toolkit</artifactId>
-                <version>1.39.10</version>
-            </dependency>
-            <dependency>
-                <groupId>org.webjars.npm</groupId>
-                <artifactId>strnum</artifactId>
-                <version>2.3.0</version>
-            </dependency>
+            <!-- bpmn-visualization's five transitive webjars (typed-mxgraph, es-toolkit,
+                 fast-xml-parser, strnum, mxgraph) used to be pinned here, because those webjars
+                 declare npm-style open ranges. perspective-processes now EXCLUDES all five (#7786) -
+                 the UI loads only dist/bpmn-visualization.min.js, which bundles them - so there is
+                 no path left to pin. -->
             <!-- The Harmonia stack (harmonia.version, alpinejs.version, lucide.version,
                  pinecone-router.version, i18next.version) is bumped as one. When Harmonia is updated,
                  update the pins below as well: read the ranges the new webjars declare (their poms) and

@@ -18,6 +18,33 @@
             <groupId>org.webjars.npm</groupId>
             <artifactId>bpmn-visualization</artifactId>
             <version>${bpmn-visualization.version}</version>
+            <!-- The UI loads one file, dist/bpmn-visualization.min.js, which already bundles these
+                 (#7786). Nothing under components/ references webjars/mxgraph, webjars/es-toolkit,
+                 typed-mxgraph, webjars/strnum or fast-xml-parser - the mxGraph the modelers use is
+                 the copy vendored in resources-mxgraph - so the five webjars were 4 MB of nested
+                 jars nobody can reach. -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>mxgraph</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>typed-mxgraph__typed-mxgraph</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>es-toolkit</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>fast-xml-parser</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>strnum</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
