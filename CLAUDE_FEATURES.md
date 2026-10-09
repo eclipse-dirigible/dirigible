@@ -584,7 +584,7 @@ The IDE chrome (sidebars, dialogs, tabs, menus, toolbars, forms) is built on [Bl
 - `database-sql-hana`
 - `database-sql-mariadb`
 - `database-sql-mysql`
-- `database-sql-snowflake`
+- `database-sql-snowflake` — dialect only; the Snowflake JDBC driver (~99 MB) is not bundled, see `modules/database/database-sql-snowflake/README.md`
 - `database-sql-h2`
 - `database-sql-mongodb` (NoSQL)
 - `database-mongodb-jdbc`
@@ -604,7 +604,7 @@ CI runs the integration suite three times (H2, PostgreSQL 16, MSSQL 2022) — wh
 - `data-anonymize` — column-level anonymization endpoint.
 - `data-processes` — process-data helpers.
 - `data-core` — shared helpers.
-- `data-source-snowpark` — Snowflake Snowpark integration.
+- `data-source-snowpark` — Snowflake Snowpark integration (needs the Snowflake JDBC driver added by the application).
 
 ### 8.3 Repository (`modules/repository/`)
 - `repository-api`, `repository-local`, `repository-master`, `repository-cache`, `repository-search`, `repository-zip` — pluggable storage abstraction backing the registry (file-system local is the default).

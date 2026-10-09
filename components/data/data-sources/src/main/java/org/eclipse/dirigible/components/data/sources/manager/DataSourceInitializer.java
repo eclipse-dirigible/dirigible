@@ -146,7 +146,7 @@ public class DataSourceInitializer implements DisposableBean {
         logger.info("Setting auto commit to [{}] for data source [{}]", autoCommit, name);
         config.setAutoCommit(autoCommit);
 
-        config.setDriverClassName(driver);
+        setDriverClassName(config, name, driver);
         config.setJdbcUrl(url);
         config.setUsername(username);
         config.setPassword(password);
@@ -191,6 +191,28 @@ public class DataSourceInitializer implements DisposableBean {
         }
 
         return managedDataSource;
+    }
+
+    /**
+     * Sets the JDBC driver class, failing with a message that says the driver is not on the classpath
+     * when it cannot be loaded. Drivers outside the default bundle (Snowflake, for example) are added
+     * by the application or installed as a {@code scope: "platform"} dependency.
+     *
+     * @param config the pool configuration
+     * @param name the data source name
+     * @param driver the driver class name
+     * @throws IllegalStateException when the driver class is not on the classpath
+     */
+    static void setDriverClassName(HikariConfig config, String name, String driver) {
+        try {
+            config.setDriverClassName(driver);
+        } catch (RuntimeException ex) {
+            String message = "The JDBC driver [" + driver + "] of data source [" + name
+                    + "] is not on the classpath. Drivers that are not bundled by default (e.g. Snowflake) have to be added to the application"
+                    + " or installed as a platform-scoped dependency.";
+            logger.error(message, ex);
+            throw new IllegalStateException(message, ex);
+        }
     }
 
     /**
