@@ -255,7 +255,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
                             return true;
                         }
                     }
-
+                    break;
                 case UPDATE:
                     switch (lifecycle) {
                         case MODIFIED:
@@ -265,6 +265,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
                             return true;
                         }
                     }
+                    break;
                 case DELETE:
                     if (csvim.getLifecycle()
                              .equals(ArtefactLifecycle.CREATED)
@@ -275,6 +276,7 @@ public class CsvimSynchronizer extends MultitenantBaseSynchronizer<Csvim, Long> 
                         callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                         return true;
                     }
+                    break;
                 case START:
                 case STOP:
             }
