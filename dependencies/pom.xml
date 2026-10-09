@@ -80,6 +80,16 @@
                 <artifactId>maven-settings-builder</artifactId>
                 <version>${maven-resolver-maven.version}</version>
             </dependency>
+            <!-- The MSSQL, HANA, MySQL and MariaDB JDBC drivers are not bundled in the default executable
+                 (#7804): their dialect modules carry no driver, an edition adds the one it needs
+                 (application pom, project.json "scope": "platform", or the /modules drop-in). Pinned here
+                 so such an edition gets the platform's version; mysql-connector-j and mariadb-java-client
+                 come from the Spring Boot BOM imported below. -->
+            <dependency>
+                <groupId>com.microsoft.sqlserver</groupId>
+                <artifactId>mssql-jdbc</artifactId>
+                <version>${mssql.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.sap.cloud.db.jdbc</groupId>
                 <artifactId>ngdbc</artifactId>

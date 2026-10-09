@@ -580,17 +580,14 @@ The IDE chrome (sidebars, dialogs, tabs, menus, toolbars, forms) is built on [Bl
 ### 8.1 Supported databases (`modules/database/`)
 - `database-h2` (default, file-backed at `./target/dirigible/h2/DefaultDB`)
 - `database-sql-postgres`
-- `database-sql-mssql`
-- `database-sql-hana`
-- `database-sql-mariadb`
-- `database-sql-mysql`
+- `database-sql-mssql`, `database-sql-hana`, `database-sql-mariadb`, `database-sql-mysql` - dialects only; their JDBC drivers are **not bundled** (#7804). An edition adds the driver (application pom, `/modules` drop-in, or a project.json `scope: "platform"` dependency); `DataSourceInitializer` refuses a data source whose driver class is missing with a message naming the coordinate (`JdbcDriverAvailability`). Versions stay pinned in `dependencies/pom.xml` / the Spring Boot BOM.
 - `database-sql-snowflake`
 - `database-sql-h2`
 - `database-sql-mongodb` (NoSQL)
 - `database-mongodb-jdbc`
 - `database-persistence` — JDBC persistence abstraction.
 
-CI runs the integration suite three times (H2, PostgreSQL 16, MSSQL 2022) — when changing SQL/DDL emission, replicate locally on the affected DB.
+CI runs the integration suite on H2 and PostgreSQL 16 (the only bundled drivers) — when changing SQL/DDL emission, replicate locally on the affected DB.
 
 ### 8.2 Data tooling components
 - `data-sources` — JDBC pool registry + `.datasource` synchronizer.

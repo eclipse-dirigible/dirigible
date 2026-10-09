@@ -136,6 +136,7 @@ public class DataSourceInitializer implements DisposableBean {
         String schema = dataSource.getSchema();
 
         logger.info("Initializing a datasource with name: [{}]", name);
+        JdbcDriverAvailability.requireDriver(name, driver);
         if (dbType.isH2()) {
             prepareRootFolder(name);
         }

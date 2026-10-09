@@ -206,6 +206,7 @@
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.30.11</ngdbc.version>
         <snowflake.version>4.4.0</snowflake.version>
+        <mssql.version>13.6.0.jre11</mssql.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- AWS SDK v2 - the single line every software.amazon.awssdk artifact in the fat jar

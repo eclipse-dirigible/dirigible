@@ -19,11 +19,6 @@
     
     <dependencies>
 		<dependency>
-			<groupId>com.sap.cloud.db.jdbc</groupId>
-			<artifactId>ngdbc</artifactId>
-			<version>${ngdbc.version}</version>
-		</dependency>
-		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
