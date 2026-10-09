@@ -41,7 +41,7 @@ import java.util.Set;
 import org.bson.BsonValue;
 import org.bson.Document;
 
-import com.mongodb.MongoClient;
+import com.mongodb.MongoClientSettings;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MongoCursor;
 
@@ -101,7 +101,7 @@ public class MongoDBResultSet implements ResultSet {
                                                                .getCollectionName());
         this.metadata.setColumnCount(this.currentDoc.size());
         Set<Entry<String, BsonValue>> docEntries =
-                this.currentDoc.toBsonDocument(this.currentDoc.getClass(), MongoClient.getDefaultCodecRegistry())
+                this.currentDoc.toBsonDocument(this.currentDoc.getClass(), MongoClientSettings.getDefaultCodecRegistry())
                                .entrySet();
         for (Entry<String, BsonValue> docEntry : docEntries) {
             this.metadata.keys()

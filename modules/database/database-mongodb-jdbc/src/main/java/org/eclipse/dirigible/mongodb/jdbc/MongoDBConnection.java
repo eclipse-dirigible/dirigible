@@ -37,9 +37,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.mongodb.ConnectionString;
-import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoClientSettings;
-import com.mongodb.MongoClientURI;
 import com.mongodb.MongoCredential;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -73,13 +71,13 @@ public class MongoDBConnection implements Connection {
     private boolean isReadonly = false;
 
     /** The client URI. */
-    private MongoClientURI clientUri;
+    private ConnectionString clientUri;
 
     /** The client. */
     private final MongoClient client;
 
     /** The client options. */
-    private final MongoClientOptions clientOptions;
+    private final ConnectionString clientOptions;
 
     /** The mongo atabase. */
     MongoDatabase mongoDatabase;
@@ -101,7 +99,7 @@ public class MongoDBConnection implements Connection {
         String username = info.getProperty("user");
         String password = info.getProperty("password");
         this.client = createMongoClient(dbUrl, username, password);
-        this.clientUri = new MongoClientURI(dbUrl);
+        this.clientUri = new ConnectionString(dbUrl);
         this.dbName = this.clientUri.getDatabase() != null ? this.clientUri.getDatabase() : MONGODB_DEFAULT_DB;
         this.collectionName = this.clientUri.getCollection();
 
@@ -111,7 +109,7 @@ public class MongoDBConnection implements Connection {
         if (this.info == null) {
             this.info = new Properties();
         }
-        this.clientOptions = this.clientUri.getOptions();
+        this.clientOptions = this.clientUri;
         this.info.putAll(this.mongoClientOptionsAsProperties(this.clientOptions, this.info));
 
         // retrieve these from connected client
@@ -189,26 +187,42 @@ public class MongoDBConnection implements Connection {
      * @param props the props
      * @return the properties
      */
-    private Properties mongoClientOptionsAsProperties(MongoClientOptions ops, Properties props) {
-        // TODO: write complex object properties too?
-        if (ops.getDescription() != null)
-            props.setProperty("description", ops.getDescription());
+    private Properties mongoClientOptionsAsProperties(ConnectionString ops, Properties props) {
+        // The 3.x MongoClientOptions is gone; the modern driver parses the same settings onto the
+        // ConnectionString itself, where each is a nullable boxed value (absent from the URI = null)
+        // rather than a defaulted primitive, so each is written only when the URI actually carried it.
+        // Two options have no ConnectionString counterpart and are therefore no longer reported:
+        // heartbeatConnectTimeout and heartbeatSocketTimeout, which the driver no longer exposes
+        // separately; connectionsPerHost / minConnectionsPerHost are the pool-size settings and keep
+        // their driver names (maxPoolSize / minPoolSize).
+        if (ops.getApplicationName() != null)
+            props.setProperty("description", ops.getApplicationName());
         if (ops.getRequiredReplicaSetName() != null)
             props.setProperty("requiredReplicaSetName", ops.getRequiredReplicaSetName());
-        props.setProperty("connectionsPerHost", "" + ops.getConnectionsPerHost());
-        props.setProperty("connectTimeout", "" + ops.getConnectTimeout());
-        props.setProperty("heartbeatConnectTimeout", "" + ops.getHeartbeatConnectTimeout());
-        props.setProperty("heartbeatFrequency", "" + ops.getHeartbeatFrequency());
-        props.setProperty("heartbeatSocketTimeout", "" + ops.getHeartbeatSocketTimeout());
-        props.setProperty("localThreshold", "" + ops.getLocalThreshold());
-        props.setProperty("maxConnectionIdleTime", "" + ops.getMaxConnectionIdleTime());
-        props.setProperty("maxConnectionLifeTime", "" + ops.getMaxConnectionLifeTime());
-        props.setProperty("maxWaitTime", "" + ops.getMaxWaitTime());
-        props.setProperty("minConnectionsPerHost", "" + ops.getMinConnectionsPerHost());
-        props.setProperty("minHeartbeatFrequency", "" + ops.getMinHeartbeatFrequency());
-        props.setProperty("serverSelectionTimeout", "" + ops.getServerSelectionTimeout());
-        props.setProperty("socketTimeout", "" + ops.getSocketTimeout());
+        putIfPresent(props, "maxPoolSize", ops.getMaxConnectionPoolSize());
+        putIfPresent(props, "minPoolSize", ops.getMinConnectionPoolSize());
+        putIfPresent(props, "connectTimeout", ops.getConnectTimeout());
+        putIfPresent(props, "heartbeatFrequency", ops.getHeartbeatFrequency());
+        putIfPresent(props, "localThreshold", ops.getLocalThreshold());
+        putIfPresent(props, "maxConnectionIdleTime", ops.getMaxConnectionIdleTime());
+        putIfPresent(props, "maxConnectionLifeTime", ops.getMaxConnectionLifeTime());
+        putIfPresent(props, "maxWaitTime", ops.getMaxWaitTime());
+        putIfPresent(props, "serverSelectionTimeout", ops.getServerSelectionTimeout());
+        putIfPresent(props, "socketTimeout", ops.getSocketTimeout());
         return props;
+    }
+
+    /**
+     * Writes a connection-string setting only when the URI carried it.
+     *
+     * @param props the properties
+     * @param name the property name
+     * @param value the value, or null when the URI did not set it
+     */
+    private static void putIfPresent(Properties props, String name, Object value) {
+        if (value != null) {
+            props.setProperty(name, String.valueOf(value));
+        }
     }
 
     /**
@@ -497,7 +511,7 @@ public class MongoDBConnection implements Connection {
             metadata.setDatabaseProductName("MongoDB");
             metadata.setDatabaseProductVersion(response.getString("version"));
             metadata.setDriverName("MongoDB JDBC Driver");
-            metadata.setURL(this.clientUri.getURI());
+            metadata.setURL(this.clientUri.getConnectionString());
         }
         // metadata.setIsReadOnly(client.isLocked());
         return metadata;

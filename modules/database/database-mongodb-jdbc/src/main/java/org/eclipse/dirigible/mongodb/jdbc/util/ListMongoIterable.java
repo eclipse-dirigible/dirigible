@@ -13,9 +13,8 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 
-import com.mongodb.Block;
-import com.mongodb.Function;
 import com.mongodb.client.MongoCursor;
+import com.mongodb.Function;
 import com.mongodb.client.MongoIterable;
 
 /**
@@ -72,10 +71,10 @@ public class ListMongoIterable implements MongoIterable<String> {
     /**
      * For each.
      *
-     * @param block the block
+     * @param action the action
      */
     @Override
-    public void forEach(Block<? super String> block) {}
+    public void forEach(java.util.function.Consumer<? super String> action) {}
 
     /**
      * First.

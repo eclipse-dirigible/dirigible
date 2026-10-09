@@ -33,6 +33,18 @@ public class LocalIteratorMongoCursor implements MongoCursor<String> {
     }
 
     /**
+     * How many results are already buffered and can be returned without a round trip - new on
+     * MongoCursor in the 5.x driver. This cursor is backed by an in-memory iterator, so everything it
+     * will ever return is already here; the driver only uses this as a hint.
+     *
+     * @return the number of immediately available results
+     */
+    @Override
+    public int available() {
+        return iterator.hasNext() ? 1 : 0;
+    }
+
+    /**
      * Close.
      */
     @Override
