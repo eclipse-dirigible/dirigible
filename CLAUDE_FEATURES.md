@@ -16,7 +16,6 @@ Source-of-truth pointers are included in each section so generated docs can cite
   - **JavaScript** — ES6+ syntax over GraalJS; synchronous programming model (in contrast to Node.js); CommonJS + ESM supported.
   - **TypeScript** — transpiled at the platform; full strong typing via tsconfig at the project root.
   - **Java** — client `.java` compiled in-process by `engine-java`.
-  - **Python** — server-side modules via `engine-python` (subset).
   - **Declarative artefacts** — XML / JSON / YAML / Markdown / Confluence wiki (see §2).
 - **Default UI.** `http://localhost:8080`, login `admin` / `admin`.
 - **License.** Eclipse Public License 2.0.
@@ -35,7 +34,6 @@ Use this table as the canonical list of file extensions and the runtime behavior
 | ------------------- | -------- | ----------------------- | ---------------------------- |
 | `*.js`, `*.mjs`, `*.ts` | JavaScript / TypeScript module | `engine-javascript` (Graalium / GraalVM polyglot) — served at `/services/js/...` and `/public/js/...` | Not synchronized; loaded on demand by `JavascriptEndpoint` / `TypeScriptEndpoint` |
 | `*.java` | Client Java source | `engine-java` — single `javac` + single `ClientClassLoader` per cycle; served at `/services/java/{project}/{*classPath}` and `/public/java/...` | `JavaSynchronizer` |
-| `*.py` | Python module | `engine-python` (limited) | `PythonEndpoint` |
 | `*.bpmn` | BPMN 2.0 process | `engine-bpm-flowable` (Flowable) | `BpmnSynchronizer` |
 | `*.camel` | Apache Camel route (YAML / XML route definition) | `engine-camel` | `CamelSynchronizer` |
 | `*.job` | Scheduled job (Quartz, cron) | `engine-jobs` | `JobSynchronizer` |
@@ -127,7 +125,6 @@ The platform is composed by what lands on the classpath — `build/application` 
 | `engine-di` | Dependency injection for TS components (`*Component.ts`). |
 | `engine-ftp`, `engine-sftp` | (S)FTP server endpoints. |
 | `engine-proxy` | HTTP reverse-proxy routes. |
-| `engine-python` | Python module execution. |
 | `engine-security` | Declarative `.access` / `.roles` enforcement; integrates with Spring Security. |
 | `engine-template`, `engine-template-javascript`, `engine-template-mustache`, `engine-template-velocity` | Template-language runtimes for generation. |
 | `engine-wiki` | Markdown and Confluence rendering. |
@@ -480,8 +477,7 @@ Interfaces that are either explicit SPIs (intended for extension), or load-beari
 
 | Interface | Role |
 | --------- | ---- |
-| `CodeRunner` | Top-level runner contract; specialized by `JavascriptCodeRunner`, `PythonCodeRunner`. |
-| `PythonCodeRunner` | Python runtime hook. |
+| `CodeRunner` | Top-level runner contract; specialized by `JavascriptCodeRunner`. |
 | `DirigibleJavascriptHooksProvider` | Plug into the JS context lifecycle (before/after eval). |
 | `JavascriptSourceProvider` | Resolve source modules; default is repository-backed. |
 | `ExternalModuleResolver` | Resolve external (non-`@aerokit/sdk/*`) imports. |
@@ -537,7 +533,7 @@ The IDE is composed of WebJar UI modules under `components/ui/` plus backend ser
 - **Tracing** — OpenTelemetry-backed view.
 
 ### 7.2 Editors (`components/ui/editor-*`)
-- `editor-monaco` (and `editor-monaco-extensions`) — Monaco-based code editing for JS/TS/Java/CSS/HTML/etc., with breakpoint glyphs (`debug-breakpoint-glyph`, `debug-current-line-glyph`). Powers JS/TS/Java/Python/HTML/CSS/JSON authoring.
+- `editor-monaco` (and `editor-monaco-extensions`) — Monaco-based code editing for JS/TS/Java/CSS/HTML/etc., with breakpoint glyphs (`debug-breakpoint-glyph`, `debug-current-line-glyph`). Powers JS/TS/Java/HTML/CSS/JSON authoring.
 - Visual / form editors: `editor-bpm` (BPMN), `editor-csv`, `editor-csvim`, `editor-data-structures` (schema / table / view), `editor-entity`, `editor-extensions`, `editor-form-builder`, `editor-image`, `editor-integrations`, `editor-jobs`, `editor-listeners`, `editor-mapping`, `editor-report`, `editor-schema`, `editor-security`, `editor-websockets`.
 
 #### Modelers (visual designers)

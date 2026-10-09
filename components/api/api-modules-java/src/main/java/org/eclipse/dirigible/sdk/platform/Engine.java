@@ -14,9 +14,9 @@ import java.util.Map;
 import org.eclipse.dirigible.components.api.platform.EnginesFacade;
 
 /**
- * Invokes another scripting engine on a file in the registry — most often GraalJS, occasionally
- * Python or another GraalVM polyglot engine. The {@code parameters} map is forwarded into the
- * engine's global scope and the engine's natural return value is propagated back.
+ * Invokes another scripting engine on a file in the registry — most often GraalJS, or another
+ * GraalVM polyglot engine. The {@code parameters} map is forwarded into the engine's global scope
+ * and the engine's natural return value is propagated back.
  * <p>
  * Useful for hybrid workflows where a Java controller delegates a step to TS/JS code (or vice
  * versa). For pure in-Java composition prefer regular method calls; spinning up an engine has
