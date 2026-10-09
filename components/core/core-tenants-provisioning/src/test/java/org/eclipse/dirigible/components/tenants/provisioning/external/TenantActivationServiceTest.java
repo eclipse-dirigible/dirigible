@@ -13,7 +13,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -27,9 +32,7 @@ import java.util.Set;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.eclipse.dirigible.components.base.synchronizer.MultitenantSynchronizers;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
-import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -41,32 +44,28 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Activation is two things that must happen in one order and one thing that must not happen at all
- * before the caller is answered.
+ * before the caller is answered - and the initialization it starts is the activated tenant's alone.
  */
 class TenantActivationServiceTest {
 
-    private static final Set<String> MULTITENANT_TYPES = Set.of("table", "csvim");
-
     private final TenantService tenantService = mock(TenantService.class);
     private final TenantDataSourceRegistrationService dataSourceRegistrationService = mock(TenantDataSourceRegistrationService.class);
-    private final DefinitionService definitionService = mock(DefinitionService.class);
-    private final MultitenantSynchronizers multitenantSynchronizers = mock(MultitenantSynchronizers.class);
+    private final TenantInitializationService initializationService = mock(TenantInitializationService.class);
     private final TenantPostProvisioningStep postProvisioningStep = mock(TenantPostProvisioningStep.class);
     private final DeferredExecutor executor = new DeferredExecutor();
 
     private final TenantActivationService service = new TenantActivationService(tenantService, dataSourceRegistrationService,
-            definitionService, multitenantSynchronizers, Set.of(postProvisioningStep), executor);
+            initializationService, Set.of(postProvisioningStep), executor);
 
     @BeforeEach
     void wireDefaults() {
-        when(multitenantSynchronizers.getArtefactTypes()).thenReturn(MULTITENANT_TYPES);
         when(dataSourceRegistrationService.isRegistered(any())).thenReturn(true);
         when(dataSourceRegistrationService.tenantDataSourceName(any())).thenReturn("acme_DefaultDB");
     }
 
     @Test
     void activationMakesTheTenantProvisioned() {
-        Tenant tenant = tenant(TenantStatus.PENDING_ACTIVATION);
+        Tenant tenant = tenant("acme", TenantStatus.PENDING_ACTIVATION);
 
         service.activate(tenant);
 
@@ -75,45 +74,55 @@ class TenantActivationServiceTest {
     }
 
     /**
-     * The per-tenant fan-out only visits provisioned tenants, so a materialization started before the
+     * The per-tenant fan-out only visits provisioned tenants, so an initialization requested before the
      * flip would skip the very tenant it is for.
      */
     @Test
-    void theTenantIsProvisionedBeforeAnythingIsMarkedForReprocessing() {
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+    void theTenantIsProvisionedBeforeItsInitializationIsRequested() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
 
-        InOrder order = inOrder(tenantService, definitionService);
+        InOrder order = inOrder(tenantService, initializationService);
         order.verify(tenantService)
              .save(any());
-        order.verify(definitionService)
-             .updateChecksums(eq(""), eq(MULTITENANT_TYPES));
+        order.verify(initializationService)
+             .request("acme");
     }
 
     /**
-     * The point of doing the marking in the request thread: a caller that polls the instant it gets its
-     * answer has to see work outstanding, not a status derived from state nothing has touched yet.
+     * The point of requesting the initialization in the request thread: a caller that polls the instant
+     * it gets its answer has to see work outstanding, not a status derived from state nothing has
+     * touched yet.
      */
     @Test
-    void theWorkIsMarkedBeforeTheCallerIsAnswered() {
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+    void theInitializationIsRequestedBeforeTheCallerIsAnswered() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
 
-        verify(definitionService).updateChecksums("", MULTITENANT_TYPES);
-        verify(postProvisioningStep, never()).execute();
+        verify(initializationService).request("acme");
+        verify(initializationService, never()).start(anyString());
+        verify(postProvisioningStep, never()).execute(anySet());
     }
 
+    /** The steps initialize the activated tenant and no other (#7799). */
     @Test
-    void theInitializationRunsAfterwards() {
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+    void theInitializationRunsAfterwardsForTheActivatedTenantOnly() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
 
         executor.runQueued();
 
-        verify(postProvisioningStep).execute();
+        InOrder order = inOrder(initializationService, postProvisioningStep);
+        order.verify(initializationService)
+             .start("acme");
+        order.verify(postProvisioningStep)
+             .execute(Set.of("acme"));
+        order.verify(initializationService)
+             .finish(eq("acme"), isNull());
+        verify(postProvisioningStep, never()).execute();
     }
 
     @Test
     void aTenantWithoutADataSourceCannotBeActivated() {
         when(dataSourceRegistrationService.isRegistered(any())).thenReturn(false);
-        Tenant tenant = tenant(TenantStatus.PENDING_ACTIVATION);
+        Tenant tenant = tenant("acme", TenantStatus.PENDING_ACTIVATION);
 
         ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> service.activate(tenant));
 
@@ -123,70 +132,99 @@ class TenantActivationServiceTest {
                 ex.getReason());
         assertEquals(TenantStatus.PENDING_ACTIVATION, tenant.getStatus());
         verify(tenantService, never()).save(any());
-        verify(definitionService, never()).updateChecksums(any(), any());
+        verify(initializationService, never()).request(anyString());
     }
 
     /** Re-activating an active tenant is the documented way to repair a failed initialization. */
     @Test
     void reActivatingAnActiveTenantReInitializesIt() {
-        Tenant tenant = tenant(TenantStatus.PROVISIONED);
+        Tenant tenant = tenant("acme", TenantStatus.PROVISIONED);
 
         service.activate(tenant);
 
         verify(tenantService, never()).save(any());
-        verify(definitionService).updateChecksums("", MULTITENANT_TYPES);
+        verify(initializationService).request("acme");
         executor.runQueued();
-        verify(postProvisioningStep).execute();
+        verify(postProvisioningStep).execute(Set.of("acme"));
+    }
+
+    /** Two activations at about the same time each initialize their own tenant. */
+    @Test
+    void tenantsActivatedTogetherAreEachInitializedOnTheirOwn() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
+        service.activate(tenant("globex", TenantStatus.PENDING_ACTIVATION));
+
+        executor.runQueued();
+
+        verify(postProvisioningStep).execute(Set.of("acme"));
+        verify(postProvisioningStep).execute(Set.of("globex"));
+        verify(initializationService).finish(eq("acme"), isNull());
+        verify(initializationService).finish(eq("globex"), isNull());
     }
 
     /**
-     * A queued pass has not started yet, so it will cover the second tenant as well - running two
-     * global synchronizations back to back would only repeat the same work.
+     * A queued initialization has not started yet, so it covers a repeated activation of its tenant.
      */
     @Test
-    void activationsThatArriveTogetherShareOneInitialization() {
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+    void aRepeatedActivationOfAQueuedTenantSharesItsInitialization() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
+        service.activate(tenant("acme", TenantStatus.PROVISIONED));
 
-        assertEquals(1, executor.queued(), "the second activation must not queue a second pass");
+        assertEquals(1, executor.queued(), "the second activation must not queue a second initialization");
         executor.runQueued();
-        verify(postProvisioningStep).execute();
-        // both activations still marked the work, which is what makes them individually observable
-        verify(definitionService, times(2)).updateChecksums("", MULTITENANT_TYPES);
+        verify(postProvisioningStep).execute(Set.of("acme"));
     }
 
-    /** An activation that arrives after the queued pass started gets a pass of its own. */
+    /** An activation that arrives after the queued initialization started gets one of its own. */
     @Test
-    void anActivationAfterThePassStartedQueuesAnother() {
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+    void anActivationAfterTheInitializationStartedQueuesAnother() {
+        service.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
         executor.runQueued();
 
-        service.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+        service.activate(tenant("acme", TenantStatus.PROVISIONED));
 
         assertEquals(1, executor.queued());
         executor.runQueued();
-        verify(postProvisioningStep, times(2)).execute();
+        verify(postProvisioningStep, times(2)).execute(Set.of("acme"));
     }
 
-    /** One failing step must not stop the others, and must not break the activation call. */
+    /**
+     * One failing step must not stop the others, and must not break the activation call - its failure
+     * is the failure of the tenant's initialization.
+     */
     @Test
-    void aFailingStepDoesNotStopTheOthers() {
+    void aFailingStepDoesNotStopTheOthersAndFailsTheInitialization() {
         TenantPostProvisioningStep failing = mock(TenantPostProvisioningStep.class);
-        org.mockito.Mockito.doThrow(new IllegalStateException("boom"))
-                           .when(failing)
-                           .execute();
+        doThrow(new IllegalStateException("boom")).when(failing)
+                                                  .execute(anySet());
         TenantActivationService withFailingStep = new TenantActivationService(tenantService, dataSourceRegistrationService,
-                definitionService, multitenantSynchronizers, Set.of(failing, postProvisioningStep), executor);
+                initializationService, Set.of(failing, postProvisioningStep), executor);
 
-        withFailingStep.activate(tenant(TenantStatus.PENDING_ACTIVATION));
+        withFailingStep.activate(tenant("acme", TenantStatus.PENDING_ACTIVATION));
         executor.runQueued();
 
-        verify(postProvisioningStep).execute();
+        verify(postProvisioningStep).execute(Set.of("acme"));
+        verify(initializationService).finish(eq("acme"), argThat(error -> error != null && error.contains("boom")));
     }
 
-    private static Tenant tenant(TenantStatus status) {
-        Tenant tenant = new Tenant("-", "Acme Ltd", "", "acme", status);
-        tenant.setId("acme");
+    /**
+     * An initialization a restart interrupted is picked up again, or its tenant reads in progress for
+     * good.
+     */
+    @Test
+    void anInterruptedInitializationIsResumedWhenTheApplicationIsReady() {
+        when(initializationService.findOpen()).thenReturn(List.of(new TenantInitialization("acme")));
+
+        service.onApplicationEvent(null);
+        executor.runQueued();
+
+        verify(postProvisioningStep).execute(Set.of("acme"));
+        verify(initializationService).finish(eq("acme"), isNull());
+    }
+
+    private static Tenant tenant(String id, TenantStatus status) {
+        Tenant tenant = new Tenant("-", id, "", id, status);
+        tenant.setId(id);
         return tenant;
     }
 

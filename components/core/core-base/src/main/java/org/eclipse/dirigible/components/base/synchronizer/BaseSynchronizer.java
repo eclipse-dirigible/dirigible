@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
+import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.open.telemetry.OpenTelemetryProvider;
@@ -26,7 +27,9 @@ import org.slf4j.LoggerFactory;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The Class BaseSynchronizer.
@@ -121,17 +124,98 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
             return completeImpl(wrapper, flow);
         }
 
+        String error = artefact.getError();
         TenantContext tenantContext = BeanProvider.getTenantContext();
-        List<TenantResult<Boolean>> results = tenantContext.executeForEachTenant(() -> {
+        List<TenantResult<TenantOutcome>> results = tenantContext.executeForEachTenant(() -> {
             logger.debug("[{} will complete artefact with lifecycle [{}] in phase [{}]] for tenant [{}]...\\nArtefact:[{}]", this,
                     lifecycle, flow, tenantContext.getCurrentTenant(), artefact);
             artefact.setLifecycle(lifecycle);
-            return completeImpl(wrapper, flow);
+            artefact.setError(error);
+            boolean completed = completeImpl(wrapper, flow);
+            return TenantOutcome.of(completed, lifecycle, artefact, flow);
         });
 
+        recordOutcomes(artefact, results);
         return results.stream()
                       .map(TenantResult::getResult)
-                      .allMatch(Boolean.TRUE::equals);
+                      .allMatch(TenantOutcome::completed);
+    }
+
+    /**
+     * Records each tenant's outcome in the {@link TenantArtefactLedger}, and keeps the shared row from
+     * reading as a success while a tenant failed: every tenant completes the artefact on the same
+     * object, so the state the row carries is the one the LAST tenant registered, and a tenant that
+     * succeeded after another one failed would otherwise hide the failure (#7776).
+     *
+     * @param artefact the artefact
+     * @param results the outcome per tenant
+     */
+    private void recordOutcomes(A artefact, List<TenantResult<TenantOutcome>> results) {
+        // the ledger lives beside the synchronization processor; a context without one has none
+        Optional<TenantArtefactLedger> ledger = BeanProvider.getOptionalBean(TenantArtefactLedger.class);
+        List<String> failures = new ArrayList<>();
+        boolean fatal = false;
+        for (TenantResult<TenantOutcome> result : results) {
+            TenantOutcome outcome = result.getResult();
+            if (outcome.lifecycle() == null) {
+                continue;
+            }
+            String tenantId = result.getTenant()
+                                    .getId();
+            ledger.ifPresent(l -> record(l, artefact, tenantId, outcome));
+            if (isFailure(outcome.lifecycle())) {
+                failures.add(tenantId + ": " + outcome.error());
+                fatal |= ArtefactLifecycle.FATAL == outcome.lifecycle();
+            }
+        }
+        if (!failures.isEmpty() && !isFailure(artefact.getLifecycle())) {
+            String message = "Failed for tenant(s) " + String.join("; ", failures);
+            logger.debug("Artefact [{}] completed for its last tenant but not for every tenant: [{}]", artefact.getKey(), message);
+            setStatus(artefact, fatal ? ArtefactLifecycle.FATAL : ArtefactLifecycle.FAILED, message);
+        }
+    }
+
+    /**
+     * Records one outcome. The ledger is bookkeeping about the work, not the work: a write that fails
+     * must not fail the artefact it describes.
+     */
+    private void record(TenantArtefactLedger ledger, A artefact, String tenantId, TenantOutcome outcome) {
+        try {
+            ledger.record(artefact, tenantId, outcome.lifecycle(), outcome.error());
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to record the outcome [{}] of artefact [{}] for tenant [{}]", outcome.lifecycle(), artefact.getKey(),
+                    tenantId, ex);
+        }
+    }
+
+    private static boolean isFailure(ArtefactLifecycle lifecycle) {
+        return ArtefactLifecycle.FAILED == lifecycle || ArtefactLifecycle.FATAL == lifecycle;
+    }
+
+    /**
+     * What completing an artefact in one phase came to for one tenant.
+     *
+     * @param completed whether the synchronizer completed the phase
+     * @param lifecycle the lifecycle to record for the tenant, or null when the phase changed nothing
+     *        for it - a phase that does not apply to the artefact's lifecycle, or the retry of a
+     *        failure that is still failed, must not overwrite the outcome recorded by the phase that
+     *        did the work
+     * @param error the error to record with a failure
+     */
+    private record TenantOutcome(boolean completed, ArtefactLifecycle lifecycle, String error) {
+
+        static TenantOutcome of(boolean completed, ArtefactLifecycle before, Artefact artefact, ArtefactPhase flow) {
+            ArtefactLifecycle after = artefact.getLifecycle();
+            if (after != before) {
+                return new TenantOutcome(completed, after, isFailure(after) ? artefact.getError() : null);
+            }
+            if (!completed && !isFailure(before)) {
+                String error = artefact.getError();
+                return new TenantOutcome(false, ArtefactLifecycle.FAILED,
+                        error == null || error.isBlank() ? "Not completed in phase [" + flow + "]" : error);
+            }
+            return new TenantOutcome(completed, null, null);
+        }
     }
 
     /**

@@ -11,14 +11,12 @@ package org.eclipse.dirigible.components.tenants.provisioning.external;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
-import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantSynchronizers;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
-import org.eclipse.dirigible.components.initializers.definition.Definition;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionState;
+import org.eclipse.dirigible.components.initializers.synchronizer.tenants.TenantArtefactLedgerService;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.slf4j.Logger;
@@ -27,30 +25,27 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 
 /**
- * Derives how far the initialization of a tenant has got.
+ * Derives how far the initialization of a tenant has got - for that tenant only.
  *
  * <p>
- * Derived, never tracked. Activation blanks the checksums of every definition that is materialized
- * per tenant and lets the synchronizers reprocess them; a definition whose checksum is still blank
- * is one the pass has not reached yet. Both halves of that - the blanking and the reprocessing -
- * are durable rows in the system database that every node of a cluster shares, so the answer here
- * is the same from any instance and survives a restart, without a run registry that could disagree
- * with reality.
+ * Every part of the answer is a row of the system database that every node of a cluster shares, so
+ * it is the same from any instance and survives a restart: the tenant's
+ * {@link TenantInitialization} says whether its initialization is still ahead or running, and the
+ * per-tenant artefact ledger says what each artefact came to in this tenant. Another tenant's
+ * failure is never reported here, and a later success elsewhere never hides one of this tenant's
+ * (#7776).
  *
  * <p>
- * Failure is read from both places it can appear. A definition that could not be parsed is recorded
- * as {@code BROKEN} with its message; an artefact that parsed but could not be materialized - a
- * table the tenant's user may not create, say - is recorded on the artefact itself as
- * {@code FAILED} or {@code FATAL} with its error. Watching only the definitions would miss exactly
- * the failure this API exists to report, because materializing into the tenant's schema is the part
- * that involves the externally created credentials.
+ * Failure is read from three places. An artefact that parsed but could not be materialized in the
+ * tenant - a table the tenant's user may not create, say - is a failure in the ledger. A definition
+ * that could not be parsed is {@code BROKEN}; that is a property of the definition, not of a
+ * tenant, so it is reported to every tenant. And a run that failed as a whole - it could not start
+ * in time, say - leaves its error on the tenant's initialization.
  *
  * <p>
- * Two properties of the signal are deliberate and worth knowing. It is batch-wide: tenants
- * activated within one synchronization window share it, so each reads {@code IN_PROGRESS} until the
- * window closes, and a definition error is reported to all of them because definition errors are
- * global. And an instance that has no per-tenant artefacts at all has nothing to materialize, so it
- * answers {@code COMPLETED} at once - which is the truth for such a deployment.
+ * A provisioned tenant without an initialization record - one provisioned by the built-in
+ * provisioner, or activated before records were kept - has nothing pending, so it is answered from
+ * the ledger and the definitions alone.
  */
 @Component
 @Conditional(TenantProvisioningApiEnabledCondition.class)
@@ -68,15 +63,26 @@ class TenantInitializationStatusCalculator {
     /** The definition service. */
     private final DefinitionService definitionService;
 
+    /** The outcome of each per-tenant artefact, per tenant. */
+    private final TenantArtefactLedgerService ledger;
+
+    /** The initialization of each activated tenant. */
+    private final TenantInitializationService initializationService;
+
     /**
      * Instantiates a new tenant initialization status calculator.
      *
      * @param multitenantSynchronizers the multitenant synchronizers
      * @param definitionService the definition service
+     * @param ledger the outcome of each per-tenant artefact, per tenant
+     * @param initializationService the initialization of each activated tenant
      */
-    TenantInitializationStatusCalculator(MultitenantSynchronizers multitenantSynchronizers, DefinitionService definitionService) {
+    TenantInitializationStatusCalculator(MultitenantSynchronizers multitenantSynchronizers, DefinitionService definitionService,
+            TenantArtefactLedgerService ledger, TenantInitializationService initializationService) {
         this.multitenantSynchronizers = multitenantSynchronizers;
         this.definitionService = definitionService;
+        this.ledger = ledger;
+        this.initializationService = initializationService;
     }
 
     /**
@@ -90,13 +96,13 @@ class TenantInitializationStatusCalculator {
             return TenantInitializationState.of(InitializationStatus.NOT_STARTED);
         }
 
-        List<Definition> definitions = definitionService.findByTypes(multitenantSynchronizers.getArtefactTypes());
-        if (definitions.stream()
-                       .anyMatch(TenantInitializationStatusCalculator::isAwaitingProcessing)) {
+        Optional<TenantInitialization> initialization = initializationService.find(tenant.getId());
+        if (initialization.map(TenantInitialization::isOpen)
+                          .orElse(false)) {
             return TenantInitializationState.of(InitializationStatus.IN_PROGRESS);
         }
 
-        List<String> errors = collectErrors(definitions);
+        List<String> errors = collectErrors(tenant.getId(), initialization);
         if (!errors.isEmpty()) {
             LOGGER.debug("Initialization of tenant [{}] is failed with [{}] error(s).", tenant.getId(), errors.size());
             return new TenantInitializationState(InitializationStatus.FAILED, describe(errors));
@@ -105,63 +111,26 @@ class TenantInitializationStatusCalculator {
     }
 
     /**
-     * Whether the synchronizers still owe this definition a pass.
+     * Everything that went wrong for the tenant: the run, the definitions, and the artefacts.
      *
-     * <p>
-     * A blank checksum is the mark the activation leaves; the pass replaces it with the real one as
-     * soon as it collects the definition. A deleted definition never gets one back - its source file is
-     * gone - so it is excluded, or a single removed artefact would leave every later activation
-     * reporting progress forever.
-     *
-     * @param definition the definition
-     * @return true, if the definition has not been reprocessed yet
-     */
-    private static boolean isAwaitingProcessing(Definition definition) {
-        if (DefinitionState.DELETED == definition.getState()) {
-            return false;
-        }
-        String checksum = definition.getChecksum();
-        return checksum == null || checksum.isBlank();
-    }
-
-    /**
-     * Everything that went wrong, from the definitions and from the artefacts they produced.
-     *
-     * @param definitions the multitenant definitions
+     * @param tenantId the tenant id
+     * @param initialization the tenant's initialization, if it has one
      * @return the failures
      */
-    private List<String> collectErrors(List<Definition> definitions) {
+    private List<String> collectErrors(String tenantId, Optional<TenantInitialization> initialization) {
         List<String> errors = new ArrayList<>();
-        definitions.stream()
-                   .filter(definition -> DefinitionState.BROKEN == definition.getState())
-                   .forEach(definition -> errors.add(
-                           definition.getType() + " [" + definition.getLocation() + "]: " + definition.getMessage()));
-
-        for (Synchronizer<?, ?> synchronizer : multitenantSynchronizers.getSynchronizers()) {
-            for (Artefact artefact : readArtefacts(synchronizer)) {
-                if (ArtefactLifecycle.FAILED == artefact.getLifecycle() || ArtefactLifecycle.FATAL == artefact.getLifecycle()) {
-                    errors.add(artefact.getType() + " [" + artefact.getLocation() + "]: " + artefact.getError());
-                }
-            }
-        }
+        initialization.map(TenantInitialization::getError)
+                      .filter(error -> !error.isBlank())
+                      .ifPresent(errors::add);
+        definitionService.findByTypes(multitenantSynchronizers.getArtefactTypes())
+                         .stream()
+                         .filter(definition -> DefinitionState.BROKEN == definition.getState())
+                         .forEach(definition -> errors.add(
+                                 definition.getType() + " [" + definition.getLocation() + "]: " + definition.getMessage()));
+        ledger.findFailures(tenantId)
+              .forEach(
+                      outcome -> errors.add(outcome.getArtefactType() + " [" + outcome.getArtefactLocation() + "]: " + outcome.getError()));
         return errors;
-    }
-
-    /**
-     * Reads one artefact type. A type whose table cannot be read - an engine switched off on this
-     * instance, say - must not turn the whole answer into an error of its own.
-     *
-     * @param synchronizer the synchronizer
-     * @return its artefacts, empty when they cannot be read
-     */
-    private List<? extends Artefact> readArtefacts(Synchronizer<?, ?> synchronizer) {
-        try {
-            return synchronizer.getService()
-                               .getAll();
-        } catch (RuntimeException ex) {
-            LOGGER.warn("Failed to read the artefacts of [{}] while calculating the initialization status.", synchronizer, ex);
-            return List.of();
-        }
     }
 
     /**

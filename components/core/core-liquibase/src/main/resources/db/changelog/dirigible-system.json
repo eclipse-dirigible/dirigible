@@ -11886,6 +11886,213 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_ARTEFACTS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_ARTEFACTS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENART_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_ARTEFACTS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_ARTEFACT_KEY",
+                    "type": "VARCHAR(2000)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_ARTEFACT_TYPE",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_ARTEFACT_LOCATION",
+                    "type": "VARCHAR(2000)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_LIFECYCLE",
+                    "type": "VARCHAR(32)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_ERROR",
+                    "type": "VARCHAR(2000)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENART_UPDATED_AT",
+                    "type": "TIMESTAMP",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_ARTEFACTS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY",
+                  "tableName": "DIRIGIBLE_TENANT_ARTEFACTS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENART_TENANT_ID, TENART_ARTEFACT_KEY",
+              "constraintName": "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY",
+              "tableName": "DIRIGIBLE_TENANT_ARTEFACTS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_INITIALIZATIONS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_INITIALIZATIONS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "name": "TENINIT_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_INITIALIZATIONS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENINIT_STATE",
+                    "type": "VARCHAR(32)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENINIT_REQUESTED_AT",
+                    "type": "TIMESTAMP",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENINIT_STARTED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENINIT_FINISHED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENINIT_ERROR",
+                    "type": "VARCHAR(2000)"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_INITIALIZATIONS"
+            }
+          }
+        ]
+      }
     }
   ]
 }

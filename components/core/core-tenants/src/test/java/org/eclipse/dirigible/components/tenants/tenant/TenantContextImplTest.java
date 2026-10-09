@@ -69,6 +69,48 @@ class TenantContextImplTest {
         verify(tenantService, never()).findByStatus(TenantStatus.INITIAL);
     }
 
+    /**
+     * Initializing a newly activated tenant runs the per-tenant artefacts through this same fan-out, so
+     * the scope is what keeps every other tenant - the default one included - untouched (#7799).
+     */
+    @Test
+    void aScopedFanOutVisitsOnlyTheTenantsOfTheScope() {
+        when(tenantService.findByStatus(TenantStatus.PROVISIONED)).thenReturn(
+                Set.of(tenant("acme", TenantStatus.PROVISIONED), tenant("globex", TenantStatus.PROVISIONED)));
+
+        Set<String> visited = new HashSet<>();
+        tenantContext.executeScopedTo(Set.of("globex"),
+                () -> tenantContext.executeForEachTenant(() -> visited.add(tenantContext.getCurrentTenant()
+                                                                                        .getId())));
+
+        assertEquals(Set.of("globex"), visited);
+    }
+
+    /** A scope naming a tenant that is not provisioned reaches nobody - it is never a way in. */
+    @Test
+    void aScopeCannotReachATenantThatIsNotProvisioned() {
+        when(tenantService.findByStatus(TenantStatus.PROVISIONED)).thenReturn(Set.of(tenant("acme", TenantStatus.PROVISIONED)));
+
+        Set<String> visited = new HashSet<>();
+        tenantContext.executeScopedTo(Set.of("globex"),
+                () -> tenantContext.executeForEachTenant(() -> visited.add(tenantContext.getCurrentTenant()
+                                                                                        .getId())));
+
+        assertTrue(visited.isEmpty(), "visited " + visited);
+    }
+
+    @Test
+    void theScopeEndsWithTheCall() {
+        when(tenantService.findByStatus(TenantStatus.PROVISIONED)).thenReturn(Set.of(tenant("acme", TenantStatus.PROVISIONED)));
+        tenantContext.executeScopedTo(Set.of("acme"), () -> null);
+
+        Set<String> visited = new HashSet<>();
+        tenantContext.executeForEachTenant(() -> visited.add(tenantContext.getCurrentTenant()
+                                                                          .getId()));
+
+        assertEquals(2, visited.size(), "the fan-out after the scoped call must reach every tenant again, got " + visited);
+    }
+
     private static Tenant tenant(String id, TenantStatus status) {
         Tenant tenant = new Tenant("-", id, "", id, status);
         tenant.setId(id);

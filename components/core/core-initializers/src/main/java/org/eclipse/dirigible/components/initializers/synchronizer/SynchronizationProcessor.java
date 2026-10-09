@@ -25,9 +25,12 @@ import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
+import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.initializers.definition.Definition;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionState;
+import org.eclipse.dirigible.components.initializers.synchronizer.tenants.TenantArtefactLedgerService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
@@ -85,6 +88,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     /** Tells whether a client is publishing to (or unpublishing from) the registry. */
     private final RegistryMutationTracker registryMutationTracker;
 
+    /** Restricts the per-tenant fan-out to the tenants being initialized. */
+    private final TenantContext tenantContext;
+
+    /** The outcome of each per-tenant artefact, per tenant. */
+    private final TenantArtefactLedgerService tenantArtefactLedger;
+
     /** The initialized. */
     private final AtomicBoolean initialized;
 
@@ -108,10 +117,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      * @param definitionService the definition service
      * @param synchronizationWatcher the synchronization watcher
      * @param registryMutationTracker the registry mutation tracker
+     * @param tenantContext the tenant context
+     * @param tenantArtefactLedger the outcome of each per-tenant artefact, per tenant
      */
     @Autowired
     public SynchronizationProcessor(IRepository repository, List<Synchronizer<?, ?>> synchronizers, DefinitionService definitionService,
-            SynchronizationWatcher synchronizationWatcher, RegistryMutationTracker registryMutationTracker) {
+            SynchronizationWatcher synchronizationWatcher, RegistryMutationTracker registryMutationTracker, TenantContext tenantContext,
+            TenantArtefactLedgerService tenantArtefactLedger) {
         this.repository = repository;
         this.synchronizers = Collections.synchronizedList(synchronizers);
         logger.info("Registered [{}] synchronizers: [{}]", synchronizers.size(), synchronizers);
@@ -119,6 +131,8 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         this.definitionService = definitionService;
         this.synchronizationWatcher = synchronizationWatcher;
         this.registryMutationTracker = registryMutationTracker;
+        this.tenantContext = tenantContext;
+        this.tenantArtefactLedger = tenantArtefactLedger;
         this.synchronizers.forEach(s -> s.setCallback(this));
 
         this.initialized = new AtomicBoolean(false);
@@ -201,6 +215,154 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     }
 
     /**
+     * Initializes newly provisioned or activated tenants: every per-tenant artefact is created in each
+     * of them, and in no other tenant (#7799).
+     *
+     * <p>
+     * The tenants already initialized are not touched. Re-running their artefacts - what blanking the
+     * checksums of every per-tenant definition used to do - is not merely redundant: it alters every
+     * tenant's tables again, re-imports seed rows a tenant deleted, and resets seeded rows a tenant
+     * edited. So the per-tenant fan-out is restricted to the given tenants, and the stored artefacts
+     * are applied to them as NEW, whatever lifecycle the shared artefact row carries - for these
+     * tenants the artefacts do not exist yet.
+     *
+     * <p>
+     * The pass holds the same processing slot as a full pass, so the two never interleave, and it waits
+     * (bounded) for the boot pass and for a running pass. The shared artefact rows are restored when it
+     * ends: a synchronizer registers its state on the one row every tenant shares, and the state of
+     * this initialization belongs to the tenants it ran for, which the {@link TenantArtefactLedger}
+     * records. A definition that is new or modified is left to the next full pass, which applies it to
+     * every tenant, these included.
+     *
+     * @param tenantIds the ids of the tenants to initialize
+     * @throws IllegalStateException when no synchronization slot could be claimed in time
+     */
+    public void initializeTenants(Set<String> tenantIds) {
+        claimForTenantInitialization(tenantIds);
+        List<SharedState> sharedStates = List.of();
+        try {
+            logger.info("Initializing tenants [{}]...", tenantIds);
+            tenantArtefactLedger.clear(tenantIds);
+            sharedStates = retrieveMultitenantArtefacts();
+            List<Artefact> artefactsToCreate = new ArrayList<>(sharedStates.size());
+            for (SharedState state : sharedStates) {
+                Artefact artefact = state.artefact();
+                artefact.setLifecycle(ArtefactLifecycle.NEW);
+                artefact.setPhase(ArtefactPhase.CREATE);
+                artefactsToCreate.add(artefact);
+            }
+            tenantContext.executeScopedTo(tenantIds, () -> {
+                completeArtefacts(artefactsToCreate);
+                return null;
+            });
+            logger.info("Initialization of tenants [{}] has completed - [{}] artefacts processed.", tenantIds, artefactsToCreate.size());
+        } finally {
+            sharedStates.forEach(SharedState::restore);
+            processing.set(false);
+        }
+    }
+
+    /**
+     * Claims the processing slot for an initialization of tenants, once the boot pass is done.
+     *
+     * @param tenantIds the tenants the initialization is for
+     */
+    private void claimForTenantInitialization(Set<String> tenantIds) {
+        long deadline = System.currentTimeMillis() + FORCE_SYNC_TIMEOUT_MILLIS;
+        while (!(prepared.get() && initialized.get() && processing.compareAndSet(false, true))) {
+            if (System.currentTimeMillis() >= deadline) {
+                throw new IllegalStateException("The initialization of tenants " + tenantIds + " could not start within ["
+                        + FORCE_SYNC_TIMEOUT_MILLIS + "] ms - prepared: [" + prepared.get() + "], initialized: [" + initialized.get()
+                        + "], running: [" + processing.get() + "]");
+            }
+            try {
+                Thread.sleep(FORCE_SYNC_RETRY_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread()
+                      .interrupt();
+                throw new IllegalStateException("Interrupted while waiting to initialize tenants " + tenantIds, e);
+            }
+        }
+    }
+
+    /**
+     * The per-tenant artefacts of the definitions every full pass has processed, with the state their
+     * shared rows carry. A FATAL artefact is left out, as the full pass leaves it out.
+     *
+     * @return the artefacts and their shared states
+     */
+    private List<SharedState> retrieveMultitenantArtefacts() {
+        List<Synchronizer<?, ?>> multitenantSynchronizers = synchronizers.stream()
+                                                                         .filter(Synchronizer::multitenantExecution)
+                                                                         .toList();
+        Set<String> types = multitenantSynchronizers.stream()
+                                                    .map(Synchronizer::getArtefactType)
+                                                    .collect(Collectors.toSet());
+        List<SharedState> states = new ArrayList<>();
+        for (Definition definition : definitionService.findByTypes(types)) {
+            if (DefinitionState.PARSED != definition.getState()) {
+                continue;
+            }
+            multitenantSynchronizers.stream()
+                                    .filter(synchronizer -> synchronizer.getArtefactType()
+                                                                        .equals(definition.getType()))
+                                    .findFirst()
+                                    .ifPresent(synchronizer -> synchronizer.retrieve(definition.getLocation())
+                                                                           .stream()
+                                                                           .filter(artefact -> ArtefactLifecycle.FATAL != artefact.getLifecycle())
+                                                                           .forEach(artefact -> states.add(
+                                                                                   SharedState.of(synchronizer, artefact))));
+        }
+        return states;
+    }
+
+    /**
+     * The state a shared artefact row carried before an initialization of tenants ran over it.
+     *
+     * @param synchronizer the synchronizer owning the artefact
+     * @param artefact the artefact
+     * @param lifecycle the lifecycle the row carried
+     * @param phase the phase the row carried
+     * @param error the error the row carried
+     */
+    private record SharedState(Synchronizer<Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle, ArtefactPhase phase,
+            String error) {
+
+        @SuppressWarnings("unchecked")
+        static SharedState of(Synchronizer<?, ?> synchronizer, Artefact artefact) {
+            return new SharedState((Synchronizer<Artefact, ?>) synchronizer, artefact, artefact.getLifecycle(), artefact.getPhase(),
+                    artefact.getError());
+        }
+
+        /**
+         * Writes the row back as it was. Some synchronizers save the artefact directly while they complete
+         * it, so the row may hold a lifecycle of this initialization even where no state was registered.
+         */
+        void restore() {
+            try {
+                artefact.setPhase(phase);
+                synchronizer.setStatus(artefact, lifecycle, error);
+            } catch (RuntimeException ex) {
+                logger.error("Failed to restore the shared state [{}] of artefact [{}] after a tenant initialization", lifecycle,
+                        artefact.getKey(), ex);
+            }
+        }
+    }
+
+    /**
+     * Forgets the per-tenant outcomes of an artefact that has been cleaned up.
+     *
+     * @param artefact the artefact
+     */
+    private void forgetTenantOutcomes(Artefact artefact) {
+        try {
+            tenantArtefactLedger.forget(artefact.getKey());
+        } catch (RuntimeException ex) {
+            logger.warn("Failed to forget the per-tenant outcomes of artefact [{}]", artefact.getKey(), ex);
+        }
+    }
+
+    /**
      * Process synchronizers.
      */
     public void processSynchronizers() {
@@ -270,149 +432,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                     artefacts.size(), countNew, countModified);
 
             if (countNew > 0 || countModified > 0 || !initialized.get()) {
-
-                TopologicalSorter<TopologyWrapper<? extends Artefact>> sorter = new TopologicalSorter<>();
-                TopologicalDepleter<TopologyWrapper<? extends Artefact>> depleter = new TopologicalDepleter<>();
-
-                Collection<? extends Artefact> values = artefacts.values();
-                List<TopologyWrapper<? extends Artefact>> wrappers = TopologyFactory.wrap(values, synchronizers);
-
-                logger.trace("Topological sorting...");
-
-                // topological sorting by dependencies
-                wrappers = sorter.sort(wrappers);
-
-                // reverse the order
-                Collections.reverse(wrappers);
-
-                logger.trace("Preparing for processing...");
-
-                Set<TopologyWrapper<? extends Artefact>> undepleted = new HashSet<>();
-
-                // preparing and depleting
-                for (Synchronizer<? extends Artefact, ?> synchronizer : synchronizers) {
-                    Set<TopologyWrapper<? extends Artefact>> unmodifiable = wrappers.stream()
-                                                                                    .filter(w -> w.getSynchronizer()
-                                                                                                  .equals(synchronizer))
-                                                                                    .collect(Collectors.toSet());
-                    try {
-                        Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(unmodifiable, ArtefactPhase.PREPARE);
-                        undepleted.addAll(results);
-                        registerErrors(results, ArtefactLifecycle.PREPARED);
-                    } catch (Exception e) {
-                        logger.error(e.getMessage(), e);
-                        addError(e.getMessage());
-                    }
-                }
-                logger.trace("Preparing for processing done.");
-
-                // return back to the sorted the order
-                Collections.reverse(wrappers);
-
-                logger.trace("Processing of artefacts...");
-                // processing and depleting
-                for (Synchronizer<? extends Artefact, ?> synchronizer : synchronizers) {
-                    HealthCheckStatus.getInstance()
-                                     .getJobs()
-                                     .setStatus(synchronizer.getClass()
-                                                            .getSimpleName(),
-                                             JobStatus.Running);
-                    Set<TopologyWrapper<? extends Artefact>> unmodifiable = wrappers.stream()
-                                                                                    .filter(w -> w.getSynchronizer()
-                                                                                                  .equals(synchronizer))
-                                                                                    .collect(Collectors.toSet());
-                    try {
-
-                        // phase create
-                        Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(unmodifiable, ArtefactPhase.CREATE);
-                        undepleted.addAll(results);
-                        registerErrors(results, ArtefactLifecycle.CREATED);
-
-                        // phase update
-                        results = depleter.deplete(unmodifiable, ArtefactPhase.UPDATE);
-                        undepleted.addAll(results);
-                        registerErrors(results, ArtefactLifecycle.UPDATED);
-
-                        // phase start
-                        results = depleter.deplete(unmodifiable, ArtefactPhase.START);
-                        undepleted.addAll(results);
-                        registerErrors(results, ArtefactLifecycle.STARTED);
-
-                    } catch (Exception e) {
-                        logger.error(e.getMessage(), e);
-                        addError(e.getMessage());
-                        HealthCheckStatus.getInstance()
-                                         .getJobs()
-                                         .setStatus(synchronizer.getClass()
-                                                                .getSimpleName(),
-                                                 JobStatus.Failed);
-                    }
-                    HealthCheckStatus.getInstance()
-                                     .getJobs()
-                                     .setStatus(synchronizer.getClass()
-                                                            .getSimpleName(),
-                                             JobStatus.Succeeded);
-                }
-
-                // Processing of cross-synchronizer artefacts once again due to eventual dependency issues
-                int crossRetryCount = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_COUNT.getIntValue();
-                int crossRetryInterval = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS.getIntValue();
-                int retryCount = 0;
-                if (!undepleted.isEmpty()) {
-                    logger.warn("Cross-processing of undepleated artefacts...");
-                    try {
-                        while (!undepleted.isEmpty()) {
-                            logger.info("Wait [{}] millis before next retry", crossRetryInterval);
-                            Thread.sleep(crossRetryInterval);
-
-                            logger.info("Retry [{}] - cross-processing of [{}] undepleated artefacts: [{}]", (retryCount + 1),
-                                    undepleted.size(), undepleted);
-                            // Progress for the readiness endpoint and the IDE indicator (#6448).
-                            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
-                                                                                             .passProgress(undepleted.size());
-                            Set<TopologyWrapper<? extends Artefact>> cross = new HashSet<>();
-                            Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(undepleted, ArtefactPhase.PREPARE);
-                            cross.addAll(results);
-                            registerErrors(results, ArtefactLifecycle.PREPARED);
-
-                            results = depleter.deplete(undepleted, ArtefactPhase.CREATE);
-                            cross.addAll(results);
-                            registerErrors(results, ArtefactLifecycle.CREATED);
-
-                            results = depleter.deplete(undepleted, ArtefactPhase.UPDATE);
-                            cross.addAll(results);
-                            registerErrors(results, ArtefactLifecycle.UPDATED);
-
-                            results = depleter.deplete(undepleted, ArtefactPhase.START);
-                            cross.addAll(results);
-                            registerErrors(results, ArtefactLifecycle.STARTED);
-
-                            String crossArtefactsLeft = cross.stream()
-                                                             .map(e -> e.getArtefact()
-                                                                        .getKey())
-                                                             .collect(Collectors.joining(", "));
-
-                            logger.warn("Retrying to deplete artefacts left after cross-processing: [{}] ", crossArtefactsLeft);
-
-                            undepleted.clear();
-                            undepleted.addAll(cross);
-
-                            if (++retryCount == crossRetryCount) {
-                                logger.error("Final retry completed. Left artefacts after cross-processing: [{}]", crossArtefactsLeft);
-                                break;
-                            }
-
-                            logger.info("Retry [{}] completed - left [{}] undepleated artefacts: [{}].", retryCount, undepleted.size(),
-                                    undepleted);
-                        }
-                    } catch (Exception e) {
-                        logger.error("Error occurred while cross-processing of undepleated artefacts", e);
-                    }
-                    logger.warn("Cross-processing of undepleated artefacts done.");
-                }
-
-                logger.trace("Processing of artefacts done.");
-
+                completeArtefacts(artefacts.values());
             } else if (countFailed > 0) {
                 retryFailed();
             }
@@ -451,6 +471,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                                 remaining.put(artefact.getKey(), artefact);
                             } else {
                                 synchronizer.cleanup(artefact);
+                                if (synchronizer.multitenantExecution()) {
+                                    forgetTenantOutcomes(artefact);
+                                }
                             }
                         } else {
                             remaining.put(artefact.getKey(), artefact);
@@ -506,6 +529,155 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
                                                                              .passCompleted(getErrors().size());
         }
+    }
+
+    /**
+     * Runs the artefacts through the phases - topological order, PREPARE, then CREATE / UPDATE / START
+     * per synchronizer, and the cross-retry of whatever is left undepleted. The machinery of a pass,
+     * shared by the full pass and the initialization of newly activated tenants.
+     *
+     * @param values the artefacts
+     */
+    private void completeArtefacts(Collection<? extends Artefact> values) {
+        TopologicalSorter<TopologyWrapper<? extends Artefact>> sorter = new TopologicalSorter<>();
+        TopologicalDepleter<TopologyWrapper<? extends Artefact>> depleter = new TopologicalDepleter<>();
+
+        List<TopologyWrapper<? extends Artefact>> wrappers = TopologyFactory.wrap(values, synchronizers);
+
+        logger.trace("Topological sorting...");
+
+        // topological sorting by dependencies
+        wrappers = sorter.sort(wrappers);
+
+        // reverse the order
+        Collections.reverse(wrappers);
+
+        logger.trace("Preparing for processing...");
+
+        Set<TopologyWrapper<? extends Artefact>> undepleted = new HashSet<>();
+
+        // preparing and depleting
+        for (Synchronizer<? extends Artefact, ?> synchronizer : synchronizers) {
+            Set<TopologyWrapper<? extends Artefact>> unmodifiable = wrappers.stream()
+                                                                            .filter(w -> w.getSynchronizer()
+                                                                                          .equals(synchronizer))
+                                                                            .collect(Collectors.toSet());
+            try {
+                Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(unmodifiable, ArtefactPhase.PREPARE);
+                undepleted.addAll(results);
+                registerErrors(results, ArtefactLifecycle.PREPARED);
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+                addError(e.getMessage());
+            }
+        }
+        logger.trace("Preparing for processing done.");
+
+        // return back to the sorted the order
+        Collections.reverse(wrappers);
+
+        logger.trace("Processing of artefacts...");
+        // processing and depleting
+        for (Synchronizer<? extends Artefact, ?> synchronizer : synchronizers) {
+            HealthCheckStatus.getInstance()
+                             .getJobs()
+                             .setStatus(synchronizer.getClass()
+                                                    .getSimpleName(),
+                                     JobStatus.Running);
+            Set<TopologyWrapper<? extends Artefact>> unmodifiable = wrappers.stream()
+                                                                            .filter(w -> w.getSynchronizer()
+                                                                                          .equals(synchronizer))
+                                                                            .collect(Collectors.toSet());
+            try {
+
+                // phase create
+                Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(unmodifiable, ArtefactPhase.CREATE);
+                undepleted.addAll(results);
+                registerErrors(results, ArtefactLifecycle.CREATED);
+
+                // phase update
+                results = depleter.deplete(unmodifiable, ArtefactPhase.UPDATE);
+                undepleted.addAll(results);
+                registerErrors(results, ArtefactLifecycle.UPDATED);
+
+                // phase start
+                results = depleter.deplete(unmodifiable, ArtefactPhase.START);
+                undepleted.addAll(results);
+                registerErrors(results, ArtefactLifecycle.STARTED);
+
+            } catch (Exception e) {
+                logger.error(e.getMessage(), e);
+                addError(e.getMessage());
+                HealthCheckStatus.getInstance()
+                                 .getJobs()
+                                 .setStatus(synchronizer.getClass()
+                                                        .getSimpleName(),
+                                         JobStatus.Failed);
+            }
+            HealthCheckStatus.getInstance()
+                             .getJobs()
+                             .setStatus(synchronizer.getClass()
+                                                    .getSimpleName(),
+                                     JobStatus.Succeeded);
+        }
+
+        // Processing of cross-synchronizer artefacts once again due to eventual dependency issues
+        int crossRetryCount = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_COUNT.getIntValue();
+        int crossRetryInterval = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS.getIntValue();
+        int retryCount = 0;
+        if (!undepleted.isEmpty()) {
+            logger.warn("Cross-processing of undepleated artefacts...");
+            try {
+                while (!undepleted.isEmpty()) {
+                    logger.info("Wait [{}] millis before next retry", crossRetryInterval);
+                    Thread.sleep(crossRetryInterval);
+
+                    logger.info("Retry [{}] - cross-processing of [{}] undepleated artefacts: [{}]", (retryCount + 1), undepleted.size(),
+                            undepleted);
+                    // Progress for the readiness endpoint and the IDE indicator (#6448).
+                    org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                                     .passProgress(undepleted.size());
+                    Set<TopologyWrapper<? extends Artefact>> cross = new HashSet<>();
+                    Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(undepleted, ArtefactPhase.PREPARE);
+                    cross.addAll(results);
+                    registerErrors(results, ArtefactLifecycle.PREPARED);
+
+                    results = depleter.deplete(undepleted, ArtefactPhase.CREATE);
+                    cross.addAll(results);
+                    registerErrors(results, ArtefactLifecycle.CREATED);
+
+                    results = depleter.deplete(undepleted, ArtefactPhase.UPDATE);
+                    cross.addAll(results);
+                    registerErrors(results, ArtefactLifecycle.UPDATED);
+
+                    results = depleter.deplete(undepleted, ArtefactPhase.START);
+                    cross.addAll(results);
+                    registerErrors(results, ArtefactLifecycle.STARTED);
+
+                    String crossArtefactsLeft = cross.stream()
+                                                     .map(e -> e.getArtefact()
+                                                                .getKey())
+                                                     .collect(Collectors.joining(", "));
+
+                    logger.warn("Retrying to deplete artefacts left after cross-processing: [{}] ", crossArtefactsLeft);
+
+                    undepleted.clear();
+                    undepleted.addAll(cross);
+
+                    if (++retryCount == crossRetryCount) {
+                        logger.error("Final retry completed. Left artefacts after cross-processing: [{}]", crossArtefactsLeft);
+                        break;
+                    }
+
+                    logger.info("Retry [{}] completed - left [{}] undepleated artefacts: [{}].", retryCount, undepleted.size(), undepleted);
+                }
+            } catch (Exception e) {
+                logger.error("Error occurred while cross-processing of undepleated artefacts", e);
+            }
+            logger.warn("Cross-processing of undepleated artefacts done.");
+        }
+
+        logger.trace("Processing of artefacts done.");
     }
 
     public boolean isSynchronizationNeeded() {

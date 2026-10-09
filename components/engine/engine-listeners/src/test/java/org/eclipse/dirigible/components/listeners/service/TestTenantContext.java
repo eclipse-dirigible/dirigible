@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The Class TestTenantContext.
@@ -223,5 +224,11 @@ public class TestTenantContext implements TenantContext {
         Tenant tenant = new TestTenant(TENANT_ID, TENANT_NAME, TENANT_SUBDOMAIN, DEFUALT_TENANT);
         TenantResult<Result> tr = new TestTenantResult<>(tenant, result);
         return List.of(tr);
+    }
+
+    @Override
+    public <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)
+            throws Exc {
+        return callable.call();
     }
 }

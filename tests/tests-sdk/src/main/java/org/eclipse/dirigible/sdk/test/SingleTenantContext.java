@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.sdk.test;
 
 import java.util.List;
+import java.util.Set;
 
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
@@ -66,6 +67,13 @@ final class SingleTenantContext implements TenantContext {
                 return result;
             }
         });
+    }
+
+    /** The slice has the default tenant only, and runs as it whatever scope a caller names. */
+    @Override
+    public <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)
+            throws Exc {
+        return callable.call();
     }
 
     private static final class DefaultTenant implements Tenant {

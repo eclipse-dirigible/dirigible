@@ -9,16 +9,15 @@
  */
 package org.eclipse.dirigible.components.tenants.provisioning.external;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.commons.lang3.StringUtils;
-import org.eclipse.dirigible.components.base.synchronizer.MultitenantSynchronizers;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
-import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -26,32 +25,39 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Activates an externally provisioned tenant: makes it real for the platform, then materializes its
- * artefacts.
+ * Activates an externally provisioned tenant: makes it real for the platform, then initializes it -
+ * and only it.
  *
  * <p>
  * The order matters. The tenant is moved to {@code PROVISIONED} first and in the request thread,
- * because the per-tenant fan-out only visits provisioned tenants - a materialization started before
+ * because the per-tenant fan-out only visits provisioned tenants - an initialization started before
  * the flip would skip the very tenant it is for.
  *
  * <p>
- * The materialization itself is a full synchronization pass, tens of seconds to minutes, so it runs
- * on an executor and the caller polls. What the caller must not see in between is a completed
- * initialization it never waited for, and it would: the derived status reads "everything is
- * processed" until something says otherwise. So the marking - blanking the checksums of the
- * per-tenant definitions - happens synchronously, before the response, and the executor only does
- * the work. The post-provisioning step blanks them again, which is harmless, and that is also why
- * repeating an activation is safe.
+ * The initialization creates every per-tenant artefact in this tenant and touches no other tenant
+ * (#7799): the others are initialized already, and running their artefacts again would alter their
+ * tables and re-import seed rows they deleted. It takes tens of seconds to minutes, so it runs on
+ * an executor and the caller polls. What the caller must not see in between is a completed
+ * initialization it never waited for, so the tenant's {@link TenantInitialization} is opened
+ * synchronously, before the response - the status reads {@code IN_PROGRESS} from then until this
+ * tenant's own initialization ends. Activating a tenant again re-opens it and initializes it again,
+ * which is how a failed initialization is repaired.
+ *
+ * <p>
+ * The record is durable, so an initialization a restart interrupted is picked up again when the
+ * application is ready.
  */
 @Service
 @Conditional(TenantProvisioningApiEnabledCondition.class)
-class TenantActivationService implements DisposableBean {
+class TenantActivationService implements ApplicationListener<ApplicationReadyEvent>, DisposableBean {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantActivationService.class);
@@ -62,39 +68,33 @@ class TenantActivationService implements DisposableBean {
     /** The data source registration service. */
     private final TenantDataSourceRegistrationService dataSourceRegistrationService;
 
-    /** The definition service. */
-    private final DefinitionService definitionService;
-
-    /** The multitenant synchronizers. */
-    private final MultitenantSynchronizers multitenantSynchronizers;
+    /** The initialization of each activated tenant. */
+    private final TenantInitializationService initializationService;
 
     /** The post provisioning steps. */
     private final Set<TenantPostProvisioningStep> postProvisioningSteps;
 
     /**
-     * One pass at a time, and at most one more queued behind it: a synchronization is global, so
-     * running several concurrently would only make them wait on each other, and queueing more than one
-     * would repeat work that the queued pass already covers.
+     * One initialization at a time: each holds the synchronization slot, so running several
+     * concurrently would only make them wait on each other.
      */
     private final ExecutorService executor;
 
-    /** Whether a pass is already queued and has not started yet. */
-    private final AtomicBoolean passQueued = new AtomicBoolean(false);
+    /** The tenants whose initialization is queued and has not started yet. */
+    private final Set<String> queuedTenants = ConcurrentHashMap.newKeySet();
 
     /**
      * Instantiates a new tenant activation service.
      *
      * @param tenantService the tenant service
      * @param dataSourceRegistrationService the data source registration service
-     * @param definitionService the definition service
-     * @param multitenantSynchronizers the multitenant synchronizers
+     * @param initializationService the initialization of each activated tenant
      * @param postProvisioningSteps the post provisioning steps
      */
     @Autowired
     TenantActivationService(TenantService tenantService, TenantDataSourceRegistrationService dataSourceRegistrationService,
-            DefinitionService definitionService, MultitenantSynchronizers multitenantSynchronizers,
-            Set<TenantPostProvisioningStep> postProvisioningSteps) {
-        this(tenantService, dataSourceRegistrationService, definitionService, multitenantSynchronizers, postProvisioningSteps,
+            TenantInitializationService initializationService, Set<TenantPostProvisioningStep> postProvisioningSteps) {
+        this(tenantService, dataSourceRegistrationService, initializationService, postProvisioningSteps,
                 Executors.newSingleThreadExecutor(threadFactory()));
     }
 
@@ -104,18 +104,16 @@ class TenantActivationService implements DisposableBean {
      *
      * @param tenantService the tenant service
      * @param dataSourceRegistrationService the data source registration service
-     * @param definitionService the definition service
-     * @param multitenantSynchronizers the multitenant synchronizers
+     * @param initializationService the initialization of each activated tenant
      * @param postProvisioningSteps the post provisioning steps
      * @param executor the executor to run initializations on
      */
     TenantActivationService(TenantService tenantService, TenantDataSourceRegistrationService dataSourceRegistrationService,
-            DefinitionService definitionService, MultitenantSynchronizers multitenantSynchronizers,
-            Set<TenantPostProvisioningStep> postProvisioningSteps, ExecutorService executor) {
+            TenantInitializationService initializationService, Set<TenantPostProvisioningStep> postProvisioningSteps,
+            ExecutorService executor) {
         this.tenantService = tenantService;
         this.dataSourceRegistrationService = dataSourceRegistrationService;
-        this.definitionService = definitionService;
-        this.multitenantSynchronizers = multitenantSynchronizers;
+        this.initializationService = initializationService;
         this.postProvisioningSteps = postProvisioningSteps;
         this.executor = executor;
     }
@@ -142,53 +140,66 @@ class TenantActivationService implements DisposableBean {
             LOGGER.info("Tenant [{}] is already active. Re-initializing it.", tenant.getId());
         }
 
-        markArtefactsForReprocessing();
+        initializationService.request(tenant.getId());
         scheduleInitialization(tenant.getId());
     }
 
     /**
-     * Blanks the checksums of every per-tenant definition, so the next synchronization reprocesses them
-     * and the derived status reports the initialization as running from the moment this call returns.
+     * Resumes the initializations a restart interrupted. Their records are still open, so their tenants
+     * would otherwise read {@code IN_PROGRESS} for good.
+     *
+     * @param event the event
      */
-    private void markArtefactsForReprocessing() {
-        Set<String> artefactTypes = multitenantSynchronizers.getArtefactTypes();
-        LOGGER.debug("Marking definitions of types [{}] for reprocessing.", artefactTypes);
-        definitionService.updateChecksums(StringUtils.EMPTY, artefactTypes);
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
+        for (TenantInitialization initialization : initializationService.findOpen()) {
+            LOGGER.info("Resuming the interrupted initialization of tenant [{}].", initialization.getTenantId());
+            scheduleInitialization(initialization.getTenantId());
+        }
     }
 
     /**
-     * Queues the initialization, unless one is already queued: a queued pass has not started yet, so it
-     * will cover this tenant too.
+     * Queues the initialization of a tenant, unless it is queued already: a queued initialization has
+     * not started yet, so it covers this activation too.
      *
-     * @param tenantId the tenant whose activation asked for it
+     * @param tenantId the tenant id
      */
     private void scheduleInitialization(String tenantId) {
-        if (!passQueued.compareAndSet(false, true)) {
-            LOGGER.info("An initialization is already queued; it will cover tenant [{}] as well.", tenantId);
+        if (!queuedTenants.add(tenantId)) {
+            LOGGER.info("The initialization of tenant [{}] is already queued.", tenantId);
             return;
         }
         executor.execute(() -> {
-            passQueued.set(false);
-            runPostProvisioningSteps(tenantId);
+            queuedTenants.remove(tenantId);
+            initialize(tenantId);
         });
     }
 
     /**
-     * Runs every post provisioning step. A step that fails must not take the others down with it - the
-     * failure is visible to the caller through the artefacts it left behind.
+     * Runs every post provisioning step for the tenant. A step that fails must not take the others down
+     * with it; its failure is recorded as the failure of the run, beside the per-artefact outcomes the
+     * steps record themselves.
      *
-     * @param tenantId the tenant whose activation asked for it
+     * @param tenantId the tenant id
      */
-    private void runPostProvisioningSteps(String tenantId) {
-        LOGGER.info("Initializing tenants, triggered by the activation of tenant [{}]...", tenantId);
-        for (TenantPostProvisioningStep step : postProvisioningSteps) {
-            try {
-                step.execute();
-            } catch (RuntimeException ex) {
-                LOGGER.error("Post provisioning step [{}] has failed.", step, ex);
+    private void initialize(String tenantId) {
+        try {
+            LOGGER.info("Initializing tenant [{}]...", tenantId);
+            initializationService.start(tenantId);
+            List<String> failures = new ArrayList<>();
+            for (TenantPostProvisioningStep step : postProvisioningSteps) {
+                try {
+                    step.execute(Set.of(tenantId));
+                } catch (RuntimeException ex) {
+                    LOGGER.error("Post provisioning step [{}] has failed for tenant [{}].", step, tenantId, ex);
+                    failures.add("Post provisioning step [" + step + "] has failed: " + ex.getMessage());
+                }
             }
+            initializationService.finish(tenantId, failures.isEmpty() ? null : String.join("; ", failures));
+            LOGGER.info("Initialization of tenant [{}] has completed.", tenantId);
+        } catch (RuntimeException ex) {
+            LOGGER.error("Failed to record the initialization of tenant [{}].", tenantId, ex);
         }
-        LOGGER.info("Initialization triggered by the activation of tenant [{}] has completed.", tenantId);
     }
 
     /**
@@ -202,7 +213,7 @@ class TenantActivationService implements DisposableBean {
     /**
      * Thread factory.
      *
-     * @return a factory of named daemon threads, so a running pass never holds up a shutdown
+     * @return a factory of named daemon threads, so a running initialization never holds up a shutdown
      */
     private static ThreadFactory threadFactory() {
         return runnable -> {

@@ -33,6 +33,9 @@ class TenantContextImpl implements TenantContext {
 
     private static final ThreadLocal<Tenant> currentTenantHolder = new ThreadLocal<>();
 
+    /** The tenants {@link #executeForEachTenant} is restricted to on this thread, or null for all. */
+    private static final ThreadLocal<Set<String>> scopeHolder = new ThreadLocal<>();
+
     private final TenantService tenantService;
 
     TenantContextImpl(TenantService tenantService) {
@@ -104,6 +107,22 @@ class TenantContextImpl implements TenantContext {
         return results;
     }
 
+    @Override
+    public <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)
+            throws Exc {
+        Set<String> previousScope = scopeHolder.get();
+        scopeHolder.set(Set.copyOf(tenantIds));
+        try {
+            return callable.call();
+        } finally {
+            if (previousScope == null) {
+                scopeHolder.remove();
+            } else {
+                scopeHolder.set(previousScope);
+            }
+        }
+    }
+
     private Set<Tenant> getProvisionedTenants() {
         Set<Tenant> tenants = tenantService.findByStatus(TenantStatus.PROVISIONED)
                                            .stream()
@@ -112,6 +131,10 @@ class TenantContextImpl implements TenantContext {
         Set<Tenant> allTenants = new HashSet<>(tenants);
         allTenants.add(TenantImpl.getDefaultTenant());
         allTenants.addAll(tenants);
+        Set<String> scope = scopeHolder.get();
+        if (scope != null) {
+            allTenants.removeIf(tenant -> !scope.contains(tenant.getId()));
+        }
         return allTenants;
     }
 

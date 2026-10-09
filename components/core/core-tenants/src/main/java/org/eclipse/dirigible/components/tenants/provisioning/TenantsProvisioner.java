@@ -20,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The Class TenantsProvisioner.
@@ -70,11 +71,16 @@ class TenantsProvisioner {
             LOGGER.debug("No tenants applicable for provisioning");
         }
 
-        tenants.forEach(this::provisionTenant);
+        Set<String> provisionedTenantIds = tenants.stream()
+                                                  .filter(this::provisionTenant)
+                                                  .map(Tenant::getId)
+                                                  .collect(Collectors.toSet());
 
-        if (!tenants.isEmpty()) {
-            LOGGER.info("Starting post provisioning process...");
-            postProvisioningSteps.forEach(this::callPostProvisioningStep);
+        // Only the tenants provisioned just now are initialized - the others already are, and running
+        // their per-tenant artefacts again would change their data (#7799).
+        if (!provisionedTenantIds.isEmpty()) {
+            LOGGER.info("Starting post provisioning process for tenants [{}]...", provisionedTenantIds);
+            postProvisioningSteps.forEach(step -> callPostProvisioningStep(step, provisionedTenantIds));
             LOGGER.info("Post provisioning process has completed.");
         }
         if (tenants.size() > 0) {
@@ -88,8 +94,9 @@ class TenantsProvisioner {
      * Provision tenant.
      *
      * @param tenant the tenant
+     * @return true, if the tenant has been provisioned
      */
-    private void provisionTenant(Tenant tenant) {
+    private boolean provisionTenant(Tenant tenant) {
         LOGGER.info("Starting provisioning process for tenant [{}]...", tenant);
 
         try {
@@ -100,8 +107,10 @@ class TenantsProvisioner {
             tenantService.save(tenant);
 
             LOGGER.info("Tenant [{}] has been provisioned successfully.", tenant);
+            return true;
         } catch (RuntimeException ex) {
             LOGGER.error("Failed to provision tenant [{}]. Continue with the next one.", tenant, ex);
+            return false;
         }
     }
 
@@ -109,10 +118,11 @@ class TenantsProvisioner {
      * Call post provisioning step.
      *
      * @param step the step
+     * @param tenantIds the ids of the tenants provisioned just now
      */
-    private void callPostProvisioningStep(TenantPostProvisioningStep step) {
+    private void callPostProvisioningStep(TenantPostProvisioningStep step, Set<String> tenantIds) {
         try {
-            step.execute();
+            step.execute(tenantIds);
         } catch (RuntimeException ex) {
             LOGGER.error("PostProvisioning step [{}] has failed.", step, ex);
         }

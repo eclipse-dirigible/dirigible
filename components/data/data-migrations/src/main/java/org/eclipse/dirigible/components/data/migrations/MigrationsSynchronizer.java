@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
+import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Outcome;
@@ -42,18 +43,19 @@ import org.springframework.stereotype.Component;
  *
  * <p>
  * Applying is idempotent by construction - the ledger, not the artefact's lifecycle, says whether a
- * database has a migration - so every path that runs it again is safe: the re-parse that follows a
- * new tenant's provisioning (it migrates that tenant and finds the others done), a boot against a
- * fresh system database, the retry of a FAILED artefact. The artefact is FAILED when any database
- * did not take the migration: a failed statement (rolled back with its ledger row), an applied file
- * edited afterwards (an applied migration is not re-run unless it declares itself
+ * database has a migration - so every path that runs it again is safe: the initialization of a
+ * newly provisioned tenant (its fan-out is scoped to that tenant), a boot against a fresh system
+ * database, the retry of a FAILED artefact. The artefact is FAILED when any database did not take
+ * the migration: a failed statement (rolled back with its ledger row), an applied file edited
+ * afterwards (an applied migration is not re-run unless it declares itself
  * {@code idempotent: true}), or an earlier version of its project that failed.
  *
  * <p>
  * The tenants are iterated here rather than by {@code BaseSynchronizer}, which completes a
  * multitenant artefact once per tenant and keeps the state the LAST tenant registered - one
  * tenant's success would hide another's failure. This synchronizer still reports
- * {@link #multitenantExecution()} so the post-provisioning re-trigger includes it.
+ * {@link #multitenantExecution()} so the initialization of a new tenant includes it, and records
+ * each tenant's outcome in the per-tenant artefact ledger itself.
  *
  * <p>
  * DELETE and cleanup remove the artefact only. A migration that ran is history: its data change and
@@ -73,16 +75,18 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
     private final DataSourcesManager dataSourcesManager;
     private final TenantContext tenantContext;
     private final IRepository repository;
+    private final TenantArtefactLedger tenantArtefactLedger;
 
     private SynchronizerCallback callback;
 
     MigrationsSynchronizer(MigrationService migrationService, MigrationExecutor executor, DataSourcesManager dataSourcesManager,
-            TenantContext tenantContext, IRepository repository) {
+            TenantContext tenantContext, IRepository repository, TenantArtefactLedger tenantArtefactLedger) {
         this.migrationService = migrationService;
         this.executor = executor;
         this.dataSourcesManager = dataSourcesManager;
         this.tenantContext = tenantContext;
         this.repository = repository;
+        this.tenantArtefactLedger = tenantArtefactLedger;
     }
 
     @Override
@@ -189,6 +193,9 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
                                .stream()
                                .map(TenantResult::getResult)
                                .toList();
+        if (script.scope() != Scope.SYSTEM) {
+            recordTenantOutcomes(migration, outcomes, success);
+        }
 
         String failures = messages(outcomes, Status.FAILED);
         if (!failures.isEmpty()) {
@@ -209,6 +216,30 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
         }
         callback.registerState(this, wrapper, success);
         return true;
+    }
+
+    /**
+     * Records what the migration came to in each tenant, so the initialization status of a tenant
+     * reports its own failure - and only its own. A tenant still waiting for an earlier version has no
+     * outcome yet.
+     */
+    private void recordTenantOutcomes(Migration migration, List<Outcome> outcomes, ArtefactLifecycle success) {
+        for (Outcome outcome : outcomes) {
+            ArtefactLifecycle lifecycle = switch (outcome.status()) {
+                case APPLIED, ALREADY_APPLIED -> success;
+                case FAILED -> ArtefactLifecycle.FAILED;
+                case WAITING -> null;
+            };
+            if (lifecycle == null) {
+                continue;
+            }
+            try {
+                tenantArtefactLedger.record(migration, outcome.tenant(), lifecycle, outcome.message());
+            } catch (RuntimeException ex) {
+                LOGGER.warn("Failed to record the outcome [{}] of migration [{}] for tenant [{}]", lifecycle, migration.getKey(),
+                        outcome.tenant(), ex);
+            }
+        }
     }
 
     /** The file as it is in the registry now - the artefact keeps what it declares, not the SQL. */

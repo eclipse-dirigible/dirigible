@@ -29,8 +29,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.initializers.definition.Definition;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
+import org.eclipse.dirigible.components.initializers.synchronizer.tenants.TenantArtefactLedgerService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -80,8 +82,8 @@ class SynchronizationProcessorConcurrencyTest {
         IRepository repository = mock(IRepository.class);
         when(repository.getInternalResourcePath(anyString())).thenReturn(registry.toString());
 
-        SynchronizationProcessor processor =
-                new SynchronizationProcessor(repository, new ArrayList<>(), definitionService, watcher, new RegistryMutationTracker());
+        SynchronizationProcessor processor = new SynchronizationProcessor(repository, new ArrayList<>(), definitionService, watcher,
+                new RegistryMutationTracker(), mock(TenantContext.class), mock(TenantArtefactLedgerService.class));
         processor.prepareSynchronizers();
 
         ExecutorService callers = Executors.newFixedThreadPool(2);
