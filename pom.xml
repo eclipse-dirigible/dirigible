@@ -511,7 +511,17 @@
                         <includeLicenseText>false</includeLicenseText>
 
                         <outputReactorProjects>true</outputReactorProjects>
-                        <outputFormat>all</outputFormat>
+                        <!-- JSON only (#7788). `all` wrote the same bill of materials twice into
+                             ${project.build.outputDirectory}/META-INF/sbom - bom.json (3.6 MB) AND
+                             bom.xml (3.5 MB) - so 7 MB of the executable was a description of the
+                             artefact, in two formats, shipped inside the artefact it describes.
+                             The JSON copy STAYS INSIDE the jar and the path stays META-INF/sbom:
+                             Spring Boot's SbomEndpoint auto-detects classpath:META-INF/sbom/bom.json
+                             and serves it as /actuator/sbom/application, which SecurityIT asserts
+                             (an earlier revision of this change moved the file out of the jar and
+                             turned both /actuator/sbom and /actuator/sbom/application into 404s).
+                             Only the unread XML duplicate goes. -->
+                        <outputFormat>json</outputFormat>
                         <outputName>bom</outputName>
                         <outputDirectory>${project.build.outputDirectory}/META-INF/sbom</outputDirectory>
                     </configuration>
