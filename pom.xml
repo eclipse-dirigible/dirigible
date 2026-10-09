@@ -335,6 +335,25 @@
                 <groupId>com.mycila</groupId>
                 <artifactId>license-maven-plugin</artifactId>
             </plugin>
+            <!-- Browser source maps are never served to a runtime, only to a developer's devtools, and
+                 they are the single largest thing the platform's own module jars carry: 38.7 MB
+                 uncompressed across five of them (view-swagger 14.5, editor-integrations 11.5,
+                 karavan-libs 11.5, flowable-libs 1.0, dev-tools 0.2), with single files up to 8.3 MB.
+                 Excluded from packaging for EVERY module here rather than module by module, so a
+                 module that vendors a new bundle does not have to remember (#7787). A developer who
+                 needs a map takes it from the npm package the bundle came from. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*.js.map</exclude>
+                        <exclude>**/*.css.map</exclude>
+                        <exclude>**/*.mjs.map</exclude>
+                        <exclude>**/*.d.ts.map</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
         </plugins>
         <pluginManagement>
             <plugins>
