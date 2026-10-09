@@ -135,7 +135,6 @@
         <module>api/api-etcd</module>
         <module>api/api-template</module>
         <module>api/api-mail</module>
-        <module>api/api-kafka</module>
         <module>api/api-mongodb</module>
         <module>api/api-rabbitmq</module>
         <module>api/api-redis</module>
@@ -1464,11 +1463,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-cms</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-api-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

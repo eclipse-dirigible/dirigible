@@ -58,7 +58,7 @@ public final class ConfigGroups {
             new Rule(ConfigGroup.MAIL, "MAIL_"), //
             new Rule(ConfigGroup.BPM, "FLOWABLE_", "BPM_"), //
             new Rule(ConfigGroup.JOBS, "SCHEDULER_", "JOB_", "TRACING_"), //
-            new Rule(ConfigGroup.MESSAGING, "MESSAGING_", "KAFKA_", "RABBITMQ_", "REDIS_", "EVENT_OUTBOX"), //
+            new Rule(ConfigGroup.MESSAGING, "MESSAGING_", "RABBITMQ_", "REDIS_", "EVENT_OUTBOX"), //
             new Rule(ConfigGroup.DOCUMENTS, "CMS_", "DOCUMENTS_", "S3_", "MS_SHAREPOINT", "PRINT_", "AWS_"), //
             new Rule(ConfigGroup.DATABASE, "DATABASE_", "LEAKED_", "SNOWFLAKE_", "MONGODB_", "PERSISTENCE_"), //
             new Rule(ConfigGroup.REPOSITORY, "REPOSITORY_", "MASTER_", "REGISTRY_", "GIT_", "INDEXING_"), //

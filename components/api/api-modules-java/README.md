@@ -57,8 +57,6 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `io/zip`                             | `sdk.io.Zip`                                                   |       |
 | `job/scheduler`                      | `sdk.job.Scheduler`                                            | Job creation is annotation-driven; see "Decorators" below. |
 | `junit`                              | `sdk.junit.Assert`                                             | Plain `AssertionError`s; use real JUnit 5 in test sources. |
-| `kafka/producer`                     | `sdk.kafka.Producer`                                           |       |
-| `kafka/consumer`                     | `sdk.kafka.Consumer`                                           |       |
 | `log/logging`                        | `sdk.log.Logging` + `sdk.log.Logger`                           |       |
 | `mail/client`                        | `sdk.mail.Mail`                                                |       |
 | `messaging/producer`                 | `sdk.messaging.Producer`                                       |       |
