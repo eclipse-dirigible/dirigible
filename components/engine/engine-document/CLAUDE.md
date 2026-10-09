@@ -161,7 +161,7 @@ dropped**: it is a tenant template under its sanitised name (`Invoice-template`,
   flagged `newer`, never applied, until it is cleared. **Known limit:** the selection is read through
   the tenant configuration cache, which is per node and invalidated by the writing node only (see
   `.claude/docs/tenants.md`); on a multi-node instance another node prints the old layout until its
-  cache reloads. Only the delete guard reads past the cache. The IDE page is `components/ui/settings-print-templates` (Settings → Print Templates).
+  cache reloads. Only the delete guard reads past the cache. The IDE page is `components/ui/settings-print-templates` (Settings → Print Templates); the tenant-facing one is the shared shell fragment `application-core/shell/views/_print-templates.html` on `stores/printTemplates.js`, mounted by the platform shells and every generated application shell.
   The generated pages share one Print implementation, `application-core/shell/js/components/printActions.js`:
   the dialog opens for more than one language or more than one tenant template, and lists the
   tenant templates, the active one and the shipped default (older shipped versions are pinned in

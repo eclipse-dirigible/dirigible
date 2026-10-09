@@ -1,0 +1,260 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!--
+  Settings > Print Templates - the ONE copy of the section, mounted through x-html on the shared
+  printTemplates store (shell/js/stores/printTemplates.js) by the application shells' Settings and by
+  every generated application shell. Every binding goes through $store.printTemplates. Stable ids and
+  attributes for the browser tests: print-templates-page, print-templates-entity, print-templates-language,
+  print-templates-use-default, print-templates-compare, print-templates-table (rows tr[data-template],
+  badges [data-status]), row menu items [data-action], print-templates-duplicate-dialog,
+  print-templates-duplicate-name, print-templates-duplicate-button, print-templates-editor,
+  print-templates-source, print-templates-save, print-templates-diff, print-templates-remove-dialog,
+  print-templates-remove-confirm.
+-->
+<div id="print-templates-page" class="vbox gap-4 p-4">
+  <div class="hbox items-center gap-2">
+    <div class="vbox gap-1 flex-1 min-w-0">
+      <span class="text-lg font-medium" x-text="$store.printTemplates.t('shell.printTemplates.title', 'Print Templates')"></span>
+      <span x-h-text.muted class="text-sm" x-text="$store.printTemplates.t('shell.printTemplates.description', 'The layouts each document type prints with, per language: the versions a release shipped and the templates of this tenant. The active one prints when a document is printed without choosing; without a selection the newest shipped version prints, and each release switches to its own.')"></span>
+    </div>
+    <button x-h-button data-variant="outline" data-size="icon-sm" type="button" @click="$store.printTemplates.refresh()"
+            :aria-label="$store.printTemplates.t('shell.printTemplates.refresh', 'Refresh')">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
+    </button>
+  </div>
+
+  <div x-show="$store.printTemplates.error" x-cloak x-h-alert data-variant="warning" role="alert">
+    <div x-h-alert-description x-text="$store.printTemplates.error"></div>
+  </div>
+
+  <div class="hbox items-end gap-3 flex-wrap">
+    <div class="vbox gap-1">
+      <label x-h-label for="print-templates-entity" x-text="$store.printTemplates.t('shell.printTemplates.documentType', 'Document type')"></label>
+      <div x-h-select class="w-full" style="min-width: 14rem">
+        <input x-h-select-input id="print-templates-entity" x-model="$store.printTemplates.entity"
+               :placeholder="$store.printTemplates.t('shell.printTemplates.documentType', 'Document type')" />
+        <div x-h-select-content>
+          <div x-h-select-list>
+            <template x-for="type in $store.printTemplates.documentTypes" :key="type.entity">
+              <div x-h-select-option="type.entity" :data-value="type.entity"></div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="vbox gap-1">
+      <label x-h-label for="print-templates-language" x-text="$store.printTemplates.t('shell.printTemplates.language', 'Language')"></label>
+      <div x-h-select class="w-full" style="min-width: 10rem">
+        <input x-h-select-input id="print-templates-language" x-model="$store.printTemplates.language"
+               :placeholder="$store.printTemplates.t('shell.printTemplates.language', 'Language')" />
+        <div x-h-select-content>
+          <div x-h-select-list>
+            <template x-for="lang in $store.printTemplates.languages" :key="lang.code">
+              <div x-h-select-option="lang.name + ' (' + lang.code + ')'" :data-value="lang.code"></div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex-1"></div>
+    <button x-h-button data-variant="outline" type="button" id="print-templates-use-default"
+            :disabled="$store.printTemplates.busy || !$store.printTemplates.selectionStored" @click="$store.printTemplates.useDefault()"
+            :title="$store.printTemplates.t('shell.printTemplates.useDefaultHint', 'Clear the selection: the newest shipped version prints, and every release switches to its own')">
+      <svg role="presentation" x-h-lucide data-lucide="rotate-ccw"></svg>
+      <span x-text="$store.printTemplates.t('shell.printTemplates.useDefault', 'Use default')"></span>
+    </button>
+    <button x-h-button data-variant="outline" type="button" id="print-templates-compare"
+            :disabled="$store.printTemplates.comparing.length !== 2" @click="$store.printTemplates.compare()"
+            :title="$store.printTemplates.t('shell.printTemplates.compareHint', 'Tick two templates to compare them')">
+      <svg role="presentation" x-h-lucide data-lucide="git-compare"></svg>
+      <span x-text="$store.printTemplates.t('shell.printTemplates.compare', 'Compare')"></span>
+    </button>
+  </div>
+
+  <div x-show="$store.printTemplates.loading" x-cloak class="hbox items-center gap-2">
+    <span x-h-spinner></span>
+    <span x-h-text.muted class="text-sm" x-text="$store.printTemplates.t('shell.printTemplates.loading', 'Loading…')"></span>
+  </div>
+
+  <div x-show="!$store.printTemplates.loading && $store.printTemplates.templates.length === 0" x-cloak x-h-info-page>
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="printer"></svg></div>
+      <div x-h-info-page-title x-text="$store.printTemplates.t('shell.printTemplates.empty', 'No templates for this language')"></div>
+      <div x-h-info-page-description x-text="$store.printTemplates.t('shell.printTemplates.emptyHint', 'A published application ships its print templates; they appear here once it is published.')"></div>
+    </div>
+  </div>
+
+  <div x-show="$store.printTemplates.templates.length > 0" x-h-table-container.scroll>
+    <table id="print-templates-table" x-h-table data-borders="rows">
+      <thead x-h-table-header>
+        <tr x-h-table-row>
+          <th x-h-table-head scope="col" :aria-label="$store.printTemplates.t('shell.printTemplates.compare', 'Compare')"></th>
+          <th x-h-table-head scope="col" x-text="$store.printTemplates.t('shell.printTemplates.template', 'Template')"></th>
+          <th x-h-table-head scope="col" x-text="$store.printTemplates.t('shell.printTemplates.kind', 'Kind')"></th>
+          <th x-h-table-head scope="col" x-text="$store.printTemplates.t('shell.printTemplates.derivedFrom', 'Derived from')"></th>
+          <th x-h-table-head scope="col" x-text="$store.printTemplates.t('shell.printTemplates.status', 'Status')"></th>
+          <th x-h-table-head scope="col" :aria-label="$store.printTemplates.t('shell.printTemplates.actions', 'Actions')"></th>
+        </tr>
+      </thead>
+      <tbody x-h-table-body>
+        <template x-for="template in $store.printTemplates.templates" :key="template.name">
+          <tr x-h-table-row :data-template="template.name" :data-kind="template.kind">
+            <td x-h-table-cell>
+              <span x-h-checkbox>
+                <input type="checkbox" x-model="template.compare"
+                       :aria-label="$store.printTemplates.t('shell.printTemplates.compareWith', 'Compare {{name}}', { name: template.name })" />
+              </span>
+            </td>
+            <td x-h-table-cell class="whitespace-nowrap font-medium" x-text="template.name"></td>
+            <td x-h-table-cell class="whitespace-nowrap" x-text="$store.printTemplates.kindLabel(template)"></td>
+            <td x-h-table-cell class="whitespace-nowrap" x-text="template.derivedFrom || ''"></td>
+            <td x-h-table-cell>
+              <div class="hbox items-center gap-1 flex-wrap">
+                <span x-show="template.active" x-h-badge data-variant="positive" data-status="active"
+                      x-text="$store.printTemplates.t('shell.printTemplates.active', 'Active')"></span>
+                <span x-show="template.defaultTemplate && !template.active" x-h-badge data-variant="outline" data-status="default"
+                      x-text="$store.printTemplates.t('shell.printTemplates.default', 'Default')"></span>
+                <span x-show="template.newer" x-h-badge data-variant="primary" data-status="newer"
+                      x-text="$store.printTemplates.t('shell.printTemplates.newer', 'New')"></span>
+              </div>
+            </td>
+            <td x-h-table-cell>
+              <button x-h-button data-variant="transparent" data-size="icon-sm" type="button" x-h-menu-trigger.dropdown
+                      :aria-label="$store.printTemplates.t('shell.printTemplates.actionsFor', 'Actions for {{name}}', { name: template.name })">
+                <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+              </button>
+              <ul x-h-menu data-align="bottom-end">
+                <li x-h-menu-item data-action="preview" @click="$store.printTemplates.preview(template)">
+                  <svg role="presentation" x-h-lucide data-lucide="eye"></svg>
+                  <span x-text="$store.printTemplates.t('shell.printTemplates.preview', 'Preview')"></span>
+                </li>
+                <li x-h-menu-item data-action="activate" :aria-disabled="template.active || $store.printTemplates.busy ? 'true' : 'false'"
+                    @click="template.active || $store.printTemplates.busy || $store.printTemplates.setActive(template)">
+                  <svg role="presentation" x-h-lucide data-lucide="check"></svg>
+                  <span x-text="$store.printTemplates.t('shell.printTemplates.setActive', 'Set active')"></span>
+                </li>
+                <li x-h-menu-item data-action="duplicate" @click="$store.printTemplates.openDuplicate(template)">
+                  <svg role="presentation" x-h-lucide data-lucide="copy"></svg>
+                  <span x-text="$store.printTemplates.t('shell.printTemplates.duplicate', 'Duplicate')"></span>
+                </li>
+                <li x-h-menu-item data-action="edit" x-show="$store.printTemplates.isTenant(template)" @click="$store.printTemplates.openEditor(template)">
+                  <svg role="presentation" x-h-lucide data-lucide="pencil"></svg>
+                  <span x-text="$store.printTemplates.t('shell.printTemplates.edit', 'Edit')"></span>
+                </li>
+                <li x-h-menu-item data-action="remove" data-variant="negative" x-show="$store.printTemplates.isTenant(template)"
+                    :aria-disabled="template.active ? 'true' : 'false'" @click="template.active || $store.printTemplates.openRemove(template)">
+                  <svg role="presentation" x-h-lucide data-lucide="trash-2"></svg>
+                  <span x-text="$store.printTemplates.t('shell.printTemplates.remove', 'Delete')"></span>
+                </li>
+              </ul>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <span x-show="$store.printTemplates.selectionKey" x-cloak x-h-text.muted class="text-xs"
+        x-text="$store.printTemplates.t('shell.printTemplates.selectionKeyHint', 'The selection is the tenant configuration {{key}}.', { key: $store.printTemplates.selectionKey })"></span>
+
+  <!-- The editor of a tenant template: its source as text, saved back as a whole. -->
+  <template x-if="$store.printTemplates.editor">
+    <div x-h-card id="print-templates-editor" class="w-full overflow-hidden">
+      <div x-h-card-header class="hbox items-center gap-2">
+        <div class="vbox gap-1 flex-1 min-w-0">
+          <div x-h-card-title x-text="$store.printTemplates.t('shell.printTemplates.editing', 'Editing {{name}}', { name: $store.printTemplates.editor.name })"></div>
+          <div x-h-card-description x-text="$store.printTemplates.t('shell.printTemplates.editingHint', 'The template source. Save writes it back; the next print uses it.')"></div>
+        </div>
+      </div>
+      <div x-h-card-content>
+        <textarea x-h-textarea id="print-templates-source" class="w-full font-mono text-xs" rows="24" spellcheck="false"
+                  x-model="$store.printTemplates.editor.source"
+                  :aria-label="$store.printTemplates.t('shell.printTemplates.source', 'Template source')"></textarea>
+      </div>
+      <div x-h-card-footer class="hbox justify-end gap-2">
+        <button x-h-button data-variant="outline" type="button" @click="$store.printTemplates.closeEditor()"
+                x-text="$store.printTemplates.t('shell.printTemplates.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" type="button" id="print-templates-save" :disabled="$store.printTemplates.busy"
+                @click="$store.printTemplates.save()" x-text="$store.printTemplates.t('shell.printTemplates.save', 'Save')"></button>
+      </div>
+    </div>
+  </template>
+
+  <!-- Two templates side by side as a line diff: what the right one adds, what it drops. -->
+  <template x-if="$store.printTemplates.diff">
+    <div x-h-card id="print-templates-diff" class="w-full overflow-hidden">
+      <div x-h-card-header class="hbox items-center gap-2">
+        <div x-h-card-title class="flex-1 min-w-0"
+             x-text="$store.printTemplates.t('shell.printTemplates.comparing', '{{left}} compared with {{right}}', { left: $store.printTemplates.diff.left, right: $store.printTemplates.diff.right })"></div>
+        <button x-h-button data-variant="outline" data-size="sm" type="button" @click="$store.printTemplates.closeDiff()"
+                x-text="$store.printTemplates.t('shell.printTemplates.close', 'Close')"></button>
+      </div>
+      <div x-h-card-content class="overflow-x-auto">
+        <pre class="font-mono text-xs whitespace-pre-wrap m-0"><template x-for="(line, index) in $store.printTemplates.diff.lines" :key="index"><div :class="line.kind === '+' ? 'bg-positive text-positive-foreground' : line.kind === '-' ? 'bg-negative text-negative-foreground' : ''" x-text="line.kind + ' ' + line.text"></div></template></pre>
+      </div>
+    </div>
+  </template>
+
+  <div x-h-dialog-overlay :data-open="!!$store.printTemplates.duplicateSource" @click.self="$store.printTemplates.closeDuplicate()"
+       @keydown.escape.window="$store.printTemplates.duplicateSource && $store.printTemplates.closeDuplicate()">
+    <form x-h-dialog id="print-templates-duplicate-dialog" @submit.prevent="$store.printTemplates.duplicate()">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.printTemplates.t('shell.printTemplates.duplicateTitle', 'Duplicate {{name}}', { name: $store.printTemplates.duplicateSource?.name || '' })"></h2>
+        <p x-h-dialog-description
+           x-text="$store.printTemplates.t('shell.printTemplates.duplicateDescription', 'The copy is a template of this tenant: edit it, and make it the active one when it is ready. It records the version it derives from.')"></p>
+      </div>
+      <div x-h-dialog-content class="vbox gap-4">
+        <div class="vbox gap-1">
+          <label x-h-label for="print-templates-duplicate-name" x-text="$store.printTemplates.t('shell.printTemplates.newName', 'New template name')"></label>
+          <input x-h-input id="print-templates-duplicate-name" type="text" autocomplete="off" x-model="$store.printTemplates.duplicateName"
+                 :placeholder="$store.printTemplates.t('shell.printTemplates.newNamePlaceholder', 'e.g. acme-blue')" />
+          <span x-h-text.muted class="text-xs"
+                x-text="$store.printTemplates.t('shell.printTemplates.nameRule', 'Letters, digits, \'.\', \'-\' and \'_\', starting with a letter or digit.')"></span>
+        </div>
+        <div x-show="$store.printTemplates.error" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.printTemplates.error"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.printTemplates.closeDuplicate()"
+                x-text="$store.printTemplates.t('shell.printTemplates.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" type="submit" id="print-templates-duplicate-button"
+                :disabled="$store.printTemplates.busy || !$store.printTemplates.duplicateNameValid"
+                x-text="$store.printTemplates.t('shell.printTemplates.duplicate', 'Duplicate')"></button>
+      </div>
+    </form>
+  </div>
+
+  <div x-h-dialog-overlay :data-open="!!$store.printTemplates.removeTarget" @click.self="$store.printTemplates.closeRemove()"
+       @keydown.escape.window="$store.printTemplates.removeTarget && $store.printTemplates.closeRemove()">
+    <div x-h-dialog id="print-templates-remove-dialog">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="$store.printTemplates.t('shell.printTemplates.removeTitle', 'Delete template')"></h2>
+        <p x-h-dialog-description
+           x-text="$store.printTemplates.t('shell.printTemplates.removeQuestion', 'Delete {{name}}? A document printed with it so far keeps its PDF; nothing else prints with it any more.', { name: $store.printTemplates.removeTarget?.name || '' })"></p>
+      </div>
+      <div x-h-dialog-content>
+        <div x-show="$store.printTemplates.error" x-cloak x-h-alert data-variant="warning" role="alert">
+          <div x-h-alert-description x-text="$store.printTemplates.error"></div>
+        </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" type="button" @click="$store.printTemplates.closeRemove()"
+                x-text="$store.printTemplates.t('shell.printTemplates.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" type="button" id="print-templates-remove-confirm" :disabled="$store.printTemplates.busy"
+                @click="$store.printTemplates.remove()" x-text="$store.printTemplates.t('shell.printTemplates.remove', 'Delete')"></button>
+      </div>
+    </div>
+  </div>
+</div>

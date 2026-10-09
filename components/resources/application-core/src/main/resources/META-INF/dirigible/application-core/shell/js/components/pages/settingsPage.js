@@ -72,9 +72,9 @@ document.addEventListener('alpine:init', () => {
       this.selected = name;
       this.selectedTitle = title || '';
       this.error = null;
-      if (name === 'tenantUsers') {
-        // The platform's Users section renders from its own store - absent on a page generated before it.
-        const store = window.Alpine && Alpine.store('tenantUsers');
+      if (name === 'tenantUsers' || name === 'printTemplates') {
+        // The platform's own sections render from their stores - absent on a page generated before them.
+        const store = window.Alpine && Alpine.store(name);
         if (store) store.load();
       }
       this.beginFragment(url);

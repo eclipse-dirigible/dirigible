@@ -31,15 +31,23 @@
             </button>
           </li>
 
-          <!-- Users: the platform's section for the owners of the current tenant (#7498), the same fragment
-               the application shell's Settings renders. Offered only while the tenantUsers store says so. -->
-          <li x-h-list-header x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak
+          <!-- The platform's own tenant sections, the same fragments the application shell's Settings
+               renders, each offered only while its store says so: Users (#7498) for the owners of the current
+               tenant, Print Templates (#7755) for whoever may select the layout a document type prints with. -->
+          <li x-h-list-header x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)" x-cloak
               x-text="T('application-core:shell.settings.tenant', 'Tenant')"></li>
           <li x-h-list-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
             <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="selected === 'tenantUsers'"
                     @click="select('tenantUsers', null, T('application-core:shell.settings.tenantUsers', 'Users'))">
               <svg role="presentation" x-h-lucide data-lucide="users"></svg>
               <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.tenantUsers', 'Users')"></span>
+            </button>
+          </li>
+          <li x-h-list-item x-show="$store.printTemplates && $store.printTemplates.visible" x-cloak>
+            <button x-h-list-item-button class="gap-3 px-4 py-3" :aria-current="selected === 'printTemplates'"
+                    @click="select('printTemplates', null, T('application-core:shell.settings.printTemplates', 'Print Templates'))">
+              <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
+              <span class="flex-1 truncate text-left" x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
             </button>
           </li>
 
@@ -159,6 +167,10 @@
         <!-- Users: the shared fragment of the tenantUsers store. -->
         <div class="size-full overflow-auto" x-show="selected === 'tenantUsers'" x-cloak
              x-html="$store.tenantUsers ? $store.tenantUsers.markup : ''"></div>
+
+        <!-- Print Templates: the shared fragment of the printTemplates store. -->
+        <div class="size-full overflow-auto" x-show="selected === 'printTemplates'" x-cloak
+             x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
 
         <!-- A setting entity's own generated CRUD list. The host carries x-h-include: Harmonia
              fetches the fragment and initializes Alpine on it (binding its <Entity>ManageListPage
