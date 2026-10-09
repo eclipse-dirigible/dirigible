@@ -29,35 +29,35 @@ import jakarta.persistence.UniqueConstraint;
  * {@link org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger}.
  */
 @Entity
-@Table(name = "DIRIGIBLE_TENANT_ARTEFACTS", uniqueConstraints = {
-        @UniqueConstraint(name = "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY", columnNames = {"TENART_TENANT_ID", "TENART_ARTEFACT_KEY"})})
+@Table(name = "DIRIGIBLE_TENANT_ARTEFACTS", uniqueConstraints = {@UniqueConstraint(name = "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY",
+        columnNames = {"TENANT_ARTEFACT_TENANT_ID", "TENANT_ARTEFACT_KEY"})})
 public class TenantArtefactOutcome {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "TENART_ID", columnDefinition = "BIGINT", nullable = false)
+    @Column(name = "TENANT_ARTEFACT_ID", columnDefinition = "BIGINT", nullable = false)
     private Long id;
 
-    @Column(name = "TENART_TENANT_ID", columnDefinition = "VARCHAR", nullable = false, length = 255)
+    @Column(name = "TENANT_ARTEFACT_TENANT_ID", columnDefinition = "VARCHAR", nullable = false, length = 255)
     private String tenantId;
 
-    @Column(name = "TENART_ARTEFACT_KEY", columnDefinition = "VARCHAR", nullable = false, length = 2000)
+    @Column(name = "TENANT_ARTEFACT_KEY", columnDefinition = "VARCHAR", nullable = false, length = 2000)
     private String artefactKey;
 
-    @Column(name = "TENART_ARTEFACT_TYPE", columnDefinition = "VARCHAR", nullable = false, length = 255)
+    @Column(name = "TENANT_ARTEFACT_TYPE", columnDefinition = "VARCHAR", nullable = false, length = 255)
     private String artefactType;
 
-    @Column(name = "TENART_ARTEFACT_LOCATION", columnDefinition = "VARCHAR", nullable = false, length = 2000)
+    @Column(name = "TENANT_ARTEFACT_LOCATION", columnDefinition = "VARCHAR", nullable = false, length = 2000)
     private String artefactLocation;
 
-    @Column(name = "TENART_LIFECYCLE", columnDefinition = "VARCHAR", nullable = false, length = 32)
+    @Column(name = "TENANT_ARTEFACT_LIFECYCLE", columnDefinition = "VARCHAR", nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private ArtefactLifecycle lifecycle;
 
-    @Column(name = "TENART_ERROR", columnDefinition = "VARCHAR", length = Artefact.ERROR_LENGTH)
+    @Column(name = "TENANT_ARTEFACT_ERROR", columnDefinition = "VARCHAR", length = Artefact.ERROR_LENGTH)
     private String error;
 
-    @Column(name = "TENART_UPDATED_AT", columnDefinition = "TIMESTAMP", nullable = false)
+    @Column(name = "TENANT_ARTEFACT_UPDATED_AT", columnDefinition = "TIMESTAMP", nullable = false)
     private Instant updatedAt;
 
     /** Required by JPA. */

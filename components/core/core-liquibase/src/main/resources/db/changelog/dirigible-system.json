@@ -11912,7 +11912,7 @@
                 {
                   "column": {
                     "autoIncrement": true,
-                    "name": "TENART_ID",
+                    "name": "TENANT_ARTEFACT_ID",
                     "type": "BIGINT",
                     "constraints": {
                       "nullable": false,
@@ -11923,7 +11923,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_TENANT_ID",
+                    "name": "TENANT_ARTEFACT_TENANT_ID",
                     "type": "VARCHAR(255)",
                     "constraints": {
                       "nullable": false
@@ -11932,7 +11932,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_ARTEFACT_KEY",
+                    "name": "TENANT_ARTEFACT_KEY",
                     "type": "VARCHAR(2000)",
                     "constraints": {
                       "nullable": false
@@ -11941,7 +11941,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_ARTEFACT_TYPE",
+                    "name": "TENANT_ARTEFACT_TYPE",
                     "type": "VARCHAR(255)",
                     "constraints": {
                       "nullable": false
@@ -11950,7 +11950,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_ARTEFACT_LOCATION",
+                    "name": "TENANT_ARTEFACT_LOCATION",
                     "type": "VARCHAR(2000)",
                     "constraints": {
                       "nullable": false
@@ -11959,7 +11959,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_LIFECYCLE",
+                    "name": "TENANT_ARTEFACT_LIFECYCLE",
                     "type": "VARCHAR(32)",
                     "constraints": {
                       "nullable": false
@@ -11968,13 +11968,13 @@
                 },
                 {
                   "column": {
-                    "name": "TENART_ERROR",
+                    "name": "TENANT_ARTEFACT_ERROR",
                     "type": "VARCHAR(2000)"
                   }
                 },
                 {
                   "column": {
-                    "name": "TENART_UPDATED_AT",
+                    "name": "TENANT_ARTEFACT_UPDATED_AT",
                     "type": "TIMESTAMP",
                     "constraints": {
                       "nullable": false
@@ -12010,7 +12010,7 @@
         "changes": [
           {
             "addUniqueConstraint": {
-              "columnNames": "TENART_TENANT_ID, TENART_ARTEFACT_KEY",
+              "columnNames": "TENANT_ARTEFACT_TENANT_ID, TENANT_ARTEFACT_KEY",
               "constraintName": "UK_DIRIGIBLE_TENANT_ARTEFACTS_TENANT_KEY",
               "tableName": "DIRIGIBLE_TENANT_ARTEFACTS"
             }
@@ -12042,7 +12042,7 @@
               "columns": [
                 {
                   "column": {
-                    "name": "TENINIT_TENANT_ID",
+                    "name": "TENANT_INITIALIZATION_TENANT_ID",
                     "type": "VARCHAR(255)",
                     "constraints": {
                       "nullable": false,
@@ -12053,7 +12053,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENINIT_STATE",
+                    "name": "TENANT_INITIALIZATION_STATE",
                     "type": "VARCHAR(32)",
                     "constraints": {
                       "nullable": false
@@ -12062,7 +12062,7 @@
                 },
                 {
                   "column": {
-                    "name": "TENINIT_REQUESTED_AT",
+                    "name": "TENANT_INITIALIZATION_REQUESTED_AT",
                     "type": "TIMESTAMP",
                     "constraints": {
                       "nullable": false
@@ -12071,19 +12071,19 @@
                 },
                 {
                   "column": {
-                    "name": "TENINIT_STARTED_AT",
+                    "name": "TENANT_INITIALIZATION_STARTED_AT",
                     "type": "TIMESTAMP"
                   }
                 },
                 {
                   "column": {
-                    "name": "TENINIT_FINISHED_AT",
+                    "name": "TENANT_INITIALIZATION_FINISHED_AT",
                     "type": "TIMESTAMP"
                   }
                 },
                 {
                   "column": {
-                    "name": "TENINIT_ERROR",
+                    "name": "TENANT_INITIALIZATION_ERROR",
                     "type": "VARCHAR(2000)"
                   }
                 }

@@ -44,23 +44,23 @@ public class TenantInitialization {
     }
 
     @Id
-    @Column(name = "TENINIT_TENANT_ID", columnDefinition = "VARCHAR", nullable = false, length = 255)
+    @Column(name = "TENANT_INITIALIZATION_TENANT_ID", columnDefinition = "VARCHAR", nullable = false, length = 255)
     private String tenantId;
 
-    @Column(name = "TENINIT_STATE", columnDefinition = "VARCHAR", nullable = false, length = 32)
+    @Column(name = "TENANT_INITIALIZATION_STATE", columnDefinition = "VARCHAR", nullable = false, length = 32)
     @Enumerated(EnumType.STRING)
     private State state;
 
-    @Column(name = "TENINIT_REQUESTED_AT", columnDefinition = "TIMESTAMP", nullable = false)
+    @Column(name = "TENANT_INITIALIZATION_REQUESTED_AT", columnDefinition = "TIMESTAMP", nullable = false)
     private Instant requestedAt;
 
-    @Column(name = "TENINIT_STARTED_AT", columnDefinition = "TIMESTAMP")
+    @Column(name = "TENANT_INITIALIZATION_STARTED_AT", columnDefinition = "TIMESTAMP")
     private Instant startedAt;
 
-    @Column(name = "TENINIT_FINISHED_AT", columnDefinition = "TIMESTAMP")
+    @Column(name = "TENANT_INITIALIZATION_FINISHED_AT", columnDefinition = "TIMESTAMP")
     private Instant finishedAt;
 
-    @Column(name = "TENINIT_ERROR", columnDefinition = "VARCHAR", length = Artefact.ERROR_LENGTH)
+    @Column(name = "TENANT_INITIALIZATION_ERROR", columnDefinition = "VARCHAR", length = Artefact.ERROR_LENGTH)
     private String error;
 
     /** Required by JPA. */
