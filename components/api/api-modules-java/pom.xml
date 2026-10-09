@@ -28,6 +28,19 @@
 
     <dependencies>
 
+        <!-- SOAP, for sdk/net/Soap.java - the only SOAP consumer in the reactor. The root pom used to
+             give every module jaxws-rt + jakarta.xml.ws-api (15 transitive jars) for this one file,
+             which imports jakarta.xml.soap only (#7785). The API plus a SAAJ implementation is what
+             MessageFactory / SOAPConnectionFactory need at runtime. -->
+        <dependency>
+            <groupId>jakarta.xml.soap</groupId>
+            <artifactId>jakarta.xml.soap-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.sun.xml.messaging.saaj</groupId>
+            <artifactId>saaj-impl</artifactId>
+        </dependency>
+
         <!-- Core platform helpers (BeanProvider, configurations, repository) -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
