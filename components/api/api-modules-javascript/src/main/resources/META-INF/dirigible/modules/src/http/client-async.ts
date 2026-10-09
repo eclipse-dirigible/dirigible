@@ -335,18 +335,21 @@ function createHttpResponseCallback(httpClient: any, successCallback: string, er
  * @returns The complex JavaScript string for the success handler.
  */
 function createSuccessCallback(callback: string): string {
-	// Note: This string uses Java utility classes (org.apache.commons.io.IOUtils) and context variables 
-    // (__context) that are available in the specific JVM environment.
+	// Note: This string reads the Java response object and the context variables (__context) available
+    // in the specific JVM environment. Since the HttpClient 5 port (dirigible #7792) that object is a
+    // SimpleHttpResponse: the status is getCode()/getReasonPhrase() rather than getStatusLine(), the
+    // headers are getHeaders(), and the body is already in memory - getBodyBytes()/getBodyText() -
+    // so there is no entity stream to read through IOUtils any more.
     
     // The structure maps the Java HTTP Response object into the standard HttpClientResponse interface.
 	return "(function(httpResponse, isBinary, context) {\n"
 		+ "var response = {};\n"
-		+ "response.statusCode = httpResponse.getStatusLine().getStatusCode();\n"
-		+ "response.statusMessage = httpResponse.getStatusLine().getReasonPhrase();\n"
-		+ "response.protocol = httpResponse.getProtocolVersion();\n"
+		+ "response.statusCode = httpResponse.getCode();\n"
+		+ "response.statusMessage = httpResponse.getReasonPhrase();\n"
+		+ "response.protocol = httpResponse.getVersion();\n"
 		+ "response.binary = isBinary;\n"
 
-		+ "var headers = httpResponse.getAllHeaders();\n"
+		+ "var headers = httpResponse.getHeaders();\n"
 		+ "response.headers = [];\n"
 		+ "for (var i = 0; i < headers.length; i ++) {\n"
 		+ "    response.headers.push({\n"
@@ -355,16 +358,10 @@ function createSuccessCallback(callback: string): string {
 		+ "    });\n"
 		+ "}\n"
 
-		+ "var entity = httpResponse.getEntity();\n"
-		+ "if (entity) {\n"
-		+ "    var inputStream = entity.getContent();\n"
-		+ "    if (isBinary) {\n"
-		+ "        // Uses Java IOUtils to read binary data\n"
-		+ "        response.data = org.apache.commons.io.IOUtils.toByteArray(inputStream);\n"
-		+ "    } else {\n"
-		+ "        // Uses Java IOUtils to read text data\n"
-		+ "        response.text = org.apache.commons.io.IOUtils.toString(inputStream);\n"
-		+ "    }\n"
+		+ "if (isBinary) {\n"
+		+ "    response.data = httpResponse.getBodyBytes();\n"
+		+ "} else {\n"
+		+ "    response.text = httpResponse.getBodyText();\n"
 		+ "}\n"
 
 		+ "(" + callback + ")(response, JSON.parse(context));\n"

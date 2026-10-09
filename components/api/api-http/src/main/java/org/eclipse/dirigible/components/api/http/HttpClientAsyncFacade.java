@@ -10,24 +10,31 @@
 package org.eclipse.dirigible.components.api.http;
 
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 
-import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpPatch;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpTrace;
-import org.apache.http.client.methods.HttpUriRequest;
-import org.apache.http.concurrent.FutureCallback;
-import org.apache.http.impl.nio.client.CloseableHttpAsyncClient;
-import org.apache.http.impl.nio.client.HttpAsyncClients;
+import org.apache.hc.client5.http.async.methods.SimpleHttpRequest;
+import org.apache.hc.client5.http.async.methods.SimpleHttpResponse;
+import org.apache.hc.client5.http.async.methods.SimpleRequestBuilder;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpHead;
+import org.apache.hc.client5.http.classic.methods.HttpPatch;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+import org.apache.hc.client5.http.classic.methods.HttpTrace;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.core5.concurrent.FutureCallback;
+import org.apache.hc.client5.http.impl.async.CloseableHttpAsyncClient;
+import org.apache.hc.client5.http.impl.async.HttpAsyncClients;
 import org.eclipse.dirigible.components.api.http.client.HttpClientRequestOptions;
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.slf4j.Logger;
@@ -109,13 +116,14 @@ public final class HttpClientAsyncFacade {
      * @param url the URL
      * @param options the options
      * @param httpResponseCallback the callback
+     * @throws IOException In case an I/O exception occurs
      */
-    public void getAsync(String url, String options, HttpResponseCallback httpResponseCallback) {
+    public void getAsync(String url, String options, HttpResponseCallback httpResponseCallback) throws IOException {
         requestsCounter++;
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpGet request = HttpClientFacade.createGetRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -131,7 +139,7 @@ public final class HttpClientAsyncFacade {
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpPost request = HttpClientFacade.createPostRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -147,7 +155,7 @@ public final class HttpClientAsyncFacade {
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpPut request = HttpClientFacade.createPutRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -163,7 +171,7 @@ public final class HttpClientAsyncFacade {
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpPatch request = HttpClientFacade.createPatchRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -172,13 +180,14 @@ public final class HttpClientAsyncFacade {
      * @param url the URL
      * @param options the options
      * @param httpResponseCallback the callback
+     * @throws IOException In case an I/O exception occurs
      */
-    public void deleteAsync(String url, String options, HttpResponseCallback httpResponseCallback) {
+    public void deleteAsync(String url, String options, HttpResponseCallback httpResponseCallback) throws IOException {
         requestsCounter++;
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpDelete request = HttpClientFacade.createDeleteRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -187,13 +196,14 @@ public final class HttpClientAsyncFacade {
      * @param url the URL
      * @param options the options
      * @param httpResponseCallback the callback
+     * @throws IOException In case an I/O exception occurs
      */
-    public void headAsync(String url, String options, HttpResponseCallback httpResponseCallback) {
+    public void headAsync(String url, String options, HttpResponseCallback httpResponseCallback) throws IOException {
         requestsCounter++;
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpHead request = HttpClientFacade.createHeadRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -202,13 +212,14 @@ public final class HttpClientAsyncFacade {
      * @param url the URL
      * @param options the options
      * @param httpResponseCallback the callback
+     * @throws IOException In case an I/O exception occurs
      */
-    public void traceAsync(String url, String options, HttpResponseCallback httpResponseCallback) {
+    public void traceAsync(String url, String options, HttpResponseCallback httpResponseCallback) throws IOException {
         requestsCounter++;
         HttpClientRequestOptions httpClientRequestOptions = HttpClientFacade.parseOptions(options);
         httpResponseCallback.setOptions(httpClientRequestOptions);
         HttpTrace request = HttpClientFacade.createTraceRequest(url, httpClientRequestOptions);
-        asyncHttpRequests.add(new AsyncHttpRequest(request, httpResponseCallback.getCallback()));
+        asyncHttpRequests.add(new AsyncHttpRequest(toSimpleRequest(request), httpResponseCallback.getCallback()));
     }
 
     /**
@@ -229,15 +240,48 @@ public final class HttpClientAsyncFacade {
     }
 
     /**
+     * The async client of HttpClient 5 takes a SimpleHttpRequest rather than the classic request the
+     * shared HttpClientFacade factories build, so the request is copied over: method, absolute URI,
+     * headers, per-request config and the body. The body is read into memory, which is what
+     * SimpleHttpRequest means by simple - the same assumption the 4.x code made by handing a fully
+     * built entity to the async client, and these facades send strings, forms and files that are
+     * already materialised.
+     *
+     * @param request the classic request
+     * @return the async request
+     * @throws IOException if the entity cannot be read
+     */
+    private static SimpleHttpRequest toSimpleRequest(HttpUriRequestBase request) throws IOException {
+        SimpleRequestBuilder builder;
+        try {
+            builder = SimpleRequestBuilder.create(request.getMethod())
+                                          .setUri(request.getUri());
+        } catch (URISyntaxException e) {
+            throw new IOException("Invalid request URI", e);
+        }
+        for (Header header : request.getHeaders()) {
+            builder.addHeader(header);
+        }
+        builder.setRequestConfig(request.getConfig());
+        HttpEntity entity = request.getEntity();
+        if (entity != null) {
+            byte[] body = EntityUtils.toByteArray(entity);
+            String declared = entity.getContentType();
+            builder.setBody(body, declared == null ? ContentType.APPLICATION_OCTET_STREAM : ContentType.parseLenient(declared));
+        }
+        return builder.build();
+    }
+
+    /**
      * The Class AsyncHttpRequest.
      */
     private static class AsyncHttpRequest {
 
         /** The request. */
-        private final HttpUriRequest request;
+        private final SimpleHttpRequest request;
 
         /** The callback. */
-        private final FutureCallback<HttpResponse> callback;
+        private final FutureCallback<SimpleHttpResponse> callback;
 
         /**
          * Instantiates a new async http request.
@@ -245,7 +289,7 @@ public final class HttpClientAsyncFacade {
          * @param request the request
          * @param callback the callback
          */
-        private AsyncHttpRequest(HttpUriRequest request, FutureCallback<HttpResponse> callback) {
+        private AsyncHttpRequest(SimpleHttpRequest request, FutureCallback<SimpleHttpResponse> callback) {
             this.request = request;
             this.callback = callback;
         }
@@ -255,7 +299,7 @@ public final class HttpClientAsyncFacade {
          *
          * @return the request
          */
-        private HttpUriRequest getRequest() {
+        private SimpleHttpRequest getRequest() {
             return request;
         }
 
@@ -264,7 +308,7 @@ public final class HttpClientAsyncFacade {
          *
          * @return the callback
          */
-        private FutureCallback<HttpResponse> getCallback() {
+        private FutureCallback<SimpleHttpResponse> getCallback() {
             return callback;
         }
     }
@@ -275,7 +319,7 @@ public final class HttpClientAsyncFacade {
     public class HttpResponseCallback {
 
         /** The callback. */
-        private final FutureCallback<HttpResponse> callback;
+        private final FutureCallback<SimpleHttpResponse> callback;
 
         /** The http client request options. */
         private HttpClientRequestOptions httpClientRequestOptions;
@@ -306,7 +350,7 @@ public final class HttpClientAsyncFacade {
          *
          * @return the callback
          */
-        public FutureCallback<HttpResponse> getCallback() {
+        public FutureCallback<SimpleHttpResponse> getCallback() {
             return callback;
         }
 
@@ -318,13 +362,14 @@ public final class HttpClientAsyncFacade {
          * @param cancelCallback the cancel callback
          * @return the future callback
          */
-        private FutureCallback<HttpResponse> createFutureCallback(String completeCallback, String failCallback, String cancelCallback) {
-            return new FutureCallback<HttpResponse>() {
+        private FutureCallback<SimpleHttpResponse> createFutureCallback(String completeCallback, String failCallback,
+                String cancelCallback) {
+            return new FutureCallback<SimpleHttpResponse>() {
 
                 private Map<Object, Object> executionContext = new HashMap<Object, Object>();
 
                 @Override
-                public void completed(HttpResponse response) {
+                public void completed(SimpleHttpResponse response) {
                     countDownLatch.countDown();
                     if (completeCallback != null) {
                         executionContext.put("response", response);

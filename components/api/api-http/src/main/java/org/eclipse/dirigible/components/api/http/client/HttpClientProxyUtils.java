@@ -20,18 +20,18 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.http.HttpException;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpRequest;
-import org.apache.http.conn.routing.HttpRoute;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.conn.ssl.TrustSelfSignedStrategy;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.conn.DefaultProxyRoutePlanner;
-import org.apache.http.protocol.HttpContext;
-import org.apache.http.ssl.SSLContextBuilder;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.impl.routing.DefaultProxyRoutePlanner;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
+import org.apache.hc.client5.http.ssl.TrustSelfSignedStrategy;
+import org.apache.hc.core5.http.HttpException;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.protocol.HttpContext;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,10 +91,17 @@ public class HttpClientProxyUtils {
             try {
                 SSLContextBuilder sslContextBuilder = new SSLContextBuilder();
                 sslContextBuilder.loadTrustMaterial(null, new TrustSelfSignedStrategy());
-                SSLConnectionSocketFactory sslSocketFactory =
-                        new SSLConnectionSocketFactory(sslContextBuilder.build(), (hostName, sslSession) -> true);
+                // HttpClient 5 configures TLS on the CONNECTION MANAGER - the 4.x
+                // HttpClientBuilder.setSSLSocketFactory is gone.
+                SSLConnectionSocketFactory sslSocketFactory = SSLConnectionSocketFactoryBuilder.create()
+                                                                                               .setSslContext(sslContextBuilder.build())
+                                                                                               .setHostnameVerifier(
+                                                                                                       (hostName, sslSession) -> true)
+                                                                                               .build();
                 HttpClientBuilder httpClientBuilder = HttpClients.custom();
-                httpClientBuilder.setSSLSocketFactory(sslSocketFactory);
+                httpClientBuilder.setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+                                                                                                .setSSLSocketFactory(sslSocketFactory)
+                                                                                                .build());
                 setProxyIfNeeded(httpClientBuilder);
                 httpClient = httpClientBuilder.build();
             } catch (Exception e) {
@@ -139,19 +146,21 @@ public class HttpClientProxyUtils {
 
         if (!StringUtils.isEmpty(httpNonProxyHosts)) {
             String[] nonProxyHosts = httpNonProxyHosts.split("\\|");
+            // HttpClient 5 makes DefaultRoutePlanner.determineRoute final, so the non-proxy hosts are
+            // expressed where 5.x intends them: determineProxy returns null for a host that must be
+            // reached directly, and the planner then builds the direct route itself.
             httpClientBuilder.setRoutePlanner(new DefaultProxyRoutePlanner(httpProxy) {
 
                 @Override
-                public HttpRoute determineRoute(HttpHost target, HttpRequest request, HttpContext context) throws HttpException {
+                protected HttpHost determineProxy(HttpHost target, HttpContext context) throws HttpException {
                     String hostname = target.getHostName();
                     for (String nonProxyHost : nonProxyHosts) {
                         if (isNonProxyHost(hostname, nonProxyHost)) {
-                            // Return direct route
-                            return new HttpRoute(target);
+                            // Direct route - no proxy for this host
+                            return null;
                         }
                     }
-                    return super.determineRoute(target, request, context);
-
+                    return super.determineProxy(target, context);
                 }
 
                 private boolean isNonProxyHost(String hostname, String nonProxyHost) {

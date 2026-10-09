@@ -19,27 +19,28 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import org.apache.commons.io.IOUtils;
-import org.apache.http.Header;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHost;
-import org.apache.http.NameValuePair;
-import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.entity.EntityBuilder;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpHead;
-import org.apache.http.client.methods.HttpPatch;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.client.methods.HttpRequestBase;
-import org.apache.http.client.methods.HttpTrace;
-import org.apache.http.entity.ContentType;
-import org.apache.http.entity.mime.MultipartEntityBuilder;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.apache.http.util.EntityUtils;
+import org.apache.hc.core5.http.Header;
+import org.apache.hc.core5.http.HttpEntity;
+import org.apache.hc.core5.http.HttpHost;
+import org.apache.hc.core5.http.NameValuePair;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.entity.EntityBuilder;
+import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
+import org.apache.hc.client5.http.classic.methods.HttpDelete;
+import org.apache.hc.client5.http.classic.methods.HttpGet;
+import org.apache.hc.client5.http.classic.methods.HttpHead;
+import org.apache.hc.client5.http.classic.methods.HttpPatch;
+import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.classic.methods.HttpPut;
+import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
+import org.apache.hc.client5.http.classic.methods.HttpTrace;
+import org.apache.hc.core5.http.ContentType;
+import org.apache.hc.client5.http.entity.mime.MultipartEntityBuilder;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.core5.http.message.BasicNameValuePair;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.util.Timeout;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.api.http.client.HttpClientFile;
 import org.eclipse.dirigible.components.api.http.client.HttpClientHeader;
@@ -176,7 +177,7 @@ public class HttpClientFacade {
      * @param httpClientRequestOptions the http client request options
      * @param httpRequestBase the http request base
      */
-    private static void prepareHeaders(HttpClientRequestOptions httpClientRequestOptions, HttpRequestBase httpRequestBase) {
+    private static void prepareHeaders(HttpClientRequestOptions httpClientRequestOptions, HttpUriRequestBase httpRequestBase) {
         for (HttpClientHeader httpClientHeader : httpClientRequestOptions.getHeaders()) {
             httpRequestBase.setHeader(httpClientHeader.getName(), httpClientHeader.getValue());
         }
@@ -200,19 +201,16 @@ public class HttpClientFacade {
     public static HttpClientResponse processHttpClientResponse(CloseableHttpResponse response, boolean binary) throws IOException {
         try {
             HttpClientResponse httpClientResponse = new HttpClientResponse();
-            httpClientResponse.setStatusCode(response.getStatusLine()
-                                                     .getStatusCode());
-            httpClientResponse.setStatusMessage(response.getStatusLine()
-                                                        .getReasonPhrase());
-            httpClientResponse.setProtocol(response.getProtocolVersion()
+            httpClientResponse.setStatusCode(response.getCode());
+            httpClientResponse.setStatusMessage(response.getReasonPhrase());
+            httpClientResponse.setProtocol(response.getVersion()
                                                    .getProtocol());
-            httpClientResponse.setProtocol(response.getProtocolVersion()
+            httpClientResponse.setProtocol(response.getVersion()
                                                    .getProtocol());
             HttpEntity entity = response.getEntity();
             if (entity != null && entity.getContent() != null) {
                 byte[] content = IOUtils.toByteArray(entity.getContent());
-                String processedContentType = ContentType.getOrDefault(entity)
-                                                         .getMimeType();
+                String processedContentType = contentTypeOf(entity).getMimeType();
                 boolean isSupportedTextType = recognizedTextMimeTypes.contains(processedContentType);
                 if (!isSupportedTextType) {
                     Optional<String> recognizedTextMimeType = recognizedTextMimeTypes.stream()
@@ -222,8 +220,7 @@ public class HttpClientFacade {
                 }
 
                 if (!binary && isSupportedTextType) {
-                    Charset charset = ContentType.getOrDefault(entity)
-                                                 .getCharset();
+                    Charset charset = contentTypeOf(entity).getCharset();
                     String text = new String(content, charset != null ? charset : StandardCharsets.UTF_8);
                     httpClientResponse.setText(text);
                 } else {
@@ -231,7 +228,7 @@ public class HttpClientFacade {
                 }
             }
 
-            for (Header header : response.getAllHeaders()) {
+            for (Header header : response.getHeaders()) {
                 httpClientResponse.getHeaders()
                                   .add(new HttpClientHeader(header.getName(), header.getValue()));
             }
@@ -240,6 +237,21 @@ public class HttpClientFacade {
         } finally {
             response.close();
         }
+    }
+
+    /**
+     * The entity's content type, or the default text one when it declares none - the HttpClient 5
+     * replacement for 4.x's ContentType.getOrDefault(HttpEntity). In 5.x an entity's content type is a
+     * String, so it is parsed leniently: a malformed header yields no content type rather than an
+     * exception, and the caller then falls back to the same default 4.x used.
+     *
+     * @param entity the entity
+     * @return the content type, never null
+     */
+    private static ContentType contentTypeOf(HttpEntity entity) {
+        String declared = entity.getContentType();
+        ContentType parsed = declared == null ? null : ContentType.parseLenient(declared);
+        return parsed != null ? parsed : ContentType.DEFAULT_TEXT;
     }
 
     /**
@@ -286,17 +298,23 @@ public class HttpClientFacade {
      * @return the request config
      */
     public static RequestConfig prepareConfig(HttpClientRequestOptions httpClientRequestOptions) {
+        // relativeRedirectsAllowed is deliberately not set: HttpClient 5 dropped the option and always
+        // allows a relative redirect, so there is nothing to map it to. The option stays on
+        // HttpClientRequestOptions so an existing options document still parses - it simply has no
+        // effect, which is also what HttpClient 5 does with it.
         RequestConfig.Builder configBuilder = RequestConfig.custom();
         configBuilder.setAuthenticationEnabled(httpClientRequestOptions.isAuthenticationEnabled())
                      .setCircularRedirectsAllowed(httpClientRequestOptions.isCircularRedirectsAllowed())
                      .setContentCompressionEnabled(httpClientRequestOptions.isContentCompressionEnabled())
                      .setExpectContinueEnabled(httpClientRequestOptions.isExpectContinueEnabled())
                      .setRedirectsEnabled(httpClientRequestOptions.isRedirectsEnabled())
-                     .setRelativeRedirectsAllowed(httpClientRequestOptions.isRelativeRedirectsAllowed())
                      .setMaxRedirects(httpClientRequestOptions.getMaxRedirects())
-                     .setConnectionRequestTimeout(httpClientRequestOptions.getConnectionRequestTimeout())
-                     .setConnectTimeout(httpClientRequestOptions.getConnectTimeout())
-                     .setSocketTimeout(httpClientRequestOptions.getSocketTimeout())
+                     // HttpClient 5 takes Timeout objects rather than bare milliseconds, and has no
+                     // socket timeout on the request config: the 4.x socketTimeout (how long to wait
+                     // for response data) is responseTimeout here, which is what it meant.
+                     .setConnectionRequestTimeout(Timeout.ofMilliseconds(httpClientRequestOptions.getConnectionRequestTimeout()))
+                     .setConnectTimeout(Timeout.ofMilliseconds(httpClientRequestOptions.getConnectTimeout()))
+                     .setResponseTimeout(Timeout.ofMilliseconds(httpClientRequestOptions.getSocketTimeout()))
                      .setCookieSpec(httpClientRequestOptions.getCookieSpec())
                      .setProxyPreferredAuthSchemes(httpClientRequestOptions.getProxyPreferredAuthSchemes())
                      .setTargetPreferredAuthSchemes(httpClientRequestOptions.getTargetPreferredAuthSchemes());
