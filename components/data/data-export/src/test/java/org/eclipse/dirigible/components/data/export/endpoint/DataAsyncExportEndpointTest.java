@@ -78,6 +78,9 @@ public class DataAsyncExportEndpointTest {
      */
     @BeforeEach
     public void setup() {
+        // the export runs on its own thread and commits outside this test's transaction, so an earlier
+        // run's export stays in the file-backed SystemDB and would be counted
+        exportService.deleteAll();
         DataSource datasource = new DataSource("/test/TestDB.datasource", "TestDB", "", "org.h2.Driver", "jdbc:h2:~/test", "sa", "");
         datasourceRepository.save(datasource);
     }

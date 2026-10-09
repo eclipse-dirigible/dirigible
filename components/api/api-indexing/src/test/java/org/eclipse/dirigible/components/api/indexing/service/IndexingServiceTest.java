@@ -13,12 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.io.IOException;
+import java.nio.file.Paths;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.io.FileUtils;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +50,18 @@ public class IndexingServiceTest {
     /** The indexing service. */
     @Autowired
     private IndexingService indexingService;
+
+    /**
+     * Starts each test from an empty index. Both tests write to the same index, which lives on disk, so
+     * the other test's documents, or a previous run's, would otherwise be counted.
+     *
+     * @throws IOException if the index folder cannot be deleted
+     */
+    @BeforeEach
+    public void clearIndex() throws IOException {
+        FileUtils.deleteDirectory(Paths.get(Configuration.get("DIRIGIBLE_INDEXING_ROOT_FOLDER"), TEST_INDEX)
+                                       .toFile());
+    }
 
     /**
      * Search test.

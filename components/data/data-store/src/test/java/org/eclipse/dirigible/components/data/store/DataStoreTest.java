@@ -95,6 +95,10 @@ public class DataStoreTest {
     @BeforeAll
     public void setup() throws Exception {
         Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "StoreDB");
+        // this runs outside the test transactions, so an earlier run's StoreDB stays in the file-backed
+        // SystemDB and saving it again violates its unique key
+        datasourceRepository.findByName("StoreDB")
+                            .ifPresent(datasourceRepository::delete);
         DataSource datasource = new DataSource("/test/StoreDB.datasource", "StoreDB", "", "org.h2.Driver", "jdbc:h2:~/StoreDB", "sa", "");
         datasourceRepository.save(datasource);
         dataSource = datasourcesManager.getDataSource("StoreDB");
