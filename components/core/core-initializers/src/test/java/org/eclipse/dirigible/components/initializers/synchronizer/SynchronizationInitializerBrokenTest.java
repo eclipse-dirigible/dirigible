@@ -37,7 +37,8 @@ import org.springframework.test.context.support.AnnotationConfigContextLoader;
  */
 @SpringBootTest
 @ExtendWith(SpringExtension.class)
-@ContextConfiguration(classes = {SynchronousSpringEventsConfig.class}, loader = AnnotationConfigContextLoader.class)
+@ContextConfiguration(classes = {SynchronousSpringEventsConfig.class}, loader = AnnotationConfigContextLoader.class,
+        initializers = IsolatedSynchronizationStore.class)
 @EntityScan("org.eclipse.dirigible.components")
 public class SynchronizationInitializerBrokenTest {
 
