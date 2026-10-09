@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.base.tenant;
 
+import java.util.Set;
+
 /**
  * A step which will be executed once a tenant provisioning process is completed (all
  * {@link TenantProvisioningStep} have completed).
@@ -22,5 +24,18 @@ public interface TenantPostProvisioningStep {
      * @throws TenantProvisioningException the tenant provisioning exception
      */
     void execute() throws TenantProvisioningException;
+
+    /**
+     * Will be called once the given tenants have been provisioned or activated. Only these tenants need
+     * initializing: every other tenant already is, and a step should leave it untouched.
+     * <p>
+     * The default runs {@link #execute()}, for a step that does not tell tenants apart.
+     *
+     * @param tenantIds the ids of the tenants just provisioned or activated
+     * @throws TenantProvisioningException the tenant provisioning exception
+     */
+    default void execute(Set<String> tenantIds) throws TenantProvisioningException {
+        execute();
+    }
 
 }

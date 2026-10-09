@@ -37,6 +37,7 @@ import org.eclipse.dirigible.components.base.callable.CallableResultAndException
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.base.tenant.TenantArtefactLedger;
 import org.eclipse.dirigible.components.base.tenant.TenantResult;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Outcome;
 import org.eclipse.dirigible.components.data.migrations.MigrationExecutor.Status;
@@ -62,6 +63,7 @@ class MigrationsSynchronizerTest {
     private final TenantContext tenantContext = mock(TenantContext.class);
     private final IRepository repository = mock(IRepository.class);
     private final SynchronizerCallback callback = mock(SynchronizerCallback.class);
+    private final TenantArtefactLedger tenantArtefactLedger = mock(TenantArtefactLedger.class);
 
     private final DirigibleDataSource tenantDataSource = mock(DirigibleDataSource.class);
     private final DirigibleDataSource systemDataSource = mock(DirigibleDataSource.class);
@@ -72,7 +74,8 @@ class MigrationsSynchronizerTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        synchronizer = new MigrationsSynchronizer(migrationService, executor, dataSourcesManager, tenantContext, repository);
+        synchronizer =
+                new MigrationsSynchronizer(migrationService, executor, dataSourcesManager, tenantContext, repository, tenantArtefactLedger);
         synchronizer.setCallback(callback);
         when(dataSourcesManager.getDefaultDataSource()).thenReturn(tenantDataSource);
         when(dataSourcesManager.getSystemDataSource()).thenReturn(systemDataSource);
@@ -92,6 +95,22 @@ class MigrationsSynchronizerTest {
         verify(callback).registerState(eq(synchronizer), any(TopologyWrapper.class), eq(ArtefactLifecycle.FAILED),
                 contains("boom in tenant-b"), any());
         verify(callback, never()).registerState(any(), any(TopologyWrapper.class), eq(ArtefactLifecycle.CREATED));
+    }
+
+    /**
+     * Each tenant's outcome is its own, so a tenant's initialization status reports its own failure
+     * only.
+     */
+    @Test
+    void eachTenantsOutcomeIsRecordedForThatTenant() throws Exception {
+        Migration migration = published(V1, "UPDATE ORDERS SET STATUS = 'OPEN';", ArtefactLifecycle.NEW);
+        givenOutcome("tenant-a", new Outcome("tenant-a", Status.APPLIED, null));
+        givenOutcome("tenant-b", new Outcome("tenant-b", Status.FAILED, "boom in tenant-b"));
+
+        synchronizer.completeImpl(wrap(migration), ArtefactPhase.CREATE);
+
+        verify(tenantArtefactLedger).record(migration, "tenant-a", ArtefactLifecycle.CREATED, null);
+        verify(tenantArtefactLedger).record(migration, "tenant-b", ArtefactLifecycle.FAILED, "boom in tenant-b");
     }
 
     @Test

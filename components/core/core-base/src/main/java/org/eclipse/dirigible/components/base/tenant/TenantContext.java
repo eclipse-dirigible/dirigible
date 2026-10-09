@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.base.tenant;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * The Interface TenantContext.
@@ -75,6 +76,23 @@ public interface TenantContext {
      * @throws Exc the exception which is thrown by the callable
      */
     <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachTenant(CallableResultAndException<Result, Exc> callable)
+            throws Exc;
+
+    /**
+     * Executes callable.call() on the calling thread with {@link #executeForEachTenant} restricted to
+     * the given tenants: every per-tenant fan-out the callable reaches, however deep, visits only the
+     * provisioned tenants among them. This is how the initialization of a newly activated tenant runs
+     * the per-tenant artefacts for that tenant alone, leaving the already initialized tenants
+     * untouched.
+     *
+     * @param tenantIds the ids of the tenants the fan-out is restricted to
+     * @param callable the callable
+     * @param <Result> result type
+     * @param <Exc> exception type which is thrown by the callable
+     * @return the result
+     * @throws Exc the exception which is thrown by the callable
+     */
+    <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)
             throws Exc;
 
 }

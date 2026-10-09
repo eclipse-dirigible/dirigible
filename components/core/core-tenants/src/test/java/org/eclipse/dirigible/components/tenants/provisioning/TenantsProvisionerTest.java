@@ -11,6 +11,9 @@ package org.eclipse.dirigible.components.tenants.provisioning;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -64,9 +67,29 @@ class TenantsProvisionerTest {
         provisioner.provision();
 
         verify(provisioningStep).execute(any());
-        verify(postProvisioningStep).execute();
+        verify(postProvisioningStep).execute(Set.of("acme"));
         verify(tenantService).save(acme);
         assertEquals(TenantStatus.PROVISIONED, acme.getStatus());
+    }
+
+    /**
+     * The post-provisioning steps initialize the tenants provisioned just now and no other: every other
+     * tenant is initialized already, and running its per-tenant artefacts again changes its data
+     * (#7799). A tenant whose provisioning failed is not provisioned, so it is not among them either.
+     */
+    @Test
+    void onlyTheTenantsProvisionedJustNowAreInitialized() {
+        Tenant acme = tenant("acme", TenantStatus.INITIAL);
+        Tenant globex = tenant("globex", TenantStatus.INITIAL);
+        when(tenantService.findByStatus(TenantStatus.INITIAL)).thenReturn(Set.of(acme, globex));
+        doThrow(new IllegalStateException("cannot create the schema")).when(provisioningStep)
+                                                                      .execute(argThat(tenant -> "globex".equals(tenant.getId())));
+
+        provisioner.provision();
+
+        verify(postProvisioningStep).execute(Set.of("acme"));
+        verify(postProvisioningStep, never()).execute();
+        assertEquals(TenantStatus.INITIAL, globex.getStatus());
     }
 
     /**
@@ -83,7 +106,7 @@ class TenantsProvisionerTest {
         provisioner.provision();
 
         verify(provisioningStep, never()).execute(any());
-        verify(postProvisioningStep, never()).execute();
+        verify(postProvisioningStep, never()).execute(anySet());
         verify(tenantService, never()).save(any());
         assertEquals(TenantStatus.PENDING_ACTIVATION, pending.getStatus());
     }

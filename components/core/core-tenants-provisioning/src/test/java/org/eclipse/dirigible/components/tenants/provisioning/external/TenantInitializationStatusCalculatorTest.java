@@ -13,20 +13,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
-import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
-import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantSynchronizers;
-import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.eclipse.dirigible.components.initializers.definition.Definition;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionService;
 import org.eclipse.dirigible.components.initializers.definition.DefinitionState;
+import org.eclipse.dirigible.components.initializers.synchronizer.tenants.TenantArtefactLedgerService;
+import org.eclipse.dirigible.components.initializers.synchronizer.tenants.TenantArtefactOutcome;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +37,7 @@ import org.junit.jupiter.api.Test;
 /**
  * The whole derivation matrix. Every case here is one a poller acts on, so getting any of them
  * wrong either strands a provisioning process or lets it declare success over a tenant that has
- * nothing in it.
+ * nothing in it - and every answer is about the tenant asked for, never about another one (#7776).
  */
 class TenantInitializationStatusCalculatorTest {
 
@@ -43,14 +45,17 @@ class TenantInitializationStatusCalculatorTest {
 
     private final MultitenantSynchronizers multitenantSynchronizers = mock(MultitenantSynchronizers.class);
     private final DefinitionService definitionService = mock(DefinitionService.class);
+    private final TenantArtefactLedgerService ledger = mock(TenantArtefactLedgerService.class);
+    private final TenantInitializationService initializationService = mock(TenantInitializationService.class);
     private final TenantInitializationStatusCalculator calculator =
-            new TenantInitializationStatusCalculator(multitenantSynchronizers, definitionService);
+            new TenantInitializationStatusCalculator(multitenantSynchronizers, definitionService, ledger, initializationService);
 
     @BeforeEach
     void wireDefaults() {
         when(multitenantSynchronizers.getArtefactTypes()).thenReturn(MULTITENANT_TYPES);
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of());
         when(definitionService.findByTypes(any())).thenReturn(List.of());
+        when(ledger.findFailures(anyString())).thenReturn(List.of());
+        when(initializationService.find(anyString())).thenReturn(Optional.empty());
     }
 
     /** Registered, maybe with a data source, but never activated. */
@@ -65,27 +70,28 @@ class TenantInitializationStatusCalculatorTest {
     }
 
     /**
-     * The mark the activation leaves. Reading anything else here would let a poller skip the wait
-     * entirely and report a tenant ready before a single table of it existed.
+     * The record the activation opens before it answers. Reading anything else here would let a poller
+     * skip the wait entirely and report a tenant ready before a single table of it existed.
      */
     @Test
-    void aBlankedDefinitionMeansTheWorkIsStillAhead() {
-        when(definitionService.findByTypes(any())).thenReturn(List.of(definition("table", "", DefinitionState.PARSED)));
+    void aRequestedInitializationIsInProgress() {
+        initialization(requested());
 
         assertEquals(InitializationStatus.IN_PROGRESS, calculate(TenantStatus.PROVISIONED).status());
     }
 
     @Test
-    void aDefinitionWithoutAnyChecksumMeansTheWorkIsStillAhead() {
-        when(definitionService.findByTypes(any())).thenReturn(List.of(definition("table", null, DefinitionState.NEW)));
+    void aRunningInitializationIsInProgress() {
+        TenantInitialization running = requested();
+        running.start(Instant.now());
+        initialization(running);
 
         assertEquals(InitializationStatus.IN_PROGRESS, calculate(TenantStatus.PROVISIONED).status());
     }
 
     @Test
-    void reprocessedDefinitionsMeanTheInitializationIsDone() {
-        when(definitionService.findByTypes(any())).thenReturn(
-                List.of(definition("table", "CHECKSUM", DefinitionState.PARSED), definition("csvim", "CHECKSUM", DefinitionState.PARSED)));
+    void aFinishedInitializationWithoutFailuresIsCompleted() {
+        initialization(finished(null));
 
         TenantInitializationState state = calculate(TenantStatus.PROVISIONED);
 
@@ -93,28 +99,17 @@ class TenantInitializationStatusCalculatorTest {
         assertNull(state.error());
     }
 
-    /**
-     * A definition whose source file is gone never gets its checksum back, so counting it as pending
-     * would leave every activation of the instance reporting progress forever.
-     */
+    /** A tenant of the built-in provisioner, or one activated before records were kept. */
     @Test
-    void aDeletedDefinitionDoesNotHoldTheInitializationOpen() {
-        when(definitionService.findByTypes(any())).thenReturn(
-                List.of(definition("table", "", DefinitionState.DELETED), definition("csvim", "CHECKSUM", DefinitionState.PARSED)));
-
-        assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
-    }
-
-    @Test
-    void anInstanceWithNothingToMaterializeIsImmediatelyComplete() {
+    void aProvisionedTenantWithoutAnInitializationIsCompleted() {
         assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
     }
 
     @Test
     void aDefinitionThatCannotBeParsedIsAFailure() {
-        Definition broken = definition("table", "CHECKSUM", DefinitionState.BROKEN);
+        Definition broken = definition("table", DefinitionState.BROKEN);
         broken.setMessage("Unexpected token at line 3");
-        when(definitionService.findByTypes(any())).thenReturn(List.of(broken));
+        when(definitionService.findByTypes(MULTITENANT_TYPES)).thenReturn(List.of(broken));
 
         TenantInitializationState state = calculate(TenantStatus.PROVISIONED);
 
@@ -127,17 +122,22 @@ class TenantInitializationStatusCalculatorTest {
                 state.error());
     }
 
+    @Test
+    void aParsedDefinitionIsNotAFailure() {
+        when(definitionService.findByTypes(MULTITENANT_TYPES)).thenReturn(List.of(definition("table", DefinitionState.PARSED)));
+
+        assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
+    }
+
     /**
      * The failure this API exists to report: the definition parsed, but materializing it into the
-     * tenant's schema - with the externally created credentials - did not work. It is recorded on the
-     * artefact, not on the definition, so watching definitions alone would call this a success.
+     * tenant's schema - with the externally created credentials - did not work. It is recorded per
+     * tenant, so watching definitions alone would call this a success.
      */
     @Test
-    void anArtefactThatCouldNotBeMaterializedIsAFailure() {
-        when(definitionService.findByTypes(any())).thenReturn(List.of(definition("table", "CHECKSUM", DefinitionState.PARSED)));
-        Synchronizer<?, ?> synchronizer = synchronizerReturning(
-                artefact("table", "/acme/customer.table", ArtefactLifecycle.FAILED, "Insufficient privilege to create table"));
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of(synchronizer));
+    void anArtefactThatCouldNotBeMaterializedInTheTenantIsAFailure() {
+        TenantArtefactOutcome failure = outcome(ArtefactLifecycle.FAILED, "Insufficient privilege to create table");
+        when(ledger.findFailures("acme")).thenReturn(List.of(failure));
 
         TenantInitializationState state = calculate(TenantStatus.PROVISIONED);
 
@@ -145,46 +145,41 @@ class TenantInitializationStatusCalculatorTest {
         assertTrue(state.error()
                         .contains("Insufficient privilege to create table"),
                 state.error());
+        assertTrue(state.error()
+                        .contains("table [/acme/customer.table]"),
+                state.error());
     }
 
+    /** Another tenant's failure is that tenant's - it never makes this one read failed (#7776). */
     @Test
-    void aFatalArtefactIsAFailureToo() {
-        Synchronizer<?, ?> synchronizer =
-                synchronizerReturning(artefact("table", "/acme/customer.table", ArtefactLifecycle.FATAL, "Dependency cycle"));
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of(synchronizer));
-
-        assertEquals(InitializationStatus.FAILED, calculate(TenantStatus.PROVISIONED).status());
-    }
-
-    @Test
-    void aSuccessfullyCreatedArtefactIsNotAFailure() {
-        Synchronizer<?, ?> synchronizer = synchronizerReturning(artefact("table", "/acme/customer.table", ArtefactLifecycle.CREATED, null));
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of(synchronizer));
+    void anotherTenantsFailureIsNotThisTenantsFailure() {
+        TenantArtefactOutcome failure = outcome(ArtefactLifecycle.FAILED, "Insufficient privilege to create table");
+        when(ledger.findFailures("globex")).thenReturn(List.of(failure));
 
         assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
     }
 
-    /** Work still ahead outranks failures already recorded - the pass may yet repair them. */
+    /** The run itself failed - it could not even start, say - and left its error on the record. */
+    @Test
+    void aRunThatFailedIsAFailure() {
+        initialization(finished("The initialization of tenants [acme] could not start within [300000] ms"));
+
+        TenantInitializationState state = calculate(TenantStatus.PROVISIONED);
+
+        assertEquals(InitializationStatus.FAILED, state.status());
+        assertTrue(state.error()
+                        .contains("could not start"),
+                state.error());
+    }
+
+    /** Work still ahead outranks failures already recorded - the run may yet repair them. */
     @Test
     void pendingWorkOutranksAnAlreadyRecordedFailure() {
-        when(definitionService.findByTypes(any())).thenReturn(List.of(definition("table", "", DefinitionState.PARSED)));
-        Synchronizer<?, ?> synchronizer =
-                synchronizerReturning(artefact("table", "/acme/customer.table", ArtefactLifecycle.FAILED, "Insufficient privilege"));
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of(synchronizer));
+        initialization(requested());
+        TenantArtefactOutcome failure = outcome(ArtefactLifecycle.FAILED, "Insufficient privilege");
+        when(ledger.findFailures("acme")).thenReturn(List.of(failure));
 
         assertEquals(InitializationStatus.IN_PROGRESS, calculate(TenantStatus.PROVISIONED).status());
-    }
-
-    /** An artefact table that cannot be read is not an initialization failure of its own. */
-    @Test
-    void anUnreadableArtefactTypeIsSkipped() {
-        Synchronizer<?, ?> broken = mock(Synchronizer.class);
-        ArtefactService<?, ?> service = mock(ArtefactService.class);
-        when(service.getAll()).thenThrow(new IllegalStateException("Table DIRIGIBLE_TABLES does not exist"));
-        doReturnService(broken, service);
-        when(multitenantSynchronizers.getSynchronizers()).thenReturn(List.of(broken));
-
-        assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
     }
 
     private TenantInitializationState calculate(TenantStatus status) {
@@ -193,42 +188,40 @@ class TenantInitializationStatusCalculatorTest {
         return calculator.calculate(tenant);
     }
 
-    private static Definition definition(String type, String checksum, DefinitionState state) {
+    private void initialization(TenantInitialization initialization) {
+        when(initializationService.find("acme")).thenReturn(Optional.of(initialization));
+    }
+
+    private static TenantInitialization requested() {
+        TenantInitialization initialization = new TenantInitialization("acme");
+        initialization.request(Instant.now());
+        return initialization;
+    }
+
+    private static TenantInitialization finished(String failure) {
+        TenantInitialization initialization = requested();
+        initialization.start(Instant.now());
+        initialization.finish(Instant.now(), failure);
+        return initialization;
+    }
+
+    private static Definition definition(String type, DefinitionState state) {
         Definition definition = new Definition("/acme/customer." + type, "customer", type, new byte[0]);
-        definition.setChecksum(checksum);
+        definition.setChecksum("CHECKSUM");
         definition.setState(state);
         return definition;
     }
 
-    private static Artefact artefact(String type, String location, ArtefactLifecycle lifecycle, String error) {
-        Artefact artefact = new Artefact(location, "customer", type, "", null) {};
-        artefact.setLifecycle(lifecycle);
-        artefact.setError(error);
-        return artefact;
-    }
-
     /**
-     * Always call this BEFORE opening a {@code when(...)} on another mock: it stubs mocks of its own,
+     * Always call this BEFORE opening a {@code when(...)} on another mock: it stubs a mock of its own,
      * and Mockito cannot nest that inside an unfinished stubbing.
-     *
-     * @param artefact the artefact the synchronizer's service reports
-     * @return the synchronizer
      */
-    private static Synchronizer<?, ?> synchronizerReturning(Artefact artefact) {
-        Synchronizer<?, ?> synchronizer = mock(Synchronizer.class);
-        ArtefactService<?, ?> service = mock(ArtefactService.class);
-        doReturnArtefacts(service, artefact);
-        doReturnService(synchronizer, service);
-        return synchronizer;
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void doReturnArtefacts(ArtefactService<?, ?> service, Artefact artefact) {
-        when(((ArtefactService) service).getAll()).thenReturn(List.of(artefact));
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private static void doReturnService(Synchronizer<?, ?> synchronizer, ArtefactService<?, ?> service) {
-        when(((Synchronizer) synchronizer).getService()).thenReturn(service);
+    private static TenantArtefactOutcome outcome(ArtefactLifecycle lifecycle, String error) {
+        TenantArtefactOutcome outcome = mock(TenantArtefactOutcome.class);
+        when(outcome.getArtefactType()).thenReturn("table");
+        when(outcome.getArtefactLocation()).thenReturn("/acme/customer.table");
+        when(outcome.getLifecycle()).thenReturn(lifecycle);
+        when(outcome.getError()).thenReturn(error);
+        return outcome;
     }
 }

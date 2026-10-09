@@ -71,4 +71,16 @@ class RetriggerSynchronizersTenantPostProvisioningStep implements TenantPostProv
         logger.info("Synchronizers have completed.");
     }
 
+    /**
+     * Initializes the given tenants only - every other tenant is initialized already, and re-running
+     * its per-tenant artefacts would change its data.
+     *
+     * @param tenantIds the ids of the tenants just provisioned or activated
+     * @throws TenantProvisioningException the tenant provisioning exception
+     */
+    @Override
+    public void execute(Set<String> tenantIds) throws TenantProvisioningException {
+        synchronizationProcessor.initializeTenants(tenantIds);
+    }
+
 }
