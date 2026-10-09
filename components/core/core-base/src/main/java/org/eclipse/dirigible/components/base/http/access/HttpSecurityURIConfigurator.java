@@ -107,7 +107,6 @@ public class HttpSecurityURIConfigurator {
             "/websockets/ide/**"};
 
     private static final String[] OPERATOR_PATTERNS = { //
-            "/spring-admin/**", //
             "/actuator/**"};
 
     /**

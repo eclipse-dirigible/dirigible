@@ -9,10 +9,14 @@
  */
 package org.eclipse.dirigible.components.engine.cms;
 
+import java.util.Arrays;
+import java.util.Map;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
@@ -27,6 +31,12 @@ public class CmisSessionFactory implements ApplicationContextAware, Initializing
     private static final String DIRIGIBLE_CMS_PROVIDER = "DIRIGIBLE_CMS_PROVIDER";
     /** The Constant CMS_PROVIDER_INTERNAL. */
     private static final String CMS_PROVIDER_INTERNAL = "cms-provider-internal";
+    /**
+     * The providers that ship as add-on modules outside the default bundle, by provider name, with the
+     * Maven artifact an application adds to get them.
+     */
+    private static final Map<String, String> ADD_ON_PROVIDERS =
+            Map.of("cms-provider-ms-sharepoint", "org.eclipse.dirigible:dirigible-components-engine-cms-sharepoint");
     /** The Constant VERSIONING_STATE_NONE. */
     public static final String VERSIONING_STATE_NONE = "none";
     /** The Constant VERSIONING_STATE_MAJOR. */
@@ -56,6 +66,11 @@ public class CmisSessionFactory implements ApplicationContextAware, Initializing
     @Override
     public void afterPropertiesSet() throws Exception {
         INSTANCE = this;
+        // fail the boot, not the first document request, when an explicitly configured provider is absent
+        String configured = Configuration.get(DIRIGIBLE_CMS_PROVIDER);
+        if (configured != null && !configured.isBlank()) {
+            resolveProviderFactory(applicationContext, configured);
+        }
     }
 
     /**
@@ -83,10 +98,39 @@ public class CmisSessionFactory implements ApplicationContextAware, Initializing
      * @return the CMIS session object
      */
     public static final CmisSession getSession() {
-        String type = Configuration.get(DIRIGIBLE_CMS_PROVIDER, CMS_PROVIDER_INTERNAL);
-        CmsProviderFactory cmsProviderFactory = applicationContext.getBean(type, CmsProviderFactory.class);
+        CmsProviderFactory cmsProviderFactory = resolveProviderFactory(applicationContext, getConfiguredProvider());
         CmsProvider cmsProvider = cmsProviderFactory.create();
         return (CmisSession) cmsProvider.getSession();
+    }
+
+    private static String getConfiguredProvider() {
+        return Configuration.get(DIRIGIBLE_CMS_PROVIDER, CMS_PROVIDER_INTERNAL);
+    }
+
+    /**
+     * Resolves the factory of the configured CMS provider, failing with a message that names the
+     * missing module when the provider is not on the classpath.
+     *
+     * @param beanFactory the bean factory holding the provider factories
+     * @param provider the configured provider name (the value of DIRIGIBLE_CMS_PROVIDER)
+     * @return the provider factory
+     * @throws IllegalStateException when no provider of that name is available
+     */
+    static CmsProviderFactory resolveProviderFactory(ListableBeanFactory beanFactory, String provider) {
+        String[] available = beanFactory.getBeanNamesForType(CmsProviderFactory.class);
+        if (Arrays.asList(available)
+                  .contains(provider)) {
+            return beanFactory.getBean(provider, CmsProviderFactory.class);
+        }
+        String addOn = ADD_ON_PROVIDERS.get(provider);
+        String message = addOn != null
+                ? DIRIGIBLE_CMS_PROVIDER + " is set to '" + provider
+                        + "', but that provider is an add-on that is not bundled by default; add the " + addOn
+                        + " artifact to the application, or unset " + DIRIGIBLE_CMS_PROVIDER + " to use the internal repository"
+                : DIRIGIBLE_CMS_PROVIDER + " is set to '" + provider + "', which is not an available CMS provider; available providers: "
+                        + String.join(", ", available);
+        logger.error(message);
+        throw new IllegalStateException(message);
     }
 
     /**

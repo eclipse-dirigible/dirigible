@@ -10,7 +10,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <name>Components - API - S3</name>
+    <name>Components - API - SharePoint</name>
     <artifactId>dirigible-components-api-sharepoint</artifactId>
     <packaging>jar</packaging>
 
@@ -45,6 +45,13 @@
             <groupId>com.azure</groupId>
             <artifactId>azure-identity</artifactId>
             <version>${azure-identity.version}</version>
+            <exclusions>
+                <!-- BoringSSL natives for five platforms; Netty falls back to the JDK SSL provider without them -->
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-tcnative-boringssl-static</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Spring Boot -->

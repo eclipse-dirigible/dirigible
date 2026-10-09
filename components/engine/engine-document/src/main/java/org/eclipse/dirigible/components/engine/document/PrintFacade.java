@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.engine.document;
 import java.io.IOException;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.springframework.stereotype.Component;
 
 import com.google.gson.Gson;
@@ -23,8 +25,9 @@ import com.google.gson.reflect.TypeToken;
  * Server-side print rendering for callers that already hold the data — chiefly the generated
  * snapshot delegate, which renders a document to an immutable PDF copy on issue. It is the
  * server-initiated counterpart to {@code PrintEndpoint}: where the endpoint takes the data the
- * browser POSTs, this resolves the entity's CMS print template for the language and renders the
- * supplied data map to PDF.
+ * browser POSTs, this resolves the entity's active print template for the language (the tenant's
+ * selection, else the shipped default - see {@link PrintTemplateCatalog}) and renders the supplied
+ * data map to PDF.
  *
  * <p>
  * The {@code String}-payload overload parses the same {@code {document, items}} shape a
@@ -39,12 +42,14 @@ public class PrintFacade {
     private static final Gson GSON = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
                                                       .create();
 
-    private final CmsStore cmsStore;
+    private final PrintTemplateCatalog catalog;
     private final PrintImageResolver imageResolver;
+    private final TenantConfigurationService tenantConfigurationService;
 
-    PrintFacade(CmsStore cmsStore, PrintImageResolver imageResolver) {
-        this.cmsStore = cmsStore;
+    PrintFacade(PrintTemplateCatalog catalog, PrintImageResolver imageResolver, TenantConfigurationService tenantConfigurationService) {
+        this.catalog = catalog;
         this.imageResolver = imageResolver;
+        this.tenantConfigurationService = tenantConfigurationService;
     }
 
     /**
@@ -57,9 +62,26 @@ public class PrintFacade {
      * @throws IOException if no template exists for the entity/language or the CMS read fails
      */
     public byte[] renderToPdf(String entity, String language, Map<String, Object> data) throws IOException {
-        String template = cmsStore.findTemplate(entity, language)
-                                  .orElseThrow(() -> new IOException(
-                                          "No print template for entity [" + entity + "] and language [" + language + "]"));
+        // The tenant's template selection is a tenant configuration, read from the thread-scoped
+        // configuration a request or a listener dispatch carries. A render outside both - a process
+        // snapshot on the BPM executor - loads it here the same way, and clears it afterwards so it never
+        // leaks onto the pooled thread.
+        boolean loaded = Configuration.getThreadConfiguration()
+                                      .isEmpty();
+        if (loaded) {
+            Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
+        }
+        String template;
+        try {
+            template = catalog.resolve(entity, language, null)
+                              .source();
+        } catch (PrintTemplateException e) {
+            throw new IOException(e.getMessage(), e);
+        } finally {
+            if (loaded) {
+                Configuration.removeThreadConfiguration();
+            }
+        }
         return PrintRenderer.renderPdf(template, language, data, imageResolver);
     }
 

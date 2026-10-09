@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.components.engine.cms.CmisFolder;
@@ -22,6 +23,8 @@ import org.eclipse.dirigible.components.engine.cms.ObjectType;
 import org.eclipse.dirigible.components.engine.cms.service.CmsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,11 +52,22 @@ public class DocumentsService {
     private final CmsService cmsService;
     private final DocumentAccessEvaluator accessEvaluator;
     private final ContentTypeResolver contentTypeResolver;
+    private final List<DocumentWriteGuard> writeGuards;
 
-    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver) {
+    @Autowired
+    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver,
+            ObjectProvider<DocumentWriteGuard> writeGuards) {
+        // An assembly without a guard is fine - a plain List would fail the context start
+        this(cmsService, accessEvaluator, contentTypeResolver, writeGuards.orderedStream()
+                                                                          .toList());
+    }
+
+    DocumentsService(CmsService cmsService, DocumentAccessEvaluator accessEvaluator, ContentTypeResolver contentTypeResolver,
+            List<DocumentWriteGuard> writeGuards) {
         this.cmsService = cmsService;
         this.accessEvaluator = accessEvaluator;
         this.contentTypeResolver = contentTypeResolver;
+        this.writeGuards = List.copyOf(writeGuards);
     }
 
     /**
@@ -132,9 +146,10 @@ public class DocumentsService {
     public String upload(String folderPath, String name, String contentType, int size, InputStream content, boolean overwrite,
             HttpServletRequest request) throws IOException {
         requireCleanPath(folderPath);
-        requireCleanPath(name);
+        requireCleanName(name);
         CmisFolder folder = folderOrRoot(folderPath);
         assertWritable(folder.getPath(), request);
+        assertChangeable(childPath(folder.getPath(), name));
         String resolvedType = contentTypeResolver.beforeUpload(name, contentType);
         CmisDocument existing = cmsService.getChildDocumentByName(folder, name);
         if (existing != null) {
@@ -159,7 +174,7 @@ public class DocumentsService {
      */
     public FolderDto createFolder(String parentPath, String name, HttpServletRequest request) throws IOException {
         requireCleanPath(parentPath);
-        requireCleanPath(name);
+        requireCleanName(name);
         CmisFolder parent = folderOrRoot(parentPath);
         assertWritable(parent.getPath(), request);
         assertNotHidden(childPath(parent.getPath(), name));
@@ -177,11 +192,16 @@ public class DocumentsService {
      */
     public void rename(String path, String name, HttpServletRequest request) throws IOException {
         requireCleanPath(path);
-        requireCleanPath(name);
+        requireCleanName(name);
         assertNotHidden(path);
         assertWritable(path, request);
-        cmsService.getObjectByPath(path)
-                  .rename(name);
+        CmisObject object = cmsService.getObjectByPath(path);
+        String canonical = canonicalPath(path);
+        assertChangeable(object, canonical);
+        if (!isFolder(object)) {
+            assertChangeable(childPath(parentPath(canonical), name));
+        }
+        object.rename(name);
     }
 
     /**
@@ -198,6 +218,7 @@ public class DocumentsService {
             assertNotHidden(path);
             assertWritable(path, request);
             CmisObject object = cmsService.getObjectByPath(path);
+            assertChangeable(object, canonicalPath(path));
             if (isFolder(object) && forceDelete) {
                 deleteTree((CmisFolder) object);
             } else {
@@ -285,6 +306,45 @@ public class DocumentsService {
         return path;
     }
 
+    /**
+     * Rejects a document or folder name that is not a single path segment: a separator in it would
+     * address another path than the one the checks saw, and a dot segment is not a name.
+     *
+     * @param name the requested name
+     * @return the same name
+     */
+    static String requireCleanName(String name) {
+        requireCleanPath(name);
+        if (name == null || name.isBlank() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || ".".equals(name) || "..".equals(name)) {
+            throw new DocumentInvalidPathException();
+        }
+        return name;
+    }
+
+    /**
+     * The path in the one form the write guards see: forward slashes, no empty or {@code .} segments,
+     * never a {@code ..} segment. The CMS backends collapse {@code //} and resolve dot segments
+     * themselves, so a guard matching the raw request path could be bypassed by one spelt differently.
+     *
+     * @param path the requested path
+     * @return the canonical absolute path
+     */
+    static String canonicalPath(String path) {
+        StringBuilder canonical = new StringBuilder();
+        for (String segment : path.replace('\\', '/')
+                                  .split("/")) {
+            if (segment.isEmpty() || ".".equals(segment)) {
+                continue;
+            }
+            if ("..".equals(segment)) {
+                throw new DocumentInvalidPathException();
+            }
+            canonical.append('/')
+                     .append(segment);
+        }
+        return canonical.isEmpty() ? "/" : canonical.toString();
+    }
+
     /** Whether the path is one the Documents surface never exposes. */
     static boolean isHidden(String path) {
         return firstSegment(path).equals(INTERNAL_FOLDER);
@@ -321,6 +381,40 @@ public class DocumentsService {
         if (!isExportsAccessible(path, request) || !accessEvaluator.isWritable(path, request)) {
             throw new DocumentAccessDeniedException(path);
         }
+    }
+
+    /** Refuses a change a {@link DocumentWriteGuard} protects the document at the path from. */
+    private void assertChangeable(String path) {
+        for (DocumentWriteGuard guard : writeGuards) {
+            Optional<String> refusal = guard.refusal(path);
+            if (refusal.isPresent()) {
+                throw new DocumentConflictException(path, refusal.get());
+            }
+        }
+    }
+
+    /**
+     * Refuses a change to a document a {@link DocumentWriteGuard} protects - or to a folder holding one
+     * at any depth, since renaming or deleting the folder changes every document under it.
+     */
+    private void assertChangeable(CmisObject object, String path) throws IOException {
+        if (writeGuards.isEmpty()) {
+            return;
+        }
+        if (!isFolder(object)) {
+            assertChangeable(path);
+            return;
+        }
+        for (CmisObject child : ((CmisFolder) object).getChildren()) {
+            assertChangeable(child, childPath(path, child.getName()));
+        }
+    }
+
+    /** The parent folder of a path, {@code /} for a top-level object. */
+    static String parentPath(String path) {
+        String trimmed = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+        int separator = trimmed.lastIndexOf('/');
+        return separator <= 0 ? "/" : trimmed.substring(0, separator);
     }
 
     private static void assertNotHidden(String path) {

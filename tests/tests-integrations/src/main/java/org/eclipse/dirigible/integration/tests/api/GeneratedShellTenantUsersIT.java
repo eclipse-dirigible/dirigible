@@ -30,10 +30,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 /**
- * Every generated application shell carries the platform's Users section (#7498): it loads the
- * tenantUsers store, routes Settings whether or not the model declares a SETTING entity, and offers
- * the Users entry and its pane in Settings. Without a SETTING entity the Settings footer shows only
- * while the Users section is offered - before #7498 such a shell had no Settings at all.
+ * Every generated application shell carries the platform's Users section (#7498) and its Print
+ * Templates section (#7755): it loads the tenantUsers and printTemplates stores, routes Settings
+ * whether or not the model declares a SETTING entity, and offers both entries and their panes in
+ * Settings. Without a SETTING entity the Settings footer shows only while one of the two sections
+ * is offered - before #7498 such a shell had no Settings at all.
  *
  * <p>
  * Rendered, not published: the rendered pages are what a regenerated application carries, and the
@@ -44,7 +45,8 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
 
     private static final String TEMPLATE = "template-application-ui-harmonia-java/template/template.js";
     private static final String PROJECT = "tenant-users-shell";
-    private static final String GUARD = "x-show=\"$store.tenantUsers && $store.tenantUsers.visible\"";
+    private static final String GUARD =
+            "x-show=\"($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)\"";
 
     @Autowired
     private WorkspaceService workspaceService;
@@ -59,10 +61,13 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
         String settings = page(rendered, "/_settings.html");
 
         assertTrue(index.contains("stores/tenantUsers.js"), "the shell must load the tenantUsers store");
+        assertTrue(index.contains("stores/printTemplates.js"), "the shell must load the printTemplates store");
         assertTrue(index.contains("x-route=\"/settings\""), "Settings must be routed without a SETTING entity");
-        assertTrue(index.contains("<li x-h-sidebar-menu-item " + GUARD), "the footer entry must show only for the Users section");
+        assertTrue(index.contains("<li x-h-sidebar-menu-item " + GUARD), "the footer entry must show only for the platform sections");
         assertTrue(settings.contains("select('tenantUsers'"), "Settings must offer the Users entry");
         assertTrue(settings.contains("$store.tenantUsers.markup"), "Settings must render the Users fragment");
+        assertTrue(settings.contains("select('printTemplates'"), "Settings must offer the Print Templates entry");
+        assertTrue(settings.contains("$store.printTemplates.markup"), "Settings must render the Print Templates fragment");
         assertFalse(index.contains("$dollar"), "no unrendered Velocity reference may reach the page");
     }
 
@@ -75,6 +80,8 @@ class GeneratedShellTenantUsersIT extends IntegrationTest {
         assertTrue(index.contains("x-route=\"/settings\""), "Settings must stay routed");
         assertFalse(index.contains("<li x-h-sidebar-menu-item " + GUARD), "with SETTING entities the footer entry is always shown");
         assertTrue(settings.contains("select('tenantUsers'"), "Settings must offer the Users entry beside the setting entities");
+        assertTrue(settings.contains("select('printTemplates'"),
+                "Settings must offer the Print Templates entry beside the setting entities");
         assertTrue(settings.contains("shell.settings.configuration"), "the setting entities must still be listed");
     }
 

@@ -10,11 +10,9 @@
 package org.eclipse.dirigible.graalium.core.graal;
 
 import java.nio.file.Path;
-import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
 import org.eclipse.dirigible.graalium.core.graal.configuration.Configuration;
-import org.eclipse.dirigible.graalium.core.python.PythonCodeRunner;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.graalvm.polyglot.EnvironmentAccess;
@@ -28,28 +26,18 @@ public class ContextCreator {
 
     private final Engine engine;
     private final Path workingDirectoryPath;
-    private final Path projectDirectoryPath;
-    private final @Nullable Path pythonModulesPath;
     private final @Nullable Consumer<Context.Builder> onBeforeContextCreatedHook;
     private final @Nullable Consumer<Context> onAfterContextCreatedHook;
     private final FileSystem fileSystem;
 
-    /** The Constant PYTHON_ENABLED. */
-    private static final boolean PYTHON_ENABLED = ServiceLoader.load(PythonCodeRunner.class)
-                                                               .iterator()
-                                                               .hasNext();
-
-    public ContextCreator(Engine engine, Path workingDirectoryPath, Path projectDirectoryPath, Path pythonModulesPath,
-            FileSystem fileSystem) {
-        this(engine, workingDirectoryPath, projectDirectoryPath, pythonModulesPath, null, null, fileSystem);
+    public ContextCreator(Engine engine, Path workingDirectoryPath, FileSystem fileSystem) {
+        this(engine, workingDirectoryPath, null, null, fileSystem);
     }
 
-    public ContextCreator(Engine engine, Path workingDirectoryPath, Path projectDirectoryPath, Path pythonModulesPath,
-            Consumer<Context.Builder> onBeforeContextCreatedHook, Consumer<Context> onAfterContextCreatedHook, FileSystem fileSystem) {
+    public ContextCreator(Engine engine, Path workingDirectoryPath, Consumer<Context.Builder> onBeforeContextCreatedHook,
+            Consumer<Context> onAfterContextCreatedHook, FileSystem fileSystem) {
         this.engine = engine;
         this.workingDirectoryPath = workingDirectoryPath;
-        this.projectDirectoryPath = projectDirectoryPath;
-        this.pythonModulesPath = pythonModulesPath;
         this.onBeforeContextCreatedHook = onBeforeContextCreatedHook;
         this.onAfterContextCreatedHook = onAfterContextCreatedHook;
         this.fileSystem = fileSystem;
@@ -79,11 +67,6 @@ public class ContextCreator {
                                                 .option("js.esm-eval-returns-exports", "true")
                                                 .option("js.text-encoding", "true");
 
-        if (PYTHON_ENABLED) {
-            contextBuilder.option("python.PythonPath", createPythonPath())
-                          .option("python.ForceImportSite", "true");
-        }
-
         if (onBeforeContextCreatedHook != null) {
             onBeforeContextCreatedHook.accept(contextBuilder);
         }
@@ -97,10 +80,4 @@ public class ContextCreator {
         return context;
     }
 
-    private String createPythonPath() {
-        if (pythonModulesPath == null) {
-            return projectDirectoryPath.toString();
-        }
-        return projectDirectoryPath + ":" + pythonModulesPath;
-    }
 }

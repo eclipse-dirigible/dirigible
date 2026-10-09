@@ -1,0 +1,134 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="printTemplates" ng-controller="PrintTemplatesController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/settings-print-templates/configs/print-templates.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <script type="text/javascript" src="/webjars/diff/dist/diff.min.js"></script>
+        <script type="text/javascript" src="js/print-templates.js"></script>
+        <style>
+            .print-templates__source {
+                font-family: "72Mono-Regular", monospace;
+                font-size: 0.8125rem;
+                min-height: 20rem;
+                white-space: pre;
+            }
+
+            .print-templates__diff {
+                font-family: "72Mono-Regular", monospace;
+                font-size: 0.8125rem;
+                margin: 0;
+                white-space: pre-wrap;
+            }
+
+            .print-templates__diff-added {
+                background-color: var(--sapSuccessBackground);
+            }
+
+            .print-templates__diff-removed {
+                background-color: var(--sapErrorBackground);
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>Print Templates</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="loadDocumentTypes()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-padding bk-full-height">
+            <bk-message-page glyph="sap-icon--print" ng-if="loaded && !documentTypes.length">
+                <bk-message-page-title>No print templates</bk-message-page-title>
+                <bk-message-page-subtitle>A module ships its print templates under doc/Templates/&lt;Entity&gt;/Print/&lt;lang&gt;/ - they appear here once it is published.</bk-message-page-subtitle>
+            </bk-message-page>
+            <div class="bk-vbox bk-box--gap" ng-if="documentTypes.length">
+                <div class="bk-hbox bk-box--gap bk-box--items-center">
+                    <span class="fd-text"><b>Document type</b></span>
+                    <bk-select title="Document type" placeholder="Document type" ng-model="selected.entity" ng-change="entitySelected()" dropdown-fixed="true" style="min-width: 14rem">
+                        <bk-option ng-repeat="type in documentTypes track by type.entity" text="{{type.entity}}" value="type.entity"></bk-option>
+                    </bk-select>
+                    <span class="fd-text"><b>Language</b></span>
+                    <bk-select title="Language" placeholder="Language" ng-model="selected.language" ng-change="load()" dropdown-fixed="true" style="min-width: 6rem">
+                        <bk-option ng-repeat="lang in languages track by lang.code" text="{{lang.code}}" value="lang.code"></bk-option>
+                    </bk-select>
+                    <span style="flex: 1 1 auto"></span>
+                    <bk-button label="Use default" glyph="sap-icon--reset" ng-disabled="!selectionStored" title="Clear the selection: the newest shipped version prints, and every release switches to its own" ng-click="useDefault()"></bk-button>
+                    <bk-button label="Compare" glyph="sap-icon--compare" ng-disabled="comparing().length !== 2" title="Select two templates to compare" ng-click="compare()"></bk-button>
+                </div>
+                <span class="fd-text bk-text--subtitle">The active template prints when a document is printed without choosing one. Its selection is the tenant configuration <code>{{selectionKey()}}</code>; without one the default prints, and each release switches to its newest version.</span>
+                <table bk-table display-mode="compact" outer-borders="none">
+                    <thead bk-table-header interactive="false">
+                        <tr bk-table-row>
+                            <th bk-table-header-cell fit-content="true">Compare</th>
+                            <th bk-table-header-cell>Template</th>
+                            <th bk-table-header-cell>Kind</th>
+                            <th bk-table-header-cell>Derived from</th>
+                            <th bk-table-header-cell>Status</th>
+                            <th bk-table-header-cell fit-content="true">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body>
+                        <tr bk-table-row ng-repeat="template in templates track by template.name" hoverable="true" activable="false">
+                            <td bk-table-cell fit-content="true">
+                                <bk-checkbox id="compare-{{$index}}" compact="true" ng-model="template.compare"></bk-checkbox>
+                                <bk-checkbox-label for="compare-{{$index}}" empty="true" compact="true"></bk-checkbox-label>
+                            </td>
+                            <td bk-table-cell>{{template.name}}</td>
+                            <td bk-table-cell>{{template.kind === 'shipped' ? 'Shipped version' : 'Tenant template'}}</td>
+                            <td bk-table-cell>{{template.derivedFrom}}</td>
+                            <td bk-table-cell>
+                                <span ng-if="template.active" bk-object-status status="positive" text="Active"></span>
+                                <span ng-if="template.defaultTemplate && !template.active" bk-object-status text="Default"></span>
+                                <span ng-if="template.newer" bk-object-status status="informative" text="New"></span>
+                            </td>
+                            <td bk-table-cell fit-content="true">
+                                <bk-button state="transparent" glyph="sap-icon--pdf-attachment" title="Preview" aria-label="Preview" ng-click="preview(template)"></bk-button>
+                                <bk-button state="transparent" glyph="sap-icon--accept" title="Set active" aria-label="Set active" ng-disabled="template.active" ng-click="setActive(template)"></bk-button>
+                                <bk-button state="transparent" glyph="sap-icon--copy" title="Duplicate" aria-label="Duplicate" ng-click="duplicate(template)"></bk-button>
+                                <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-disabled="template.kind !== 'tenant'" ng-click="edit(template)"></bk-button>
+                                <bk-button state="transparent" glyph="sap-icon--delete" title="Delete" aria-label="Delete" ng-disabled="template.kind !== 'tenant' || template.active" ng-click="remove(template)"></bk-button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="bk-vbox bk-box--gap" ng-if="editor">
+                    <div class="bk-hbox bk-box--gap bk-box--items-center">
+                        <span class="fd-text"><b>Editing {{editor.name}}</b></span>
+                        <span style="flex: 1 1 auto"></span>
+                        <bk-button label="Save" state="emphasized" ng-click="save()"></bk-button>
+                        <bk-button label="Cancel" state="transparent" ng-click="closeEditor()"></bk-button>
+                    </div>
+                    <bk-textarea class="print-templates__source" spellcheck="false" aria-label="Template source" ng-model="editor.source"></bk-textarea>
+                </div>
+                <div class="bk-vbox bk-box--gap" ng-if="diff">
+                    <div class="bk-hbox bk-box--gap bk-box--items-center">
+                        <span class="fd-text"><b>{{diff.left}}</b> compared with <b>{{diff.right}}</b></span>
+                        <span style="flex: 1 1 auto"></span>
+                        <bk-button label="Close" state="transparent" ng-click="closeDiff()"></bk-button>
+                    </div>
+                    <pre class="print-templates__diff"><div ng-repeat="line in diff.lines track by $index" ng-class="{'print-templates__diff-added': line.kind === '+', 'print-templates__diff-removed': line.kind === '-'}">{{line.kind}} {{line.text}}</div></pre>
+                </div>
+            </div>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

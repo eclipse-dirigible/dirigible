@@ -44,7 +44,6 @@ UI at `http://localhost:8080`, default credentials `admin`/`admin`. Useful URLs 
 
 - `/` — redirects to the IDE entrypoint (default `services/web/shell-ide/`, configurable via `DIRIGIBLE_HOME_URL`)
 - `/swagger-ui/index.html`, `/api-docs` — OpenAPI / Swagger UI for built-in REST endpoints
-- `/spring-admin/` — Spring Boot Admin (server profile enabled in this app)
 - `/actuator/health/readiness`, `/actuator/health/liveness` — health probes (also what the CI DAST job polls)
 - `/services/...` — secured Spring-side endpoints (see `BaseEndpoint.PREFIX_ENDPOINT_*`)
 - `/public/...` — unauthenticated counterpart

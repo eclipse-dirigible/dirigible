@@ -42,10 +42,6 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-api-sharepoint</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-cache</artifactId>
         </dependency>
         <dependency>
@@ -53,16 +49,6 @@
             <artifactId>dirigible-components-api-pdf</artifactId>
         </dependency>
 
-
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-api-modules-python</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-api-kafka</artifactId>
-        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-etcd</artifactId>

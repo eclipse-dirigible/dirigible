@@ -111,10 +111,27 @@ public class TenantConfigurationService {
     }
 
     /**
+     * Reads one configuration entry of the current tenant straight from the store, past this node's
+     * cache, which another node's write does not invalidate. For a decision that must not be taken on a
+     * stale value; the cache is dropped as well, so this node's next reads see the store too.
+     *
+     * @param key the configuration key
+     * @return the stored value, or {@code null} when the tenant has not set the key
+     * @throws SQLException if the read fails
+     */
+    public String readStoredForCurrentTenant(String key) throws SQLException {
+        Map<String, String> stored = store.readAll();
+        cache.invalidate(currentTenantId());
+        return stored.get(key);
+    }
+
+    /**
      * Lists the predefined (allow-listed) configuration keys together with the current tenant's stored
      * value for each - {@code value} is {@code null} when the tenant has not set that key. This is what
      * the settings UI renders: the fixed set of overridable properties, not just the ones already
-     * stored.
+     * stored. Members of the allowed key families ({@code DIRIGIBLE_PRINT_TEMPLATE_*}) are deliberately
+     * not listed: they have their own page, and the shells save every listed entry back on Save, which
+     * would put a stale selection back over one made elsewhere meanwhile.
      *
      * @return one entry per allowed key, in the policy's display order
      * @throws SQLException if the read fails

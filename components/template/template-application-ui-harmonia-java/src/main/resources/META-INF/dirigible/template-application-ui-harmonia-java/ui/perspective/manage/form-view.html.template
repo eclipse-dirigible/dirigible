@@ -747,23 +747,38 @@
   </div>
 #if($hasPrint == "true")
 
-  <!-- Print language picker: shown when more than one template language exists under
-       Templates/${name}/Print/ in the CMS ("English" -> en, "Bulgarian" -> bg, ...) -->
+  <!-- Print picker: shown when more than one template language exists under
+       Templates/${name}/Print/ in the CMS ("English" -> en, "Bulgarian" -> bg, ...) or the chosen
+       language has more than one layout in the tenant's print template catalogue -->
   <div x-h-dialog-overlay :data-open="printLangOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></h2>
-        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.')"></p>
+        <p x-h-dialog-description x-text="printLanguages.length > 1 ? T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.') : T('$projectName:${tprefix}.messages.printLayout', 'Choose the layout.')"></p>
         <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
         <div class="vbox gap-2">
           <template x-for="lang in printLanguages" :key="lang.code">
-            <button type="button" x-h-button data-variant="outline" @click="printLangOpen = false; printDoc(lang.code)">
-              <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="lang.name"></span>
+            <button type="button" x-h-button x-show="printLanguages.length > 1" :data-variant="lang.code === printLang ? 'primary' : 'outline'" @click="selectPrintLanguage(lang.code)">
+              <svg role="presentation" x-h-lucide data-lucide="languages"></svg><span x-text="lang.name"></span>
+            </button>
+          </template>
+          <!-- The layouts of the chosen language (the tenant's print template catalogue), the
+               active one preselected; another one prints this document only. -->
+          <p class="text-sm text-muted-foreground" x-show="printLanguages.length > 1 && printLayouts.length > 1" x-text="T('$projectName:${tprefix}.messages.printLayout', 'Choose the layout.')"></p>
+          <template x-for="template in printLayouts" :key="template.name">
+            <button type="button" x-h-button x-show="printLayouts.length > 1" :data-variant="template.name === printTemplate ? 'primary' : 'outline'" @click="printTemplate = template.name">
+              <svg role="presentation" x-h-lucide data-lucide="file-text"></svg><span x-text="template.name"></span>
             </button>
           </template>
         </div>
+      </div>
+      <div x-h-dialog-footer>
+        <button type="button" x-h-button data-variant="transparent" @click="printLangOpen = false" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+        <button type="button" x-h-button data-variant="primary" :disabled="printBusy || printLoading" @click="printLangOpen = false; printDoc(printLang, printTemplate)">
+          <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+        </button>
       </div>
     </div>
   </div>

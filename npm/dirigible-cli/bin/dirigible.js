@@ -19,7 +19,8 @@ const dirigibleJarPath = require.resolve('@dirigiblelabs/dirigible/data/dirigibl
 const userArgs = process.argv.slice(2);
 
 // Define commands that require the Dirigible jar
-const dirigibleJarCommands = ['start'];
+// (generate runs the platform's own generator from it, #7793)
+const dirigibleJarCommands = ['start', 'generate'];
 
 const userCommand = userArgs[0];
 

@@ -558,6 +558,7 @@ document.addEventListener('alpine:init', () => {
               this.settingsSelected = item.id;
               this.settingsUrl = item.path || '';
               if (item.id === 'tenant-configuration') this.loadTenantConfig();
+              if (item.id === 'print-templates') this.loadPrintTemplates();
               if (item.id === 'document-numbering') this.loadNumbering();
               if (item.id === 'tenant-users') this.loadTenantUsers();
             }
@@ -691,6 +692,12 @@ document.addEventListener('alpine:init', () => {
       if (store) store.load();
     },
 
+    /** Reads the Print Templates section's catalogue - the store may be absent on a page that predates it. */
+    loadPrintTemplates() {
+      const store = window.Alpine && Alpine.store('printTemplates');
+      if (store) store.load();
+    },
+
     /** Open the Settings master-detail (the aggregated SETTING entities from every app). */
     openSettings() {
       this.settingsMode = true;
@@ -714,6 +721,7 @@ document.addEventListener('alpine:init', () => {
           window.history.replaceState(window.history.state, '', url);
         }
         if (item.id === 'tenant-configuration') this.loadTenantConfig();
+        if (item.id === 'print-templates') this.loadPrintTemplates();
         if (item.id === 'document-numbering') this.loadNumbering();
         if (item.id === 'tenant-users') this.loadTenantUsers();
       }
@@ -726,6 +734,7 @@ document.addEventListener('alpine:init', () => {
     findSettingItem(id) {
       if (id === 'region-language') return { id: 'region-language' };
       if (id === 'tenant-configuration') return { id: 'tenant-configuration' };
+      if (id === 'print-templates') return { id: 'print-templates' };
       if (id === 'document-numbering') return { id: 'document-numbering' };
       if (id === 'tenant-users') return { id: 'tenant-users' };
       return (this.settingsItems || []).find(i => i.id === id) || null;

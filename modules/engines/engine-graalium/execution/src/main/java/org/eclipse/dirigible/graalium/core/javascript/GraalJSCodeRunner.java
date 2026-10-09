@@ -84,8 +84,8 @@ public class GraalJSCodeRunner implements CodeRunner<Source, Value> {
 
         graalJSSourceCreator = new GraalJSSourceCreator(builder.jsModuleType);
         graalJSInterceptor = builder.interceptor;
-        graalContext = new ContextCreator(graalEngine, currentWorkingDirectoryPath, currentWorkingDirectoryPath, null,
-                onBeforeContextCreatedHook, onAfterContextCreatedHook, graalJSFileSystem).createContext();
+        graalContext = new ContextCreator(graalEngine, currentWorkingDirectoryPath, onBeforeContextCreatedHook, onAfterContextCreatedHook,
+                graalJSFileSystem).createContext();
 
         addGlobalObjects(builder.globalObjects);
         registerPolyfills(graalContext, builder.jsPolyfills);

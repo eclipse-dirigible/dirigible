@@ -27,6 +27,16 @@
             <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
           </button>
         </li>
+        <!-- Print Templates: a built-in entry for the layouts each document type prints with (#7755) - the
+             versions a release shipped and this tenant's own templates, and which one prints. Offered to
+             those who may change the tenant configuration, once a published application declares a
+             document type with templates; the section is the shared fragment the printTemplates store fetches. -->
+        <li x-h-list-item x-show="$store.printTemplates && $store.printTemplates.visible" x-cloak>
+          <button x-h-list-item-button :aria-current="isSettingActive({ id: 'print-templates' })" @click="selectSetting({ id: 'print-templates' })">
+            <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
+            <span x-text="T('application-core:shell.settings.printTemplates', 'Print Templates')"></span>
+          </button>
+        </li>
         <template x-for="item in visibleSettingsItems()" :key="item.id">
           <li x-h-list-item>
             <button x-h-list-item-button :aria-current="isSettingActive(item)" @click="selectSetting(item)">
@@ -39,7 +49,7 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration'" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'print-templates'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
@@ -161,6 +171,8 @@
         </template>
       </div>
     </div>
+    <!-- Print Templates detail: the shared fragment of the printTemplates store (application-core/shell/views/_print-templates.html). -->
+    <div x-show="settingsSelected === 'print-templates'" class="size-full overflow-auto" x-html="$store.printTemplates ? $store.printTemplates.markup : ''"></div>
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
             style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>

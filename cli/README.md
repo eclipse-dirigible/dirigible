@@ -32,19 +32,31 @@ java -jar target/dirigible-cli-*-executable.jar start  \
 ### Regenerate a project from its intent
 
 `generate` runs the IDE's Generate for every `*.intent` at the root of a project - the model files,
-the `.test` manifest and `gen/` - in-process, with no platform booted, no database and no web
-server. The projects its intent names in `uses:` are read from next to it, as in a workspace.
+the `.test` manifest and `gen/` - with no platform booted, no database and no web server. The
+projects its intent names in `uses:` are read from next to it, as in a workspace.
+
+The generator is the platform's own, so `generate` runs it from the platform jar, like `start`: the
+CLI is a launcher and carries none of the platform (#7793). When the CLI is installed via npm,
+`--dirigibleJarPath` is resolved automatically.
 
 ```shell
+DIRIGIBLE_JAR="$DIRIGIBLE_REPO_PATH/build/application/target/dirigible-application-*-executable.jar"
+
 # regenerate in place (what changes or is added is written, what is no longer generated is deleted)
-java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>"
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --dirigibleJarPath $DIRIGIBLE_JAR
 
 # regenerate into another folder, leaving the project untouched
-java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --out "<folder>"
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --out "<folder>" --dirigibleJarPath $DIRIGIBLE_JAR
 
 # check: write nothing, print the unified diff of every COMMITTED file the regeneration changes or
 # drops, and exit 1 if there is one
-java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --check
+java -jar target/dirigible-cli-*-executable.jar generate --project "<path_to_project>" --check --dirigibleJarPath $DIRIGIBLE_JAR
+```
+
+Without the CLI, the platform jar runs the same generator directly:
+
+```shell
+java -Dloader.main=org.eclipse.dirigible.generate.HeadlessGenerate -jar $DIRIGIBLE_JAR --project "<path_to_project>" --check
 ```
 
 The first line of the output names the platform version that generated. `--check` compares the files
@@ -55,7 +67,8 @@ no drift (or regenerated), `1` drift, `2` the intent could not be generated.
 ### Regeneration check in GitHub Actions
 
 `.github/actions/regen-check` wraps `generate --check` for a pull-request gate, against the
-`dirigible-cli` release a module repository pins:
+Eclipse Dirigible release a module repository pins (its `dirigible-application` jar is downloaded
+from Maven Central):
 
 ```yaml
 - uses: eclipse-dirigible/dirigible/.github/actions/regen-check@master
@@ -64,5 +77,5 @@ no drift (or regenerated), `1` drift, `2` the intent could not be generated.
     projects: my-module another-module
 ```
 
-`cli-jar` takes a locally built jar instead of a release; this repository checks its own
+`dirigible-jar` takes a locally built platform jar instead of a release; this repository checks its own
 `tests/tests-integrations/src/main/resources/sample-intent-*` that way on every pull request.

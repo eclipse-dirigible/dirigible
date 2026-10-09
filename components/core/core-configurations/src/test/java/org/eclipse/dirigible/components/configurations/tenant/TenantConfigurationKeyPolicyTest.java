@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Unit tests for {@link TenantConfigurationKeyPolicy} - pure logic, no Spring context. The policy
- * is an explicit white-list; for now only the branding properties are injectable.
+ * is an explicit white-list plus a few key-family prefixes.
  */
 class TenantConfigurationKeyPolicyTest {
 
@@ -56,6 +56,33 @@ class TenantConfigurationKeyPolicyTest {
         assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_UNKNOWN"));
         assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_"));
         assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_NAME_SUFFIX"));
+    }
+
+    @Test
+    void printTemplateKeysAreInjectableByPrefix() {
+        // One key per document type and language - the family cannot be enumerated (#7755).
+        assertTrue(policy.isInjectable("DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN"));
+        assertTrue(policy.isInjectable("DIRIGIBLE_PRINT_TEMPLATE_PURCHASEORDER_BG"));
+        assertTrue(policy.isPrefixed("DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN"));
+        assertFalse(policy.isPrefixed("DIRIGIBLE_BRANDING_NAME"));
+    }
+
+    @Test
+    void aBarePrefixIsNotAKey() {
+        assertFalse(policy.isInjectable("DIRIGIBLE_PRINT_TEMPLATE_"));
+        assertFalse(policy.isInjectable("DIRIGIBLE_PRINT_TEMPLATE"));
+        assertFalse(policy.isPrefixed(null));
+    }
+
+    @Test
+    void filterInjectableKeepsPrefixedKeys() {
+        Map<String, String> raw = new LinkedHashMap<>();
+        raw.put("DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN", "acme-blue");
+        raw.put("DIRIGIBLE_PRINT_TEMPLATES", "x");
+
+        Map<String, String> injectable = policy.filterInjectable(raw);
+
+        assertEquals(Map.of("DIRIGIBLE_PRINT_TEMPLATE_SALESINVOICE_EN", "acme-blue"), injectable);
     }
 
     @Test

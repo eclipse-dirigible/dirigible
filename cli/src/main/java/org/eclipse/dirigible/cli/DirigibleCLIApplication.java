@@ -26,9 +26,8 @@ import org.springframework.shell.core.command.CommandParser;
 import org.springframework.shell.core.command.CommandRegistry;
 import org.springframework.shell.core.command.annotation.EnableCommand;
 
-// The auto-configurations are named, not discovered: `generate` puts the intent engine and the
-// templates on the classpath (#7642), and a discovering @SpringBootApplication would configure a
-// web server, Liquibase, data sources... out of the platform jars that came with them.
+// The auto-configurations are named, not discovered: the CLI is a launcher and needs none of the
+// others (#7642, #7793).
 @SpringBootConfiguration
 @ComponentScan
 @ImportAutoConfiguration(ProjectInfoAutoConfiguration.class)

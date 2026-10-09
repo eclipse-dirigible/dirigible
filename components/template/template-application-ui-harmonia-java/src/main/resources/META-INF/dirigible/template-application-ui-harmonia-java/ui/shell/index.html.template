@@ -166,15 +166,16 @@
 #set($hasSettings = false)
 #foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
           <!-- Settings pinned to the sidebar footer (bottom-left), like codbex-athena-app. Always emitted:
-               a model without SETTING entities still offers Settings to a tenant owner, for the platform's
-               Users section (#7498) - the entry then shows only while that section is offered. -->
+               a model without SETTING entities still offers Settings for the platform's own sections - Users
+               (#7498) for a tenant owner, Print Templates (#7755) for whoever may select the layout a document
+               prints with - so the entry then shows only while one of them is offered. -->
           <div x-h-sidebar-footer data-borderless="true">
             <nav :aria-label="T('application-core:shell.nav.settings', 'Settings')">
               <ul x-h-sidebar-menu>
 #if($hasSettings)
                 <li x-h-sidebar-menu-item>
 #else
-                <li x-h-sidebar-menu-item x-show="$store.tenantUsers && $store.tenantUsers.visible" x-cloak>
+                <li x-h-sidebar-menu-item x-show="($store.tenantUsers && $store.tenantUsers.visible) || ($store.printTemplates && $store.printTemplates.visible)" x-cloak>
 #end
                   <button x-h-sidebar-menu-nav :data-active="isActive('/settings')" @click="navigate('/settings')">
                     <svg role="presentation" x-h-lucide data-lucide="settings"></svg><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
@@ -620,6 +621,7 @@
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/printActions.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/relatedPanel.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
@@ -627,6 +629,7 @@
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenant.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/tenantUsers.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/printTemplates.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>

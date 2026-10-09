@@ -39,6 +39,10 @@ import org.springframework.stereotype.Component;
  * overwritten; on delete the database row is removed and the CMS copy stays.
  *
  * <p>
+ * Print templates ({@code doc/Templates/<Entity>/Print/<lang>/*.print}) are not seeded here: they
+ * are versions of a catalogue, which {@link PrintTemplateSynchronizer} maintains.
+ *
+ * <p>
  * Matching is <b>folder-scoped</b> (any file under {@code doc/}), not extension-scoped — the folder
  * is a raw CMS staging area, so do not place model artefacts ({@code .csvim}, {@code .bpmn}, …)
  * there expecting their normal engines to run; under {@code doc/} they are treated as opaque CMS
@@ -63,12 +67,15 @@ class CmsSeedSynchronizer extends MultitenantBaseSynchronizer<CmsSeed, Long> {
         this.cmsStore = cmsStore;
     }
 
-    /** Folder-scoped: accept any regular file under a {@code doc/} folder, whatever its extension. */
+    /**
+     * Folder-scoped: accept any regular file under a {@code doc/} folder, whatever its extension -
+     * except a shipped print template, which {@link PrintTemplateSynchronizer} seeds as a version.
+     */
     @Override
     public boolean isAccepted(Path file, BasicFileAttributes attrs) {
-        return attrs.isRegularFile() && file.toString()
-                                            .replace('\\', '/')
-                                            .contains(DOC_SEGMENT);
+        String path = file.toString()
+                          .replace('\\', '/');
+        return attrs.isRegularFile() && path.contains(DOC_SEGMENT) && !PrintTemplateSynchronizer.isShippedTemplate(path);
     }
 
     @Override

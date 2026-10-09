@@ -23,6 +23,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-cms</artifactId>
 		</dependency>
+		<!-- The tenant configuration store: which print template a document type prints with -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-configurations</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-api-pdf</artifactId>
@@ -31,6 +36,14 @@
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-parsers-document</artifactId>
+		</dependency>
+
+		<!-- The CMIS folder contract names an OpenCMIS enum, so the fake CMS of CmsStoreTest needs it -->
+		<dependency>
+			<groupId>org.apache.chemistry.opencmis</groupId>
+			<artifactId>chemistry-opencmis-commons-api</artifactId>
+			<version>${chemistry.version}</version>
+			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

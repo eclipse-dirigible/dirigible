@@ -66,7 +66,6 @@
         <module>engine/engine-typescript</module>
         <module>engine/engine-proxy</module>
         <module>engine/engine-native-apps</module>
-        <module>engine/engine-python</module>
         <module>engine/engine-web</module>
         <module>engine/engine-template</module>
         <module>engine/engine-template-velocity</module>
@@ -110,7 +109,6 @@
         <!-- API -->
         <module>api/api-modules-javascript</module>
         <module>api/api-modules-java</module>
-        <module>api/api-modules-python</module>
         <module>api/api-cache</module>
         <module>api/api-core</module>
         <module>api/api-test</module>
@@ -135,7 +133,6 @@
         <module>api/api-etcd</module>
         <module>api/api-template</module>
         <module>api/api-mail</module>
-        <module>api/api-kafka</module>
         <module>api/api-mongodb</module>
         <module>api/api-rabbitmq</module>
         <module>api/api-redis</module>
@@ -159,6 +156,7 @@
         <module>ui/perspective-processes</module>
         <module>ui/perspective-tracing</module>
         <module>ui/settings-locale</module>
+        <module>ui/settings-print-templates</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
         <module>ui/view-projects</module>
@@ -713,11 +711,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-api-modules-python</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-database</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -913,6 +906,12 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-settings-locale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-settings-print-templates</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -1459,11 +1458,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-cms</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-api-kafka</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

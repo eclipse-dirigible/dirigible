@@ -68,7 +68,6 @@ function fixPath(path, mod) {
         "git",
         "indexing",
         "job",
-        "kafka",
         "log",
         "mail",
         "messaging",

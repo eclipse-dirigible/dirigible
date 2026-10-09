@@ -209,17 +209,6 @@
             <artifactId>dirigible-components-group-templates</artifactId>
             <type>pom</type>
         </dependency>
-
-        <dependency>
-            <groupId>de.codecentric</groupId>
-            <artifactId>spring-boot-admin-starter-server</artifactId>
-            <version>${spring.admin.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>de.codecentric</groupId>
-            <artifactId>spring-boot-admin-starter-client</artifactId>
-            <version>${spring.admin.version}</version>
-        </dependency>
     </dependencies>
 
     <dependencyManagement>

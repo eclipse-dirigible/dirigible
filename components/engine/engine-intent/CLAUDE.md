@@ -552,7 +552,7 @@ Every action below has a real SDK surface to generate against, so none of this n
 | notify — email | `mail.Mail` |
 | notify — in-app / push | `net.Websockets` / `messaging.Producer` |
 | call out (HTTP / webhook) | `http.HttpClient` |
-| publish / consume message | `messaging` / `kafka` / `rabbitmq` Producer/Consumer |
+| publish / consume message | `messaging` / `rabbitmq` Producer/Consumer |
 | inbound webhook | `http.Controller` + `@Get`/`@Post` |
 | outbound departure | `messaging.Producer.sendToQueue`/`sendToTopic` |
 | read / write / upsert data | `db.Store` / the generated `<Entity>Repository` |

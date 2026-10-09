@@ -1,24 +1,48 @@
 {
-  "recordedAt": "2026-10-06T06:48:21.906487Z",
-  "note": "Statement counts only, from a local run of PerformanceBaselineIT (#7646): they do not depend on the machine. The release workflow replaces this file with a full recording, latencies included.",
+  "recordedAt": "2026-10-09T09:36:13.510534271Z",
+  "environment": {
+    "hikariMaximumPoolSize": {
+      "DefaultDB": 20,
+      "SystemDB": 10,
+      "SystemDB (artefacts)": 20
+    },
+    "tomcatMaxThreads": 200,
+    "jvmMaxHeapMb": 6144,
+    "availableProcessors": 4,
+    "javaVersion": "24.0.2+12-FR",
+    "concurrentUsers": 10,
+    "iterations": 50
+  },
   "steps": {
     "listPage": {
+      "p50Millis": 230.9,
+      "p95Millis": 290.1,
       "statements": 8
     },
     "search": {
+      "p50Millis": 176.2,
+      "p95Millis": 296.5,
       "statements": 8
     },
     "create": {
+      "p50Millis": 245.2,
+      "p95Millis": 316.0,
       "statements": 12
     },
     "transition": {
+      "p50Millis": 218.0,
+      "p95Millis": 347.6,
       "statements": 14
     },
     "print": {
+      "p50Millis": 464.1,
+      "p95Millis": 694.0,
       "statements": 7
     },
     "inbox": {
-      "statements": 9008
+      "p50Millis": 6635.0,
+      "p95Millis": 7261.4,
+      "statements": 8008
     }
   }
 }

@@ -3384,8 +3384,21 @@ class IntentEngineIT extends IntegrationTest {
         // (per-version Open + Download), not by the Print button.
         assertFalse(documentPage.contains("storedSnapshot") || documentPage.contains("openStoredSnapshot"),
                 "the Print button must not redirect to a stored copy - it always renders live");
-        assertTrue(documentPage.contains("printLanguages") && documentPage.contains("/services/print/Order/languages"),
-                "the Print button should fetch the CMS languages and ask when there are several");
+        // The flow itself lives in the shared shell runtime (printActions.js, #7755): the page spreads it
+        // into its Alpine data with its entity and feeder, and the runtime fetches the CMS languages and
+        // the layouts of the chosen one.
+        assertTrue(
+                documentPage.contains("...printActions({ entity: 'Order', feeder: '/services/java/" + PROJECT
+                        + "/gen/events/orders/OrderPrintFeeder/' })"),
+                "the document page must spread the shared print actions with its entity and feeder, got: " + documentPage);
+        String printActions = shellScript("components/printActions.js");
+        assertTrue(
+                printActions.contains("'/services/print/' + encodeURIComponent(options.entity)")
+                        && printActions.contains("base + '/languages'") && printActions.contains("base + '/templates?lang='"),
+                "the shared print runtime should fetch the CMS languages and the layouts of the chosen one, got: " + printActions);
+        assertTrue(
+                printActions.contains("this.printLanguages.length > 1 || this.printLayouts.filter((t) => t.kind === 'tenant').length > 1"),
+                "the shared print runtime should ask only when there is a real choice of language or tenant layout");
         // The child is registered as a READ-ONLY files def - that flag is what identifies it as a
         // Snapshot rather than a user-uploaded Attachment, and what gives its rows the per-version
         // inline Open action next to Download.
