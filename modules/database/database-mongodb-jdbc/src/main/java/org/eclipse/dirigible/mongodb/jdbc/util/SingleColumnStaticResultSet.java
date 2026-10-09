@@ -39,7 +39,7 @@ import org.bson.BsonValue;
 import org.eclipse.dirigible.mongodb.jdbc.MongoDBConnection;
 import org.eclipse.dirigible.mongodb.jdbc.MongoDBResultSetMetaData;
 
-import com.mongodb.MongoClient;
+import com.mongodb.MongoClientSettings;
 
 /**
  * The Class SingleColumnStaticResultSet.

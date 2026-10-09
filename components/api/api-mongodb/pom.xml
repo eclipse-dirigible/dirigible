@@ -40,11 +40,26 @@
 		<!-- Libs -->
 		<dependency>
 	        <groupId>org.mongodb</groupId>
-	        <artifactId>mongo-java-driver</artifactId>
-	        <version>${mongodb.version}</version>
+
+	        <artifactId>mongodb-driver-sync</artifactId>
 	    </dependency>
 		
-	</dependencies>
+			<!-- Testcontainers for MongoDBJdbcBridgeTest (#7791): nothing exercised the JDBC bridge,
+		     which is how it could sit on an end-of-life driver unnoticed. Tagged "testcontainers",
+		     so it runs under that profile rather than on every build. -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers</artifactId>
+			<version>${testcontainers.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>testcontainers-junit-jupiter</artifactId>
+			<version>${testcontainers.version}</version>
+			<scope>test</scope>
+		</dependency>
+</dependencies>
 
 	<properties>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
