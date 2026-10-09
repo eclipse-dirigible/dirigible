@@ -493,9 +493,16 @@
                         <includeLicenseText>false</includeLicenseText>
 
                         <outputReactorProjects>true</outputReactorProjects>
-                        <outputFormat>all</outputFormat>
+                        <!-- JSON only, and NEXT TO the jar rather than inside it (#7788). The SBOM was
+                             written into ${project.build.outputDirectory}/META-INF/sbom, so 7 MB of the
+                             executable - a description of the artefact, in two formats - shipped inside
+                             the artefact it describes, where no runtime code reads it (grepped: nothing
+                             under components/, modules/ or build/ opens META-INF/sbom). The plugin's
+                             default outputDirectory is target/, and `attach` defaults to true, so the
+                             bom becomes an attached artifact of dirigible-application and is deployed
+                             and released beside the jar - which is where a consumer looks for it. -->
+                        <outputFormat>json</outputFormat>
                         <outputName>bom</outputName>
-                        <outputDirectory>${project.build.outputDirectory}/META-INF/sbom</outputDirectory>
                     </configuration>
                 </plugin>
             </plugins>
