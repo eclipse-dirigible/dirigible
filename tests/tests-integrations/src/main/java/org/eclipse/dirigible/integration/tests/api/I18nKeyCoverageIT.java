@@ -32,9 +32,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Every UI label key the generated pages and the shells ask for exists in every language the
@@ -359,9 +359,8 @@ class I18nKeyCoverageIT {
     }
 
     private static void flatten(JsonNode node, String prefix, Map<String, String> flat) {
-        Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-        while (fields.hasNext()) {
-            Map.Entry<String, JsonNode> field = fields.next();
+        // Jackson 3 renamed the field accessors to property ones and properties() is a Set.
+        for (Map.Entry<String, JsonNode> field : node.properties()) {
             if (field.getValue()
                      .isObject()) {
                 flatten(field.getValue(), prefix + field.getKey() + ".", flat);
@@ -397,19 +396,13 @@ class I18nKeyCoverageIT {
     }
 
     private static JsonNode json(String resource) {
-        try {
-            return JSON.readTree(read(resource));
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Not JSON: " + resource, ex);
-        }
+        // Jackson 3 exceptions are unchecked, so readTree no longer declares IOException - the
+        // JacksonException it raises instead already carries the resource in its message.
+        return JSON.readTree(read(resource));
     }
 
     private static JsonNode json(Resource resource) {
-        try {
-            return JSON.readTree(read(resource));
-        } catch (IOException ex) {
-            throw new UncheckedIOException("Not JSON: " + url(resource), ex);
-        }
+        return JSON.readTree(read(resource));
     }
 
     private static String read(Resource resource) {

@@ -34,7 +34,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
 import com.codeborne.selenide.SelenideElement;
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 
 /**
  * Settings > Users, in a browser, against a real Keycloak: an owner invites a person with two roles

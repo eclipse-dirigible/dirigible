@@ -25,8 +25,8 @@ import java.util.Optional;
 import org.apache.commons.lang3.ClassUtils;
 import org.eclipse.dirigible.components.database.helpers.FormattingParameters;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * The ResultSet JSON Writer.
@@ -68,8 +68,9 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
     @Override
     public void write(ResultSet resultSet, OutputStream output, Optional<FormattingParameters> resultParameters) throws Exception {
 
-        JsonGenerator jsonGenerator = objectMapper.getFactory()
-                                                  .createGenerator(output);
+        // Jackson 3: the mapper creates the generator itself (getFactory() is tokenStreamFactory(),
+        // whose createGenerator needs a context the mapper already supplies).
+        JsonGenerator jsonGenerator = objectMapper.createGenerator(output);
 
         jsonGenerator.writeStartArray();
 
@@ -105,7 +106,7 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     }
                 }
 
-                jsonGenerator.writeFieldName(label != null ? label : name);
+                jsonGenerator.writeName(label != null ? label : name);
                 if (value instanceof String) {
                     jsonGenerator.writeString((String) value);
                 } else if (value instanceof Character) {

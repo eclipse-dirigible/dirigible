@@ -21,9 +21,9 @@ import org.bson.Document;
 import org.eclipse.dirigible.mongodb.jdbc.util.JsonArrayMongoIteratorResultSet;
 import org.eclipse.dirigible.mongodb.jdbc.util.SingleColumnStaticResultSet;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 import com.mongodb.client.MongoIterable;
 
 /**
@@ -1753,7 +1753,8 @@ public class MongoDBDatabaseMetadata implements DatabaseMetaData {
             if (entry.getValue() != null && entry.getValue() instanceof Document) {
                 Document nestedDocument = (Document) entry.getValue();
                 ArrayNode nestedArray = populateColumns(nestedDocument);
-                obj.put(NESTED, nestedArray);
+                // Jackson 3 keeps put() for scalars only; a node value is set().
+                obj.set(NESTED, nestedArray);
             }
             obj.put(COLUMN_SIZE, "");
             obj.put(IS_NULLABLE, true);

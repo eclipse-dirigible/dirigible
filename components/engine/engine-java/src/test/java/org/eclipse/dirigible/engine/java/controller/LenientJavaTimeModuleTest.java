@@ -18,8 +18,10 @@ import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.cfg.MapperBuilder;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.exc.InvalidFormatException;
 
 /**
  * The mapper is assembled the same way {@link ControllerInvoker} builds its body binder:
@@ -27,8 +29,10 @@ import com.fasterxml.jackson.databind.exc.InvalidFormatException;
  */
 class LenientJavaTimeModuleTest {
 
-    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules()
-                                                          .registerModule(new LenientJavaTimeModule());
+    private final ObjectMapper mapper = JsonMapper.builder()
+                                                  .addModules(MapperBuilder.findModules())
+                                                  .addModule(new LenientJavaTimeModule())
+                                                  .build();
 
     /** The reported failure: a user-typed "2026-08-10 12:30" reaching an Instant field verbatim. */
     @Test
