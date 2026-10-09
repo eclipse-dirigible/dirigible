@@ -122,7 +122,7 @@ The platform is composed by what lands on the classpath — `build/application` 
 | `engine-odata` | OData v2 (CXF) at `/odata/v2/...`. |
 | `engine-openapi` | Aggregates OpenAPI fragments published by TS and Java controllers; served at `/services/openapi`. |
 | `engine-web` | `expose`-driven static / project-resource serving. |
-| `engine-cms`, `engine-cms-internal`, `engine-cms-s3`, `engine-cms-sharepoint` | Content management — internal CMIS, AWS S3 backend, MS SharePoint backend. |
+| `engine-cms`, `engine-cms-internal`, `engine-cms-s3`, `engine-cms-sharepoint` | Content management — internal CMIS, AWS S3 backend, MS SharePoint backend. SharePoint (`engine-cms-sharepoint` + `api-sharepoint`) is an add-on, not in the default bundle — see `components/engine/engine-cms-sharepoint/README.md`. |
 | `engine-command` | Run shell commands from user code. |
 | `engine-di` | Dependency injection for TS components (`*Component.ts`). |
 | `engine-ftp`, `engine-sftp` | (S)FTP server endpoints. |
@@ -351,7 +351,7 @@ Each facade is a Spring component or a static utility that exposes platform capa
 | `RedisFacade` | api-redis | `@aerokit/sdk/redis/client`. |
 | `S3Facade` | api-s3 | AWS S3 client (CMS-S3 backing). |
 | `UserFacade` | api-security | `@aerokit/sdk/security/user` — current user, roles, anonymous-mode checks (canonical source of role semantics, mirrored by `@Roles`). |
-| `SharepointFacade` | api-sharepoint | MS SharePoint CMS backing. |
+| `SharepointFacade` | api-sharepoint | MS SharePoint CMS backing (add-on, not in the default bundle). |
 | `TemplateEnginesFacade` | api-template | `@aerokit/sdk/template/engines` — Mustache / Velocity / JS templating. |
 | `Base64Facade`, `DigestFacade`, `EscapeFacade`, `HexFacade`, `QRCodeFacade`, `UTF8Facade`, `UrlFacade`, `UuidFacade`, `Xml2JsonFacade` | api-utils | `@aerokit/sdk/utils/*`. |
 | `ThreadContextFacade` | core-base + commons-helpers | Internal: per-request thread-context propagation. |
@@ -714,7 +714,7 @@ Notable env-vars (non-exhaustive — full list lives in the source):
 | `DIRIGIBLE_JAVA_LSP_ENABLED` / `_INSTALL_DIR` | — | JDT.LS install controls. |
 | `DIRIGIBLE_MAIL_*` | — | SMTP defaults for the Mail API. |
 | `DIRIGIBLE_FLOWABLE_*` | — | Flowable engine datasource + mail settings. |
-| `DIRIGIBLE_MS_SHAREPOINT_*` | — | SharePoint CMS credentials. |
+| `DIRIGIBLE_MS_SHAREPOINT_*` | — | SharePoint CMS credentials (only with the SharePoint add-on on the classpath). |
 | `DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER` | — | Internal CMIS root. |
 | `DIRIGIBLE_SYNCHRONIZER_FREQUENCY` | — | Reconciliation cadence. |
 | `DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_COUNT` / `_INTERVAL_MILLIS` | — | Cross-synchronizer retry tuning. |
