@@ -165,7 +165,6 @@
         <okhttp.version>5.5.0</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
-        <jaxws-rt.version>4.0.5</jaxws-rt.version>
 
         <!-- Lucene -->
         <lucene.version>10.5.1</lucene.version>
@@ -944,33 +943,17 @@
             <groupId>org.glassfish.jaxb</groupId>
             <artifactId>jaxb-runtime</artifactId>
         </dependency>
-        <dependency>
-            <groupId>jakarta.xml.ws</groupId>
-            <artifactId>jakarta.xml.ws-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.sun.xml.ws</groupId>
-            <artifactId>jaxws-rt</artifactId>
-            <version>${jaxws-rt.version}</version>
-        </dependency>
+        <!-- Kept here on purpose: 8 modules import com.google.common (api-etcd, api-utils,
+             core-repository, data-core, data-management, data-sources, engine-security,
+             database-persistence), so declaring it per module would be 8 declarations of the same
+             3 MB jar rather than a saving. jaxws-rt / jakarta.xml.ws-api, byte-buddy and the two
+             okhttp artifacts were here with ZERO imports anywhere and are gone (#7785) - the only
+             SOAP consumer, sdk/net/Soap.java, declares the two artifacts it needs in
+             api-modules-java, and Hibernate brings its own byte-buddy transitively. -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>${guava.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>${okhttp.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp-urlconnection</artifactId>
-            <version>${okhttp.version}</version>
         </dependency>
 
         <!-- Test Dependencies -->
@@ -1044,10 +1027,18 @@
                     </exclusion>
                 </exclusions>
             </dependency>
+            <!-- SOAP for sdk/net/Soap.java, declared in api-modules-java (#7785). Both used to
+                 arrive transitively through the root pom's jaxws-rt; these are the versions that
+                 reactor resolved (jakarta.xml.soap-api 3.0.2, saaj-impl 3.0.6). -->
             <dependency>
-                <groupId>commons-collections</groupId>
-                <artifactId>commons-collections</artifactId>
-                <version>3.2.2</version>
+                <groupId>jakarta.xml.soap</groupId>
+                <artifactId>jakarta.xml.soap-api</artifactId>
+                <version>3.0.2</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sun.xml.messaging.saaj</groupId>
+                <artifactId>saaj-impl</artifactId>
+                <version>3.0.6</version>
             </dependency>
             <dependency>
                 <groupId>org.dom4j</groupId>
