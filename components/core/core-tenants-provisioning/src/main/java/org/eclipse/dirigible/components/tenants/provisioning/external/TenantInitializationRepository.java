@@ -12,13 +12,20 @@ package org.eclipse.dirigible.components.tenants.provisioning.external;
 import java.util.Collection;
 import java.util.List;
 
+import org.springframework.context.annotation.Conditional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 /**
  * The initializations activations asked for, by tenant id.
+ *
+ * <p>
+ * Conditional like every other bean of this package: the JPA repositories are scanned across the
+ * whole platform, so without it a deployment that did not opt into the API would still get this
+ * bean.
  */
 @Repository
+@Conditional(TenantProvisioningApiEnabledCondition.class)
 public interface TenantInitializationRepository extends JpaRepository<TenantInitialization, String> {
 
     /**
