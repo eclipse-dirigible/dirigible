@@ -15,6 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -33,8 +34,8 @@ import org.springframework.stereotype.Component;
  * version ever shipped, in shipping order, with the hash of its bytes.
  * <ul>
  * <li>A version label always names the same bytes: changed bytes published under a label already
- * recorded get {@code <label>+<hash>} instead, and bytes shipped before get their earlier version
- * back (a rollback adds nothing).</li>
+ * recorded get its next revision, {@code <label>_v1}, {@code <label>_v2}, ... instead, and bytes
+ * shipped before get their earlier version back (a rollback adds nothing).</li>
  * <li>Versions are ordered by when they were first shipped, which is the only order a content hash
  * has - and, for release versions published in order, their release order.</li>
  * <li>A tenant copy is recognised as an earlier version by its bytes.</li>
@@ -117,7 +118,7 @@ class PrintTemplateReleases {
      * @param label the version the module declares - its release version, else the content hash
      * @param content the shipped bytes
      * @return the earlier version of the same bytes; else the label, unless it already names other
-     *         bytes, in which case the label qualified by the content hash
+     *         bytes, in which case its next revision ({@code <label>_v1}, ...)
      */
     String assign(String entity, String language, String name, String label, byte[] content) {
         String hash = PrintTemplateName.contentHash(content);
@@ -125,7 +126,8 @@ class PrintTemplateReleases {
         if (known.isPresent()) {
             return known.get();
         }
-        String version = isTaken(entity, language, name, label) ? qualify(label, PrintTemplateName.shortHash(content)) : label;
+        OptionalInt revision = latestRevision(entity, language, name, label);
+        String version = revision.isPresent() ? PrintTemplateName.revise(label, revision.getAsInt() + 1) : label;
         try {
             versionService.record(new PrintTemplateVersion(entity, language, name, version, hash));
         } catch (DataIntegrityViolationException e) {
@@ -178,18 +180,19 @@ class PrintTemplateReleases {
                              .findFirst();
     }
 
-    private boolean isTaken(String entity, String language, String name, String version) {
+    /**
+     * The highest revision of a label recorded for a template: 0 for the label itself, empty when
+     * neither it nor a revision of it is recorded.
+     */
+    private OptionalInt latestRevision(String entity, String language, String name, String label) {
         return versionService.findShipped(entity, language)
                              .stream()
-                             .anyMatch(recorded -> recorded.getTemplateName()
-                                                           .equals(name)
-                                     && recorded.getVersion()
-                                                .equals(version));
-    }
-
-    /** {@code 1.28.0+1a2b3c4d}: SemVer build metadata, which a release version may already carry. */
-    private static String qualify(String label, String hash) {
-        return label + (label.indexOf('+') < 0 ? "+" : ".") + hash;
+                             .filter(recorded -> recorded.getTemplateName()
+                                                         .equals(name))
+                             .map(recorded -> PrintTemplateName.revisionOf(recorded.getVersion(), label))
+                             .filter(OptionalInt::isPresent)
+                             .mapToInt(OptionalInt::getAsInt)
+                             .max();
     }
 
     private Snapshot load(String entity, String language, Instant now) {

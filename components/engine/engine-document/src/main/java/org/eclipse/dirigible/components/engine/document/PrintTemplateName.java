@@ -16,6 +16,7 @@ import java.text.Normalizer;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,10 +51,20 @@ record PrintTemplateName(String name, String version) {
     private static final Pattern VERSION = Pattern.compile("[A-Za-z0-9][A-Za-z0-9.+_-]{0,63}");
 
     /**
-     * A release version: at least two dot-separated numbers (so an all-digit content hash never reads
-     * as one), an optional pre-release and optional build metadata.
+     * Separates a version from its revision: {@code 1.28.0_v1} is the first content shipped under
+     * 1.28.0 after 1.28.0 itself.
      */
-    private static final Pattern SEMVER = Pattern.compile("(\\d+(?:\\.\\d+)+)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?");
+    static final String REVISION_SEPARATOR = "_v";
+
+    /** A revision fits an {@code int}. */
+    private static final int MAX_REVISION_DIGITS = 9;
+
+    /**
+     * A release version: at least two dot-separated numbers (so an all-digit content hash never reads
+     * as one), an optional pre-release, optional build metadata and an optional revision.
+     */
+    private static final Pattern SEMVER = Pattern.compile("(\\d+(?:\\.\\d+)+)(?:-([0-9A-Za-z.-]+))?(?:\\+[0-9A-Za-z.-]+)?(?:"
+            + REVISION_SEPARATOR + "(\\d{1," + MAX_REVISION_DIGITS + "}))?");
 
     /**
      * What an overwrite through the Documents perspective leaves behind on a CMS whose rename does
@@ -280,7 +291,8 @@ record PrintTemplateName(String name, String version) {
     }
 
     /**
-     * Compares two release versions by their numbers; a pre-release ranks below its release.
+     * Compares two release versions by their numbers; a pre-release ranks below its release, and a
+     * revision ({@code 1.28.0_v2}) above the version it revises.
      *
      * @param other the other shipped name, which must have a release version as well
      * @return negative, zero or positive as this version is older, equal or newer
@@ -304,9 +316,52 @@ record PrintTemplateName(String name, String version) {
         String leftPre = left.group(2);
         String rightPre = right.group(2);
         if (leftPre == null || rightPre == null) {
-            return leftPre == null ? (rightPre == null ? 0 : 1) : -1;
+            if (leftPre != null || rightPre != null) {
+                return leftPre == null ? 1 : -1;
+            }
+        } else {
+            int compared = comparePreRelease(leftPre.split("\\."), rightPre.split("\\."));
+            if (compared != 0) {
+                return compared;
+            }
         }
-        return comparePreRelease(leftPre.split("\\."), rightPre.split("\\."));
+        return Integer.compare(revisionNumber(left.group(3)), revisionNumber(right.group(3)));
+    }
+
+    /**
+     * A revision of a version - the label a content gets when its version already names other bytes.
+     *
+     * @param label the version
+     * @param revision the revision, from 1
+     * @return {@code <label>_v<revision>}
+     */
+    static String revise(String label, int revision) {
+        return label + REVISION_SEPARATOR + revision;
+    }
+
+    /**
+     * Which revision of a label a version is.
+     *
+     * @param version the version
+     * @param label the label
+     * @return 0 for the label itself, N for {@code <label>_vN}, empty for any other version
+     */
+    static OptionalInt revisionOf(String version, String label) {
+        if (version.equals(label)) {
+            return OptionalInt.of(0);
+        }
+        String prefix = label + REVISION_SEPARATOR;
+        if (version.startsWith(prefix)) {
+            String revision = version.substring(prefix.length());
+            if (isNumeric(revision) && revision.length() <= MAX_REVISION_DIGITS) {
+                return OptionalInt.of(Integer.parseInt(revision));
+            }
+        }
+        return OptionalInt.empty();
+    }
+
+    private static int revisionNumber(String revision) {
+        return revision == null ? 0 : Integer.parseInt(revision);
     }
 
     /**

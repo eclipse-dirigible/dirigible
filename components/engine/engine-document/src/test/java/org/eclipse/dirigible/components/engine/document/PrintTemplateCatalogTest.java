@@ -143,11 +143,21 @@ class PrintTemplateCatalogTest {
 
         String hotfix = ship("standard", "1.28.0", V2);
 
-        assertEquals("1.28.0+" + PrintTemplateName.shortHash(bytes(V2)), hotfix);
+        assertEquals("1.28.0_v1", hotfix);
         assertEquals(V1, read("standard@1.28.0"), "a pinned tenant keeps printing what it pinned");
         assertEquals(V2, read("standard@" + hotfix));
         configuration.clear();
         assertEquals("standard@" + hotfix, resolved());
+    }
+
+    @Test
+    void everyFurtherChangeUnderOneVersionGetsTheNextRevision() throws Exception {
+        ship("standard", "1.28.0", V1);
+        ship("standard", "1.28.0", V2);
+
+        assertEquals("1.28.0_v2", ship("standard", "1.28.0", V3));
+        assertEquals("1.28.0_v1", ship("standard", "1.28.0", V2), "bytes shipped before keep their revision");
+        assertEquals(Set.of("standard@1.28.0.print", "standard@1.28.0_v1.print", "standard@1.28.0_v2.print"), cms.names(FOLDER));
     }
 
     @Test

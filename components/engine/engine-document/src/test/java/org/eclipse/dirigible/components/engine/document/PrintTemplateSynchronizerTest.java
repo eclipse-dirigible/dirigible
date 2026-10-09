@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.endsWith;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -111,6 +112,33 @@ class PrintTemplateSynchronizerTest {
         assertEquals("1.28.0", seed.getVersion());
         verify(releases, times(1)).assign(anyString(), anyString(), anyString(), anyString(), any());
         verify(cmsSeedService).delete(legacy);
+    }
+
+    @Test
+    void aProjectWithoutAProjectJsonVersionTakesItsPackageJsonVersion() throws Exception {
+        byte[] content = "<document/>".getBytes(StandardCharsets.UTF_8);
+        String location = "/sales/doc/Templates/SalesInvoice/Print/en/standard.print";
+        PrintTemplateSeedService seedService = mock(PrintTemplateSeedService.class);
+        when(seedService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        PrintTemplateReleases releases = mock(PrintTemplateReleases.class);
+        when(releases.assign(anyString(), anyString(), anyString(), anyString(), any())).thenAnswer(
+                invocation -> invocation.getArgument(3));
+        IRepository repository = mock(IRepository.class);
+        IResource projectJson = mock(IResource.class);
+        when(projectJson.exists()).thenReturn(true);
+        when(projectJson.getContent()).thenReturn("{\"guid\": \"sales\"}".getBytes(StandardCharsets.UTF_8));
+        IResource packageJson = mock(IResource.class);
+        when(packageJson.exists()).thenReturn(true);
+        when(packageJson.getContent()).thenReturn("{\"name\": \"@acme/sales\", \"version\": \"1.26.0\"}".getBytes(StandardCharsets.UTF_8));
+        when(repository.getResource(endsWith("/sales/project.json"))).thenReturn(projectJson);
+        when(repository.getResource(endsWith("/sales/package.json"))).thenReturn(packageJson);
+        PrintTemplateSynchronizer synchronizer = new PrintTemplateSynchronizer(seedService, mock(CmsSeedService.class),
+                mock(PrintTemplateCatalog.class), releases, repository, mock(TenantContext.class));
+
+        PrintTemplateSeed seed = synchronizer.parseImpl(location, content)
+                                             .get(0);
+
+        assertEquals("1.26.0", seed.getVersion());
     }
 
     @Test

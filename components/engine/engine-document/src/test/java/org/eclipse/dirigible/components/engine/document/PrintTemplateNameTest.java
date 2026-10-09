@@ -64,6 +64,20 @@ class PrintTemplateNameTest {
     }
 
     @Test
+    void aRevisionRanksAboveTheVersionItRevisesAndBelowTheNextRelease() {
+        assertTrue(shipped("1.28.0_v1").compareReleaseVersion(shipped("1.28.0")) > 0);
+        assertTrue(shipped("1.28.0_v10").compareReleaseVersion(shipped("1.28.0_v2")) > 0);
+        assertTrue(shipped("1.28.0_v3").compareReleaseVersion(shipped("1.30.0")) < 0);
+        assertEquals("1.28.0_v1", PrintTemplateName.revise("1.28.0", 1));
+        assertEquals(0, PrintTemplateName.revisionOf("1.28.0", "1.28.0")
+                                         .getAsInt());
+        assertEquals(2, PrintTemplateName.revisionOf("1.28.0_v2", "1.28.0")
+                                         .getAsInt());
+        assertTrue(PrintTemplateName.revisionOf("1.28.0.1", "1.28.0")
+                                    .isEmpty());
+    }
+
+    @Test
     void anyDocumentNameSanitisesToATenantTemplateName() {
         assertEquals("Invoice-template", PrintTemplateName.sanitize("Invoice template"));
         assertEquals("standard-1-", PrintTemplateName.sanitize("standard (1)"));

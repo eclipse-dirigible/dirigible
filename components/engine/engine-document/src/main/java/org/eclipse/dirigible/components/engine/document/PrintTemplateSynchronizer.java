@@ -57,11 +57,11 @@ import com.google.gson.JsonParser;
  *
  * <p>
  * The version is the module's release version - the {@code version} field of the project's
- * {@code project.json} - when it declares a valid one, else the first 8 hex digits of the content's
- * SHA-256; {@link PrintTemplateReleases} keeps it immutable (bytes shipped before get their earlier
- * version back, changed bytes under a recorded label get the label qualified by their hash).
- * Deleting the file removes the artefact row only; the versions it shipped stay in every tenant's
- * catalogue.
+ * {@code project.json}, else of its {@code package.json} - when one declares a valid one, else the
+ * first 8 hex digits of the content's SHA-256; {@link PrintTemplateReleases} keeps it immutable
+ * (bytes shipped before get their earlier version back, changed bytes under a recorded label get
+ * its next revision, {@code <label>_v1}, {@code <label>_v2}, ...). Deleting the file removes the
+ * artefact row only; the versions it shipped stay in every tenant's catalogue.
  *
  * <p>
  * Taking a file over from {@link CmsSeedSynchronizer} retires its {@code cms-seed} row, recording
@@ -85,7 +85,8 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
 
     private static final String TEMPLATES_SEGMENT = "Templates";
     private static final String PRINT_SEGMENT = "Print";
-    private static final String PROJECT_FILE = "project.json";
+    /** The project descriptors that may declare the module's release version, in precedence order. */
+    private static final List<String> VERSION_DESCRIPTORS = List.of("project.json", "package.json");
     private static final String VERSION_PROPERTY = "version";
     private static final int HASH_VERSION_LENGTH = 8;
 
@@ -240,12 +241,26 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
         }
     }
 
-    /** The {@code version} of the project's {@code project.json}, when it declares a valid one. */
+    /**
+     * The {@code version} of the project's {@code project.json}, else of its {@code package.json}, when
+     * one declares a valid one.
+     */
     private Optional<String> releaseVersion(String project) {
         if (project.isEmpty()) {
             return Optional.empty();
         }
-        IResource descriptor = repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + PROJECT_FILE);
+        for (String descriptorName : VERSION_DESCRIPTORS) {
+            Optional<String> version = declaredVersion(project, descriptorName);
+            if (version.isPresent()) {
+                return version;
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The {@code version} one descriptor of the project declares, when it is a valid one. */
+    private Optional<String> declaredVersion(String project, String descriptorName) {
+        IResource descriptor = repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + descriptorName);
         if (!descriptor.exists()) {
             return Optional.empty();
         }
@@ -261,12 +276,12 @@ class PrintTemplateSynchronizer extends MultitenantBaseSynchronizer<PrintTemplat
                     if (PrintTemplateName.isValidVersion(version)) {
                         return Optional.of(version);
                     }
-                    logger.warn("The version [{}] of project [{}] cannot name a print template version - using the content hash", version,
+                    logger.warn("The version [{}] in [{}] of project [{}] cannot name a print template version", version, descriptorName,
                             project);
                 }
             }
         } catch (RuntimeException e) {
-            logger.warn("Cannot read the version of project [{}] - using the content hash for its print templates", project, e);
+            logger.warn("Cannot read the version from [{}] of project [{}]", descriptorName, project, e);
         }
         return Optional.empty();
     }

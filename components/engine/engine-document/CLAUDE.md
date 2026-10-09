@@ -70,12 +70,14 @@ dropped**: it is a tenant template under its sanitised name (`Invoice-template`,
   `doc/Templates/<Entity>/Print/<lang>/<file>.print` (a `/doc/` higher up, in the repository root
   or a project name, does not matter), and its project - whose `project.json` gives the version - is
   the first segment of the registry-relative location, however deep the `doc/` folder sits.
-- **Version** = the project's `project.json` `version` when valid, else the first 8 hex digits of the
+- **Version** = the project's `project.json` `version` when valid, else its `package.json` `version`
+  (the BusinessIntents `base-*` modules declare it only there), else the first 8 hex digits of the
   content SHA-256 - and then **`PrintTemplateReleases`** makes it immutable against the ledger
   `DIRIGIBLE_PRINT_TEMPLATE_VERSIONS` (every version this instance ever shipped, append-only, with
   the content hash): bytes shipped before get their earlier version back (a rollback or an unchanged
   release adds nothing), and changed bytes under a label already recorded ship as
-  `<label>+<hash>` (a WARN) instead of overwriting what pinned tenants print. Per tenant the seed adds
+  its next revision, `<label>_v1`, `<label>_v2`, ... (a WARN; a revision ranks above the version it
+  revises and below the next release) instead of overwriting what pinned tenants print. Per tenant the seed adds
   `<name>@<version>.print` when missing, **converges** an existing one whose bytes drifted, adds
   nothing when the newest shipped version already has the same bytes, and never touches a tenant
   template.
