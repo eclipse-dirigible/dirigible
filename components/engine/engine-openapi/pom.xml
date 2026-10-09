@@ -38,9 +38,18 @@
 			<artifactId>dirigible-parsers-typescript</artifactId>
     	</dependency>
 
+        <!-- swagger-parser-v3, NOT the swagger-parser aggregator (#7789). The aggregator adds
+             swagger-parser-v2-converter and with it the whole Swagger 1.x line: swagger-core 1.6.16,
+             swagger-models 1.6.16, swagger-parser 1.0.76, swagger-compat-spec-parser,
+             json-schema-validator 2.2.14 with json-schema-core and jopt-simple, and rhino (1.4 MB).
+             This module parses with io.swagger.v3.parser.OpenAPIV3Parser, which is the v3
+             implementation itself - the 2.0 conversion happens only in io.swagger.parser.OpenAPIParser,
+             the facade that iterates SwaggerParserExtension providers, and nothing here uses it. So a
+             Swagger 2.0 input document does not work today either way; dropping the converter removes
+             the second Swagger model line rather than a feature. -->
         <dependency>
             <groupId>io.swagger.parser.v3</groupId>
-            <artifactId>swagger-parser</artifactId>
+            <artifactId>swagger-parser-v3</artifactId>
             <version>2.1.48</version>
             <exclusions>
             	<exclusion>
@@ -64,12 +73,6 @@
 		    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 		    <version>${springdoc.version}</version>
 		</dependency>
-		<dependency>
-		   <groupId>javax.xml.bind</groupId>
-		   <artifactId>jaxb-api</artifactId>
-            <version>${jaxb.version}</version>
-		 </dependency>
-		 
 		 <!-- Tests -->
 		 <dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
