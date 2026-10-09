@@ -274,6 +274,24 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
           architecture: x64
 
+      # Maven 3.10.0 (runner image 20261004) makes central-publishing-maven-plugin 0.11.0 bundle the
+      # local repository's maven-metadata-local.xml and _remote.repositories, and Central refuses the
+      # whole deployment ("Bundle has content that does NOT have a .pom file") - 14.78.0 to 14.80.0
+      # (#7813). Pinned until the plugin supports 3.10.
+      - name: Set up Maven 3.9.16
+        run: |
+          curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz | tar xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/apache-maven-3.9.16/bin" >> "$GITHUB_PATH"
+
+      - name: Verify the Maven version
+        run: |
+          version=$(mvn -v)
+          echo "$version"
+          case "$version" in
+            *"Apache Maven 3.9.16"*) ;;
+            *) echo "::error::the release must run on Maven 3.9.16 (#7813)"; exit 1 ;;
+          esac
+
       - name: Install NodeJS
         uses: actions/setup-node@v4
         with:
