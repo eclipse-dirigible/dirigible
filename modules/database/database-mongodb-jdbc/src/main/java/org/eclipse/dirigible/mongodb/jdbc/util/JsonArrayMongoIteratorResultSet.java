@@ -33,11 +33,11 @@ import java.util.Calendar;
 import java.util.Iterator;
 import java.util.Map;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * The Class SingleColumnMongoIteratorResultSet.
@@ -268,7 +268,9 @@ public class JsonArrayMongoIteratorResultSet implements ResultSet {
         try {
             return this.currentRecord.get(columnIndex)
                                      .binaryValue();
-        } catch (IOException e) {
+        } catch (JacksonException e) {
+            // Jackson 3 exceptions are unchecked, so binaryValue() no longer declares IOException;
+            // JacksonException is the successor and keeps the SQLException contract of this method.
             throw new SQLException(e);
         }
     }
@@ -478,7 +480,9 @@ public class JsonArrayMongoIteratorResultSet implements ResultSet {
         try {
             return this.currentRecord.get(columnLabel)
                                      .binaryValue();
-        } catch (IOException e) {
+        } catch (JacksonException e) {
+            // Jackson 3 exceptions are unchecked, so binaryValue() no longer declares IOException;
+            // JacksonException is the successor and keeps the SQLException contract of this method.
             throw new SQLException(e);
         }
     }

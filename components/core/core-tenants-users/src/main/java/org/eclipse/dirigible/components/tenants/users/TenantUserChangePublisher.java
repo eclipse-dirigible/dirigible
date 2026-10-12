@@ -17,8 +17,8 @@ import org.springframework.context.annotation.Conditional;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Publishes the Owners' change requests to the configured queue. There is nothing to write first
@@ -57,7 +57,7 @@ class TenantUserChangePublisher {
         String json;
         try {
             json = JSON.writeValueAsString(request);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Could not serialize the change request [" + request.requestId() + "]", e);
         }
         try {

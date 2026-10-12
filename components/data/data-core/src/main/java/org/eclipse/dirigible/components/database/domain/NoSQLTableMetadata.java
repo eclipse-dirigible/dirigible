@@ -20,8 +20,8 @@ import java.util.List;
 import org.eclipse.dirigible.components.database.DatabaseNameNormalizer;
 import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
 
 /**
  * The Table Metadata transport object.

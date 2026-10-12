@@ -9,9 +9,9 @@
  */
 package org.eclipse.dirigible.components.ide.lsp.java.endpoint;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import jakarta.annotation.security.RolesAllowed;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;

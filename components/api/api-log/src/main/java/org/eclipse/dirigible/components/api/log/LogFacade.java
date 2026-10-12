@@ -9,9 +9,10 @@
  */
 package org.eclipse.dirigible.components.api.log;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.ArrayType;
-import com.fasterxml.jackson.databind.type.TypeFactory;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.type.ArrayType;
+import tools.jackson.databind.type.TypeFactory;
 import com.oracle.truffle.js.runtime.GraalJSException;
 import com.oracle.truffle.js.runtime.Strings;
 import com.oracle.truffle.js.runtime.builtins.JSErrorObject;
@@ -43,8 +44,10 @@ public class LogFacade {
     private static final ObjectMapper om = new ObjectMapper();
 
     /** The Constant objectArrayType. */
-    private static final ArrayType objectArrayType = TypeFactory.defaultInstance()
-                                                                .constructArrayType(Object.class);
+    // Jackson 3 dropped TypeFactory.defaultInstance(); a type factory comes from the mapper that will
+    // use it, which is also the one whose configuration the type should reflect.
+    private static final ArrayType objectArrayType = om.getTypeFactory()
+                                                       .constructArrayType(Object.class);
 
     /**
      * Sets the logging level.
@@ -163,7 +166,10 @@ public class LogFacade {
                 if (args.length < 1) {
                     args = null;
                 }
-            } catch (IOException e) {
+            } catch (JacksonException e) {
+                // Jackson 3 exceptions are unchecked, so readValue no longer declares IOException;
+                // JacksonException is the successor and keeps the behaviour - unparseable arguments
+                // are logged and the message is still written without them.
                 LOGGER.error("Cannot parse log arguments for logger [{}] for message [{}] at level [{}]", loggerName, message, level, e);
             }
         }

@@ -16,14 +16,14 @@ import java.time.LocalDateTime;
 
 import org.eclipse.dirigible.sdk.utils.LenientJavaTime;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.datatype.jsr310.deser.InstantDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateDeserializer;
-import com.fasterxml.jackson.datatype.jsr310.deser.LocalDateTimeDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.module.SimpleModule;
+import tools.jackson.databind.ext.javatime.deser.InstantDeserializer;
+import tools.jackson.databind.ext.javatime.deser.LocalDateDeserializer;
+import tools.jackson.databind.ext.javatime.deser.LocalDateTimeDeserializer;
 
 /**
  * Jackson module making {@code @Body} binding tolerant of near-ISO date/time strings for the three
@@ -48,9 +48,9 @@ class LenientJavaTimeModule extends SimpleModule {
 
     LenientJavaTimeModule() {
         super("dirigible-lenient-java-time");
-        addDeserializer(Instant.class, new JsonDeserializer<Instant>() {
+        addDeserializer(Instant.class, new ValueDeserializer<Instant>() {
             @Override
-            public Instant deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            public Instant deserialize(JsonParser p, DeserializationContext ctxt) {
                 if (p.hasToken(JsonToken.VALUE_STRING)) {
                     Instant lenient = LenientJavaTime.parseInstant(p.getText());
                     if (lenient != null) {
@@ -60,9 +60,9 @@ class LenientJavaTimeModule extends SimpleModule {
                 return InstantDeserializer.INSTANT.deserialize(p, ctxt);
             }
         });
-        addDeserializer(LocalDate.class, new JsonDeserializer<LocalDate>() {
+        addDeserializer(LocalDate.class, new ValueDeserializer<LocalDate>() {
             @Override
-            public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) {
                 if (p.hasToken(JsonToken.VALUE_STRING)) {
                     LocalDate lenient = LenientJavaTime.parseLocalDate(p.getText());
                     if (lenient != null) {
@@ -72,9 +72,9 @@ class LenientJavaTimeModule extends SimpleModule {
                 return LocalDateDeserializer.INSTANCE.deserialize(p, ctxt);
             }
         });
-        addDeserializer(LocalDateTime.class, new JsonDeserializer<LocalDateTime>() {
+        addDeserializer(LocalDateTime.class, new ValueDeserializer<LocalDateTime>() {
             @Override
-            public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) {
                 if (p.hasToken(JsonToken.VALUE_STRING)) {
                     LocalDateTime lenient = LenientJavaTime.parseLocalDateTime(p.getText());
                     if (lenient != null) {

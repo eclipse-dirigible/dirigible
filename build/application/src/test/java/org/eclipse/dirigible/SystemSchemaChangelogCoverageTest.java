@@ -21,7 +21,7 @@ import org.springframework.context.annotation.ClassPathScanningCandidateComponen
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.util.ClassUtils;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import static org.junit.jupiter.api.Assertions.assertTrue;

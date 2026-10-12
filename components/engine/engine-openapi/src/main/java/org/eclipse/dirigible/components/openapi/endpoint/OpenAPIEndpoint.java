@@ -29,6 +29,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+// Jackson 2 ON PURPOSE (#7790): io.swagger.v3.core.util.Json.mapper() below is swagger-core's own
+// Jackson 2 ObjectMapper, so writeValueAsString throws the 2.x checked JsonProcessingException.
+// This
+// one import is the swagger boundary and moves when swagger-core does.
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import io.swagger.v3.oas.models.Components;

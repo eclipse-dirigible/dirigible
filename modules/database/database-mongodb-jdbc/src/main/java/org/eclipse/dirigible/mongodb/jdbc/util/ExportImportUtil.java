@@ -21,11 +21,12 @@ import org.eclipse.dirigible.mongodb.jdbc.MongoDBConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonToken;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationFeature;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.mongodb.client.MongoCursor;
 
 /**
@@ -119,12 +120,14 @@ public class ExportImportUtil {
      * @throws Exception the exception
      */
     public static void importCollection(MongoDBConnection connection, String collection, InputStream input) throws Exception {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        // Jackson 3 mappers are immutable, so features are set on the builder rather than on a built
+        // mapper; java.time support is built into databind and registered by default, so the jsr310
+        // module registration this used to need is gone (#7790).
+        ObjectMapper mapper = JsonMapper.builder()
+                                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                                        .build();
 
-        try (JsonParser jsonParser = mapper.getFactory()
-                                           .createParser(input)) {
+        try (JsonParser jsonParser = mapper.createParser(input)) {
 
             if (jsonParser.nextToken() != JsonToken.START_ARRAY) {
                 throw new IllegalStateException("Expected content to be an array");
@@ -137,7 +140,10 @@ public class ExportImportUtil {
                     connection.getMongoDatabase()
                               .getCollection(collection)
                               .insertOne(document);
-                } catch (IOException e) {
+                } catch (JacksonException e) {
+                    // Jackson 3 exceptions are unchecked, so the IOException this used to catch is no
+                    // longer thrown here; JacksonException is its successor and keeps the behaviour -
+                    // a document that will not parse is logged and the import goes on to the next one.
                     logger.error(e.getMessage(), e);
                 }
             }

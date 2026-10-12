@@ -9,8 +9,8 @@
  */
 package org.eclipse.dirigible.tests.framework.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,7 +21,7 @@ public class JsonAsserter {
         try {
             assertThat(mapper.readTree(actualJson)).isEqualTo(mapper.readTree(expectedJson))
                                                    .withFailMessage("Unexpected JSON");
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Unexpected JSON", e);
         }
     }

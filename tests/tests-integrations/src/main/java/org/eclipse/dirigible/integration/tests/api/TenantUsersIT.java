@@ -55,8 +55,8 @@ import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Tenant users, the Owner's side, end to end on one instance: the three commands each publish one
