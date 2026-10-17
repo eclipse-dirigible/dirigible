@@ -89,11 +89,14 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
             assertEquals("false", eval(context, "String(page.hasHierarchy)"));
             assertEquals("false", eval(context, "String(page.treeVisible)"), "no edges, no tree");
             assertEquals("1:0,2:0,3:0", rows(context), "the flat page, depth 0");
+            // The view switch (#7837) presses what the page shows: Table, though the mode is Tree.
+            assertEquals("table", eval(context, "page.viewChoice"), "no hierarchy, so the switch reads Table");
 
             // A filled-in org chart: depth-first, children under their parent, any depth, unpaged.
             set(context, "[e(1, 'Ada', null), e(2, 'Bob', 1), e(3, 'Cy', 1), e(4, 'Dee', 2), e(5, 'Eve', 4),"
                     + " e(6, 'Fay', 5), e(7, 'Gus', 6), e(8, 'Hal', 7), e(9, 'Ivy', 8), e(10, 'Jo', 9), e(11, 'Kim', 10)]");
             assertEquals("true", eval(context, "String(page.treeVisible)"));
+            assertEquals("tree", eval(context, "page.viewChoice"));
             assertEquals("1:0,2:1,4:2,5:3,6:4,7:5,8:6,9:7,10:8,11:9,3:1", rows(context),
                     "depth-first, deeper than the old six fixed levels, and not cut to one page of 10");
             assertEquals("true,true,false", eval(context, "[0, 1, 10].map(i => page.visibleRows[i].hasChildren).join(',')"));
@@ -108,11 +111,14 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
             assertEquals("1:0,2:1,3:1", rows(context));
             eval(context, "page.toggleNode(page.items[1]);");
 
-            // The table on demand, and for a search: a match anywhere in the tree must be findable.
-            eval(context, "page.viewMode = 'table';");
+            // The table on demand, picked through the view switch, which sets the mode and remembers it;
+            // and for a search: a match anywhere in the tree must be findable.
+            eval(context, "page.viewChoice = 'table';");
+            assertEquals("table", eval(context, "page.viewMode"));
+            assertEquals("table", eval(context, "Object.values(__storage).join(',')"), "the switch remembers the pick");
             assertEquals("false", eval(context, "String(page.treeVisible)"));
             assertEquals(10, rows(context).split(",").length, "the table is paged again");
-            eval(context, "page.viewMode = 'tree'; page.searchTerm = 'Dee';");
+            eval(context, "page.viewChoice = 'tree'; page.searchTerm = 'Dee';");
             assertEquals("4:0", rows(context));
             eval(context, "page.searchTerm = '';");
 
@@ -164,7 +170,7 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
     private static void assertTheViewIsOneTableForBothModes(String view) {
         assertFalse(view.contains("x-h-tree"), "the label-only tree is gone");
         assertTrue(view.contains("x-for=\"{ row, depth, hasChildren } in visibleRows\""), "one table body for both modes");
-        assertTrue(view.contains("x-h-button-group x-model=\"viewMode\"") && view.contains("x-h-button-group-radio=\"'tree'\"")
+        assertTrue(view.contains("x-h-button-group x-model=\"viewChoice\"") && view.contains("x-h-button-group-radio=\"'tree'\"")
                 && view.contains("x-h-button-group-radio=\"'table'\""), "the Tree / Table toggle");
         assertTrue(view.contains("data-lucide=\"users\""), "the node icon is the entity's icon, not a generic file");
         assertTrue(view.contains("@click.stop=\"toggleNode(row)\""), "the chevron expands and collapses");

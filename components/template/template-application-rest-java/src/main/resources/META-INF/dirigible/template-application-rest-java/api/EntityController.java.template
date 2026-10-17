@@ -649,6 +649,9 @@ public class ${name}Controller {
                         yield "e." + field + " in (:" + paramName + ")";
                     }
                     case "LIKE" -> "e." + field + " like :" + paramName;
+                    // A half-open range [from, to) - what the slot picker asks for the days it shows (#7837).
+                    case "GTE" -> "e." + field + " >= :" + paramName;
+                    case "LT" -> "e." + field + " < :" + paramName;
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
                 hql.append(first ? " where " : " and ").append(clause);

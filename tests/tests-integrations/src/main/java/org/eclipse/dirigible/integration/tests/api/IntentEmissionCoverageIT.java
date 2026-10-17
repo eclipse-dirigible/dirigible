@@ -4205,10 +4205,30 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the entity's own create/edit form must still be routed");
         assertTrue(shellIndex.contains("x-route=\"/my/Leave/list\" x-template.target.app=\"./views/my/Leave-list.html\""),
                 "the personal list must stay reachable at /my/<Entity>/list");
-        assertTrue(contentOf("gen/emission/views/Leave/Leave-manage-list.html").contains("goCalendar()"),
-                "the entity's browse page must offer the switch to its calendar");
-        assertTrue(contentOf("gen/emission/views/Leave/Leave-calendar.html").contains("goList()"),
-                "the calendar must offer the switch back to the entity's own browse page");
+        // #7837: the switch is one icon-only single-choice x-h-button-group on both pages, and the
+        // page's viewChoice routes the pick.
+        String leaveList = contentOf("gen/emission/views/Leave/Leave-manage-list.html");
+        assertTrue(leaveList.contains("x-model=\"viewChoice\"") && leaveList.contains("x-h-button-group-radio=\"'calendar'\""),
+                "the entity's browse page must offer the switch to its calendar as the view group");
+        assertFalse(leaveList.contains("@click=\"goCalendar()\""), "the calendar is no longer a menu item of the browse page");
+        assertTrue(
+                contentOf("gen/emission/js/components/pages/Leave/LeaveManageListPage.js").contains(
+                        "if (value === 'calendar') return this.goCalendar();"),
+                "picking the calendar in the browse page's view group must open the calendar");
+        String leaveCalendarView = contentOf("gen/emission/views/Leave/Leave-calendar.html");
+        assertTrue(leaveCalendarView.contains("x-model=\"viewChoice\"") && leaveCalendarView.contains("x-h-button-group-radio=\"'table'\""),
+                "the calendar must offer the switch back to the entity's own browse page as the view group");
+        assertTrue(leaveCalendar.contains("if (value === 'table') this.goList();"),
+                "picking the table in the calendar's view group must open the entity's own browse page");
+        // The calendar's own chrome is translated, its events come from the shared mapping, and a
+        // reload hands over the events alone - Harmonia applies `view` on every config, so a config
+        // naming it would snap the calendar back to its initial view.
+        assertTrue(leaveCalendarView.contains(":data-today-label=") && leaveCalendarView.contains(":data-more-label="),
+                "the calendar must hand x-h-calendar its labels translated");
+        assertTrue(leaveCalendar.contains("window.HarmoniaCalendar.events("),
+                "the calendar must map rows through the shared HarmoniaCalendar");
+        assertTrue(leaveCalendar.contains("this.calCfg = { events: this.buildEvents() };"),
+                "a reload must keep the view the user navigated to");
         assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
                 "the personal list must offer the switch to the personal calendar");
 
@@ -4216,6 +4236,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // BY must link there. Both of the scope target's record surfaces carry the affordance - the
         // record sheet of its list (selected row) and the entity's own form (open record).
         assertTrue(leaveCalendar.contains("scopeId"), "a scoped calendar must read its scope from the route");
+        assertTrue(
+                leaveCalendarView.contains("x-h-chip-close") && leaveCalendar.contains("clearScope()")
+                        && leaveCalendar.contains("loadScopeText()"),
+                "a scoped calendar must name its scope record in a chip that drops the scope");
         assertTrue(
                 contentOf("gen/emission/views/Campaign/Campaign-manage-list.html").contains(
                         "openScopedCalendar('CampaignEvent', 'Campaign', selectedId)"),
@@ -4234,10 +4258,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the document list of a slots entity must stay reachable at /<Entity>/list");
         assertTrue(shellIndex.contains("x-route=\"/Visit/create\" x-template.target.app=\"./views/Visit/Visit-document.html\""),
                 "slot-click must create through the DOCUMENT editor, not a plain form");
-        assertTrue(contentOf("gen/emission/views/Visit/Visit-slots.html").contains("goList()"),
-                "the picker must offer the switch to the entity's own browse page");
-        assertTrue(contentOf("gen/emission/views/Visit/Visit-manage-list.html").contains("goSlots()"),
-                "the document list must offer the switch back to the picker");
+        String visitSlotsView = contentOf("gen/emission/views/Visit/Visit-slots.html");
+        String visitSlots = contentOf("gen/emission/js/components/pages/Visit/VisitSlotsPage.js");
+        assertTrue(
+                visitSlotsView.contains("x-model=\"viewChoice\"") && visitSlotsView.contains("x-h-button-group-radio=\"'table'\"")
+                        && visitSlots.contains("if (value === 'table') this.goList();"),
+                "the picker must offer the switch to the entity's own browse page as the view group");
+        assertTrue(
+                contentOf("gen/emission/views/Visit/Visit-manage-list.html").contains("x-h-button-group-radio=\"'slots'\"")
+                        && contentOf("gen/emission/js/components/pages/Visit/VisitManageListPage.js").contains(
+                                "if (value === 'slots') return this.goSlots();"),
+                "the document list must offer the switch back to the picker as the view group");
+        // #7837: the picker reads the bookings of the days it shows (range-change, a GTE/LT search on
+        // the start column) and a taken slot stays clickable, opening its booking.
+        assertTrue(visitSlotsView.contains("@range-change=\"onRange\""), "the picker must load the days it shows");
+        assertTrue(visitSlots.contains("operator: 'GTE'") && visitSlots.contains("operator: 'LT'"),
+                "the picker must ask the controller for the visible days only");
+        assertTrue(visitSlots.contains("clickable: true"), "a taken slot must stay clickable so it opens its booking");
 
         // #6482: a document whose LINE-ITEMS child declares view: calendar renders the items PANE as
         // the calendar - on the power, personal and partner document surfaces alike. This is the

@@ -660,6 +660,29 @@ document.addEventListener('alpine:init', () => {
     // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
     goSlots() { window.PineconeRouter.navigate('/${name}'); },
 #end
+#if($hierarchyProperty || $calendarView || $slotsView)
+    // The view switch (one x-h-button-group): the pressed option is what the page shows - Tree only
+    // while the records form a hierarchy - and picking the calendar or the slot picker leaves for it.
+    get viewChoice() {
+#if($hierarchyProperty)
+      return this.hasHierarchy ? this.viewMode : 'table';
+#else
+      return 'table';
+#end
+    },
+    set viewChoice(value) {
+#if($calendarView)
+      if (value === 'calendar') return this.goCalendar();
+#end
+#if($slotsView)
+      if (value === 'slots') return this.goSlots();
+#end
+#if($hierarchyProperty)
+      this.viewMode = value;
+      this.rememberViewMode(value);
+#end
+    },
+#end
     newEntity() {
       const route = '/${name}/create';
       if (this.inlineHosted()) return this.openInDialog(route, window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new');

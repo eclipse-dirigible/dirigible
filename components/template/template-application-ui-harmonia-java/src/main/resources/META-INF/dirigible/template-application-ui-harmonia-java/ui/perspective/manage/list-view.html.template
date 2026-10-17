@@ -122,51 +122,57 @@
     <!-- A filter query is in flight: the table keeps the previous rows (see displayState), this
          spinner just signals the refresh so the empty state is never shown mid-query (#7461). -->
     <span x-show="filtering" x-h-spinner aria-hidden="true"></span>
-#if($hierarchyProperty)
-    <!-- Tree / Table (#7613): a single-choice button group, offered once the records form a hierarchy;
-         the choice is remembered per user (rememberViewMode). -->
-    <div x-h-button-group x-model="viewMode" @change="rememberViewMode($event.detail.value)" x-show="hasHierarchy" x-cloak
-         :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')">
-      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'tree'">
-        <svg role="presentation" x-h-lucide data-lucide="list-tree"></svg>
-        <span x-text="T('$projectName:${tprefix}.defaults.tree', 'Tree')"></span>
+    <div class="flex-1"></div>
+
+#if($hierarchyProperty || $calendarView || $slotsView)
+    <!-- The view switch: one single-choice group, icon-only, always just before New. It holds the
+         other page of the same records - the calendar (intent `view: calendar|range`) or the slot
+         picker (`view: slots`), which owns /${name} while this page browses at /${name}/list - and,
+         for a `hierarchy:` list (#7613), the Tree / Table modes of this page; Tree shows once the
+         records form a hierarchy (and a group of Tree / Table alone only then). viewChoice routes the
+         pick (list-page.js). -->
+    <div x-h-button-group x-model="viewChoice" :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')"#if(!$calendarView && !$slotsView) x-show="hasHierarchy" x-cloak#end>
+#if($calendarView)
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'calendar'"
+              :aria-label="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')" :title="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')">
+        <svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg>
       </button>
-      <button type="button" x-h-button data-variant="outline" x-h-button-group-radio="'table'">
+#end
+#if($slotsView)
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'slots'"
+              :aria-label="T('$projectName:${tprefix}.defaults.slots', 'Slots')" :title="T('$projectName:${tprefix}.defaults.slots', 'Slots')">
+        <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
+      </button>
+#end
+#if($hierarchyProperty)
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'tree'" x-show="hasHierarchy" x-cloak
+              :aria-label="T('$projectName:${tprefix}.defaults.tree', 'Tree')" :title="T('$projectName:${tprefix}.defaults.tree', 'Tree')">
+        <svg role="presentation" x-h-lucide data-lucide="list-tree"></svg>
+      </button>
+#end
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'table'"
+#if($hierarchyProperty)
+              :aria-label="T('$projectName:${tprefix}.defaults.table', 'Table')" :title="T('$projectName:${tprefix}.defaults.table', 'Table')">
+#else
+              :aria-label="T('$projectName:${tprefix}.defaults.list', 'List')" :title="T('$projectName:${tprefix}.defaults.list', 'List')">
+#end
         <svg role="presentation" x-h-lucide data-lucide="table"></svg>
-        <span x-text="T('$projectName:${tprefix}.defaults.table', 'Table')"></span>
       </button>
     </div>
 #end
-    <div class="flex-1"></div>
 
     <button x-h-button data-variant="primary" @click="newEntity()">
       <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
 
-    <!-- Everything discretionary: the exports, the other views of the same records, and whatever the
-         customActions extension point contributes to this page. -->
+    <!-- Everything discretionary: the exports and whatever the customActions extension point
+         contributes to this page. -->
     <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown
             :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')">
       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
     </button>
     <ul x-h-menu data-align="bottom-end">
-#if($calendarView)
-      <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
-           this browse page lives at /${name}/list. -->
-      <li x-h-menu-item @click="goCalendar()">
-        <svg role="presentation" x-h-lucide data-lucide="calendar"></svg>
-        <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
-      </li>
-#end
-#if($slotsView)
-      <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
-           this browse page lives at /${name}/list. -->
-      <li x-h-menu-item @click="goSlots()">
-        <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
-        <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
-      </li>
-#end
       <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
       <li x-h-menu-item :aria-disabled="sortedItems.length === 0" @click="exportCsv()">
         <svg role="presentation" x-h-lucide data-lucide="download"></svg>

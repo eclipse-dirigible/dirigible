@@ -8,17 +8,29 @@
  * Slots page for ${name} — an appointment/booking picker built on Harmonia x-h-slot-picker.
  * Free slots (from ${slotOpen} to ${slotClose}, every ${slotStep} min) are bookable; picking one opens
  * the shared ${name}FormPage create form prefilled with the chosen datetime (?${slotStartProperty}=).
- * Existing bookings are loaded so their slots can be shown taken.
+ * The bookings of the days in view are loaded (range-change) and shown taken; a taken slot opens its
+ * booking.
  */
+## The Java type of the start column decides how a day boundary is written into the range search:
+## an Instant is an absolute moment (the browser's local midnight), a LocalDateTime / LocalDate is not.
+#set($slotStartType = "")
+#foreach($property in $properties)
+#if($property.name == "${slotStartProperty}")
+#set($slotStartType = "$!{property.dataTypeJavaClass}")
+#end
+#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}SlotsPage', () => ({
     ...basePage(),
     state: 'loading',
     error: null,
     items: [],
+    // The days in view, as the picker reports them (range-change): { from, to } as YYYY-MM-DD.
+    range: null,
     // Config object for x-h-slot-picker (shorthand start/end/step + disabled weekdays). fillEmptyDays
     // gives every day `slots` does not list - all of them while nothing is booked - the shorthand
-    // schedule; without it an empty `slots` array means no slots at all (Harmonia 3.6.0+).
+    // schedule; without it an empty `slots` array means no slots at all (Harmonia 3.6.0+). Replacing
+    // `slots` keeps the days in view.
     slotCfg: {
       start: '${slotOpen}',
       end: '${slotClose}',
@@ -27,89 +39,156 @@ document.addEventListener('alpine:init', () => {
       disabledDays: [${slotDisabledDays}],
 #end
       fillEmptyDays: true,
+      showNowIndicator: true,
       slots: []
     },
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
     caView: '${name}',
 
-    async init() {
-      await this.load();
+    // The view switch (x-h-button-group): this page is the picker; picking the table opens the
+    // entity's own browse page.
+    get viewChoice() { return 'slots'; },
+    set viewChoice(value) { if (value === 'table') this.goList(); },
+
+    init() {
+      // No load here: the picker reports the days it shows once it initialises (range-change), and
+      // that report is what loads them.
       // A custom action changes rows this view shows (a transition flips a status, a create-from adds
       // a record) through its own endpoint, not this page's editing path. Re-read on every action so
-      // what is on screen agrees with the server (issue #7073).
-      this.onActionDone(() => this.load());
+      // what is on screen agrees with the server (issue #7073) - quietly, keeping the picker up.
+      this.onActionDone(() => this.load(true));
     },
 
-    async load() {
-      this.state = 'loading';
+    // range-change: the user paged, picked a date or pressed Today. The picker stays on screen.
+    onRange(e) {
+      if (!e || !e.detail) return;
+      this.range = { from: e.detail.from, to: e.detail.to };
+      this.load(true);
+    },
+
+    async load(quiet) {
+      if (!this.range) return;
+      if (!quiet || this.state !== 'default') this.state = 'loading';
       this.error = null;
+      const range = this.range;
       try {
-        this.items = await App.services.api.getAll(this.apiPath);
-        // Mark already-booked datetimes as taken (best-effort: keys the picker off exact start times).
+        const items = await App.services.api.post(this.apiPath + '/search', {
+          conditions: [
+            { propertyName: '${slotStartProperty}', operator: 'GTE', value: this.dayBoundary(range.from) },
+            { propertyName: '${slotStartProperty}', operator: 'LT', value: this.dayBoundary(this.nextDay(range.to)) }
+          ]
+        });
+        // A slower answer for a range the user already left must not paint over the current one.
+        if (range !== this.range) return;
+        this.items = items || [];
         this.slotCfg = { ...this.slotCfg, slots: this.bookedSlots() };
         this.state = 'default';
       } catch (e) {
+        if (range !== this.range) return;
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ${menuLabel}.');
         this.state = 'error';
       }
       this.refreshIcons();
     },
 
-    // Build explicit unavailable slots for the datetimes already booked, so they render taken. A day
-    // with any booked slot is expanded to its full generated grid (open..close by step) with the booked
-    // ones flagged unavailable; days with no bookings fall back to the shorthand schedule (fillEmptyDays).
-    bookedSlots() {
-      const booked = {};
-      for (const row of (this.items || [])) {
-        const iso = this.toISO(row.${slotStartProperty});
-        if (!iso || iso.indexOf('T') < 0) continue;
-        const [d, t] = iso.split('T');
-        (booked[d] = booked[d] || new Set()).add(t.slice(0, 5));
+    // The start of a day (YYYY-MM-DD) in the shape the controller coerces into the start column's type.
+    dayBoundary(day) {
+#if($slotStartType == "java.time.Instant")
+      const [y, m, d] = day.split('-').map(Number);
+      return new Date(y, m - 1, d).toISOString();
+#elseif($slotStartType == "java.time.LocalDate")
+      return day;
+#else
+      return day + 'T00:00:00';
+#end
+    },
+    nextDay(day) {
+      const [y, m, d] = day.split('-').map(Number);
+      const next = new Date(y, m - 1, d + 1);
+      const p = n => String(n).padStart(2, '0');
+      return next.getFullYear() + '-' + p(next.getMonth() + 1) + '-' + p(next.getDate());
+    },
+
+    // A booking's start as the browser's LOCAL day and HH:MM - the grid the picker draws. Jackson
+    // sends a LocalDateTime as an array (already local) and an Instant as epoch seconds (an absolute
+    // moment, so it goes through Date); an ISO string with a zone is a moment too. null when unset or
+    // date-only (a slot needs a time).
+    localSlot(v) {
+      const p = n => String(n).padStart(2, '0');
+      if (Array.isArray(v)) {
+        if (v.length <= 3) return null;
+        return { date: v[0] + '-' + p(v[1]) + '-' + p(v[2]), time: p(v[3] || 0) + ':' + p(v[4] || 0) };
       }
-      const out = [];
+      let moment = null;
+      if (typeof v === 'number') moment = new Date(v < 1e12 ? v * 1000 : v);
+      else if (typeof v === 'string' && /(Z|[+-]\d{2}:?\d{2})$/.test(v)) moment = new Date(v);
+      if (moment) {
+        if (isNaN(moment.getTime())) return null;
+        return { date: moment.getFullYear() + '-' + p(moment.getMonth() + 1) + '-' + p(moment.getDate()), time: p(moment.getHours()) + ':' + p(moment.getMinutes()) };
+      }
+      if (typeof v === 'string' && v.indexOf('T') > 0) {
+        const [date, time] = v.split('T');
+        return { date: date, time: time.slice(0, 5) };
+      }
+      return null;
+    },
+
+    // Explicit slots for the days that have a booking: the day's full grid (open..close by step), each
+    // booked start taken - coloured, labelled and still clickable, so it opens its booking. A booking
+    // off the grid gets a slot of its own. Days with no booking fall back to the shorthand schedule
+    // (fillEmptyDays).
+    bookedSlots() {
+      const booked = {};   // day -> HH:MM -> booking id
+      for (const row of this.items) {
+        const at = this.localSlot(row.${slotStartProperty});
+        if (!at) continue;
+        const day = (booked[at.date] = booked[at.date] || {});
+        if (!(at.time in day)) day[at.time] = row.${primaryKeysString};
+      }
+      const p = n => String(n).padStart(2, '0');
+      const hhmm = minutes => p(Math.floor(minutes / 60)) + ':' + p(minutes % 60);
       const step = ${slotStep};
       const [oh, om] = '${slotOpen}'.split(':').map(Number);
       const [ch, cm] = '${slotClose}'.split(':').map(Number);
       const open = oh * 60 + om, close = ch * 60 + cm;
-      const p = n => String(n).padStart(2, '0');
-      for (const d of Object.keys(booked)) {
-        for (let m = open; m < close; m += step) {
-          const s = p(Math.floor(m / 60)) + ':' + p(m % 60);
-          const e = p(Math.floor((m + step) / 60)) + ':' + p((m + step) % 60);
-          out.push({ date: d, start: s, end: e, available: !booked[d].has(s) });
+      const entity = window.T ? window.T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') : '${entityLabel}';
+      const out = [];
+      for (const date of Object.keys(booked)) {
+        const day = booked[date];
+        const starts = new Set();
+        for (let m = open; m < close; m += step) starts.add(hhmm(m));
+        Object.keys(day).forEach(t => starts.add(t));
+        for (const start of [...starts].sort()) {
+          const [sh, sm] = start.split(':').map(Number);
+          const slot = { date: date, start: start, end: hhmm(Math.min(sh * 60 + sm + step, 24 * 60 - 1)) };
+          if (start in day) {
+            const label = entity + ' #' + day[start];
+            Object.assign(slot, { available: false, clickable: true, color: 'blue', description: label, tooltip: label, bookingId: day[start] });
+          }
+          out.push(slot);
         }
       }
       return out;
     },
 
-    // Jackson java.time -> ISO string (see the calendar page; slots need a datetime).
-    toISO(v) {
-      if (v === undefined || v === null || v === '') return '';
-      if (Array.isArray(v)) {
-        const p = n => String(n).padStart(2, '0');
-        const date = v[0] + '-' + p(v[1]) + '-' + p(v[2]);
-        return v.length <= 3 ? date : date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
-      }
-      if (typeof v === 'number') {
-        // Jackson serializes Instant/Timestamp as epoch SECONDS (with nanos); JS Date wants millis.
-        const ms = v < 1e12 ? v * 1000 : v;
-        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
-      }
-      return String(v);
-    },
-
-    // Slot click -> create the booking prefilled with the chosen datetime (YYYY-MM-DDTHH:MM).
+    // A free slot -> create the booking prefilled with the chosen datetime (YYYY-MM-DDTHH:MM); a taken
+    // one -> open its booking.
     onSlotClick(e) {
       const slot = e && e.detail ? e.detail.slot : null;
-      if (!slot || slot.available === false) return;
+      if (!slot) return;
+      if (slot.available === false) {
+        const id = slot.item ? slot.item.bookingId : undefined;
+        if (id !== undefined && id !== null) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
+        return;
+      }
       const val = slot.date + 'T' + slot.start;
       window.PineconeRouter.navigate('/${name}/create?${slotStartProperty}=' + encodeURIComponent(val));
     },
     newEntity() { window.PineconeRouter.navigate('/${name}/create'); },
 
-    // Switch to the entity's own browse page (list / master / document list). The picker took over
-    // /${name}, so that layout browses at /${name}/list.
+    // Switch to the entity's own browse page (list / document list). The picker took over /${name},
+    // so that layout browses at /${name}/list.
     goList() { window.PineconeRouter.navigate('/${name}/list'); }
   }));
 }, { once: true });

@@ -258,5 +258,18 @@ document.addEventListener('alpine:init', () => {
     // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
     goSlots() { window.PineconeRouter.navigate('/${name}'); },
 #end
+#if($calendarView || $slotsView)
+
+    // The view switch (x-h-button-group): this page is the list; picking the other view leaves for it.
+    get viewChoice() { return 'table'; },
+    set viewChoice(value) {
+#if($calendarView)
+      if (value === 'calendar') this.goCalendar();
+#end
+#if($slotsView)
+      if (value === 'slots') this.goSlots();
+#end
+    },
+#end
   }));
 }, { once: true });

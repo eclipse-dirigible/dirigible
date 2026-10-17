@@ -20,20 +20,28 @@
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+#if($calendarView || $slotsView)
+    <!-- The view switch, the one every browse page of these records carries: the calendar (intent
+         `view: calendar|range`) or the slot picker (`view: slots`) owns /${name}, and this list lives
+         at /${name}/list. -->
+    <div x-h-button-group x-model="viewChoice" :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')">
 #if($calendarView)
-    <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
-         this list lives at /${name}/list. -->
-    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
-      <svg role="presentation" x-h-lucide data-lucide="calendar"></svg><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
-    </button>
+      <button type="button" x-h-button data-variant="outline" data-size="icon-sm" x-h-button-group-radio="'calendar'"
+              :aria-label="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')" :title="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')">
+        <svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg>
+      </button>
 #end
 #if($slotsView)
-    <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
-         this browse page lives at /${name}/list. -->
-    <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
-      <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
-      <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
-    </button>
+      <button type="button" x-h-button data-variant="outline" data-size="icon-sm" x-h-button-group-radio="'slots'"
+              :aria-label="T('$projectName:${tprefix}.defaults.slots', 'Slots')" :title="T('$projectName:${tprefix}.defaults.slots', 'Slots')">
+        <svg role="presentation" x-h-lucide data-lucide="clock"></svg>
+      </button>
+#end
+      <button type="button" x-h-button data-variant="outline" data-size="icon-sm" x-h-button-group-radio="'table'"
+              :aria-label="T('$projectName:${tprefix}.defaults.list', 'List')" :title="T('$projectName:${tprefix}.defaults.list', 'List')">
+        <svg role="presentation" x-h-lucide data-lucide="table"></svg>
+      </button>
+    </div>
 #end
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">

@@ -7,14 +7,19 @@
 /*
  * Calendar page for ${name} — the entity's records rendered as events on a Harmonia x-h-calendar.
  * Fetches through the same generated controller as the manage list; create/edit reuse the shared
- * ${name}FormPage (date-click -> /create, event-click -> /{id}/edit).
+ * ${name}FormPage (date-click -> /create, event-click -> /{id}/edit). The row-to-event mapping is the
+ * shared one (services/calendarEvents.js, window.HarmoniaCalendar) every calendar surface uses.
  */
 ## When the calendar title property is a RELATION, resolve the FK to its referenced label exactly
 ## like the list columns do - otherwise every event would carry a raw id as its title.
 #set($titleRelation = false)
+#set($scopeRelation = false)
 #foreach($property in $properties)
 #if($property.name == "$!{calendarTitleProperty}" && ($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"))
 #set($titleRelation = $property)
+#end
+#if($property.name == "$!{calendarScopeProperty}" && $property.widgetDropdownControllerUrl)
+#set($scopeRelation = $property)
 #end
 #end
 ## A relation labelled by a number: { stampOn: issue } field shows the draft marker, never its UUID
@@ -27,26 +32,67 @@ document.addEventListener('alpine:init', () => {
     state: 'loading',
     error: null,
     items: [],
-    // Reactive config for x-h-calendar; repopulated after each load so the calendar re-renders.
+    // Config for x-h-calendar. Harmonia applies `view` (and `date`) on EVERY config it is handed, so
+    // only this first one names the initial view; a reload hands over the events alone and the
+    // calendar stays on the view and period the user navigated to.
     calCfg: { view: '${calendarInitialView}', events: [] },
 
     // Controller path for ${name}, relative to App.config.restBase (api.* prepends it).
     apiPath: '/${javaPerspectiveName}/${name}Controller',
     // Entity name for developer-contributed custom actions ($store.customActions).
     caView: '${name}',
+
+    // The view switch (x-h-button-group): this page is the calendar; picking the table opens the
+    // entity's own browse page.
+    get viewChoice() { return 'calendar'; },
+    set viewChoice(value) { if (value === 'table') this.goList(); },
 #if($calendarScopeProperty)
+
     // Scope: when opened as /${name}?${calendarScopeProperty}=<id> the calendar shows/creates only the
     // records of that parent (e.g. day allocations of one timesheet). Read from the hash query.
     scopeId: null,
+    scopeText: '',
     readScope() {
       const q = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
       const v = new URLSearchParams(q).get('${calendarScopeProperty}');
       this.scopeId = (v === null || v === '') ? null : v;
+      this.scopeText = this.scopeId ? '#' + this.scopeId : '';
     },
     // Append the active scope so the create form presets the parent FK alongside the date.
     withScope(qs) {
       if (!this.scopeId) return qs;
       return qs + (qs ? '&' : '?') + '${calendarScopeProperty}=' + encodeURIComponent(this.scopeId);
+    },
+    // What the scope chip names: the scope property, and the record it filters by.
+    get scopeLabel() {
+#if($scopeRelation)
+      const label = '#if($scopeRelation.widgetLabel)${scopeRelation.widgetLabelJs}#else${scopeRelation.name}#end';
+      return window.T ? window.T('$projectName:${tprefix}.t.${scopeRelation.dataName}', label) : label;
+#else
+      return '${calendarScopeProperty}';
+#end
+    },
+#if($scopeRelation)
+    // The scoped record's label, read after the events so the calendar paints first; the chip shows
+    // the bare id until it arrives (and keeps it when the record cannot be read).
+    async loadScopeText() {
+      const id = this.scopeId;
+      try {
+        const record = await App.services.api.get('${scopeRelation.widgetDropdownControllerUrl}/' + encodeURIComponent(id), { baseUrl: '' });
+        const label = record ? #labelOf($scopeRelation "record") : null;
+        if (id === this.scopeId && label !== undefined && label !== null && String(label) !== '') this.scopeText = String(label);
+      } catch (e) {
+        console.warn('[${name}CalendarPage] the scope record could not be read', e);
+      }
+    },
+#end
+    // Drop the scope: every event shows again. The hash loses its query in place - no navigation, the
+    // page is the same route.
+    clearScope() {
+      this.scopeId = null;
+      this.scopeText = '';
+      window.history.replaceState(null, '', '#/${name}');
+      this.load(true);
     },
 #end
 
@@ -58,10 +104,13 @@ document.addEventListener('alpine:init', () => {
 #if($titleRelation)
       this.loadTitleLookup();
 #end
+#if($scopeRelation)
+      if (this.scopeId) this.loadScopeText();
+#end
       // A custom action changes rows this view shows (a transition flips a status, a create-from adds
       // a record) through its own endpoint, not this page's editing path. Re-read on every action so
-      // what is on screen agrees with the server (issue #7073).
-      this.onActionDone(() => this.load());
+      // what is on screen agrees with the server (issue #7073) - quietly, keeping the calendar up.
+      this.onActionDone(() => this.load(true));
     },
 #if($titleRelation)
 
@@ -73,13 +122,18 @@ document.addEventListener('alpine:init', () => {
         const map = {};
         (rows || []).forEach((r) => { map[r.${titleRelation.widgetDropDownKey}] = #labelOf($titleRelation "r"); });
         this.titleLookup = map;
-        this.calCfg = { view: this.calCfg.view, events: this.buildEvents() };
-      } catch (e) { /* fail-soft: the raw value stays the title fallback */ }
+        this.calCfg = { events: this.buildEvents() };
+      } catch (e) {
+        // Fail-soft: the raw value stays the title fallback.
+        console.warn('[${name}CalendarPage] the title labels could not be read', e);
+      }
     },
 #end
 
-    async load() {
-      this.state = 'loading';
+    // A quiet reload (after an action, or a dropped scope) keeps the calendar on screen; only the
+    // first load, or a retry from the error state, shows the spinner.
+    async load(quiet) {
+      if (!quiet || this.state !== 'default') this.state = 'loading';
       this.error = null;
       try {
 #if($calendarScopeProperty)
@@ -89,7 +143,7 @@ document.addEventListener('alpine:init', () => {
 #else
         this.items = await App.services.api.getAll(this.apiPath);
 #end
-        this.calCfg = { view: '${calendarInitialView}', events: this.buildEvents() };
+        this.calCfg = { events: this.buildEvents() };
         this.state = 'default';
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ${menuLabel}.');
@@ -98,26 +152,22 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
-    // Map each record to a calendar event. Rows with no start value are skipped.
+    // The rows as calendar events (rows with no start value are skipped).
     buildEvents() {
-      return (this.items || []).map(row => {
-        const start = this.toISO(row.${calendarStartProperty});
-        if (!start) return null;
-        const ev = {
-          id: String(row.${primaryKeysString}),
-          title: this.titleFor(row),
-          start: start,
-          allDay: #if($calendarRange)true#{else}this.isDateOnly(row.${calendarStartProperty})#end
-        };
+      return window.HarmoniaCalendar.events(this.items, {
+        start: '${calendarStartProperty}',
 #if($calendarEndProperty)
-        const end = this.toISO(row.${calendarEndProperty});
-        if (end) ev.end = end;
+        end: '${calendarEndProperty}',
 #end
 #if($calendarColorProperty)
-        ev.color = this.colorFor(row.${calendarColorProperty});
+        color: '${calendarColorProperty}',
 #end
-        return ev;
-      }).filter(Boolean);
+        range: #if($calendarRange)true#{else}false#end
+      }, {
+        primaryKey: '${primaryKeysString}',
+        label: '${menuLabel}',
+        title: (row) => this.titleFor(row)
+      });
     },
 
     titleFor(row) {
@@ -127,66 +177,28 @@ document.addEventListener('alpine:init', () => {
       const resolved = this.titleLookup[t];
       if (resolved !== undefined && resolved !== null && String(resolved) !== '') return String(resolved);
 #end
-      if (t !== undefined && t !== null && String(t) !== '') return String(t);
+      return t;
+#else
+      return null;
 #end
-      return '${menuLabel} #' + row.${primaryKeysString};
-    },
-
-    // Jackson serializes java.time as arrays (LocalDate [y,m,d]; LocalDateTime [y,m,d,h,mi,s,ns]) and
-    // Instant/Timestamp as a numeric epoch. Convert any of those (or a plain ISO string) to the ISO
-    // string x-h-calendar expects; '' when unset.
-    toISO(v) {
-      if (v === undefined || v === null || v === '') return '';
-      if (Array.isArray(v)) {
-        const p = n => String(n).padStart(2, '0');
-        const date = v[0] + '-' + p(v[1]) + '-' + p(v[2]);
-        if (v.length <= 3) return date;
-        return date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
-      }
-      if (typeof v === 'number') {
-        // Jackson serializes Instant/Timestamp as epoch SECONDS (with nanos); JS Date wants millis.
-        const ms = v < 1e12 ? v * 1000 : v;
-        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
-      }
-      return String(v);
-    },
-    isDateOnly(v) {
-      return Array.isArray(v) ? v.length <= 3 : (typeof v === 'string' && v.length <= 10);
-    },
-
-    // Deterministic categorical colour from the Harmonia calendar palette.
-    colorFor(v) {
-      const palette = ['blue', 'green', 'purple', 'orange', 'teal', 'pink', 'indigo', 'yellow', 'red', 'gray'];
-      const key = (v === undefined || v === null) ? '' : String(v);
-      let h = 0;
-      for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-      return palette[h % palette.length];
     },
 
     // Empty-cell click -> create, prefilling the start field from the clicked day (and the slot time in
     // week/day views). The shared form presets any field whose name matches a query param on create, so
-    // ?${calendarStartProperty}=<value> lands on the date/datetime input; a datetime start also gets the
-    // clicked HH:MM.
+    // ?${calendarStartProperty}=<value> lands on the date/datetime input.
     onDateClick(e) {
-      const d = e && e.detail ? e.detail.date : null;
-      let qs = '';
-      if (d instanceof Date && !isNaN(d.getTime())) {
-        const p = n => String(n).padStart(2, '0');
-        let val = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
-        const time = e.detail.time;
-        if (time) val += 'T' + time;
-        qs = '?${calendarStartProperty}=' + encodeURIComponent(val);
-      }
+      const value = window.HarmoniaCalendar.clickedDateValue(e);
+      const qs = value ? '?${calendarStartProperty}=' + encodeURIComponent(value) : '';
       window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope(qs)#{else}qs#end);
     },
     onEventClick(e) {
-      const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
-      if (id) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
+      const id = window.HarmoniaCalendar.clickedEventId(e);
+      if (id !== null) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
     },
     newEntity() { window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope('')#{else}''#end); },
 
-    // Switch to the entity's own browse page (list / master / document list). The calendar took over
-    // /${name}, so that layout browses at /${name}/list.
+    // Switch to the entity's own browse page (list / document list). The calendar took over /${name},
+    // so that layout browses at /${name}/list.
     goList() { window.PineconeRouter.navigate('/${name}/list'); }
   }));
 }, { once: true });

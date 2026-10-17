@@ -6,44 +6,88 @@
   (@event-click / @date-click reference bare handlers so Alpine passes the event - avoids a Velocity
   $event reference in the attribute.)
 -->
-<div x-data="${name}CalendarPage" class="vbox size-full">
+<div x-data="${name}CalendarPage" class="vbox size-full gap-4 p-4">
 
-  <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
-    <div x-h-toolbar-spacer></div>
-    <!-- Developer-contributed page actions for this view (customActions extension point). -->
-    <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
-      <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action)">
-        <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+  <!-- One action row, the manage list's: the page carries no title (the shell's breadcrumb names it),
+       the view switch and New stay visible, and the contributed actions collapse into the overflow. -->
+  <div class="hbox flex-wrap items-center gap-2">
+#if($calendarScopeProperty)
+    <!-- Opened as /${name}?${calendarScopeProperty}=<id>: the events are those of one record, and the
+         chip says which. Its x drops the scope and shows every event. -->
+    <div x-h-chip data-variant="information" x-show="scopeId" x-cloak>
+      <span class="text-muted-foreground" x-text="scopeLabel + ':'"></span>
+      <span class="truncate" style="max-width: 14rem" x-text="scopeText"></span>
+      <button x-h-chip-close :aria-label="T('$projectName:${tprefix}.defaults.removeFilter', 'Remove {{name}} filter', { name: scopeLabel })"
+              @click="clearScope()"></button>
+    </div>
+#end
+    <div class="flex-1"></div>
+
+    <!-- The calendar is an ADDITIONAL browse page: the entity's own layout (its list / document list)
+         browses at /${name}/list, and this is the same switch that list carries. -->
+    <div x-h-button-group x-model="viewChoice" :aria-label="T('$projectName:${tprefix}.defaults.listView', 'View')">
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'calendar'"
+              :aria-label="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')" :title="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')">
+        <svg role="presentation" x-h-lucide data-lucide="calendar-days"></svg>
       </button>
-    </template>
-    <!-- The calendar is an ADDITIONAL browse page: this switches to the entity's own layout (its list /
-         master / document list) at /${name}/list, which carries the mirror switch back here. -->
-    <button x-h-button data-variant="outline" data-size="sm" @click="goList()">
-      <svg role="presentation" x-h-lucide data-lucide="table"></svg>
-      <span x-text="T('$projectName:${tprefix}.defaults.list', 'List')"></span>
-    </button>
+      <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'table'"
+              :aria-label="T('$projectName:${tprefix}.defaults.list', 'List')" :title="T('$projectName:${tprefix}.defaults.list', 'List')">
+        <svg role="presentation" x-h-lucide data-lucide="table"></svg>
+      </button>
+    </div>
+
     <button x-h-button data-variant="primary" @click="newEntity()">
       <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
+
+    <!-- Developer-contributed page actions for this view (customActions extension point): never the
+         primary, so they live behind the overflow, which shows only when there is one. -->
+    <template x-if="$store.customActions.getActions(caView, 'page').length">
+      <div class="inline-flex">
+        <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown
+                :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')">
+          <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+        </button>
+        <ul x-h-menu data-align="bottom-end">
+          <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
+            <li x-h-menu-item @click="$store.customActions.trigger(action)"
+                x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+          </template>
+        </ul>
+      </div>
+    </template>
   </div>
 
-  <!-- Loading -->
-  <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
+  <!-- Loading (the first load only - a reload keeps the calendar on screen) -->
+  <div x-show="state === 'loading'"><div x-h-spinner></div></div>
 
   <!-- Error -->
-  <div x-show="state === 'error'" x-h-info-page class="p-4">
+  <div x-show="state === 'error'" x-h-info-page>
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="error"></div>
     </div>
+    <div x-h-info-page-content>
+      <button x-h-button data-variant="primary" @click="load()" x-text="T('$projectName:${tprefix}.defaults.retry', 'Retry')"></button>
+    </div>
   </div>
 
-  <!-- Calendar -->
-  <div x-show="state === 'default'" style="flex: 1; min-height: 0; padding: 0.5rem;">
-    <div x-h-calendar="calCfg" style="height: 100%; min-height: 560px;"
+  <!-- Calendar. x-h-calendar draws its own toolbar (period, Today, view switcher), so its labels are
+       handed to it translated. -->
+  <div x-show="state === 'default'" class="flex-1 min-h-0">
+    <div x-h-calendar="calCfg" class="h-full" style="min-height: 560px;"
+         :aria-label="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"
+         :data-today-label="T('$projectName:${tprefix}.defaults.today', 'Today')"
+         :data-day-label="T('$projectName:${tprefix}.defaults.day', 'Day')"
+         :data-week-label="T('$projectName:${tprefix}.defaults.week', 'Week')"
+         :data-month-label="T('$projectName:${tprefix}.defaults.month', 'Month')"
+         :data-year-label="T('$projectName:${tprefix}.defaults.year', 'Year')"
+         :data-aria-prev="T('$projectName:${tprefix}.defaults.previous', 'Previous')"
+         :data-aria-next="T('$projectName:${tprefix}.defaults.next', 'Next')"
+         :data-aria-views="T('$projectName:${tprefix}.defaults.changeView', 'Change view')"
+         :data-more-label="T('$projectName:${tprefix}.defaults.moreEvents', '+{count} more')"
          @event-click="onEventClick" @date-click="onDateClick"></div>
   </div>
 
