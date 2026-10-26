@@ -43,6 +43,12 @@
       </button>
     </div>
 #end
+    <!-- The Inbox's Refresh (#8130): re-reads the rows under the search, sort and page in force, and
+         the stamp says how old the rows on screen are. -->
+    <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span>
+    </button>
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
       <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>

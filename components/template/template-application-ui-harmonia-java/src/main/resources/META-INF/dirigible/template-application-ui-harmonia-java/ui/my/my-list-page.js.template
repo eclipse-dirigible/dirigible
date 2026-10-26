@@ -52,6 +52,8 @@ document.addEventListener('alpine:init', () => {
 #end
       await this.load();
       this.loadLookups();
+      // Back on this list through the sidebar or the hosting shell, which re-renders nothing (#8130).
+      this.onReentered(() => this.refresh());
     },
 
     lookups: {},   // relationship column name -> { fkValue: label }
@@ -75,15 +77,23 @@ document.addEventListener('alpine:init', () => {
       this.lookups = all;
     },
 
-    async load() {
-      this.state = 'loading';
+    // `quiet` keeps the current rows on screen until the fresh rows arrive.
+    async load(quiet) {
+      if (!quiet) this.state = 'loading';
       try {
         this.items = await App.services.api.get(this.apiPath) || [];
         this.state = this.items.length ? 'default' : 'empty';
+        this.lastUpdated = new Date();
       } catch (e) {
         this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not load your ${menuLabel}.');
         this.state = 'error';
       }
+    },
+
+    // The header's Refresh (#8130): the rows again, without blanking the table meanwhile.
+    async refresh() {
+      await this.load(true);
+      this.loadLookups();
     },
 
     display(row, col) {

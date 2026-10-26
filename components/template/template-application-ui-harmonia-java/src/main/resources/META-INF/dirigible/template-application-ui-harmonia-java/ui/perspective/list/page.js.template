@@ -50,16 +50,24 @@ document.addEventListener('alpine:init', () => {
       // the table, the selected record's pane and the status-filtered action buttons agree with the
       // server (issue #7073).
       this.onActionDone(async () => { await this.load(); this.loadLookups(); });
+      // Back on this list through the sidebar or the hosting shell, which re-renders nothing (#8130).
+      this.onReentered(() => this.refresh());
     },
 
-    async load() {
-      this.state = 'loading';
+    // `quiet` keeps the current rows and page on screen until the fresh rows arrive.
+    async load(quiet) {
+      if (!quiet) {
+        this.state = 'loading';
+        this.currentPage = 1;
+      }
       this.error = null;
-      this.currentPage = 1;
       try {
         // TODO (Phase 2): use the controller's $limit/$offset + /count for server-side paging.
         this.items = await App.services.api.getAll(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
+        // A quiet re-read keeps the page, unless the rows it stood on are gone.
+        this.currentPage = Math.min(this.currentPage, this.totalPages);
+        this.lastUpdated = new Date();
         // Keep the current selection if it still exists, else clear it.
         if (this.selected) {
           this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
@@ -69,6 +77,12 @@ document.addEventListener('alpine:init', () => {
         this.state = 'error';
       }
       this.refreshIcons();
+    },
+
+    // The header's Refresh (#8130): the rows again, under the search, sort and page in force.
+    async refresh() {
+      await this.load(true);
+      this.loadLookups();
     },
 
     // Right-pane selection (the table shows only the major columns; the pane shows every property).

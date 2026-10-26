@@ -444,8 +444,16 @@ document.addEventListener('alpine:init', () => {
         this.hostedUrl = this.appUrl(item, '');
         this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+      } else {
+        // The app is already on screen: its page re-reads instead (#8130).
+        this.reenterHostedApp();
       }
       this.closeSideNav();
+    },
+
+    /** Signal the page of the hosted app that the user came back to it, so it re-reads (#8130). */
+    reenterHostedApp() {
+      if (this.hostedId && this.$refs.hostedFrame) App.pageReentered(this.$refs.hostedFrame.contentWindow);
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
@@ -587,6 +595,9 @@ document.addEventListener('alpine:init', () => {
       try { localStorage.setItem(PROJECTION_KEY, p.id); } catch (e) { /* no storage */ }
       if (this.hostedId && !this.visibleGroups().some(g => (g.items || []).some(i => i.id === this.hostedId))) {
         this.navigate('/dashboard');
+      } else {
+        // The hosted app stays on screen under the new projection: its page re-reads (#8130).
+        this.reenterHostedApp();
       }
     },
 
