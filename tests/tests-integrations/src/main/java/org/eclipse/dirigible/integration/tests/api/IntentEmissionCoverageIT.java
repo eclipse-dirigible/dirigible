@@ -3705,6 +3705,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 unitManageView.indexOf("cycleSort('UnitPrice')") >= 0
                         && unitManageView.indexOf("cycleSort('UnitPrice')") < unitManageView.indexOf("cycleSort('Name')"),
                 "list: must put UnitPrice before Name in the list header");
+        // #8132: the header's default text is the label derived from unitPrice, as the record sheet's
+        // is - it is what an English user reads, and it used to be the raw name.
+        String unitHeader = unitManageView.substring(unitManageView.indexOf("<thead"), unitManageView.indexOf("</thead>"));
+        assertTrue(unitHeader.contains("', 'Unit Price')") && !unitHeader.contains("', 'UnitPrice')"),
+                "the list header must default to the property's label, not its name: " + unitHeader);
         assertFalse(unitManageView.contains("cycleSort('PackPrice')"), "a property list: leaves out must not be a list column");
         assertTrue(
                 unitManageList.indexOf("{ name: 'UnitPrice'") >= 0

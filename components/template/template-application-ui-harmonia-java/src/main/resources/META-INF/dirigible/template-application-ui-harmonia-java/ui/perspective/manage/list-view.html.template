@@ -292,9 +292,12 @@
               <tr x-h-table-row>
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
+## showed raw wherever the catalog had no entry for the column, which is English.
+#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
                 <th x-h-table-head scope="col"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <button class="hbox #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")w-full justify-end #{end}cursor-pointer items-center gap-1" @click="cycleSort('${property.name}')">
-                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
+                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
                     <svg x-h-lucide role="presentation" class="size-4"
                          :data-lucide="isSortedAsc('${property.name}') ? 'arrow-up' : (isSortedDesc('${property.name}') ? 'arrow-down' : 'chevrons-up-down')"></svg>
                   </button>
