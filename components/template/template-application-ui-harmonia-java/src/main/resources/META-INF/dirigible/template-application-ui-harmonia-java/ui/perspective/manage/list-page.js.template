@@ -32,7 +32,8 @@ document.addEventListener('alpine:init', () => {
     pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
-    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ,
+    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> a
+    // { from, to } range of whole days, either end open (#8131; `instant` marks a timestamp column),
     // boolean -> EQ with a real true/false picked from Yes/No (a LIKE '%true%' reaches the controller as
     // Boolean.valueOf("%true%") = false and matches nothing, issue #7720).
     // FK columns render a dropdown from the same lookup maps the list loads. Order + `number` mirror
@@ -44,7 +45,7 @@ document.addEventListener('alpine:init', () => {
     filterColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end },
 #end
 #end
     ],
@@ -469,24 +470,74 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Per-column server-side filter row ------------------------------------------------------
-    // Build POST /search conditions from the non-empty column filters (string -> LIKE, else EQ).
+    // Build POST /search conditions from the non-empty column filters (string -> LIKE, a date range ->
+    // GTE / LT, else EQ).
     buildConditions() {
       const conds = [];
       for (const col of this.filterColumns) {
         const raw = this.columnFilters[col.name];
-        if (raw === undefined || raw === null || String(raw).trim() === '') continue;
+        if (!this.filterHasValue(col, raw)) continue;
         if (col.type === 'string') {
           conds.push({ propertyName: col.name, operator: 'LIKE', value: '%' + String(raw).trim() + '%' });
         } else if (col.type === 'number' || col.type === 'fk') {
           const n = Number(raw);
           conds.push({ propertyName: col.name, operator: 'EQ', value: isNaN(n) ? raw : n });
         } else if (col.type === 'date') {
-          conds.push({ propertyName: col.name, operator: 'EQ', value: raw });
+          // From and To are whole days, so the range is the half-open [From, the day after To) the
+          // controller's GTE / LT answer - To includes its whole day on a timestamp column too.
+          if (raw.from) conds.push({ propertyName: col.name, operator: 'GTE', value: this.dateBound(raw.from, col.instant) });
+          if (raw.to) conds.push({ propertyName: col.name, operator: 'LT', value: this.dateBound(this.addDays(raw.to, 1), col.instant) });
         } else if (col.type === 'boolean') {
           conds.push({ propertyName: col.name, operator: 'EQ', value: raw === true || String(raw) === 'true' });
         }
       }
       return conds;
+    },
+
+    // Whether a column's filter value narrows anything: a date range needs at least one of its ends.
+    filterHasValue(col, v) {
+      if (v === undefined || v === null) return false;
+      if (col.type === 'date') return !!(v.from || v.to);
+      return String(v).trim() !== '';
+    },
+
+    // ----- Date ranges (#8131): the picker's model and every bound are local YYYY-MM-DD days ----------
+    toDay(date) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    },
+    fromDay(day) {
+      const [y, m, d] = String(day).split('-').map(Number);
+      return new Date(y, m - 1, d);
+    },
+    addDays(day, n) {
+      const date = this.fromDay(day);
+      return this.toDay(new Date(date.getFullYear(), date.getMonth(), date.getDate() + n));
+    },
+    // A day as the controller binds it: a DATE column takes the day itself, a timestamp column the
+    // instant the day starts in the user's own time zone.
+    dateBound(day, instant) { return instant ? this.fromDay(day).toISOString() : day; },
+
+    // The quick periods; each fills From and To, and Apply runs the query as for a typed range. A week
+    // starts on Monday.
+    datePresets: [
+      { key: 'today',     label: 'Today' },
+      { key: 'thisWeek',  label: 'This week' },
+      { key: 'thisMonth', label: 'This month' },
+      { key: 'lastMonth', label: 'Last month' },
+      { key: 'thisYear',  label: 'This year' },
+    ],
+    applyDatePreset(key) {
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+      const monday = d - ((now.getDay() + 6) % 7);
+      const range = {
+        today:     [new Date(y, m, d), new Date(y, m, d)],
+        thisWeek:  [new Date(y, m, monday), new Date(y, m, monday + 6)],
+        thisMonth: [new Date(y, m, 1), new Date(y, m + 1, 0)],
+        lastMonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
+        thisYear:  [new Date(y, 0, 1), new Date(y, 11, 31)],
+      }[key];
+      this.filterDraft = { from: this.toDay(range[0]), to: this.toDay(range[1]) };
     },
 
     // Reload the list from the backend: POST /search when any filter is set, else the full getAll.
@@ -518,10 +569,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     get hasActiveColumnFilters() {
-      return this.filterColumns.some(c => {
-        const v = this.columnFilters[c.name];
-        return v !== undefined && v !== null && String(v).trim() !== '';
-      });
+      return this.filterColumns.some(c => this.filterHasValue(c, this.columnFilters[c.name]));
     },
 
     clearColumnFilters() { this.columnFilters = {}; this.applyServerFilter(); },
@@ -536,16 +584,22 @@ document.addEventListener('alpine:init', () => {
 
     // The filters in force, as chips - each value printed the way the table prints that column.
     get activeFilterChips() {
-      return this.filterColumns.filter(c => {
-        const v = this.columnFilters[c.name];
-        return v !== undefined && v !== null && String(v).trim() !== '';
-      }).map(c => ({ name: c.name, label: this.filterLabel(c), text: this.filterValueText(c) }));
+      return this.filterColumns.filter(c => this.filterHasValue(c, this.columnFilters[c.name]))
+        .map(c => ({ name: c.name, label: this.filterLabel(c), text: this.filterValueText(c) }));
     },
 
     filterValueText(col) {
       const v = this.columnFilters[col.name];
       if (col.type === 'fk')   return this.lookupText(col.name, v);
-      if (col.type === 'date') return this.displayValue(v, true);
+      if (col.type === 'date') {
+        // "01.10.2026 - 31.10.2026", or the one end an open range has.
+        const from = v.from ? this.displayValue(v.from, true) : '';
+        const to = v.to ? this.displayValue(v.to, true) : '';
+        if (from && to) return from + ' - ' + to;
+        if (!window.T) return from ? 'From ' + from : 'To ' + to;
+        return from ? T('application-core:shell.list.dateFromValue', 'From {{date}}', { date: from })
+                    : T('application-core:shell.list.dateToValue', 'To {{date}}', { date: to });
+      }
       if (col.type === 'boolean') {
         const yes = v === true || String(v) === 'true';
         return window.T ? (yes ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No')) : (yes ? 'Yes' : 'No');
@@ -553,10 +607,15 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
-    // Open the editor for one column, starting from the value that column already filters by.
+    // Open the editor for one column, starting from the value that column already filters by. A date
+    // column edits a { from, to } copy, so Cancel leaves the range in force untouched.
     openFilterEditor(name) {
       this.filterEditing = name;
       const v = this.columnFilters[name];
+      if (this.editedFilterColumn && this.editedFilterColumn.type === 'date') {
+        this.filterDraft = { from: (v && v.from) || '', to: (v && v.to) || '' };
+        return;
+      }
       this.filterDraft = (v === undefined || v === null) ? '' : v;
     },
     backToFilterMenu() { this.filterEditing = null; this.filterDraft = ''; },
@@ -565,7 +624,10 @@ document.addEventListener('alpine:init', () => {
     // Apply writes the draft into the filter model and runs the ONE query it implies.
     applyFilterDraft() {
       if (!this.filterEditing) return;
-      this.columnFilters = { ...this.columnFilters, [this.filterEditing]: this.filterDraft };
+      let value = this.filterDraft;
+      // A range picked back to front is meant the right way round.
+      if (value && value.from && value.to && value.from > value.to) value = { from: value.to, to: value.from };
+      this.columnFilters = { ...this.columnFilters, [this.filterEditing]: value };
       this.closeFilterMenu();
       this.applyServerFilter();
     },

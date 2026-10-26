@@ -412,7 +412,16 @@
       "promptSelect": "Изберете..."
     },
     "list": {
-      "resizeColumn": "Промяна на ширината на колоната"
+      "resizeColumn": "Промяна на ширината на колоната",
+      "dateFrom": "От",
+      "dateTo": "До",
+      "dateFromValue": "От {{date}}",
+      "dateToValue": "До {{date}}",
+      "today": "Днес",
+      "thisWeek": "Тази седмица",
+      "thisMonth": "Този месец",
+      "lastMonth": "Миналия месец",
+      "thisYear": "Тази година"
     },
     "warnings": {
       "title": "Моля, потвърдете",

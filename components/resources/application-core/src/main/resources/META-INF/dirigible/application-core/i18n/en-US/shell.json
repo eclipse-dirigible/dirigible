@@ -412,7 +412,16 @@
       "promptSelect": "Select..."
     },
     "list": {
-      "resizeColumn": "Resize column"
+      "resizeColumn": "Resize column",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "dateFromValue": "From {{date}}",
+      "dateToValue": "To {{date}}",
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "thisYear": "This year"
     },
     "warnings": {
       "title": "Please confirm",
