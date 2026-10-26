@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.PayloadSupport;
+import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.PostSetSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAssigneeSupport;
@@ -48,7 +49,9 @@ import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.StepEventSupport;
 import org.eclipse.dirigible.components.intent.generator.ToOneWalk;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.ActionCallIntent;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
@@ -265,6 +268,10 @@ public final class IntentParser {
     /** A one-hop path inside a {@code fileName:} token: a field, or a to-one relation and one field. */
     private static final java.util.regex.Pattern FILE_NAME_PATH =
             java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
+    /** One {@code {...}} placeholder of a {@code call:} action's path or body. */
+    private static final java.util.regex.Pattern CALL_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+    /** The methods a {@code call:} action may send. */
+    private static final Set<String> CALL_METHODS = Set.of("POST", "PUT", "DELETE");
     /** The field types a {@code fileName:} token may carry a {@code :pattern} date format on. */
     private static final Set<String> FILE_NAME_DATE_TYPES = Set.of("date", "timestamp");
     /** Comparison operators a schedule's {@code where} condition may use. */
@@ -9514,13 +9521,14 @@ public final class IntentParser {
 
     /**
      * Validate the {@code actions} block: each on-demand action needs a unique name, a known
-     * {@code forEntity}, a {@code scope} of {@code entity} or {@code page}, and a same-origin
-     * {@code page} to open. The generator contributes each into the app's
-     * {@code <project>-custom-action} extension point so it renders on the entity's view (see the
-     * ActionIntentGenerator).
+     * {@code forEntity}, a {@code scope} of {@code entity} or {@code page}, and either a same-origin
+     * {@code page} to open or a {@code call:} to send (issue #8090). The generator contributes each
+     * into the app's {@code <project>-custom-action} extension point so it renders on the entity's view
+     * (see the ActionIntentGenerator).
      */
     private static void validateActions(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> actionNames = new HashSet<>();
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         for (ActionIntent action : model.getActions()) {
             if (action.getName() == null || action.getName()
                                                   .isBlank()) {
@@ -9541,9 +9549,135 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("action [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
-            if (action.getPage() == null || action.getPage()
-                                                  .isBlank()) {
-                issues.add("action [" + name + "] has no page (a same-origin path to open)");
+            boolean hasPage = action.getPage() != null && !action.getPage()
+                                                                 .isBlank();
+            if (action.getCall() != null) {
+                if (hasPage) {
+                    issues.add("action [" + name + "] declares both page and call - a button either opens a page or calls an endpoint");
+                }
+                validateActionCall(action, byName.get(action.getForEntity()), model, issues);
+            } else if (!hasPage) {
+                issues.add("action [" + name + "] has no page (a same-origin path to open) or call (an endpoint to send a request to)");
+            } else {
+                rejectCallOnlyKeys(action, issues);
+            }
+        }
+    }
+
+    /**
+     * A page action opens a page and nothing else: the dialog, the guard, the role binding and the
+     * toast are a {@code call:}'s, and authored on a page they would be silently unconsumed.
+     */
+    private static void rejectCallOnlyKeys(ActionIntent action, List<String> issues) {
+        List<String> keys = new ArrayList<>();
+        if (!action.getPrompt()
+                   .isEmpty()) {
+            keys.add("prompt");
+        }
+        if (action.getConfirm() != null) {
+            keys.add("confirm");
+        }
+        if (!action.getFromStatus()
+                   .isEmpty()) {
+            keys.add("fromStatus");
+        }
+        if (action.getCan() != null) {
+            keys.add("can");
+        }
+        if (action.getSuccess() != null) {
+            keys.add("success");
+        }
+        if (!keys.isEmpty()) {
+            issues.add("action [" + action.getName() + "] declares " + keys
+                    + ", which only a call: action uses - a page action opens its page");
+        }
+    }
+
+    /**
+     * A {@code call:} action (issue #8090): the request it sends to the application's own endpoint, the
+     * dialog that collects its inputs, the advisory from-status guard and the role binding.
+     */
+    private static void validateActionCall(ActionIntent action, EntityIntent entity, IntentModel model, List<String> issues) {
+        String subject = "action [" + action.getName() + "]";
+        ActionCallIntent call = action.getCall();
+        String method = call.getMethod();
+        if (method == null || !CALL_METHODS.contains(method)) {
+            issues.add(subject + " call method [" + method + "] is not one of " + new TreeSet<>(CALL_METHODS));
+        }
+        String path = call.getPath();
+        if (path == null || path.isBlank()) {
+            issues.add(subject + " call has no path");
+        } else {
+            if (!path.startsWith("/services/") || path.contains("..") || path.contains("://")) {
+                issues.add(subject + " call path [" + path + "] must be an absolute same-origin path under /services/");
+            }
+            java.util.regex.Matcher placeholder = CALL_PLACEHOLDER.matcher(path);
+            while (placeholder.find()) {
+                if (!"id".equals(placeholder.group(1))) {
+                    issues.add(subject + " call path names [{" + placeholder.group(1)
+                            + "}] - {id} (the clicked record's key) is the only placeholder a path may carry");
+                } else if (!"entity".equals(action.getScope())) {
+                    issues.add(subject + " call path names {id} but the action has scope [" + action.getScope()
+                            + "] - only a per-record (scope: entity) action has a record");
+                }
+            }
+        }
+        Set<String> inputs = new HashSet<>();
+        for (ActionPromptIntent input : action.getPrompt()) {
+            if (input.getName() == null || !SourceVersion.isIdentifier(input.getName())) {
+                issues.add(subject + " prompt input [" + input.getName() + "] needs a name that is an identifier");
+                continue;
+            }
+            if (!inputs.add(input.getName())) {
+                issues.add(subject + " prompt declares [" + input.getName() + "] twice");
+            }
+            if (!ActionPromptIntent.TYPES.contains(input.getType())) {
+                issues.add(subject + " prompt input [" + input.getName() + "] has type [" + input.getType() + "] - expected one of "
+                        + new TreeSet<>(ActionPromptIntent.TYPES));
+            }
+        }
+        if (call.getBody() != null) {
+            validateCallBody(call.getBody(), inputs, subject, issues);
+        }
+        if (!action.getPrompt()
+                   .isEmpty()
+                && action.getConfirm() != null) {
+            issues.add(subject + " declares both prompt and confirm - the prompt dialog IS the confirmation");
+        }
+        if (!action.getFromStatus()
+                   .isEmpty()) {
+            if (!"entity".equals(action.getScope())) {
+                issues.add(subject + " declares fromStatus but has scope [" + action.getScope()
+                        + "] - only a per-record (scope: entity) action has a status to check");
+            } else if (entity != null && LifecycleStages.statusRelation(entity) == null) {
+                issues.add(subject + " declares fromStatus but [" + entity.getName()
+                        + "] has no `function: EntityStatus` relation to read the status from");
+            }
+        }
+        if (action.getCan() != null && PermissionSupport.rolesListing(model, action.getCan())
+                                                        .isEmpty()) {
+            issues.add(subject + " can [" + action.getCan()
+                    + "] is listed by no role under permissions - the button would be shown to nobody");
+        }
+    }
+
+    /** Every {@code {name}} in a call's body - at any depth - must be a declared prompt input. */
+    private static void validateCallBody(Object value, Set<String> inputs, String subject, List<String> issues) {
+        if (value instanceof Map<?, ?> map) {
+            for (Object nested : map.values()) {
+                validateCallBody(nested, inputs, subject, issues);
+            }
+        } else if (value instanceof List<?> list) {
+            for (Object nested : list) {
+                validateCallBody(nested, inputs, subject, issues);
+            }
+        } else if (value instanceof String text) {
+            java.util.regex.Matcher placeholder = CALL_PLACEHOLDER.matcher(text);
+            while (placeholder.find()) {
+                if (!inputs.contains(placeholder.group(1))) {
+                    issues.add(subject + " call body names [{" + placeholder.group(1) + "}], which is not a prompt input - declared: "
+                            + new TreeSet<>(inputs));
+                }
             }
         }
     }

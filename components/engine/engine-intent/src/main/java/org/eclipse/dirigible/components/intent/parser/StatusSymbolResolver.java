@@ -105,6 +105,7 @@ final class StatusSymbolResolver {
         resolver.index(root);
         resolver.rewriteEntities(root);
         resolver.rewriteTransitions(root);
+        resolver.rewriteActions(root);
         resolver.rewriteProcesses(root);
         resolver.rewritePostings(root);
         resolver.rewriteGenerates(root);
@@ -271,6 +272,20 @@ final class StatusSymbolResolver {
             Target status = statusOf(text(transition, "forEntity"));
             putResolvedList(transition, "from", status, subject + " from");
             putResolved(transition, "setStatus", status, subject + " setStatus");
+        }
+    }
+
+    /**
+     * The statuses a {@code call:} action's button is offered in (issue #8090), on its entity's own
+     * nomenclature.
+     */
+    private void rewriteActions(Map<?, ?> root) {
+        for (Object node : asList(root.get("actions"))) {
+            Map<?, ?> action = asMap(node);
+            if (action != null) {
+                putResolvedList(action, "fromStatus", statusOf(text(action, "forEntity")),
+                        "action [" + text(action, "name") + "] fromStatus");
+            }
         }
     }
 

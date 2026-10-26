@@ -87,6 +87,13 @@ public class InvoiceLineController {
         return entity;
     }
 
+    @Get("/access")
+    @Documentation("What the CURRENT caller may do with InvoiceLine: read and write, by the same gates every endpoint applies - what the generated pages show or hide their write controls by; the 403 of each write stays authoritative")
+    public Map<String, Boolean> access() {
+        // Never a 403: a caller who may not read is told so, the way a reader is told it may not write.
+        return Map.of("read", mayRead(), "write", mayWrite());
+    }
+
     @Post
     @Documentation("Create InvoiceLine")
     public InvoiceLineEntity create(@Body InvoiceLineEntity entity) {
@@ -270,12 +277,19 @@ public class InvoiceLineController {
     }
 
     private void checkPermissions(String op) {
-        if ("read".equals(op) && !(isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineReadOnly") || isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineFullAccess"))) {
+        if (!("write".equals(op) ? mayWrite() : mayRead())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
-        if ("write".equals(op) && !isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineFullAccess")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
+    }
+
+    /** The read gate every read endpoint applies - and what GET /access answers as {@code read}. */
+    private static boolean mayRead() {
+        return isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineReadOnly") || isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineFullAccess");
+    }
+
+    /** The write gate every write endpoint applies - and what GET /access answers as {@code write}. */
+    private static boolean mayWrite() {
+        return isInAnyRole("sample-intent-money.InvoiceLine.InvoiceLineFullAccess");
     }
 
     /**

@@ -152,15 +152,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             // Invoice". The descriptor carries the source's status FK and the ids, so the shared
             // customActions store decides it from the record it already has, with no extra request;
             // the generated controller's 409 stays the contract for every other caller.
-            Map<String, Object> gate = new LinkedHashMap<>();
-            gate.put("property", guard.statusProperty());
-            if (!guard.allowed()
-                      .isEmpty()) {
-                gate.put("allowed", guard.allowed());
-            } else {
-                gate.put("blocked", guard.blocked());
-            }
-            view.put("guard", gate);
+            view.put("guard", guard.descriptor());
         }
         if (g.hasPrompt()) {
             // Declared input form (issue #6685): the customActions store opens a dialog instead of the

@@ -382,7 +382,7 @@ class ControllerInvokerBindingTest {
 
     // --- HTTP test plumbing ----------------------------------------------------------------------
 
-    private static org.eclipse.dirigible.engine.java.spi.LoadedClass loaded(Class<?> type) {
+    static org.eclipse.dirigible.engine.java.spi.LoadedClass loaded(Class<?> type) {
         return new org.eclipse.dirigible.engine.java.spi.LoadedClass("p", type.getName(), type, type.getClassLoader());
     }
 
@@ -390,7 +390,7 @@ class ControllerInvokerBindingTest {
     // is a no-op so leaving it open is harmless, and try-with-resources here would close it before
     // the test consumes it. Suppressing CodeQL's java/input-resource-leak.
     @SuppressWarnings("resource")
-    private static HttpServletRequest mockRequest(String body) {
+    static HttpServletRequest mockRequest(String body) {
         HttpServletRequest req = mock(HttpServletRequest.class);
         if (body != null) {
             try {

@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * On-demand action declaration. Contributes a developer-defined action button onto an entity's
  * generated Harmonia view via the app's {@code <project>-custom-action} extension point (the same
@@ -19,6 +22,13 @@ package org.eclipse.dirigible.components.intent.model;
  * button renders: {@code page} (a toolbar action on the whole view) or {@code entity} (a per-record
  * action that carries the selected record's id to the opened page). {@link #page} is the
  * same-origin path opened in the app-wide dialog when the button is clicked.
+ *
+ * <p>
+ * Instead of a page, an action may {@link #call} the application's own endpoint (issue #8090): the
+ * shell sends the declared request after a confirmation ({@link #confirm}) or a dialog of
+ * {@link #prompt} inputs, and toasts the outcome. {@link #fromStatus} hides the button outside the
+ * listed statuses (advisory only - the endpoint decides), and {@link #can} offers it only to the
+ * roles whose permissions list the token.
  */
 public class ActionIntent {
 
@@ -42,6 +52,24 @@ public class ActionIntent {
 
     /** Same-origin path opened in the app-wide dialog when the action is triggered. */
     private String page;
+
+    /** The request sent to the application's own endpoint; excludes {@link #page}. */
+    private ActionCallIntent call;
+
+    /** The inputs a {@link #call} collects in a dialog before it is sent. */
+    private List<ActionPromptIntent> prompt = new ArrayList<>();
+
+    /** The confirmation text of a {@link #call} without a {@link #prompt}. */
+    private String confirm;
+
+    /** The {@code forEntity} statuses (seed ids) the button is offered in. */
+    private List<Integer> fromStatus = new ArrayList<>();
+
+    /** The {@code Resource:action} permission token whose roles are offered the button. */
+    private String can;
+
+    /** The toast text of a successful {@link #call}. */
+    private String success;
 
     public String getName() {
         return name;
@@ -97,5 +125,53 @@ public class ActionIntent {
 
     public void setPage(String page) {
         this.page = page;
+    }
+
+    public ActionCallIntent getCall() {
+        return call;
+    }
+
+    public void setCall(ActionCallIntent call) {
+        this.call = call;
+    }
+
+    public List<ActionPromptIntent> getPrompt() {
+        return prompt;
+    }
+
+    public void setPrompt(List<ActionPromptIntent> prompt) {
+        this.prompt = prompt == null ? new ArrayList<>() : prompt;
+    }
+
+    public String getConfirm() {
+        return confirm;
+    }
+
+    public void setConfirm(String confirm) {
+        this.confirm = confirm;
+    }
+
+    public List<Integer> getFromStatus() {
+        return fromStatus;
+    }
+
+    public void setFromStatus(List<Integer> fromStatus) {
+        this.fromStatus = fromStatus == null ? new ArrayList<>() : fromStatus;
+    }
+
+    public String getCan() {
+        return can;
+    }
+
+    public void setCan(String can) {
+        this.can = can;
+    }
+
+    public String getSuccess() {
+        return success;
+    }
+
+    public void setSuccess(String success) {
+        this.success = success;
     }
 }

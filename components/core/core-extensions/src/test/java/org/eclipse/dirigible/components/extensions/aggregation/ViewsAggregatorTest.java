@@ -13,12 +13,16 @@ import static org.eclipse.dirigible.components.extensions.aggregation.Modules.js
 import static org.eclipse.dirigible.components.extensions.aggregation.Modules.stub;
 import static org.eclipse.dirigible.components.extensions.aggregation.Modules.values;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.context.ThreadContextFacade;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.script.ScriptEngineAvailability;
 import org.eclipse.dirigible.components.extensions.modules.ExtensionModuleReader;
 import org.junit.jupiter.api.Test;
@@ -26,9 +30,11 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 /**
- * The view validation, de-duplication, focus and ordering rules, and the views offered only with
- * the JavaScript engine.
+ * The view validation, de-duplication, focus and ordering rules, the views offered only with the
+ * JavaScript engine, and the views offered only to the roles they name.
  */
 @ExtendWith(MockitoExtension.class)
 class ViewsAggregatorTest {
@@ -90,6 +96,38 @@ class ViewsAggregatorTest {
 
         when(scriptEngine.isAvailable()).thenReturn(true);
         assertEquals(List.of("console", "debugger"), values(aggregate(), "id"));
+    }
+
+    @Test
+    void aCustomActionWithRolesIsDroppedForACallerWithoutThem() throws Exception {
+        stub(reader, POINT, json("{'id': 'escalate', 'label': 'Escalate', 'call': {'path': '/services/e'}, 'roles': ['SupportLead']}"),
+                json("{'id': 'retry', 'label': 'Retry', 'call': {'path': '/services/r'}, 'roles': ['Clerk', 'SupportLead']}"),
+                json("{'id': 'open', 'label': 'Open', 'call': {'path': '/services/o'}}"));
+
+        assertEquals(List.of("open", "retry"), values(aggregateAs("Clerk"), "id"));
+    }
+
+    @Test
+    void aCustomActionWithRolesIsKeptForAnAdministrator() throws Exception {
+        stub(reader, POINT, json("{'id': 'escalate', 'label': 'Escalate', 'call': {'path': '/services/e'}, 'roles': ['SupportLead']}"));
+
+        assertEquals(List.of("escalate"), values(aggregateAs(Roles.ADMINISTRATOR.getRoleName()), "id"));
+    }
+
+    /** Aggregates as a signed-in caller holding exactly the given roles. */
+    private List<Map<String, Object>> aggregateAs(String... roles) throws Exception {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        for (String role : roles) {
+            lenient().when(request.isUserInRole(role))
+                     .thenReturn(true);
+        }
+        ThreadContextFacade.setUp();
+        try {
+            ThreadContextFacade.set(HttpServletRequest.class.getCanonicalName(), request);
+            return aggregate();
+        } finally {
+            ThreadContextFacade.tearDown();
+        }
     }
 
     private List<Map<String, Object>> aggregate() {

@@ -143,6 +143,7 @@
         "formGrpFilter": "{{name}} Filter",
         "formHeadSelect": "{{name}} Details",
         "formHeadCreate": "Create {{name}}",
+        "cannotCreate": "You can view {{name}} records but not create them.",
         "formHeadUpdate": "Update {{name}}",
         "reportTitle": "{{name}} Report",
         "reportFilter": "Report Filter",

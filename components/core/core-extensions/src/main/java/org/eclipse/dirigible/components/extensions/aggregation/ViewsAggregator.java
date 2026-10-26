@@ -28,9 +28,12 @@ import org.springframework.stereotype.Component;
  * Aggregates the views of extension points.
  *
  * <p>
- * A view needs an {@code id}, a {@code label}, and a target: a {@code path} to open, or an
+ * A view needs an {@code id}, a {@code label}, and a target: a {@code path} to open, an
  * {@code endpoint} to call (an on-demand action button that POSTs rather than opening a page - see
- * the custom actions store). The first view of an id wins. A view without a region never takes the
+ * the custom actions store), or a {@code call} - the request an intent action sends to the
+ * application's own endpoint (issue #8090). The first view of an id wins. A view naming
+ * {@code roles} is offered only to a caller holding one of them ({@link CallerRoles}): a button the
+ * caller may not press is never shipped to the browser. A view without a region never takes the
  * focus when opened; one in the center or bottom region does unless it says otherwise, one in the
  * left or right region does not unless it says otherwise. A view declaring
  * {@value ScriptEngineAvailability#REQUIRES_SCRIPT_ENGINE} is offered only where the JavaScript
@@ -101,15 +104,15 @@ class ViewsAggregator {
             LOGGER.warn("View [{}] does not have a label and is skipped.", view.get("id"));
             return false;
         }
-        if (!truthy(view, "path") && !truthy(view, "endpoint")) {
-            LOGGER.warn("View [{}] does not have a path or an endpoint and is skipped.", view.get("id"));
+        if (!truthy(view, "path") && !truthy(view, "endpoint") && !truthy(view, "call")) {
+            LOGGER.warn("View [{}] does not have a path, an endpoint or a call and is skipped.", view.get("id"));
             return false;
         }
         return true;
     }
 
     private boolean isOffered(Map<String, Object> view) {
-        return !truthy(view, ScriptEngineAvailability.REQUIRES_SCRIPT_ENGINE) || scriptEngine.isAvailable();
+        return (!truthy(view, ScriptEngineAvailability.REQUIRES_SCRIPT_ENGINE) || scriptEngine.isAvailable()) && CallerRoles.offered(view);
     }
 
     private static void applyFocus(Map<String, Object> view) {

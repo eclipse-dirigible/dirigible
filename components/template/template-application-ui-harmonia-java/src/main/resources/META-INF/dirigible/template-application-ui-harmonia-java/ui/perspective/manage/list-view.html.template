@@ -161,7 +161,9 @@
     </div>
 #end
 
-    <button x-h-button data-variant="primary" @click="newEntity()">
+    <!-- Write controls show only for a caller the controller's GET /access says may write (#8089) -
+         the 403 of each write stays the guard. -->
+    <button x-h-button data-variant="primary" x-show="canWrite()" @click="newEntity()">
       <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
@@ -254,10 +256,10 @@
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
-      <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
+      <div x-h-info-page-description x-show="canWrite()" x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="primary" @click="newEntity()" x-text="T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></button>
+      <button x-h-button data-variant="primary" x-show="canWrite()" @click="newEntity()" x-text="T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></button>
     </div>
   </div>
 
@@ -368,22 +370,29 @@
                       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
+                      <!-- The row's own contributed actions (#8116), first, as in the sheet's menu - the
+                           same ones, by the same store call and status guards. -->
+                      <template x-for="action in rowActions(row)" :key="action.id">
+                        <li x-h-menu-item @click="runRowAction(action, row)"
+                            x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                      </template>
+                      <li x-h-menu-separator x-show="rowActions(row).length"></li>
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
 #if($hierarchyProperty)
                       <!-- Add child (#7724): a new record under this one, its parent preset. Offered on an
                            immutable record too - the child is a new record, the parent is not written. -->
-                      <li x-h-menu-item @click="newChild(row)" x-text="T('$projectName:${tprefix}.defaults.addChild', 'Add child')"></li>
+                      <li x-h-menu-item x-show="canWrite()" @click="newChild(row)" x-text="T('$projectName:${tprefix}.defaults.addChild', 'Add child')"></li>
 #end
 #if($immutableStatusProperty || $immutableAlways)
                       <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
                            Preview stays - the record remains readable. -->
-                      <li x-h-menu-item x-show="!isRowImmutable(row)" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                      <li x-h-menu-separator x-show="!isRowImmutable(row)"></li>
-                      <li x-h-menu-item x-show="!isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                      <li x-h-menu-item x-show="canWrite() &amp;&amp; !isRowImmutable(row)" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                      <li x-h-menu-separator x-show="canWrite() &amp;&amp; !isRowImmutable(row)"></li>
+                      <li x-h-menu-item x-show="canWrite() &amp;&amp; !isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
 #else
-                      <li x-h-menu-item @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                      <li x-h-menu-separator></li>
-                      <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                      <li x-h-menu-item x-show="canWrite()" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                      <li x-h-menu-separator x-show="canWrite()"></li>
+                      <li x-h-menu-item x-show="canWrite()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
 #end
                     </ul>
                   </td>
@@ -490,7 +499,7 @@
             </li>
 #if($hierarchyProperty)
             <!-- Add child (#7724): the selected record is the parent the new one is created under. -->
-            <li x-h-menu-item @click="newChild(selected)">
+            <li x-h-menu-item x-show="canWrite()" @click="newChild(selected)">
               <svg role="presentation" x-h-lucide data-lucide="list-plus"></svg>
               <span x-text="T('$projectName:${tprefix}.defaults.addChild', 'Add child')"></span>
             </li>
@@ -583,7 +592,7 @@
       </div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-        <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy">
+        <button x-h-button data-variant="negative" x-show="canWrite()" @click="confirmDelete()" :disabled="deleteBusy">
           <span x-show="deleteBusy" x-h-spinner></span>
           <span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span>
         </button>

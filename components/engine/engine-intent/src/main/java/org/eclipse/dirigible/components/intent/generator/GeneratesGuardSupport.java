@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -72,6 +74,21 @@ public final class GeneratesGuardSupport {
             return allowed.isEmpty()
                     ? "was already generated from this " + fromEntity + " (its status is the one the completion hook writes)"
                     : "is allowed only from status [" + join(allowed) + "]";
+        }
+
+        /**
+         * The guard as a button descriptor's {@code guard}: the status property and the allowed (or the
+         * blocked) ids, read by the shell's {@code customActions} store off the record it already has.
+         */
+        public Map<String, Object> descriptor() {
+            Map<String, Object> gate = new LinkedHashMap<>();
+            gate.put("property", statusProperty);
+            if (!allowed.isEmpty()) {
+                gate.put("allowed", allowed);
+            } else {
+                gate.put("blocked", blocked);
+            }
+            return gate;
         }
 
         /** The status ids the guard names, for the javadoc of the generated controller. */

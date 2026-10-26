@@ -136,6 +136,23 @@ class RoleScopedFieldControllerTemplateIT {
         }
     }
 
+    /**
+     * The pages ask the controller what the caller may do (#8089). With no gate at all - no entity role
+     * and no role-scoped property, which an intent never produces but the entity modeler does - the
+     * answer is both, for everyone.
+     */
+    @Test
+    void aControllerWithoutGatesTellsEveryCallerItMayDoBoth() throws Exception {
+        Map<String, Object> context = context();
+        context.put("properties", List.of(primaryKey(), amount()));
+        String rendered = render("EntityController.java.template", context);
+
+        assertTrue(rendered.contains("@Get(\"/access\")"), "the controller must expose the access pre-check: " + rendered);
+        assertTrue(rendered.contains("return Map.of(\"read\", true, \"write\", true);"),
+                "an ungated controller must admit both for every caller: " + rendered);
+        assertFalse(rendered.contains("mayWrite()"), "an ungated controller has no gate to evaluate");
+    }
+
     private static List<String> templates() {
         List<String> templates = new ArrayList<>();
         templates.add("EntityController.java.template");

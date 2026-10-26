@@ -25,6 +25,9 @@
  * the page in the app-wide dialog. An `endpoint` descriptor may also declare `notifies`, meaning the
  * controller mails as part of its work and answers { record, notify }: the delivery outcome then decides
  * the toast, so a fail-soft send that did not leave is a warning rather than a success (issue #7023).
+ * A `call` descriptor (issue #8090) sends its declared request - method, path, body filled from the
+ * prompt - to the application's OWN endpoint after the same confirm (`confirm` is its text) or prompt;
+ * a descriptor naming `roles` reaches only a caller holding one of them, filtered by the server.
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
@@ -229,9 +232,11 @@ document.addEventListener('alpine:init', () => {
     //   - otherwise (`path`): open the contributed page in the app-wide dialog.
     // An entity action carries the selected record's primary key as `id`; the view knows its own primary
     // key so it passes the id value here rather than the whole row.
+    //   - `call` present: the same confirm / prompt, then the declared request to the application's own
+    //     endpoint (issue #8090) - see runCall.
     trigger(action, id, record) {
       if (!action) return;
-      if (action.endpoint) {
+      if (action.endpoint || action.call) {
         // A declared input form (issue #6685) opens the prompt dialog instead of the plain
         // confirm; when the target's detail registration is unavailable (e.g. the shared shell,
         // which does not load the hosted apps' registrations) it degrades to the confirm below.
@@ -257,7 +262,7 @@ document.addEventListener('alpine:init', () => {
       if (!this.confirmAction || this.confirmBusy) return;
       this.confirmBusy = true;
       try {
-        await this.runEndpoint(this.confirmAction, this.confirmId);
+        await this.run(this.confirmAction, this.confirmId);
       } finally {
         this.confirmBusy = false;
         this.confirmOpen = false;
@@ -455,11 +460,67 @@ document.addEventListener('alpine:init', () => {
       this.promptError = '';
       this.promptBusy = true;
       try {
-        await this.runEndpoint(this.promptAction, this.promptId, this.promptValues);
+        await this.run(this.promptAction, this.promptId, this.promptValues);
       } finally {
         this.promptBusy = false;
         this.cancelPrompt();
       }
+    },
+
+    // Send a confirmed / prompted action: its declared call, or the POST to its generated endpoint.
+    run(action, id, values) {
+      return action.call ? this.runCall(action, id, values) : this.runEndpoint(action, id, values);
+    },
+
+    // Send a `call` action's request to the application's own endpoint (issue #8090). `{id}` in the
+    // path is the clicked record's key; the body is the declared one with its prompt placeholders
+    // filled (callValue). The endpoint owns the rule, so its answer is reported and never read: a 2xx
+    // toasts the authored `success`, a 400/409 the endpoint's own message, anything else the generic
+    // failure.
+    async runCall(action, id, values) {
+      const label = action.label || 'Action';
+      const call = action.call;
+      const key = (id !== undefined && id !== null) ? String(id) : '';
+      const url = call.path.split('{id}').join(encodeURIComponent(key));
+      const body = call.body ? this.callValue(call.body, action, values || {}) : undefined;
+      try {
+        await App.services.api.request(call.method || 'POST', url, body, { baseUrl: '' });
+        this.notify(label, action.success || (label + ' completed'), 'positive');
+        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      } catch (e) {
+        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
+          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
+          : 'Action failed';
+        this.notify(label, msg, 'negative');
+      }
+    },
+
+    // A body value with its prompt placeholders filled. A string that is exactly "{name}" becomes that
+    // input TYPED by its control - a number, a boolean, or null for an empty optional input - so the
+    // endpoint receives `level: 2`, not `"2"`. A placeholder inside a longer string interpolates as
+    // text; maps and lists are filled throughout; every other value is a constant, sent as written.
+    callValue(value, action, values) {
+      if (Array.isArray(value)) return value.map((v) => this.callValue(v, action, values));
+      if (value && typeof value === 'object') {
+        const out = {};
+        for (const k of Object.keys(value)) out[k] = this.callValue(value[k], action, values);
+        return out;
+      }
+      if (typeof value !== 'string') return value;
+      const whole = /^\{([^{}]*)\}$/.exec(value);
+      if (whole) return this.typedInput(action, whole[1], values[whole[1]]);
+      return value.replace(/\{([^{}]*)\}/g, (m, name) => {
+        const v = values[name];
+        return (v === undefined || v === null) ? '' : String(v);
+      });
+    },
+
+    typedInput(action, name, v) {
+      const col = (action.promptColumns || []).find((c) => c.name === name);
+      const widget = col ? col.widget : 'TEXT';
+      if (widget === 'CHECKBOX') return Boolean(v);
+      if (v === undefined || v === null || v === '') return null;
+      return widget === 'NUMBER' ? Number(v) : v;
     },
 
     // POST { id } to the action's endpoint (a generated create-from controller). The server clones the

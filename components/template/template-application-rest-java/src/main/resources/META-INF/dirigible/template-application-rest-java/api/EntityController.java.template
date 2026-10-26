@@ -218,6 +218,17 @@ public class ${name}Controller {
         return restricted;
     }
 #end
+
+    @Get("/access")
+    @Documentation("What the CURRENT caller may do with ${name}: read and write, by the same gates every endpoint applies - what the generated pages show or hide their write controls by; the 403 of each write stays authoritative")
+    public Map<String, Boolean> access() {
+        // Never a 403: a caller who may not read is told so, the way a reader is told it may not write.
+#if($needsRoles)
+        return Map.of("read", mayRead(), "write", mayWrite());
+#else
+        return Map.of("read", true, "write", true);
+#end
+    }
 #if($history == "true")
 
     @Get("/{id}/history")
@@ -757,20 +768,36 @@ public class ${name}Controller {
 #if($needsRoles)
 
     private void checkPermissions(String op) {
+        if (!("write".equals(op) ? mayWrite() : mayRead())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+    }
+
+    /** The read gate every read endpoint applies - and what GET /access answers as {@code read}. */
+    private static boolean mayRead() {
 #if($perspectiveRole)
         if (!isInAnyRole("${perspectiveRole}")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+            return false;
         }
 #end
 #if($roleRead)
-        if ("read".equals(op) && !(isInAnyRole("${roleRead}")#if($roleWrite) || isInAnyRole("${roleWrite}")#end)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        return isInAnyRole("${roleRead}")#if($roleWrite) || isInAnyRole("${roleWrite}")#end;
+#else
+        return true;
+#end
+    }
+
+    /** The write gate every write endpoint applies - and what GET /access answers as {@code write}. */
+    private static boolean mayWrite() {
+#if($perspectiveRole)
+        if (!isInAnyRole("${perspectiveRole}")) {
+            return false;
         }
 #end
 #if($roleWrite)
-        if ("write".equals(op) && !isInAnyRole("${roleWrite}")) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
-        }
+        return isInAnyRole("${roleWrite}");
+#else
+        return true;
 #end
     }
 #end

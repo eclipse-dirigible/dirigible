@@ -45,8 +45,8 @@ public final class ConfigGroups {
             new Rule(ConfigGroup.AI, "INTENT_AI_"), //
             new Rule(ConfigGroup.DEVTOOLS, "JAVA_LSP_", "JAVA_DEBUG_", "TERMINAL_", "GRAALIUM_", "TSC_WATCH", "EXEC_COMMAND_",
                     "JAVASCRIPT_GRAALVM_DEBUGGER_PORT"), //
-            new Rule(ConfigGroup.RUNTIMES, "JAVASCRIPT_", "JAVA_RECONCILE", "DEPENDENCIES_", "MAVEN_", "NATIVE_APP", "PROJECT_TYPESCRIPT",
-                    "GENERATE_", "CORE_MODULE_SIGNATURE"), //
+            new Rule(ConfigGroup.RUNTIMES, "JAVASCRIPT_", "JAVA_RECONCILE", "JAVA_CONTROLLER_", "DEPENDENCIES_", "MAVEN_", "NATIVE_APP",
+                    "PROJECT_TYPESCRIPT", "GENERATE_", "CORE_MODULE_SIGNATURE"), //
             new Rule(ConfigGroup.BRANDING, "BRANDING_", "THEME_"), //
             new Rule(ConfigGroup.LOCALE, "APPLICATION_LANGUAGES", "APPLICATION_COUNTRY"), //
             new Rule(ConfigGroup.TENANCY, "MULTI_TENANT", "TENANT_", "TENANTS_", "APP_ID"), //

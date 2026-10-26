@@ -484,6 +484,14 @@ public enum DirigibleConfig {
     JAVA_RECONCILE_INTERVAL_SECONDS("DIRIGIBLE_JAVA_RECONCILE_INTERVAL_SECONDS", "30"),
 
     /**
+     * Whether a client-Java controller answers a date as a Jackson timestamp - an Instant as decimal
+     * epoch seconds, a LocalDate as a [year, month, day] array - instead of ISO-8601 (#8083). A
+     * compatibility switch for clients that still read the numbers; a request body binds either shape
+     * regardless. Read once, when the controller invoker is built.
+     */
+    JAVA_CONTROLLER_DATES_AS_TIMESTAMPS("DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS", Boolean.FALSE.toString()),
+
+    /**
      * Whether an issue report carries the server-side log excerpt of its own requests (#7948); the
      * reporter sees the excerpt before sending either way.
      */
