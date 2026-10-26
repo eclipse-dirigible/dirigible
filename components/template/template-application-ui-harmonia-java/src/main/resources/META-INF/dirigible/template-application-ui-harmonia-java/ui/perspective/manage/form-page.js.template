@@ -207,6 +207,9 @@ document.addEventListener('alpine:init', () => {
     // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
     // (an outage must not lock the UI - the server still refuses the write).
     mutable: true,
+    // The record as the server answered it, set once it has loaded (#8116): what its contributed actions'
+    // status guards read. The form holds only the editable fields, and until the load it holds blanks.
+    loadedRecord: null,
 #end
 
     // Record action bar (issue #7491). Two viewport flags, because the page changes twice: below
@@ -246,6 +249,22 @@ document.addEventListener('alpine:init', () => {
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
       this.detailDefs = this.id != null ? App.detailsFor('${name}') : [];
       this.relatedDefs = this.id != null ? App.relatedFor('${name}') : [];
+#if($roleWrite)
+      // Whether this caller may write ${name} at all (#8089), settled before the form shows: a caller
+      // who may only read gets the preview on /edit and a notice on /create - never a form whose save
+      // the controller was always going to refuse. The 403 of each write stays the guard.
+      this.state = 'loading';
+      await this.loadAccess();
+      if (!this.canWrite() && !this.isEdit && !this.isPreview) {
+        this.state = 'cannot-create';
+        return;
+      }
+      if (!this.canWrite() && this.isEdit) this.mode = 'preview';
+      this.state = 'ready';
+#else
+      // No write gate on ${name}: whoever may open this page may write, so there is nothing to ask.
+      this.access = { read: true, write: true };
+#end
 
 #if($hasDropdowns)
       await this.loadOptions(true);
@@ -253,6 +272,12 @@ document.addEventListener('alpine:init', () => {
 
       if (this.isEdit || this.isPreview) {
         await this.loadRecord();
+        // A contributed action changes the record behind the page (#8116): re-read it, so its status and
+        // the actions it now allows show without a reload. Preview only - the actions are offered there,
+        // and an edit in progress must not be overwritten.
+        this.onActionDone(async () => {
+          if (this.isPreview) await this.loadRecord(true);
+        });
       } else {
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
@@ -352,6 +377,7 @@ document.addEventListener('alpine:init', () => {
       if (!quiet) this.state = 'loading';
       try {
         const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+        this.loadedRecord = record;
         // Copy only known form fields so server-only props don't leak into the body.
         for (const key of Object.keys(this.form)) {
           if (record[key] !== undefined) this.form[key] = record[key];
@@ -776,9 +802,10 @@ document.addEventListener('alpine:init', () => {
 
 #end
     // Backend temporal -> the value an HTML date/time input expects (by widget), so an edited
-    // record's dates populate the fields. The Java REST controller serializes java.time via Jackson
-    // as an ARRAY ([y,m,d] or [y,m,d,h,mi,s,ns]) and java.time.Instant as a numeric epoch — NOT an
-    // ISO string — so handle arrays/numbers as well as ISO-ish strings (the original assumption).
+    // record's dates populate the fields. The Java REST controller answers java.time as ISO-8601 -
+    // an Instant with its zone, which the input needs in the viewer's local clock - or, with
+    // DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS, as Jackson ARRAYS ([y,m,d] or [y,m,d,h,mi,s,ns])
+    // and an Instant as a numeric epoch; every shape is handled.
     // Convert a value to the fixed shape its <input> needs — NOT pattern-driven (shell format.js).
     toDateInput(value, widget) {
       return window.HarmoniaFormat.toDateInput(value, widget);
@@ -895,8 +922,10 @@ document.addEventListener('alpine:init', () => {
 #end
 
     // Whether Edit is offerable at all. The server stays authoritative - a caller the roles deny
-    // still gets a 403 - this only keeps the affordance honest where the page already knows.
+    // still gets a 403 - this only keeps the affordance honest where the page already knows: its
+    // GET /access answer (#8089) and the record's mutability.
     get canEdit() {
+      if (!this.canWrite()) return false;
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
       return !!this.mutable;
 #else
@@ -904,20 +933,22 @@ document.addEventListener('alpine:init', () => {
 #end
     },
 
-    // 'task' | 'edit' | 'none' - the filled slot.
+    // 'task' | 'action' | 'edit' | 'none' - the filled slot: the record's pending process task, then a
+    // contributed action declared primary that applies to the record (#8119), then Edit.
     get primaryAction() {
       if (this.recordTasks.length) return 'task';
+      if (this.primaryCustomAction) return 'action';
       return this.canEdit ? 'edit' : 'none';
     },
 
-    // Edit steps down to the outlined slot when a task holds the primary one, and folds into the
-    // overflow menu on a narrow viewport.
+    // Edit steps down to the outlined slot when a task or a primary action holds the filled one, and
+    // folds into the overflow menu on a narrow viewport.
     get showsSecondaryEdit() {
-      return this.primaryAction === 'task' && this.canEdit && !this.isNarrow;
+      return (this.primaryAction === 'task' || this.primaryAction === 'action') && this.canEdit && !this.isNarrow;
     },
 
     get editInMenu() {
-      return this.primaryAction === 'task' && this.canEdit && this.isNarrow;
+      return (this.primaryAction === 'task' || this.primaryAction === 'action') && this.canEdit && this.isNarrow;
     },
 
     // The overflow menu renders only when it would carry something.
@@ -945,9 +976,43 @@ document.addEventListener('alpine:init', () => {
       return this.canEdit;
     },
 
+    // The record's own contributed actions, for the overflow menu (#8116): the list sheet's rule
+    // (customActions.getActions over the record's status and roles). In preview only: an action acts on
+    // the STORED record, which an edit in progress does not match. None in create mode, which has no
+    // record, and none before the record has loaded - the store offers every action on a record without
+    // its status (#7605).
+    get recordActions() {
+      const store = Alpine.store('customActions');
+      return (store && this.isPreview && this.loadedRecord) ? store.getActions('${name}', 'entity', this.loadedRecord) : [];
+    },
+
+    // The contributed action that is the page's filled button (#8119): the first of the record's
+    // actions that declares primary. recordActions has already applied preview-only, the loaded record,
+    // and the action's status guards and roles.
+    get primaryCustomAction() {
+      return this.recordActions.find((a) => a.primary) || null;
+    },
+
+    // The record's actions the overflow menu lists: all of them but the one in the filled slot.
+    get menuRecordActions() {
+      const primary = this.primaryAction === 'action' ? this.primaryCustomAction : null;
+      return this.recordActions.filter((a) => a !== primary);
+    },
+
+    runPrimaryAction() {
+      const action = this.primaryCustomAction;
+      if (action) Alpine.store('customActions').trigger(action, this.id, this.loadedRecord);
+    },
+
+    primaryActionLabel() {
+      const a = this.primaryCustomAction;
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
+
     // Everything that would sit above the destructive group.
     get menuHasAboveDelete() {
-      return this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
+      return this.menuRecordActions.length > 0 || this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
     },
 
     get hasOverflowMenu() {
@@ -988,7 +1053,7 @@ document.addEventListener('alpine:init', () => {
 
     headerTitle() {
       const name = T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}');
-      if (this.isPreview) return name;
+      if (this.isPreview || this.state === 'cannot-create') return name;
       return this.isEdit
         ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Update {{name}}', { name: name })
         : T('$projectName:${tprefix}.defaults.formHeadCreate', 'Create {{name}}', { name: name });
@@ -1075,7 +1140,7 @@ document.addEventListener('alpine:init', () => {
 
     // Ctrl/Cmd+S saves from anywhere on the form, under the same guard the Save button carries.
     saveShortcut() {
-      if (this.isPreview || this.state === 'saving') return;
+      if (this.isPreview || !this.canWrite() || this.state === 'saving') return;
       if (this.isEdit && !this.isDirty()) return;
       this.save();
     },

@@ -26,7 +26,6 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -225,18 +224,9 @@ class IntentStatementImportIT extends IntegrationTest {
 
     private void assertLine(Map<String, Object> row, int lineNumber, String bookedOn, String amount, String details) {
         assertEquals(lineNumber, ((Number) row.get("LineNumber")).intValue(), "line number of " + row);
-        assertEquals(bookedOn, isoDate(row.get("BookedOn")), "booking date of " + row);
+        assertEquals(bookedOn, row.get("BookedOn"), "booking date of " + row);
         assertEquals(0, new BigDecimal(amount).compareTo(new BigDecimal(String.valueOf(row.get("Amount")))), "amount of " + row);
         assertEquals(details, row.get("Details"), "details of " + row);
-    }
-
-    /** The controller writes a date as {@code [year, month, day]}; the assertions read ISO text. */
-    private static String isoDate(Object value) {
-        if (value instanceof List<?> parts && parts.size() == 3) {
-            return LocalDate.of(((Number) parts.get(0)).intValue(), ((Number) parts.get(1)).intValue(), ((Number) parts.get(2)).intValue())
-                            .toString();
-        }
-        return String.valueOf(value);
     }
 
     /** The rows of one statement, by line number. */

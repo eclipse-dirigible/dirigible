@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.ExportIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -50,7 +51,8 @@ import org.eclipse.dirigible.components.intent.model.ReportIntent;
  * <li>Anything else ({@code approve}, {@code start}, ...) is a business action with no generated
  * URL behind it. It is legitimate to author - the process guard or a hand-written
  * {@code custom/*.access} enforces it - so it is kept as an advisory naming the token, never
- * silently discarded.</li>
+ * silently discarded - unless an {@code actions:} entry binds it with {@code can:}, which makes it
+ * the gate of that action's button (issue #8090).</li>
  * </ul>
  * A token whose resource half names nothing the intent declares is an ISSUE (a typo that would gate
  * nothing), and a malformed token is refused by the parser before generation runs.
@@ -194,13 +196,14 @@ public final class PermissionSupport {
         List<String> advisories = new ArrayList<>();
         Set<String> gateBearing = gateBearingResources(model);
         Set<String> declared = declaredResources(model);
+        Set<String> actionBound = actionBoundTokens(model);
         for (PermissionIntent permission : model.getPermissions()) {
             String role = permission.getRole();
             if (role == null || role.isBlank()) {
                 continue;
             }
             for (String token : permission.getCan()) {
-                bind(role.trim(), token, gateBearing, declared, read, write, issues, advisories);
+                bind(role.trim(), token, gateBearing, declared, actionBound, read, write, issues, advisories);
             }
         }
         List<String> extraWrite = settings == null ? List.of() : settings.extraRoles();
@@ -209,8 +212,8 @@ public final class PermissionSupport {
                 Collections.unmodifiableList(advisories), extraRead, extraWrite);
     }
 
-    private static void bind(String role, String token, Set<String> gateBearing, Set<String> declared, Map<String, Set<String>> read,
-            Map<String, Set<String>> write, List<String> issues, List<String> advisories) {
+    private static void bind(String role, String token, Set<String> gateBearing, Set<String> declared, Set<String> actionBound,
+            Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories) {
         if (token == null || token.isBlank()) {
             return;
         }
@@ -233,6 +236,10 @@ public final class PermissionSupport {
         boolean readable = READ_ACTIONS.contains(action) || ALL_ACTIONS.contains(action);
         boolean writable = WRITE_ACTIONS.contains(action) || ALL_ACTIONS.contains(action);
         if (!readable && !writable) {
+            if (actionBound.contains(token.trim())) {
+                // The gate of a call action's button (issue #8090): enforced where the button is offered.
+                return;
+            }
             advisories.add("permission [" + role + "] can [" + token + "] names action [" + action
                     + "], which maps to no generated gate (the generated surfaces gate read and write) - enforce it in a process guard"
                     + " or a hand-written custom/*.access");
@@ -252,6 +259,44 @@ public final class PermissionSupport {
         // read gate names authored roles.
         read.computeIfAbsent(resource, key -> new LinkedHashSet<>())
             .add(role);
+    }
+
+    /**
+     * The roles whose {@code permissions[].can} lists the token - who is offered the button of an
+     * action bound to it with {@code can:} (issue #8090).
+     *
+     * @param model the parsed intent
+     * @param token the {@code Resource:action} token
+     * @return the roles, in declaration order; empty when no role lists the token
+     */
+    public static List<String> rolesListing(IntentModel model, String token) {
+        Set<String> roles = new LinkedHashSet<>();
+        for (PermissionIntent permission : model.getPermissions()) {
+            String role = permission.getRole();
+            if (role == null || role.isBlank()) {
+                continue;
+            }
+            for (String listed : permission.getCan()) {
+                if (listed != null && listed.trim()
+                                            .equals(token.trim())) {
+                    roles.add(role.trim());
+                }
+            }
+        }
+        return List.copyOf(roles);
+    }
+
+    /** The tokens the {@code actions:} entries bind with {@code can:}. */
+    private static Set<String> actionBoundTokens(IntentModel model) {
+        Set<String> tokens = new LinkedHashSet<>();
+        for (ActionIntent action : model.getActions()) {
+            if (action.getCan() != null && !action.getCan()
+                                                  .isBlank()) {
+                tokens.add(action.getCan()
+                                 .trim());
+            }
+        }
+        return tokens;
     }
 
     /**

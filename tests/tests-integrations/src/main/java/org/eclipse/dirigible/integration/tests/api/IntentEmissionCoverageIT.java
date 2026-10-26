@@ -47,10 +47,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
-import io.restassured.config.JsonConfig;
-import io.restassured.config.RestAssuredConfig;
 import io.restassured.path.json.JsonPath;
-import io.restassured.path.json.config.JsonPathConfig.NumberReturnType;
 
 
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
@@ -134,11 +131,6 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final Pattern HTML_COMMENT = Pattern.compile("(?s)<!--.*?-->");
     /** A live reference to the page's {@code mutable} flag (not the word inside "immutable"). */
     private static final Pattern MUTABLE_REFERENCE = Pattern.compile("\\bmutable\\b");
-    /** An Instant is written as decimal epoch seconds; the default float would lose minutes of it. */
-    private static final RestAssuredConfig EXACT_NUMBERS = RestAssuredConfig.config()
-                                                                            .jsonConfig(JsonConfig.jsonConfig()
-                                                                                                  .numberReturnType(
-                                                                                                          NumberReturnType.BIG_DECIMAL));
 
     private static final String INTENT_YAML_ENTITIES = """
             name: emission
@@ -2631,8 +2623,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                       .truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         int permit = createRecord("/permit/PermitController", "{\"Note\":\"flowed\"}");
         AtomicReference<Map<String, Object>> approved = new AtomicReference<>();
-        restAssuredExecutor.execute(() -> approved.set(given().config(EXACT_NUMBERS)
-                                                              .when()
+        restAssuredExecutor.execute(() -> approved.set(given().when()
                                                               .get(API + "/permit/PermitController/" + permit)
                                                               .then()
                                                               .statusCode(200)
@@ -2660,11 +2651,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(expectedStatus));
     }
 
-    /** GETs a record from a generated controller, its numbers exact. */
+    /** GETs a record from a generated controller. */
     private Map<String, Object> readRecord(String controller, int id) {
         AtomicReference<Map<String, Object>> record = new AtomicReference<>();
-        restAssuredExecutor.execute(() -> record.set(given().config(EXACT_NUMBERS)
-                                                            .when()
+        restAssuredExecutor.execute(() -> record.set(given().when()
                                                             .get(API + controller + "/" + id)
                                                             .then()
                                                             .statusCode(200)
@@ -2684,21 +2674,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200));
     }
 
-    /** An Instant is written as epoch seconds, with its nanoseconds as the fraction. */
+    /** An Instant is answered as ISO-8601 in UTC (#8083). */
     private static Instant instantOf(Object value) {
         assertNotNull(value, "expected an instant");
-        BigDecimal epochSeconds = new BigDecimal(String.valueOf(value));
-        return Instant.ofEpochSecond(epochSeconds.longValue(), epochSeconds.remainder(BigDecimal.ONE)
-                                                                           .movePointRight(9)
-                                                                           .longValue());
+        return Instant.parse((String) value);
     }
 
-    /** A LocalDate is written as its [year, month, day] array. */
+    /** A LocalDate is answered as its ISO date (#8083). */
     private static java.time.LocalDate dateOf(Object value) {
-        List<?> parts = (List<?>) value;
-        assertEquals(3, parts.size(), "a date is written as [year, month, day]: " + value);
-        return java.time.LocalDate.of(((Number) parts.get(0)).intValue(), ((Number) parts.get(1)).intValue(),
-                ((Number) parts.get(2)).intValue());
+        assertNotNull(value, "expected a date");
+        return java.time.LocalDate.parse((String) value);
     }
 
     /**
@@ -2714,8 +2699,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/reorder/ReorderController")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("OrderedOn",
-                                                         equalTo(List.of(today.getYear(), today.getMonthValue(), today.getDayOfMonth())))
+                                                 .body("OrderedOn", equalTo(today.toString()))
                                                  .body("Period", equalTo(java.time.YearMonth.from(today)
                                                                                             .toString()))
                                                  .body("RecordedAt", notNullValue())
@@ -2730,7 +2714,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/reorder/ReorderController")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("OrderedOn", equalTo(List.of(2020, 1, 15)))
+                                                 .body("OrderedOn", equalTo("2020-01-15"))
                                                  .body("Period", equalTo("2020-01")));
     }
 

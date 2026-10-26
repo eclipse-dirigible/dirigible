@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.request.RequestIds;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
@@ -76,17 +77,20 @@ public class ControllerInvoker {
         // that was findAndRegisterModules(), and the lenient module is added LAST so its per-type
         // deserializers still win.
         //
-        // WRITE_DATES_AS_TIMESTAMPS is pinned ON because Jackson 3 moved it to DateTimeFeature
-        // and flipped its default to OFF. Left
-        // at the new default, every date / timestamp a generated controller returns changes from the
-        // epoch number clients have always received to an ISO-8601 string - a breaking wire change
-        // that this dependency migration has no business making. IntentSetFieldNowIT caught it on
-        // "ApprovedAt" (String cannot be cast to Number).
+        // A date is answered as ISO-8601 - an Instant as "2026-10-23T10:41:22.343660Z", a LocalDate
+        // as "2026-11-02" - which is what a JSON API is expected to answer, what tells seconds from
+        // milliseconds without guessing, and what the generated UI and hand-written endpoints read
+        // alike (#8083). WRITE_DATES_AS_TIMESTAMPS is set explicitly, not left to the injected mapper,
+        // so the wire format does not follow the platform's shared Jackson configuration.
+        // DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS restores the Jackson timestamps (decimal epoch
+        // seconds, [y, m, d] arrays) controllers answered before, for clients that read the numbers;
+        // binding accepts both shapes either way.
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new)
                                                 .rebuild()
                                                 .addModules(MapperBuilder.findModules())
                                                 .addModule(new LenientJavaTimeModule())
-                                                .enable(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS)
+                                                .configure(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS,
+                                                        DirigibleConfig.JAVA_CONTROLLER_DATES_AS_TIMESTAMPS.getBooleanValue())
                                                 .build();
     }
 

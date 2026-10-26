@@ -33,8 +33,12 @@ import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
  * registration for the shared {@code customActions} store to type the dialog from, so the action
  * descriptor carries each prompted control itself: its widget, its caption and, for a to-one, the
  * controller its options are read from, its key and its label property.
+ *
+ * <p>
+ * A {@code call:} action (issue #8090) has no target at all, so its controls are declared inline
+ * and emitted in the same shape through {@link #declared}.
  */
-final class PromptColumns {
+public final class PromptColumns {
 
     private PromptColumns() {}
 
@@ -72,6 +76,18 @@ final class PromptColumns {
             columns.add(crossModelColumn(p, info, uses, context));
         }
         return columns;
+    }
+
+    /**
+     * A control declared inline with its own type - a {@code call:} action's prompt input.
+     *
+     * @param name the input's name
+     * @param label the caption, or null for a humanized name
+     * @param type the declared type ({@code string}, {@code integer}, {@code boolean}, ...)
+     * @return the control, in the shape the shell's prompt dialog renders
+     */
+    public static Map<String, Object> declared(String name, String label, String type) {
+        return column(name, caption(label, name), widgetOf(type), null);
     }
 
     private static boolean isDetailOf(EntityIntent target, String forEntity) {

@@ -15,9 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.base.http.access.UserRequestVerifier;
-import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.extensions.modules.ExtensionModule;
 import org.eclipse.dirigible.components.extensions.modules.ExtensionModuleReader;
 import org.slf4j.Logger;
@@ -33,9 +30,7 @@ import org.springframework.stereotype.Component;
  * A projection carries {@code id}, {@code label}, optionally {@code description}, {@code icon} and
  * {@code order}; {@code groups} (group ids included wholesale) and {@code items} (perspective ids
  * cherry-picked), or {@code all: true} for the "everything" entry; and optionally {@code roles},
- * offering it only to a user holding at least one of them - checked here, so a gated entry is never
- * shipped to the browser. That is in addition to the {@code role} of the extension artefact itself,
- * which the extension service applies.
+ * offering it only to a user holding at least one of them ({@link CallerRoles}).
  */
 @Component
 class ProjectionsAggregator {
@@ -71,35 +66,11 @@ class ProjectionsAggregator {
             Map<String, Object> projection = module.content();
             if (!ids.add(projection.get("id"))) {
                 LOGGER.warn("Projection with non-unique id [{}] is skipped.", projection.get("id"));
-            } else if (isOffered(projection)) {
+            } else if (CallerRoles.offered(projection)) {
                 projections.add(projection);
             }
         }
         projections.sort(ExtensionOrdering.byOrderThenText("label"));
         return projections;
-    }
-
-    private static boolean isOffered(Map<String, Object> projection) {
-        if (!(projection.get("roles") instanceof List<?> roles) || roles.isEmpty()) {
-            return true;
-        }
-        return roles.stream()
-                    .anyMatch(role -> role != null && isUserInRole(role.toString()));
-    }
-
-    /**
-     * Whether the current user holds the role, as the script API's {@code user.isInRole} answered: in
-     * an anonymous mode everybody does, a developer or an administrator holds every role, and outside a
-     * request nobody does.
-     */
-    private static boolean isUserInRole(String role) {
-        if (Configuration.isAnonymousModeEnabled() || Configuration.isAnonymousUserEnabled()) {
-            return true;
-        }
-        if (!UserRequestVerifier.isValid()) {
-            return false;
-        }
-        return UserRequestVerifier.isUserInRole(Roles.DEVELOPER.getRoleName())
-                || UserRequestVerifier.isUserInRole(Roles.ADMINISTRATOR.getRoleName()) || UserRequestVerifier.isUserInRole(role);
     }
 }

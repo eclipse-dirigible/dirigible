@@ -283,8 +283,9 @@
     </form>
 
     <!-- Date/time controls (model + control type + editable) so form.js can convert the backend's
-         java.time values to/from the inputs' ISO shape (Jackson serializes LocalDate as [y,m,d] and
-         Instant as an epoch number, NOT ISO strings — a raw bind would show "2026,6,30" / break the input). -->
+         java.time values to/from the inputs' ISO shape (an Instant arrives as a zoned ISO string the
+         input needs in the viewer's local clock, or - with DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS -
+         as an epoch number, a LocalDate as [y,m,d]; a raw bind would show "2026,6,30" / break the input). -->
     <script>
       window.__harmoniaDateControls = [
 #foreach($element in $form)

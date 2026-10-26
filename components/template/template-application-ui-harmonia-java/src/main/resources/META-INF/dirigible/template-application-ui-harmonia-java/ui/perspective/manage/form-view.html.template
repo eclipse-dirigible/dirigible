@@ -58,7 +58,7 @@
         <!-- Preview says WHICH record this is, from the properties the model marks as major; the
              editable modes say what the asterisks mean instead. -->
         <span x-h-text.muted class="truncate text-sm" x-show="isPreview &amp;&amp; summaryLine()" x-text="summaryLine()"></span>
-        <span x-h-text.muted class="text-sm" x-show="!isPreview" x-text="T('$projectName:${tprefix}.messages.requiredLegend', 'Fields marked * are required')"></span>
+        <span x-h-text.muted class="text-sm" x-show="!isPreview &amp;&amp; canWrite()" x-text="T('$projectName:${tprefix}.messages.requiredLegend', 'Fields marked * are required')"></span>
       </div>
 
       <!-- At most one filled button, chosen by the component (primaryAction), never by competing
@@ -94,6 +94,17 @@
           <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
         </button>
         <ul x-h-menu data-align="bottom-end">
+          <!-- The record's own contributed actions (#8116), first, as in the list sheet's menu: the
+               same ones, by the same store call and status guards (recordActions - preview only, and
+               only once the record has loaded). -->
+          <template x-for="action in menuRecordActions" :key="action.id">
+            <li x-h-menu-item @click="$store.customActions.trigger(action, id, loadedRecord)"
+                x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+          </template>
+          <!-- The delete group brings its own rule (menuHasAboveDelete counts the actions). -->
+          <template x-if="menuRecordActions.length &amp;&amp; (editInMenu || menuHasPrint || menuHasCalendars)">
+            <li x-h-menu-separator></li>
+          </template>
           <!-- Edit folds in here on a narrow viewport; the primary never folds. -->
           <template x-if="editInMenu">
             <li x-h-menu-item @click="goEdit()">
@@ -165,6 +176,11 @@
           </ul>
         </div>
 #end
+        <!-- Primary, a contributed action declared primary that applies to this record (#8119). Edit
+             then steps down to the outlined button, as it does for a task. -->
+        <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview &amp;&amp; primaryAction === 'action'" @click="runPrimaryAction()">
+          <span x-text="primaryActionLabel()"></span>
+        </button>
         <!-- Primary, case 2: Edit, when nothing else claims the slot. A record the user cannot
              change leaves the slot empty rather than offering a button that would 403. -->
         <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="isPreview &amp;&amp; primaryAction === 'edit'" @click="goEdit()">
@@ -172,8 +188,8 @@
         </button>
 
         <!-- Primary, editable modes: Save. Nothing to save on an unchanged record; a create is
-             always offerable. -->
-        <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
+             offerable to every caller the controller's GET /access says may write (#8089). -->
+        <button type="button" x-h-button data-variant="primary" class="shrink-0" x-show="!isPreview &amp;&amp; canWrite()" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
           <span x-show="state === 'saving'" x-h-spinner></span>
           <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
         </button>
@@ -213,13 +229,25 @@
     </div>
   </div>
 
+  <!-- Create opened by a caller who may only read (#8089): one notice instead of a form whose save
+       the controller would refuse. -->
+  <div x-show="state === 'cannot-create'" x-h-info-page class="p-4">
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="lock"></svg></div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.defaults.cannotCreate', 'You can view ${entityLabel} records but not create them.', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
+    </div>
+    <div x-h-info-page-content>
+      <button x-h-button data-variant="outline" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
+    </div>
+  </div>
+
   <!-- Loading (edit) -->
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
 
   <!-- Form area: the main column holds the field form, the detail collections and the action footer
        (in that order, so the Save/Cancel bar is the LAST thing on the page - below the panels, like
        the document view); the read-only/audit sidebar is the second column of this hbox. -->
-  <div x-show="state !== 'loading' && state !== 'load-failure'"
+  <div x-show="state !== 'loading' && state !== 'load-failure' && state !== 'cannot-create'"
         class="vbox lg:hbox w-full items-start gap-6 px-4 py-6"
         :style="isNarrow ? 'padding-bottom: 5rem' : ''">
     <!-- Main content column. w-full: below lg the body is a column whose items-start would otherwise
@@ -640,6 +668,18 @@
                       </template>
                       <td x-h-table-cell data-row-actions>
                         <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><svg role="presentation" x-h-lucide data-lucide="external-link"></svg></button>
+                        <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
+                        <template x-if="rowActions(row).length">
+                          <span class="inline-flex">
+                            <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                            <ul x-h-menu data-align="bottom-end">
+                              <template x-for="action in rowActions(row)" :key="action.id">
+                                <li x-h-menu-item @click="runRowAction(action, row)"
+                                    x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                              </template>
+                            </ul>
+                          </span>
+                        </template>
                       </td>
                     </tr>
                   </template>
@@ -661,8 +701,8 @@
       <div x-h-toolbar-spacer></div>
       <!-- The button says what it will do: leaving a dirty form discards the edit (issue #7359). -->
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="isDirty() ? T('$projectName:${tprefix}.defaults.discard', 'Discard') : T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <!-- Nothing to save on an unchanged record; a create is always offerable. -->
-      <button type="button" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
+      <!-- Nothing to save on an unchanged record; a create is offerable to a caller who may write. -->
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview &amp;&amp; canWrite()" :disabled="state === 'saving' || (isEdit &amp;&amp; !isDirty())" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
         <svg x-h-lucide role="presentation" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>

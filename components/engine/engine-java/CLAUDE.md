@@ -401,6 +401,11 @@ developer who wrote the line, not the operator who happened to run the process.
 - `ControllerInvoker` renders its own compact `{status, error, message}` body, so a generated
   controller's validation reason reaches the caller verbatim. The platform-wide error body carries the
   reason too since #6994; the ITs here still assert status codes only.
+- A controller answers dates as ISO-8601 (#8083): an `Instant` as `"2026-10-23T10:34:10.343660Z"`, a
+  `LocalDate` as `"2026-11-02"`. `ControllerInvoker` sets `WRITE_DATES_AS_TIMESTAMPS` itself, not from
+  the shared mapper; `DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS=true` restores the Jackson timestamps
+  of earlier releases (decimal epoch seconds, `[y, m, d]` arrays). `@Body` binds both shapes either way.
+  An IT reads a date with `Instant.parse` / `LocalDate.parse`, never as a number.
 
 ## Tests
 

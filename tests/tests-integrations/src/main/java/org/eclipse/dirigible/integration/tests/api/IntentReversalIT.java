@@ -178,8 +178,7 @@ class IntentReversalIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("Storno", equalTo(original))
                                                  .body("Status", equalTo(1))
-                                                 // a date reads back as [year, month, day]
-                                                 .body("Date", equalTo(List.of(now.getYear(), now.getMonthValue(), now.getDayOfMonth())))
+                                                 .body("Date", equalTo(today))
                                                  .body("Note", equalTo("accrual"))
                                                  .body("ReversedBy", nullValue()),
                 TIMEOUT_SECONDS);

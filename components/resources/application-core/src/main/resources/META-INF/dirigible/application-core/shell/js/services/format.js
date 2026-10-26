@@ -261,10 +261,12 @@
     },
 
     /**
-     * Format a date/datetime value for display using the instance Date / Timestamp patterns. Jackson
-     * serializes java.time as arrays (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]), an
-     * Instant/Timestamp as an epoch number, and a java.util.Date as an ISO string with a zone offset;
-     * all three shapes are recognised. An offset-carrying string is converted to the viewer's zone (an
+     * Format a date/datetime value for display using the instance Date / Timestamp patterns. A Java
+     * controller answers java.time as ISO-8601 (#8083): an Instant/Timestamp with its zone ("...Z"), a
+     * LocalDate / LocalDateTime without one. With DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS it
+     * answers Jackson timestamps instead - arrays (LocalDate [y,m,d], LocalDateTime
+     * [y,m,d,h,mi,s,ns]) and an Instant/Timestamp as epoch seconds; every one of these shapes is
+     * recognised. An offset-carrying string is converted to the viewer's zone (an
      * offset-less one is a wall clock and is read literally). Empty -> '—'; an unrecognised value
      * (e.g. an already-formatted string) passes through unchanged.
      */

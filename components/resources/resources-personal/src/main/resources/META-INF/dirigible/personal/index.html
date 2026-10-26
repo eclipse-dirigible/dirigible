@@ -334,7 +334,7 @@
         <div x-h-dialog-content>
           <p
             x-h-text.muted
-            x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"
+            x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) || T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"
           ></p>
         </div>
         <div x-h-dialog-footer>

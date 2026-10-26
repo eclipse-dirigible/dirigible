@@ -144,6 +144,7 @@
       "formGrpFilter": "Филтър {{name}}",
       "formHeadSelect": "Детайли за {{name}}",
       "formHeadCreate": "Създаване на {{name}}",
+      "cannotCreate": "Можете да разглеждате записи от {{name}}, но не и да ги създавате.",
       "formHeadUpdate": "Редакция на {{name}}",
       "reportTitle": "Справка {{name}}",
       "reportFilter": "Филтър на справката",

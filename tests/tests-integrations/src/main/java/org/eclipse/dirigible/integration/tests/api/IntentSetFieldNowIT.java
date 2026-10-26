@@ -16,7 +16,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,10 +34,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
-
-import io.restassured.config.JsonConfig;
-import io.restassured.config.RestAssuredConfig;
-import io.restassured.path.json.config.JsonPathConfig.NumberReturnType;
 
 /**
  * A process step can record when something happened - dirigible #7873.
@@ -64,13 +59,6 @@ class IntentSetFieldNowIT extends IntegrationTest {
     private static final long TIMEOUT_SECONDS = 90;
     /** The steps run once the create event has started the instance. */
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
-    /**
-     * An Instant is written as decimal epoch seconds; the default float would lose minutes of it.
-     */
-    private static final RestAssuredConfig EXACT_NUMBERS = RestAssuredConfig.config()
-                                                                            .jsonConfig(JsonConfig.jsonConfig()
-                                                                                                  .numberReturnType(
-                                                                                                          NumberReturnType.BIG_DECIMAL));
 
     private static final String INTENT_YAML = """
             name: setfieldnow
@@ -115,19 +103,19 @@ class IntentSetFieldNowIT extends IntegrationTest {
         Instant after = Instant.now();
         LocalDate dayAfter = LocalDate.now();
 
-        Instant approvedAt = instantOf((Number) stamped.get("ApprovedAt"));
+        // The controller answers ISO-8601 (#8083): an Instant as "...Z", a LocalDate as "yyyy-MM-dd".
+        Instant approvedAt = Instant.parse((String) stamped.get("ApprovedAt"));
         assertFalse(approvedAt.isBefore(before), "the stamp must be taken after the order was created: " + approvedAt + " < " + before);
         assertFalse(approvedAt.isAfter(after), "the stamp must be taken before the flow was observed done: " + approvedAt + " > " + after);
 
-        LocalDate approvedOn = dateOf(stamped.get("ApprovedOn"));
+        LocalDate approvedOn = LocalDate.parse((String) stamped.get("ApprovedOn"));
         assertTrue(approvedOn.equals(dayBefore) || approvedOn.equals(dayAfter), "the date stamp must be today: " + approvedOn);
     }
 
     /** The order once both stamp steps have run. */
     private Map<String, Object> awaitStamped(int order) {
         AtomicReference<Map<String, Object>> stamped = new AtomicReference<>();
-        restAssuredExecutor.execute(() -> stamped.set(given().config(EXACT_NUMBERS)
-                                                             .when()
+        restAssuredExecutor.execute(() -> stamped.set(given().when()
                                                              .get(ORDERS + "/" + order)
                                                              .then()
                                                              .statusCode(200)
@@ -138,21 +126,6 @@ class IntentSetFieldNowIT extends IntegrationTest {
                                                              .getMap("")),
                 PROCESS_TIMEOUT_SECONDS);
         return stamped.get();
-    }
-
-    /** An Instant is written as epoch seconds, with its nanoseconds as the fraction. */
-    private static Instant instantOf(Number value) {
-        BigDecimal epochSeconds = new BigDecimal(value.toString());
-        return Instant.ofEpochSecond(epochSeconds.longValue(), epochSeconds.remainder(BigDecimal.ONE)
-                                                                           .movePointRight(9)
-                                                                           .longValue());
-    }
-
-    /** A LocalDate is written as its [year, month, day] array. */
-    private static LocalDate dateOf(Object value) {
-        List<?> parts = (List<?>) value;
-        assertEquals(3, parts.size(), "a date is written as [year, month, day]: " + value);
-        return LocalDate.of(((Number) parts.get(0)).intValue(), ((Number) parts.get(1)).intValue(), ((Number) parts.get(2)).intValue());
     }
 
     private int create(String body) {

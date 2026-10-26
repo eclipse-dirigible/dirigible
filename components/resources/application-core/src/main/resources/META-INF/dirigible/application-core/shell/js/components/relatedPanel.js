@@ -69,5 +69,19 @@ function relatedPanel(def, recordId) {
       Alpine.store('related').create(
         app + '?embedded=1#/' + this.def.entity + '/' + id + '/preview?embedded=1&dialog=1', this.title);
     },
+
+    // A row's record's own contributed actions (#8118), for its menu beside Open: the source entity's
+    // actions the row's status guards and roles allow - the rule of the list's row menu (#8116). Only
+    // for a same-project register: a cross-project source's descriptors belong to its own application.
+    // Read-only still: an action is the source's own declared operation, guarded by its own endpoint,
+    // not an edit through the register - which re-reads its rows after one (detailPanel's onActionDone).
+    rowActions(row) {
+      const store = Alpine.store('customActions');
+      return (this.def.local && row && store) ? store.getActions(this.def.entity, 'entity', row) : [];
+    },
+
+    runRowAction(action, row) {
+      Alpine.store('customActions').trigger(action, row[this.def.primaryKey], row);
+    },
   };
 }

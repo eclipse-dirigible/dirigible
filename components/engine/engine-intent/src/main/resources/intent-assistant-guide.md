@@ -2253,6 +2253,60 @@ shell ANNOUNCES that outcome: the message may carry `status` (`ok` / `error` / `
 `message`, one that carries nothing gets the default "<label> completed", and a page closed by its
 own Cancel button reports `cancelled` so an abandoned action is dismissed in silence.
 
+**`call:` - a button for the application's OWN endpoint.** When a hand-written endpoint owns the rule
+(a `custom/` controller that guards a state machine, keeps one operation at a time, is idempotent, or
+answers a 409 written for people), declare `call:` instead of `page:`: the generated view offers the
+button, collects the inputs and sends the request, and no page or generated controller is written.
+
+```yaml
+actions:
+  - name: EscalateTicket
+    forEntity: Ticket
+    label: Escalate
+    fromStatus: [OPEN, ON_HOLD]   # hides the button elsewhere - ADVISORY: the endpoint's 409 decides
+    can: Ticket:escalate          # offered only to the roles whose permissions list this token
+    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date
+      - { name: level, type: integer, label: Level, required: true }
+      - { name: note,  type: text,    label: Note }
+    call:
+      method: POST                # POST (default) | PUT | DELETE
+      path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/escalations
+      body: { kind: MANUAL, level: "{level}", note: "{note}" }
+    success: Escalation requested # the toast; default "<label> completed"
+  - name: RetryEscalation
+    forEntity: Escalation
+    label: Retry
+    confirm: Run this escalation again?   # the confirmation text of a call without a prompt
+    call: { path: "/services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry" }
+```
+
+Rules: `call:` and `page:` are exclusive; `prompt`, `confirm`, `fromStatus`, `can` and `success` belong
+to a `call:` only, and `prompt` excludes `confirm` (the dialog IS the confirmation). `path` is an
+absolute same-origin path under `/services/`; its one placeholder is `{id}` (the clicked record's key,
+URL-encoded), which needs `scope: entity`. In `body`, a string that is exactly `"{name}"` is that prompt
+input TYPED (an integer sends a number, a boolean a boolean, an empty optional input `null`), `{name}`
+inside a longer string interpolates as text, and everything else is a constant; every `{name}` must be a
+declared prompt input, and without `body` none is sent. `fromStatus` names seeded statuses of
+`forEntity`'s `function: EntityStatus` relation; it only hides the button - the platform adds NO server
+check, so the endpoint must enforce its own rule. A `can:` token no role lists is refused (the button
+would be shown to nobody), and a token an action binds is not reported as an advisory. The answer's
+body is not read: a 2xx toasts `success`, a 400/409 shows the endpoint's `message`.
+
+**`primary: true` - the record's filled button.** The list's details sheet and the record page each
+have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,
+`generates:` entry or `transitions:` entry that IS the next step declares `primary: true`; when it applies
+to the record (its `fromStatus` / `from` guard and its roles pass), it takes the filled slot, and Edit
+moves to the sheet's menu or to the page's outlined button. A pending process task still comes first, and
+several primary actions of one entity are fine when they apply in different statuses (the first that
+applies wins, in `order`). Refused on `scope: page`. Without it, the record's actions stay in its menus:
+the row's `⋯`, the sheet's More actions, the record page's `⋯` and, for a `related:` register's rows, a
+`⋯` beside Open.
+
+**`call:` or `generates:`?** `generates:` inserts the target row through its OWN generated controller -
+right when the rules fit `fromStatus:` / `defaults:`. When the rules live in the application's endpoint
+(and some cannot be expressed in the DSL at all), copying them into the intent duplicates them; `call:`
+puts the button in front of the endpoint that already owns them.
+
 ### transitions - guarded on-demand status flips (void / cancel / close / reopen)
 
 **Use when:** a document needs a manual status change AFTER its create-time process has ended - void
@@ -5055,6 +5109,7 @@ or a seeded name.
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
+- "a button on X's view that calls our own endpoint / custom controller (it owns the rule)" -> **actions** with `call:`
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
 - "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" (on a button, per selected record) -> **generates**
 - "when X is approved/identified/closed, create the Y document from it automatically (no click)" -> **generates** with `event:`

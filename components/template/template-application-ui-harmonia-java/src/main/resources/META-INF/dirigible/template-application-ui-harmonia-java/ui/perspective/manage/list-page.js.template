@@ -96,6 +96,15 @@ document.addEventListener('alpine:init', () => {
         this.exportColumns = this.exportColumns.filter(c => this.canSee(c.name));
       });
 #end
+#if($roleWrite)
+      // Whether this caller may write ${name} at all (#8089): New, Edit and Delete stay hidden until
+      // the controller answers, and stay hidden for a caller it would refuse. Not awaited - the rows
+      // render at once.
+      this.loadAccess();
+#else
+      // No write gate on ${name}: whoever may open this page may write, so there is nothing to ask.
+      this.access = { read: true, write: true };
+#end
       await this.load();
       this.loadLookups();
       this.selectFromRoute();
@@ -303,13 +312,32 @@ document.addEventListener('alpine:init', () => {
       const actions = Alpine.store('customActions');
       return (this.selected && actions) ? actions.getActions(this.caView, 'entity', this.selected) : [];
     },
-    // 'task' | 'edit' | 'preview' - what the sheet's one filled button does. The record's own
-    // process task comes first (the step it is waiting on), then Edit, and Preview when the
-    // record's status makes it read-only and there is nothing to edit. A contributed action is
-    // never it: Duplicate and Print are conveniences, not the reason the record is open, and the
-    // filled button is what the sheet is FOR.
+    // A row's own contributed actions, for its row menu (#8116): the sheet's rule, applied to the row -
+    // the same store call, so the same status guards and roles. A method, not a getter: the row menu
+    // evaluates it per row, and the row already carries the status the guards read.
+    rowActions(row) {
+      const actions = Alpine.store('customActions');
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row) : [];
+    },
+    // Runs one of a row's actions on that row. Here rather than in the markup: there, a $store call
+    // whose arguments carry the row's key expression is read by Velocity as one reference, and refused.
+    runRowAction(action, row) {
+      Alpine.store('customActions').trigger(action, row.${primaryKeysString}, row);
+    },
+    // The contributed action that is the sheet's filled button (#8119): the first of the record's
+    // actions that declares primary - recordActions has already applied its status guards and roles.
+    get primaryCustomAction() {
+      return this.recordActions.find((a) => a.primary) || null;
+    },
+    // 'task' | 'action' | 'edit' | 'preview' - what the sheet's one filled button does. The record's
+    // own process task comes first (the step it is waiting on), then a contributed action declared
+    // primary that applies to the record (#8119), then Edit, and Preview when the record's status - or
+    // a caller who may only read (#8089) - leaves nothing to edit. Any other contributed action is
+    // never it: Duplicate and Print are conveniences, not the reason the record is open.
     get primaryAction() {
       if (this.recordTasks.length) return 'task';
+      if (this.primaryCustomAction) return 'action';
+      if (!this.canWrite()) return 'preview';
 #if($immutableStatusProperty || $immutableAlways)
       if (this.isRowImmutable(this.selected)) return 'preview';
 #end
@@ -317,21 +345,36 @@ document.addEventListener('alpine:init', () => {
     },
     // Whatever the primary button did not take. Contributed actions are all of them, always.
     get menuTasks() { return this.primaryAction === 'task' ? this.recordTasks.slice(1) : this.recordTasks; },
-    get menuActions() { return this.recordActions; },
+    get menuActions() {
+      const primary = this.primaryCustomAction;
+      return this.recordActions.filter((a) => a !== primary);
+    },
+    runPrimaryAction() {
+      const action = this.primaryCustomAction;
+      if (action) Alpine.store('customActions').trigger(action, this.selectedId, this.selected);
+    },
+    primaryActionLabel() {
+      const a = this.primaryCustomAction;
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
     // The task the primary button runs. Named here rather than indexed in the markup: a $store
     // method call carrying an index expression is the Velocity-vs-Alpine trap - Velocity parses the
     // $store reference and chokes on the '['.
     get primaryTask() { return this.recordTasks[0] || null; },
 
     get menuHasEdit() {
+      if (!this.canWrite()) return false;
 #if($immutableStatusProperty || $immutableAlways)
       if (this.isRowImmutable(this.selected)) return false;
 #end
       return this.primaryAction !== 'edit';
     },
     get menuHasPreview() { return this.primaryAction !== 'preview'; },
-    // Delete is withheld from a record its status makes read-only (the controller would 409).
+    // Delete is withheld from a caller who may not write (the controller would 403) and from a
+    // record its status makes read-only (it would 409).
     get menuHasDelete() {
+      if (!this.canWrite()) return false;
 #if($immutableStatusProperty || $immutableAlways)
       return !this.isRowImmutable(this.selected);
 #else
@@ -340,8 +383,8 @@ document.addEventListener('alpine:init', () => {
     },
     // A separator earns its place only between two groups that both have something in them.
 #if($hierarchyProperty)
-    // Add child is always in the record group, so the group is never empty.
-    get menuHasRecordActions() { return true; },
+    // Add child is in the record group for a caller who may write, so the group is never empty then.
+    get menuHasRecordActions() { return this.canWrite() || this.menuHasPreview; },
 #else
     get menuHasRecordActions() { return this.menuHasPreview || this.menuHasEdit; },
 #end

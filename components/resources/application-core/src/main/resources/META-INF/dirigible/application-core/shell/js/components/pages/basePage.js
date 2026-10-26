@@ -429,6 +429,40 @@ function basePage() {
     },
 
     /**
+     * What this caller may do with the entity - `{ read, write }`, answered by the controller's
+     * GET /access from the same gates its endpoints enforce (dirigible #8089). A page whose entity
+     * has a write gate asks once and hides New / Edit / Delete / Save from a caller who may only
+     * read, instead of offering a form the server was always going to refuse with a 403.
+     *
+     * `null` until the answer arrives, and canWrite() is false while it is, so the write controls
+     * never flash up and disappear. A page without a write gate sets the answer itself and asks
+     * nothing.
+     */
+    access: null,
+
+    /** Whether the write controls show for this caller. */
+    canWrite() {
+      return this.access === null ? false : this.access.write !== false;
+    },
+
+    /**
+     * Ask the entity's controller what this caller may do. Failure shows the write controls, the way
+     * loadRestrictedFields shows every field: each write still answers 403 to a caller who may not
+     * make it, so the worst case is today's refusal - never a control hidden from someone entitled
+     * to it.
+     */
+    async loadAccess(apiPath) {
+      const path = apiPath || this.apiPath;
+      try {
+        const answer = await App.services.api.get(path + '/access');
+        this.access = { read: !answer || answer.read !== false, write: !answer || answer.write !== false };
+      } catch (e) {
+        console.error('[access] could not read what this caller may do with ' + path, e);
+        this.access = { read: true, write: true };
+      }
+    },
+
+    /**
      * Whether a date picker's `change` event carries a value the picker actually PARSED.
      *
      * The picker listens on its own input, so its handler has already run by the time the event
