@@ -70,9 +70,10 @@ window.MonitoringOps = (() => {
     historicInstanceVariables: (instanceId) =>
       get('/services/bpm/bpm-processes/historic-instances/' + encodeURIComponent(instanceId) + '/variables'),
 
-    /** The open user tasks of a process instance. */
+    /** Every open user task of a process instance, whoever it is assigned to or a candidate for -
+     *  an operator needs the instance's tasks, not only their own (type=all, dirigible #8076). */
     instanceTasks: (instanceId) =>
-      get('/services/bpm/bpm-processes/instance/' + encodeURIComponent(instanceId) + '/tasks'),
+      get('/services/bpm/bpm-processes/instance/' + encodeURIComponent(instanceId) + '/tasks?type=all'),
 
     /** Per-activity { positive, negative } counters, overlaid as badges on the diagram. */
     instanceActivities: (instanceId) =>

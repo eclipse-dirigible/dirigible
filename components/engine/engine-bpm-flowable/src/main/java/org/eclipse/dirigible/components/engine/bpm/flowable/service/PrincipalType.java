@@ -14,7 +14,9 @@ public enum PrincipalType {
     /** The assignee. */
     ASSIGNEE("assignee"),
     /** The candidate groups. */
-    CANDIDATE_GROUPS("groups");
+    CANDIDATE_GROUPS("groups"),
+    /** Every task, regardless of who it is addressed to - an operator's view of one instance. */
+    ALL("all");
 
     /** The type. */
     private final String type;

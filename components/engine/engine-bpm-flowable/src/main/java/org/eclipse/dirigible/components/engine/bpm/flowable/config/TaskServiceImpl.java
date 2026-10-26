@@ -230,6 +230,10 @@ class TaskServiceImpl implements TaskService {
             // assignee = the effective identity: under act-as (delegated entry) the Inbox serves
             // the acting identity's own tasks, e.g. a personal-assigned submit task
             return taskQuery.taskAssignee(ActAsFacade.effectiveUser());
+        } else if (PrincipalType.ALL.equals(type)) {
+            // every task of the instance, whoever it is addressed to - the operator's view, behind the
+            // operator role gate on the /bpm-processes endpoints; the tenant filter above still applies
+            return taskQuery;
         } else {
             throw new IllegalArgumentException("Unrecognised principal type: " + type);
         }

@@ -344,6 +344,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
         dto.setAssignee(task.getAssignee());
         dto.setFormKey(task.getFormKey());
         dto.setCreateTime(task.getCreateTime());
+        dto.setDueDate(task.getDueDate());
         dto.setProcessInstanceId(task.getProcessInstanceId());
         dto.setCandidateUsers(identityLinks.stream()
                                            .map(IdentityLinkInfo::getUserId)
