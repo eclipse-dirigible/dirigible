@@ -94,6 +94,17 @@
           <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
         </button>
         <ul x-h-menu data-align="bottom-end">
+          <!-- The record's own contributed actions (#8116), first, as in the list sheet's menu: the
+               same ones, by the same store call and status guards (recordActions - preview only, and
+               only once the record has loaded). -->
+          <template x-for="action in recordActions" :key="action.id">
+            <li x-h-menu-item @click="$store.customActions.trigger(action, id, loadedRecord)"
+                x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+          </template>
+          <!-- The delete group brings its own rule (menuHasAboveDelete counts the actions). -->
+          <template x-if="recordActions.length &amp;&amp; (editInMenu || menuHasPrint || menuHasCalendars)">
+            <li x-h-menu-separator></li>
+          </template>
           <!-- Edit folds in here on a narrow viewport; the primary never folds. -->
           <template x-if="editInMenu">
             <li x-h-menu-item @click="goEdit()">

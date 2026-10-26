@@ -370,6 +370,13 @@
                       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
+                      <!-- The row's own contributed actions (#8116), first, as in the sheet's menu - the
+                           same ones, by the same store call and status guards. -->
+                      <template x-for="action in rowActions(row)" :key="action.id">
+                        <li x-h-menu-item @click="runRowAction(action, row)"
+                            x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                      </template>
+                      <li x-h-menu-separator x-show="rowActions(row).length"></li>
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
 #if($hierarchyProperty)
                       <!-- Add child (#7724): a new record under this one, its parent preset. Offered on an

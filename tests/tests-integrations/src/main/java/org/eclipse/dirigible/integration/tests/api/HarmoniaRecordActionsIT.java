@@ -34,6 +34,8 @@ class HarmoniaRecordActionsIT {
 
     private static final String DOCUMENT = "/META-INF/dirigible/template-application-ui-harmonia-java/ui/perspective/document/";
 
+    private static final String MANAGE = "/META-INF/dirigible/template-application-ui-harmonia-java/ui/perspective/manage/";
+
     /**
      * The proforma's three actions: Print-like (unguarded), a create-from guarded by {@code allowed},
      * and a transition guarded by {@code from}.
@@ -79,6 +81,59 @@ class HarmoniaRecordActionsIT {
                 "loadHeader must mark the record loaded where it assigns it");
     }
 
+    /**
+     * The manage list's row menu offers each row the actions its own status allows (#8116) - the
+     * sheet's rule, applied to the row it is opened on.
+     */
+    @Test
+    void aRowOffersTheActionsItsStatusAllows() throws Exception {
+        try (Context context = load()) {
+            context.eval("js",
+                    "var list = { caView: 'ProformaInvoice', " + method(MANAGE + "list-page.js.template", "    rowActions(row) {") + " };");
+            assertEquals("notes,invoice,void", ids(context, "list.rowActions({ Id: 1, Status: 2 })"), "an ISSUED row offers all three");
+            assertEquals("notes", ids(context, "list.rowActions({ Id: 2, Status: 3 })"), "an INVOICED row offers neither guarded action");
+        }
+    }
+
+    /**
+     * The manage record page offers its record's actions in preview only, and only once the record has
+     * loaded (#8116): an action acts on the stored record, and the store fails open on a record without
+     * its status (#7605).
+     */
+    @Test
+    void theRecordPageOffersItsActionsInPreviewOnceLoaded() throws Exception {
+        try (Context context = load()) {
+            String getter = method(MANAGE + "form-page.js.template", "    get recordActions() {").replace("'${name}'", "'ProformaInvoice'");
+            context.eval("js", "var form = { mode: 'preview', loadedRecord: null, get isPreview() { return this.mode === 'preview'; }, "
+                    + getter + " };");
+            assertEquals("", ids(context, "form.recordActions"), "nothing before the record has loaded");
+
+            context.eval("js", "form.loadedRecord = { Id: 12, Status: 2 };");
+            assertEquals("notes,invoice,void", ids(context, "form.recordActions"), "an ISSUED proforma offers all three");
+
+            context.eval("js", "form.loadedRecord = { Id: 12, Status: 3 };");
+            assertEquals("notes", ids(context, "form.recordActions"), "an INVOICED proforma offers only the unguarded one");
+
+            context.eval("js", "form.mode = 'edit';");
+            assertEquals("", ids(context, "form.recordActions"), "nothing while editing: an action acts on the stored record");
+            context.eval("js", "form.mode = 'create'; form.loadedRecord = null;");
+            assertEquals("", ids(context, "form.recordActions"), "nothing on a record not yet created");
+        }
+    }
+
+    /** The two manage menus read the page's answer, and the record page keeps the record it loaded. */
+    @Test
+    void theManagePagesWireTheActions() throws Exception {
+        assertTrue(read(MANAGE + "list-view.html.template").contains("x-for=\"action in rowActions(row)\""),
+                "the row menu must offer the row's actions");
+        assertTrue(read(MANAGE + "form-view.html.template").contains("x-for=\"action in recordActions\""),
+                "the record page's More actions menu must offer the record's actions");
+        String page = read(MANAGE + "form-page.js.template");
+        assertTrue(page.contains("this.loadedRecord = record;"), "loadRecord must keep the record the guards read");
+        assertTrue(page.contains("this.onActionDone("), "the record page must re-read its record after an action");
+        assertTrue(page.contains("return this.recordActions.length > 0 ||"), "the overflow menu must count the actions");
+    }
+
     private static String ids(Context context, String expression) {
         return context.eval("js", expression + ".map(function (a) { return a.id; }).join(',')")
                       .asString();
@@ -113,6 +168,15 @@ class HarmoniaRecordActionsIT {
         String page = read(DOCUMENT + "document-page.js.template");
         int start = page.indexOf("    recordActions() {");
         assertTrue(start >= 0, "the document page declares no recordActions()");
+        int end = page.indexOf("\n    },", start);
+        return page.substring(start, end + "\n    }".length());
+    }
+
+    /** A method of a page template, from its first line to its closing brace, exactly as shipped. */
+    private static String method(String template, String firstLine) throws Exception {
+        String page = read(template);
+        int start = page.indexOf(firstLine);
+        assertTrue(start >= 0, template + " declares no " + firstLine.trim());
         int end = page.indexOf("\n    },", start);
         return page.substring(start, end + "\n    }".length());
     }

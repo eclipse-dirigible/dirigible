@@ -312,6 +312,18 @@ document.addEventListener('alpine:init', () => {
       const actions = Alpine.store('customActions');
       return (this.selected && actions) ? actions.getActions(this.caView, 'entity', this.selected) : [];
     },
+    // A row's own contributed actions, for its row menu (#8116): the sheet's rule, applied to the row -
+    // the same store call, so the same status guards and roles. A method, not a getter: the row menu
+    // evaluates it per row, and the row already carries the status the guards read.
+    rowActions(row) {
+      const actions = Alpine.store('customActions');
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row) : [];
+    },
+    // Runs one of a row's actions on that row. Here rather than in the markup: there, a $store call
+    // whose arguments carry the row's key expression is read by Velocity as one reference, and refused.
+    runRowAction(action, row) {
+      Alpine.store('customActions').trigger(action, row.${primaryKeysString}, row);
+    },
     // 'task' | 'edit' | 'preview' - what the sheet's one filled button does. The record's own
     // process task comes first (the step it is waiting on), then Edit, and Preview when the
     // record's status - or a caller who may only read (#8089) - leaves nothing to edit. A

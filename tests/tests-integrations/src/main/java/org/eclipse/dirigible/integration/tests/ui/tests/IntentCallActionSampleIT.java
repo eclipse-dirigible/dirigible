@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -30,10 +31,13 @@ import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.openqa.selenium.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.ElementsCollection;
 import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 
 /**
  * An intent action that calls the application's OWN endpoint (issue #8090): a hand-written
@@ -250,6 +254,24 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                                                                                               .get("body"),
                 "the controller receives the templated body, the level as a number");
 
+        // The same action is offered in the two other menus a user opens on a record (#8116): the row's
+        // own menu in the list, and the record page's - for the OPEN ticket, not for the CLOSED one.
+        // The escalation above left the ticket's sheet open over the list: close it, and load the list
+        // afresh.
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
+        Selenide.refresh();
+        List<String> open = rowMenu("Printer jammed");
+        assertTrue(open.contains("Escalate"), "the OPEN ticket's row menu offers Escalate: " + open);
+        List<String> closed = rowMenu("Password reset");
+        assertFalse(closed.contains("Escalate"), "the CLOSED ticket's row menu does not: " + closed);
+        List<String> openPage = pageMenu(1);
+        assertTrue(openPage.contains("Escalate"), "the OPEN ticket's page offers Escalate in its More actions: " + openPage);
+        List<String> closedPage = pageMenu(2);
+        assertFalse(closedPage.contains("Escalate"), "the CLOSED ticket's page does not: " + closedPage);
+
         // A CLOSED ticket is offered no Escalate button; forced anyway, the endpoint's own refusal is
         // what the user reads.
         assertEquals(Boolean.FALSE,
@@ -270,6 +292,59 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         assertTrue(((Number) received.get(received.size() - 1)
                                      .get("contentLength")).longValue() <= 0,
                 "a call without a body sends none: " + received);
+    }
+
+    /**
+     * The items of a list row's own menu (its ⋯ cell), opened on the row whose text contains the
+     * subject.
+     */
+    private static List<String> rowMenu(String subject) {
+        SelenideElement row = Selenide.$$("tbody tr")
+                                      .findBy(Condition.text(subject))
+                                      .shouldBe(Condition.visible);
+        SelenideElement trigger = row.$("button[aria-label='Row actions']");
+        trigger.click();
+        // The menu that trigger opened - the menu component renders it outside the row and names its
+        // trigger, and a menu opened earlier may still be on screen.
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> texts = items.texts();
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return texts;
+    }
+
+    /**
+     * The items of a record page's More actions menu, in preview, once the page has loaded its record.
+     */
+    private List<String> pageMenu(int id) {
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket/" + id + "/preview");
+        Selenide.refresh();
+        // The page's own record, once loaded: the actions' status guards read it.
+        String loaded = "var el = document.querySelector('[x-data=\"TicketFormPage\"]');"
+                + " var page = el && window.Alpine ? Alpine.$data(el) : null;"
+                + " return !!(page && page.loadedRecord && page.loadedRecord.Id == " + id + ");";
+        for (int i = 0; i < 40 && !Boolean.TRUE.equals(Selenide.executeJavaScript(loaded)); i++) {
+            Selenide.sleep(250);
+        }
+        assertEquals(Boolean.TRUE, Selenide.executeJavaScript(loaded), "ticket " + id + "'s page loaded its record");
+        SelenideElement trigger = Selenide.$$("button[aria-label='More actions']")
+                                          .filterBy(Condition.visible)
+                                          .first()
+                                          .shouldBe(Condition.visible);
+        trigger.click();
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> texts = items.texts();
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return texts;
     }
 
     /** The custom-action descriptors the given user is offered, by id. */

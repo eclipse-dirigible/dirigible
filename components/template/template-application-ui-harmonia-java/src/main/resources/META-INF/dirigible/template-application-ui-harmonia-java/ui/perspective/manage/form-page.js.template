@@ -207,6 +207,9 @@ document.addEventListener('alpine:init', () => {
     // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
     // (an outage must not lock the UI - the server still refuses the write).
     mutable: true,
+    // The record as the server answered it, set once it has loaded (#8116): what its contributed actions'
+    // status guards read. The form holds only the editable fields, and until the load it holds blanks.
+    loadedRecord: null,
 #end
 
     // Record action bar (issue #7491). Two viewport flags, because the page changes twice: below
@@ -269,6 +272,12 @@ document.addEventListener('alpine:init', () => {
 
       if (this.isEdit || this.isPreview) {
         await this.loadRecord();
+        // A contributed action changes the record behind the page (#8116): re-read it, so its status and
+        // the actions it now allows show without a reload. Preview only - the actions are offered there,
+        // and an edit in progress must not be overwritten.
+        this.onActionDone(async () => {
+          if (this.isPreview) await this.loadRecord(true);
+        });
       } else {
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
@@ -368,6 +377,7 @@ document.addEventListener('alpine:init', () => {
       if (!quiet) this.state = 'loading';
       try {
         const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+        this.loadedRecord = record;
         // Copy only known form fields so server-only props don't leak into the body.
         for (const key of Object.keys(this.form)) {
           if (record[key] !== undefined) this.form[key] = record[key];
@@ -964,9 +974,19 @@ document.addEventListener('alpine:init', () => {
       return this.canEdit;
     },
 
+    // The record's own contributed actions, for the overflow menu (#8116): the list sheet's rule
+    // (customActions.getActions over the record's status and roles). In preview only: an action acts on
+    // the STORED record, which an edit in progress does not match. None in create mode, which has no
+    // record, and none before the record has loaded - the store offers every action on a record without
+    // its status (#7605).
+    get recordActions() {
+      const store = Alpine.store('customActions');
+      return (store && this.isPreview && this.loadedRecord) ? store.getActions('${name}', 'entity', this.loadedRecord) : [];
+    },
+
     // Everything that would sit above the destructive group.
     get menuHasAboveDelete() {
-      return this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
+      return this.recordActions.length > 0 || this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
     },
 
     get hasOverflowMenu() {
