@@ -220,8 +220,12 @@ class TaskServiceImpl implements TaskService {
         TaskQuery taskQuery = flowableTaskService.createTaskQuery()
                                                  .taskTenantId(getTenantId());
         if (PrincipalType.CANDIDATE_GROUPS.equals(type)) {
-            // roles/groups are NEVER impersonated - candidate visibility stays the REAL user's
-            return taskQuery.taskCandidateGroupIn(UserFacade.getUserRoles());
+            // The "available" bucket: a task is reachable by its candidate GROUPS (the user's roles) or by
+            // its candidate USERS (the user named directly). Flowable ORs the two conditions and still
+            // restricts to unassigned tasks. Neither identity is impersonated - candidate visibility stays
+            // the REAL user's, beside the groups it sits with; act-as moves only the assignee bucket.
+            return taskQuery.taskCandidateGroupIn(UserFacade.getUserRoles())
+                            .taskCandidateUser(UserFacade.getName());
         } else if (PrincipalType.ASSIGNEE.equals(type)) {
             // assignee = the effective identity: under act-as (delegated entry) the Inbox serves
             // the acting identity's own tasks, e.g. a personal-assigned submit task
