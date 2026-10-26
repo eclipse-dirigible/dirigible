@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -199,6 +200,30 @@ class CallActionIntentTest {
                                     .stream()
                                     .anyMatch(advisory -> advisory.contains("Ticket:close")),
                 "a token no action binds is still reported");
+    }
+
+    /** {@code primary: true} (#8119): opt-in, and kept on the model for the generators. */
+    @Test
+    void aPrimaryEntityActionParses() {
+        assertTrue(IntentParser
+                               .parse(YAML.replace("    success: Escalation requested",
+                                       "    success: Escalation requested\n    primary: true"))
+                               .getActions()
+                               .get(0)
+                               .isPrimary());
+        assertFalse(IntentParser.parse(YAML)
+                                .getActions()
+                                .get(0)
+                                .isPrimary(),
+                "primary is opt-in");
+    }
+
+    /** The filled button is a record's, so a page-scope action cannot be primary (#8119). */
+    @Test
+    void aPrimaryPageActionIsRefused() {
+        assertIssue(
+                YAML.replace("    success: Escalation requested", "    success: Escalation requested\n    primary: true\n    scope: page"),
+                "declares primary but has scope [page]");
     }
 
     private static void assertIssue(String yaml, String expected) {

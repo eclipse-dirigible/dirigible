@@ -9549,6 +9549,10 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("action [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
+            if (action.isPrimary() && "page".equals(scope)) {
+                issues.add("action [" + name
+                        + "] declares primary but has scope [page] - the filled button is a record's, so primary needs scope: entity");
+            }
             boolean hasPage = action.getPage() != null && !action.getPage()
                                                                  .isBlank();
             if (action.getCall() != null) {
@@ -10218,6 +10222,10 @@ public final class IntentParser {
             String name = g.getName();
             if (!names.add(name)) {
                 issues.add("duplicate generates action [" + name + "]");
+            }
+            if (g.isPrimary() && "page".equals(g.getScope())) {
+                issues.add("generates action [" + name
+                        + "] declares primary but has scope [page] - the filled button is a record's, so primary needs scope: entity");
             }
             // A cross-model SOURCE (fromUses:) is resolved from the OWNER's .model at generation time,
             // exactly as a cross-model target is - nothing about it is checkable against this model's

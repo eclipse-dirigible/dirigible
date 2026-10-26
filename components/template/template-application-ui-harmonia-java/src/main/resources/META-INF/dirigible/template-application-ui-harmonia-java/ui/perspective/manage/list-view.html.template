@@ -456,6 +456,11 @@
               <span x-text="$store.processTasks.taskName(primaryTask)"></span>
             </button>
           </template>
+          <template x-if="primaryAction === 'action'">
+            <button x-h-button data-variant="primary" @click="runPrimaryAction()">
+              <span x-text="primaryActionLabel()"></span>
+            </button>
+          </template>
           <template x-if="primaryAction === 'edit'">
             <button x-h-button data-variant="primary" @click="editEntity(selected)">
               <svg role="presentation" x-h-lucide data-lucide="pencil"></svg>

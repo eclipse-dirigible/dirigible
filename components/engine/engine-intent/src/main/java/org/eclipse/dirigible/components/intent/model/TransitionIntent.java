@@ -59,6 +59,13 @@ public class TransitionIntent {
     private String icon;
     /** Optional ordering among a view's actions. */
     private Integer order;
+
+    /**
+     * When {@code true} and the action applies to a record (its status guards and roles pass), it is
+     * the record's filled button - in the list's details sheet and on the record page - instead of Edit
+     * (#8119). A pending process task still comes first. Entity scope only.
+     */
+    private Boolean primary;
     /**
      * Optional outbound mail sent AFTER the status flip commits - "on Void, mail the counterparty". The
      * reusable notify block ({@code to} / {@code subject} / {@code body} / {@code attach: print}),
@@ -129,6 +136,19 @@ public class TransitionIntent {
 
     public void setOrder(Integer order) {
         this.order = order;
+    }
+
+    public Boolean getPrimary() {
+        return primary;
+    }
+
+    public void setPrimary(Boolean primary) {
+        this.primary = primary;
+    }
+
+    /** Whether this action is the record's filled button when it applies (see {@link #primary}). */
+    public boolean isPrimary() {
+        return Boolean.TRUE.equals(primary);
     }
 
     public NotificationIntent getNotify() {

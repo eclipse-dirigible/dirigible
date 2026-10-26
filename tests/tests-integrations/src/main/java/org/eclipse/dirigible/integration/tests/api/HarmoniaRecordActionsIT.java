@@ -36,6 +36,8 @@ class HarmoniaRecordActionsIT {
 
     private static final String MANAGE = "/META-INF/dirigible/template-application-ui-harmonia-java/ui/perspective/manage/";
 
+    private static final String RELATED = "/META-INF/dirigible/application-core/shell/js/components/relatedPanel.js";
+
     /**
      * The proforma's three actions: Print-like (unguarded), a create-from guarded by {@code allowed},
      * and a transition guarded by {@code from}.
@@ -126,12 +128,63 @@ class HarmoniaRecordActionsIT {
     void theManagePagesWireTheActions() throws Exception {
         assertTrue(read(MANAGE + "list-view.html.template").contains("x-for=\"action in rowActions(row)\""),
                 "the row menu must offer the row's actions");
-        assertTrue(read(MANAGE + "form-view.html.template").contains("x-for=\"action in recordActions\""),
+        assertTrue(read(MANAGE + "form-view.html.template").contains("x-for=\"action in menuRecordActions\""),
                 "the record page's More actions menu must offer the record's actions");
         String page = read(MANAGE + "form-page.js.template");
         assertTrue(page.contains("this.loadedRecord = record;"), "loadRecord must keep the record the guards read");
         assertTrue(page.contains("this.onActionDone("), "the record page must re-read its record after an action");
-        assertTrue(page.contains("return this.recordActions.length > 0 ||"), "the overflow menu must count the actions");
+        assertTrue(page.contains("return this.menuRecordActions.length > 0 ||"), "the overflow menu must count the actions");
+    }
+
+    /**
+     * A related: register's row offers its record's actions by the row's status (#8118) - only for a
+     * same-project register, whose source's descriptors this application holds.
+     */
+    @Test
+    void aRegisterRowOffersItsSourcesActionsByStatus() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "var register = { def: { entity: 'ProformaInvoice', local: true, primaryKey: 'Id' }, "
+                    + method(RELATED, "    rowActions(row) {") + " };");
+            assertEquals("notes,invoice,void", ids(context, "register.rowActions({ Id: 1, Status: 2 })"), "an ISSUED row offers all three");
+            assertEquals("notes", ids(context, "register.rowActions({ Id: 2, Status: 3 })"), "an INVOICED row only the unguarded one");
+            context.eval("js", "register.def.local = false;");
+            assertEquals("", ids(context, "register.rowActions({ Id: 1, Status: 2 })"), "a cross-project register offers none");
+        }
+    }
+
+    /**
+     * An action declared primary is the record page's filled button when it applies (#8119), after a
+     * pending process task, and leaves the overflow menu.
+     */
+    @Test
+    void aPrimaryActionTakesTheFilledSlotWhenItApplies() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.actions.find(function (a) { return a.id === 'invoice'; }).primary = true;");
+            String page = MANAGE + "form-page.js.template";
+            context.eval("js",
+                    "var form = { mode: 'preview', loadedRecord: null, recordTasks: [], canEdit: true,"
+                            + " get isPreview() { return this.mode === 'preview'; }, "
+                            + method(page, "    get recordActions() {").replace("'${name}'", "'ProformaInvoice'") + ", "
+                            + method(page, "    get primaryCustomAction() {") + ", " + method(page, "    get menuRecordActions() {") + ", "
+                            + method(page, "    get primaryAction() {") + " };");
+
+            context.eval("js", "form.loadedRecord = { Id: 12, Status: 2 };");
+            assertEquals("action", context.eval("js", "form.primaryAction")
+                                          .asString(),
+                    "an ISSUED proforma's filled button is Generate Invoice");
+            assertEquals("notes,void", ids(context, "form.menuRecordActions"), "and it leaves the menu");
+
+            context.eval("js", "form.loadedRecord = { Id: 12, Status: 3 };");
+            assertEquals("edit", context.eval("js", "form.primaryAction")
+                                        .asString(),
+                    "an INVOICED proforma, where it does not apply, keeps Edit");
+
+            context.eval("js", "form.loadedRecord = { Id: 12, Status: 2 }; form.recordTasks = [{ id: 't1' }];");
+            assertEquals("task", context.eval("js", "form.primaryAction")
+                                        .asString(),
+                    "a pending process task still comes first");
+            assertEquals("notes,invoice,void", ids(context, "form.menuRecordActions"), "and the primary action returns to the menu");
+        }
     }
 
     private static String ids(Context context, String expression) {

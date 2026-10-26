@@ -114,6 +114,11 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
         if (action.getOrder() != null) {
             view.put("order", action.getOrder());
         }
+        if (action.isPrimary()) {
+            // The record's filled button when it applies (#8119) - emitted only when declared, so a
+            // descriptor without it is byte-identical to before.
+            view.put("primary", true);
+        }
         if (action.getCall() != null) {
             putCall(view, action, model);
         }

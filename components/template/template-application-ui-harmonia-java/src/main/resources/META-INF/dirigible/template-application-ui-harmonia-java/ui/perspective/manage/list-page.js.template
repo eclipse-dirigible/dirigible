@@ -324,13 +324,19 @@ document.addEventListener('alpine:init', () => {
     runRowAction(action, row) {
       Alpine.store('customActions').trigger(action, row.${primaryKeysString}, row);
     },
-    // 'task' | 'edit' | 'preview' - what the sheet's one filled button does. The record's own
-    // process task comes first (the step it is waiting on), then Edit, and Preview when the
-    // record's status - or a caller who may only read (#8089) - leaves nothing to edit. A
-    // contributed action is never it: Duplicate and Print are conveniences, not the reason the
-    // record is open, and the filled button is what the sheet is FOR.
+    // The contributed action that is the sheet's filled button (#8119): the first of the record's
+    // actions that declares primary - recordActions has already applied its status guards and roles.
+    get primaryCustomAction() {
+      return this.recordActions.find((a) => a.primary) || null;
+    },
+    // 'task' | 'action' | 'edit' | 'preview' - what the sheet's one filled button does. The record's
+    // own process task comes first (the step it is waiting on), then a contributed action declared
+    // primary that applies to the record (#8119), then Edit, and Preview when the record's status - or
+    // a caller who may only read (#8089) - leaves nothing to edit. Any other contributed action is
+    // never it: Duplicate and Print are conveniences, not the reason the record is open.
     get primaryAction() {
       if (this.recordTasks.length) return 'task';
+      if (this.primaryCustomAction) return 'action';
       if (!this.canWrite()) return 'preview';
 #if($immutableStatusProperty || $immutableAlways)
       if (this.isRowImmutable(this.selected)) return 'preview';
@@ -339,7 +345,19 @@ document.addEventListener('alpine:init', () => {
     },
     // Whatever the primary button did not take. Contributed actions are all of them, always.
     get menuTasks() { return this.primaryAction === 'task' ? this.recordTasks.slice(1) : this.recordTasks; },
-    get menuActions() { return this.recordActions; },
+    get menuActions() {
+      const primary = this.primaryCustomAction;
+      return this.recordActions.filter((a) => a !== primary);
+    },
+    runPrimaryAction() {
+      const action = this.primaryCustomAction;
+      if (action) Alpine.store('customActions').trigger(action, this.selectedId, this.selected);
+    },
+    primaryActionLabel() {
+      const a = this.primaryCustomAction;
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
     // The task the primary button runs. Named here rather than indexed in the markup: a $store
     // method call carrying an index expression is the Velocity-vs-Alpine trap - Velocity parses the
     // $store reference and chokes on the '['.

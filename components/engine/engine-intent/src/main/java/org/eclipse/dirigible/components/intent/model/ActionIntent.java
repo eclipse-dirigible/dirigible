@@ -50,6 +50,13 @@ public class ActionIntent {
     /** Optional ordering hint among the contributed actions of a view. */
     private Integer order;
 
+    /**
+     * When {@code true} and the action applies to a record (its status guards and roles pass), it is
+     * the record's filled button - in the list's details sheet and on the record page - instead of Edit
+     * (#8119). A pending process task still comes first. Entity scope only.
+     */
+    private Boolean primary;
+
     /** Same-origin path opened in the app-wide dialog when the action is triggered. */
     private String page;
 
@@ -117,6 +124,19 @@ public class ActionIntent {
 
     public void setOrder(Integer order) {
         this.order = order;
+    }
+
+    public Boolean getPrimary() {
+        return primary;
+    }
+
+    public void setPrimary(Boolean primary) {
+        this.primary = primary;
+    }
+
+    /** Whether this action is the record's filled button when it applies (see {@link #primary}). */
+    public boolean isPrimary() {
+        return Boolean.TRUE.equals(primary);
     }
 
     public String getPage() {
