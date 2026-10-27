@@ -559,6 +559,17 @@ document.addEventListener('alpine:init', () => {
         if (res.ok) {
           const data = await res.json();
           this.projections = Array.isArray(data.projections) ? data.projections : [];
+          // A projection translates its name the way a navigation group does (#7610): it declares
+          // `translation: { key: '<project>:<path>' }`, adopted as its tkey. The key's project is a
+          // catalog namespace nothing else loads - a lens project contributes no perspective - so
+          // the shell adds it here, or the switcher stays in English (#8133).
+          this.projections.forEach(p => {
+            const key = p.translation && p.translation.key;
+            if (!p.tkey && typeof key === 'string' && key.indexOf(':') > 0) p.tkey = key;
+          });
+          const namespaces = [...new Set(this.projections.map(p => (p.tkey || '').split(':')[0])
+            .filter(ns => ns && ns !== 'application-core'))];
+          if (namespaces.length && window.AppI18nAddNamespaces) AppI18nAddNamespaces(namespaces);
         }
       } catch (e) {
         console.error('Failed to load application projections', e);

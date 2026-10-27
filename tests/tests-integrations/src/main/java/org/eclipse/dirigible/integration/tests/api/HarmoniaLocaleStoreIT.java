@@ -82,6 +82,19 @@ class HarmoniaLocaleStoreIT {
         }
     }
 
+    /**
+     * The picker names each language in that language, whatever the UI speaks (#8133): a Bulgarian user
+     * looks for "Български", not "Bulgarian".
+     */
+    @Test
+    void aLanguageIsNamedInItself() {
+        try (Context context = load("en")) {
+            assertEquals("Български", eval(context, "Alpine.store('locale').displayName('bg')"));
+            assertEquals("English", eval(context, "Alpine.store('locale').displayName('en')"));
+            assertEquals("Deutsch", eval(context, "Alpine.store('locale').displayName('de')"));
+        }
+    }
+
     private static int count(Context context) {
         return context.eval("js", "__requests.length")
                       .asInt();
