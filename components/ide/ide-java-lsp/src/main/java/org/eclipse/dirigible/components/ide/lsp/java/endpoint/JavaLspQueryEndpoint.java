@@ -16,6 +16,10 @@ import jakarta.annotation.security.RolesAllowed;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
+import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.engine.java.synchronizer.JavaSynchronizer;
+import org.eclipse.dirigible.repository.api.ICollection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,6 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.security.Principal;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -58,11 +63,17 @@ public class JavaLspQueryEndpoint {
 
     private static final long REQUEST_TIMEOUT_SECONDS = 60;
 
+    private static final String NODE_MODULES = "node_modules";
+
+    private static final String HIDDEN_PREFIX = ".";
+
     private final JdtLsManager manager;
+    private final WorkspaceService workspaceService;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public JavaLspQueryEndpoint(JdtLsManager manager) {
+    public JavaLspQueryEndpoint(JdtLsManager manager, WorkspaceService workspaceService) {
         this.manager = manager;
+        this.workspaceService = workspaceService;
     }
 
     /** Resolves the call-hierarchy item at a position ({@code textDocument/prepareCallHierarchy}). */
@@ -112,6 +123,11 @@ public class JavaLspQueryEndpoint {
      * {@code textDocument/publishDiagnostics} JDT.LS has emitted (it builds the whole workspace), as a
      * JSON array of {@code { uri, diagnostics[] }}. Starting/initializing the instance triggers the
      * build that fills the snapshot — the first call may be partial until that build completes.
+     *
+     * <p>
+     * A workspace without Java sources is answered with an empty snapshot unless an instance already
+     * runs for it: JDT.LS has nothing to report there, and an instance it started would hold a JVM
+     * until shutdown.
      */
     @PostMapping("/diagnostics")
     public ResponseEntity<String> diagnostics(@RequestBody String body, Principal principal) {
@@ -120,6 +136,9 @@ public class JavaLspQueryEndpoint {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing 'workspace'");
         }
         String username = principal != null ? principal.getName() : "anonymous";
+        if (!manager.isRunning(username, workspace) && !containsJavaSource(workspaceService.getWorkspace(workspace))) {
+            return json(mapper.createArrayNode());
+        }
         try {
             JdtLsInstance instance = manager.getOrStart(username, workspace);
             instance.ensureInitialized()
@@ -181,6 +200,30 @@ public class JavaLspQueryEndpoint {
     private static String workspaceOf(JsonNode body) {
         return body.path("workspace")
                    .asText(null);
+    }
+
+    private static boolean containsJavaSource(Workspace workspace) {
+        return workspace.exists() && hasJavaSource(workspace);
+    }
+
+    /**
+     * Looks for a {@code .java} file the way the Java engine recognises a source, stopping at the first
+     * one. A project's unit tests ({@code custom/test/**}) count too, since JDT.LS reports on them;
+     * {@code node_modules} and hidden folders hold no source of the project and are not searched.
+     */
+    private static boolean hasJavaSource(ICollection folder) {
+        for (String name : folder.getResourcesNames()) {
+            if (name.toLowerCase(Locale.ROOT)
+                    .endsWith(JavaSynchronizer.FILE_EXTENSION)) {
+                return true;
+            }
+        }
+        for (String name : folder.getCollectionsNames()) {
+            if (!NODE_MODULES.equals(name) && !name.startsWith(HIDDEN_PREFIX) && hasJavaSource(folder.getCollection(name))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Builds {@code {textDocument:{uri}, position:{line,character}}} from the request body. */

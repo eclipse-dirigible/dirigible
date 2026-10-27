@@ -154,7 +154,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
             throw new IllegalStateException(
                     "[java-lsp] JDT.LS is not yet available — still starting up or not bundled in this build. Try again in a moment.");
         }
-        String key = username + "/" + workspace;
+        String key = instanceKey(username, workspace);
         JdtLsInstance existing = instances.get(key);
         if (existing != null && existing.isAlive()) {
             ensureEclipseProjectFilesForWorkspace(workspaceRoot(username, workspace));
@@ -170,6 +170,18 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
             instances.put(key, fresh);
             return fresh;
         }
+    }
+
+    /**
+     * Tells whether a JDT.LS instance already runs for the given workspace, without starting one.
+     *
+     * @param username the owner of the workspace
+     * @param workspace the workspace name
+     * @return {@code true} when a live instance serves that workspace
+     */
+    public boolean isRunning(String username, String workspace) {
+        JdtLsInstance existing = instances.get(instanceKey(username, workspace));
+        return existing != null && existing.isAlive();
     }
 
     /** Finds the instance that owns the given WebSocket session ID. */
@@ -430,6 +442,10 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    private static String instanceKey(String username, String workspace) {
+        return username + "/" + workspace;
+    }
 
     /**
      * Resolves the on-disk workspace root for the given user and workspace name, mirroring the layout
