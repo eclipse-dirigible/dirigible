@@ -40,7 +40,8 @@ import com.codeborne.selenide.Selenide;
  * a string column with a declared length now carries it - the entity form, the document header, the
  * line dialog (from the column config) and the administration editor - while dates and numbers
  * carry none. The browser leg types past the limit into a real form and checks the field stopped
- * there.
+ * there and says why: at the limit the field's description reads "Maximum 30 characters", and only
+ * then.
  */
 class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
 
@@ -83,6 +84,13 @@ class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
             return input ? input.value : 'not-rendered';
             """;
 
+    /** The visible length hint of the field holding the input {@code %s}, or empty when none shows. */
+    private static final String LENGTH_HINT = """
+            var field = document.getElementById('%s').closest('[x-h-field]');
+            var hint = Array.from(field.querySelectorAll('[x-h-field-description]')).find(p => p.checkVisibility());
+            return hint ? hint.textContent.trim() : '';
+            """;
+
     @Autowired
     private IRepository repository;
 
@@ -118,6 +126,10 @@ class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
         Selenide.$("#f_Code")
                 .sendKeys("A".repeat(40));
         assertEquals("A".repeat(30), Selenide.executeJavaScript(CODE_VALUE), "the input must stop at the column length");
+        // ...and says why: the full field's description names the limit, an unfilled one shows nothing.
+        assertEquals("Maximum 30 characters", poll(String.format(LENGTH_HINT, "f_Code"), "Maximum 30 characters"),
+                "a field that reached its length must say so");
+        assertEquals("", Selenide.executeJavaScript(String.format(LENGTH_HINT, "f_Name")), "a field below its length shows no hint");
     }
 
     /** The element a marker opens, up to its end - the generated attributes wrap. */

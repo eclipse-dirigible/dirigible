@@ -37,6 +37,7 @@
       "inputSearch": "Search {{name}}...",
       "inputEnter": "Enter {{name}}...",
       "inputSelect": "Select {{name}}...",
+      "maxLengthReached": "Maximum {{count}} characters",
       "noData": "No data available.",
       "noDataYet": "No {{name}} yet",
       "getStarted": "Get started by creating the first record.",

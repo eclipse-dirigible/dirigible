@@ -26,6 +26,13 @@
 ## The column length the controller enforces, as the input's maxlength (#8135): a string column with a
 ## declared length - the same set the server refuses past ("exceeds the maximum length of N").
 #macro(maxLength $p)#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time") maxlength="${p.dataLength}"#end#end
+## ...and says why it stops (#8135): once the value fills the column, the field's description names the
+## limit - nothing is shown before, so a long form stays as it was.
+#macro(maxLengthHint $p)
+#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time")
+        <p x-h-field-description x-show="String(form.${p.name} ?? '').length >= ${p.dataLength}" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: ${p.dataLength} })"></p>
+#end
+#end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")options['${property.name}']#{else}null#end#end
 #macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
 #macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
@@ -156,6 +163,7 @@
 #else
         <input x-h-input type="text" x-model="form.${property.name}"#maxLength($property) :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
+#maxLengthHint($property)
       </div>
 #end
 #end
@@ -458,6 +466,7 @@
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
                 <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="itemFieldError === col.name" />
               </template>
+              <p x-h-field-description x-show="col.maxLength && String(draft[col.name] ?? '').length >= col.maxLength" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: col.maxLength })"></p>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    server recomputes it on save, so rendering an input only faked editability. -->
               <template x-if="col.readonly">
