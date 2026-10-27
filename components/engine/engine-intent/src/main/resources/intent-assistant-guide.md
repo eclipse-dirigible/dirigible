@@ -345,8 +345,10 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   other route), the reason a `required` field's **presence check is skipped** (the value is
   guaranteed), and the **seed for a new line in a document's item dialog** - the dialog opens on the
   standard value instead of a blank one, which is what makes a one-click affordance like **Fill Month**
-  actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
-  user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
+  actually one click. Only a create is defaulted: an existing row is never re-defaulted. An update
+  that leaves the field empty keeps the stored value instead (#8105, the same for a relation's
+  `init:`), so a PUT carrying only what it changed never erases it - and a defaulted field cannot be
+  cleared to null by an update. A `date`/`time`/`timestamp` or binary field is the exception
   to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
   (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. **`defaultValue:
   now`** is the one default that reaches a moment field on every leg (#7603): the current moment in the

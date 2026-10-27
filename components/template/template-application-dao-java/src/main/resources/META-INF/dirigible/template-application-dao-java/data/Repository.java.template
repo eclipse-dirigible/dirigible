@@ -2,6 +2,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
+#set($keptWhenOmitted = [])
 ## The document's status (the `function: EntityStatus` relation, rendered as DOCUMENT_STATUS): the
 ## property every status-gated rule is keyed on, and what checkFor() asks about (#7577).
 #set($entityStatusProperty = "")
@@ -68,6 +69,13 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         #if(!$property.isDateType)
             #set($ignore = $reportedOnUpdate.add($property))
         #end
+    #end
+## A user-editable field the model gives a default - a field's defaultValue:, a relation's init: - is
+## kept from the stored row when an update leaves it null (#8105): a caller PUTs the fields its form
+## edits, so an omitted one is not a clear. Defaults apply on create only, so without this the update
+## wrote NULL - and a 500 quoting the statement when the column is also NOT NULL.
+    #if(!$property.dataPrimaryKey && $property.dataDefaultValue && !$preservedOnUpdate.contains($property))
+        #set($ignore = $keptWhenOmitted.add($property))
     #end
 #end
 ## Does any owned child REFUSE the master's delete (whenMasterDeleted: refuse)? Those checks are
@@ -207,14 +215,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## and server-side create that silently got a wrong total. Applying it here makes the guarantee the one
 ## the intent guide states ("a row inserted without the column gets it") hold for the value the
 ## calculations, guards and checks see, not just for the value that lands in the column.
-## Only create() defaults: an existing row is never re-defaulted, so a value the user deliberately
-## cleared stays cleared.
+## Only create() defaults: an existing row is never re-defaulted. An update keeps the stored value of a
+## defaulted field it leaves null instead (keepDefaultedWhenOmitted, #8105).
 ## A date/time or binary column is excluded: its DEFAULT is emitted verbatim into the DDL and is
 ## typically a SQL expression (CURRENT_DATE, now()), which has no Java literal to stand in for it.
 ## The literal itself is resolved in Java (ModelParameterProcessor / JavaLiterals) and is present only
 ## on a property that has one, so the type list lives in one place - and an authored value carrying a
 ## quote or a backslash is escaped rather than ending the literal it is written into and failing the
 ## compile of the whole generated module (dirigible #7154).
+## On update, the defaulted fields an update leaves null keep their stored values (#8105) - the
+## counterpart of applyDefaults: never re-defaulted, never erased.
+#macro(keepDefaultedWhenOmitted)
+#if($keptWhenOmitted.size() > 0)
+        keepDefaultedWhenOmitted(entity);
+#end
+#end
 #macro(applyDefaults)
 #foreach($property in $properties)
 #if($property.dataDefaultValueJavaLiteral)
@@ -557,6 +572,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #trimText()
 #normalizeSubsets()
 #normalizeInput()
+#keepDefaultedWhenOmitted()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
@@ -703,6 +719,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #trimText()
 #normalizeSubsets()
 #normalizeInput()
+#keepDefaultedWhenOmitted()
 #if($hasStatusStamps)
         // The status the record stands in BEFORE this write: a stamp records an arrival, and the
         // lifecycle (when declared) judges the same move - one read serves both.
@@ -1444,8 +1461,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveText)
         trimText(submitted);
 #end
-#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
+#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
         ${name}Entity entity = copyOf(submitted);
+#keepDefaultedWhenOmitted()
 #if($preservedOnUpdate.size() > 0)
         ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
         if (stored != null) {
@@ -1504,7 +1522,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
-#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
+#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
 
     private static ${name}Entity copyOf(${name}Entity source) {
         ${name}Entity copy = new ${name}Entity();
@@ -1512,6 +1530,33 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         copy.${property.name} = source.${property.name};
 #end
         return copy;
+    }
+#end
+#if($keptWhenOmitted.size() > 0)
+
+    /**
+     * Keeps the stored value of every defaulted field ({@code defaultValue:}, a relation's
+     * {@code init:}) this update leaves null (#8105). A caller sends the fields its form edits, so a
+     * field it leaves out is not a clear - and the default applies on create only, so without this the
+     * update erased it, or failed on the NOT NULL column with a 500 quoting the statement. The stored row
+     * is read only when such a field is actually null, through the base find, so a translated read never
+     * stands in for the stored value.
+     *
+     * @param entity the record about to be updated, completed in place
+     */
+    private void keepDefaultedWhenOmitted(${name}Entity entity) {
+        if (entity.${pkPropertyName} == null#foreach($property in $keptWhenOmitted)#if($foreach.first) || (#else && #end entity.${property.name} != null#end)) {
+            return;
+        }
+        ${name}Entity stored = super.findById(entity.${pkPropertyName});
+        if (stored == null) {
+            return;
+        }
+#foreach($property in $keptWhenOmitted)
+        if (entity.${property.name} == null) {
+            entity.${property.name} = stored.${property.name};
+        }
+#end
     }
 #end
 #if($warningChecks && $warningChecks.size() > 0)
