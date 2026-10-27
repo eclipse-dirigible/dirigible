@@ -24,6 +24,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusDa
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ValidationErrorDTO;
 import org.eclipse.dirigible.components.ide.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -40,6 +41,9 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.identitylink.api.IdentityLink;
 import org.flowable.job.api.Job;
 import org.flowable.task.api.Task;
+import org.flowable.validation.ProcessValidator;
+import org.flowable.validation.ProcessValidatorFactory;
+import org.flowable.validation.ValidationError;
 import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -177,6 +181,36 @@ public class BpmService {
             file.create();
         }
         file.setContent(bytes);
+    }
+
+    /**
+     * Validates a BPMN model posted in the modeler's JSON form, running Flowable's default process
+     * validator over it so the editor can report problems - an unresolved service-task implementation,
+     * a missing sequence-flow condition - before publish, instead of at the synchronizer's FAILED.
+     *
+     * @param payload the modeler's JSON model (the same shape {@link #saveModel} receives)
+     * @return the validation problems, empty when the model is valid
+     * @throws IOException when the payload is not readable JSON
+     */
+    public List<ValidationErrorDTO> validateModel(String payload) throws IOException {
+        JsonNode modelNode = new ObjectMapper().readTree(payload);
+        BpmnModel bpmnModel = new BpmnJsonConverter().convertToBpmnModel(modelNode);
+        ProcessValidator processValidator = new ProcessValidatorFactory().createDefaultProcessValidator();
+        return processValidator.validate(bpmnModel)
+                               .stream()
+                               .map(BpmService::toValidationErrorDTO)
+                               .toList();
+    }
+
+    private static ValidationErrorDTO toValidationErrorDTO(ValidationError error) {
+        ValidationErrorDTO dto = new ValidationErrorDTO();
+        dto.setActivityId(error.getActivityId());
+        dto.setActivityName(error.getActivityName());
+        dto.setProblem(error.getProblem());
+        dto.setDefaultDescription(error.getDefaultDescription());
+        dto.setValidatorSetName(error.getValidatorSetName());
+        dto.setWarning(error.isWarning());
+        return dto;
     }
 
     /**
