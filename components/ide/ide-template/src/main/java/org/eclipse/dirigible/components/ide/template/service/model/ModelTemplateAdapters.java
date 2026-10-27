@@ -178,6 +178,12 @@ final class ModelTemplateAdapters {
         List<Object> languages = ModelValues.asList(model.get("languages"));
         parameters.put("appLanguages",
                 JavaScriptJson.compact(languages.isEmpty() ? List.of(DEFAULT_APP_LANGUAGE) : new ArrayList<>(languages)));
+        // Whether the application has data to translate at all - a multilingual entity. The shell's
+        // translation check holds the declared data languages against the platform's only then, so a
+        // fully translated application without such data is not reported as untranslated (#8137).
+        parameters.put("appTranslatableData", ModelValues.asMaps(model.get("entities"))
+                                                         .stream()
+                                                         .anyMatch(entity -> ModelValues.isTrue(entity, "multilingual")));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
         // Country-scoped field labels, rendered into the application's configuration as a JSON object
         // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).

@@ -32,6 +32,11 @@ App.config = {
   // content falls back to the default language.
   languages: ${appLanguages},
 
+  // Whether the app has data to translate at all (a multilingual entity). The shell weighs the
+  // `languages` declaration above only for such an app: one without translatable data is fully
+  // translated once its screens are (#8137).
+  translatableData: ${appTranslatableData},
+
   // Country-scoped label overrides (the intent's field `countryLabels:`), keyed by ISO 3166-1
   // alpha-2 country code and then by the label's own translation key. The shared i18n runtime
   // prefers an entry here over the language catalogs whenever the tenant declares a country
