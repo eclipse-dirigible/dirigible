@@ -54,6 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import ch.qos.logback.classic.Level;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -63,6 +64,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.sdk.net.WebsocketClientHandler;
 import org.eclipse.dirigible.sdk.net.Websockets;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,6 +127,8 @@ class ExternalFrontendIT extends IntegrationTest {
 
     private static final String ORIGIN = "https://app.example.com";
     private static final String UNLISTED_ORIGIN = "https://evil.example.com";
+    private static final String STOMP_ERROR_HANDLER_LOGGER =
+            "org.eclipse.dirigible.components.websockets.config.BearerTokenStompErrorHandler";
     /** The platform's client at the mock provider - shared with the tests reusing the provider. */
     static final String CLIENT_ID = "external-frontend-it";
     static final String CLIENT_SECRET = "external-frontend-it-secret";
@@ -723,15 +727,23 @@ class ExternalFrontendIT extends IntegrationTest {
 
     @Test
     void aStompSubscriptionToATopicIsRefused() throws Exception {
+        LogsAsserter refusals = new LogsAsserter(STOMP_ERROR_HANDLER_LOGGER, Level.DEBUG);
         RecordingSessionHandler handler = new RecordingSessionHandler();
         StompSession session = connect(identityProvider.idToken("jane", DEVELOPER_GROUPS), ORIGIN, handler);
 
         session.subscribe("/topic/announcements", new InboxFrameHandler(new LinkedBlockingQueue<>()));
 
-        assertEquals("Unauthorized", handler.errors.poll(10, TimeUnit.SECONDS));
         Awaitility.await()
                   .atMost(10, TimeUnit.SECONDS)
                   .until(() -> !session.isConnected());
+        refusals.assertLoggedMessage("Refusing a STOMP frame [SUBSCRIBE]", Level.INFO);
+        // the ERROR frame is best-effort here, unlike for a refused CONNECT: a SUBSCRIBE answered while
+        // the CONNECTED frame is still being flushed only reaches Spring's per-session send buffer, and
+        // the close that follows the refusal discards that buffer
+        String error = handler.errors.poll();
+        if (error != null) {
+            assertEquals("Unauthorized", error);
+        }
     }
 
     @Test
