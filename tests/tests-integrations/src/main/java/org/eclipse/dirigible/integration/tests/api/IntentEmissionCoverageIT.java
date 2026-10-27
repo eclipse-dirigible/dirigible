@@ -3068,11 +3068,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a composition master must delete the children it owns through their own repository, got: " + entryRepository);
         // ...and the record and its children leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through would commit some of the
-        // children and keep the record - the very orphan state the cascade exists to prevent.
-        assertTrue(
-                entryRepository.contains("UnitOfWork.run(() -> deleteWithOwnedChildren(entity))")
-                        && entryRepository.contains("UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id))"),
-                "the cascade must run as one unit of work with the record's own delete, got: " + entryRepository);
+        // children and keep the record - the very orphan state the cascade exists to prevent. The
+        // refusal runs in that same unit, ahead of the children: the record is locked before its
+        // references are counted (#8252).
+        assertTrue(Pattern.compile(
+                "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(entity\\.Id\\);\\s*deleteWithOwnedChildren\\(entity\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find()
+                && Pattern.compile(
+                        "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(id\\);\\s*deleteByIdWithOwnedChildren\\(id\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find(),
+                "the cascade must run as one unit of work with the record's own delete, its refusal first, got: " + entryRepository);
         // ...and the author's alternative is the refusal, on the child that declared it - naming both
         // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
         assertTrue(
