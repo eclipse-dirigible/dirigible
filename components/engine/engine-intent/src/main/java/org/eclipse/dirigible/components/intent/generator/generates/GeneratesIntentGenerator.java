@@ -146,6 +146,11 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         if (g.getOrder() != null) {
             view.put("order", g.getOrder());
         }
+        if (g.isPrimary()) {
+            // The record's filled button when it applies (#8119) - emitted only when declared, so a
+            // descriptor without it is byte-identical to before.
+            view.put("primary", true);
+        }
         if (guard != null) {
             // The from-status guard (issue #7068): the button stops offering itself on a record the
             // action would refuse - a proforma already INVOICED must not carry a live "Generate

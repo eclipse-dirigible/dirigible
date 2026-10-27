@@ -14,7 +14,7 @@
     <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}', '${name}')"></span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
-      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"
+      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${menuLabel}...', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"
              x-model="searchTerm" @input="onSearchChange()" />
       <div x-h-input-group-addon data-align="inline-start">
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
@@ -43,6 +43,12 @@
       </button>
     </div>
 #end
+    <!-- The Inbox's Refresh (#8130): re-reads the rows under the search, sort and page in force, and
+         the stamp says how old the rows on screen are. -->
+    <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span>
+    </button>
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
       <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
@@ -81,7 +87,7 @@
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
-      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${name} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"></div>
       <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.noData', 'There is nothing to show here.')"></div>
     </div>
   </div>
@@ -100,10 +106,13 @@
               <tr x-h-table-row>
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
+## showed raw wherever the catalog had no entry for the column, which is English.
+#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <!-- A real button sorts, so the header is reachable and operable from the keyboard (#7645). -->
                   <button type="button" class="hbox w-full cursor-pointer items-center justify-between" @click="cycleSort('${property.name}')">
-                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
+                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
                     <svg x-h-lucide role="presentation" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>

@@ -27,9 +27,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Lazy
 @Component
@@ -89,6 +93,85 @@ class BpmnMultitenancyTestProject extends BaseMultitenantTestProject {
         assertHistoricProcessInstancesCount(1, tenantHost, adminUser, adminPass);
 
         LOGGER.info("Test project [{}] for tenant [{}] has been verified successfully!", getProjectResourcesFolder(), tenant);
+    }
+
+    /**
+     * Reproduction for #8078: {@code POST /bpm-processes/instance/{id}/variables} and the SKIP action
+     * do not validate that the target instance belongs to the caller's tenant, so one tenant's operator
+     * can write into another tenant's running process. The victim tenant starts a process that parks at
+     * its approval user task; the attacker tenant - a different tenant whose operator has no business
+     * touching the victim's process - then writes a variable and plants the SKIP marker on the victim's
+     * instance id. The assertions encode the secure expectation (reject, nothing written), so this test
+     * is red on the unfixed code and becomes the regression guard once the validation is added.
+     *
+     * @param tenants the provisioned tenants; at least two are required
+     */
+    void demonstrateCrossTenantVariableWrite(List<DirigibleTestTenant> tenants) {
+        if (tenants.size() < 2) {
+            throw new IllegalStateException("At least two tenants are required to demonstrate cross-tenant isolation");
+        }
+        configure();
+
+        DirigibleTestTenant victim = tenants.get(1);
+        DirigibleTestTenant attacker = tenants.get(2);
+
+        securityUtil.assignAllSystemRolesToUser(victim.getUsername(), victim.getId());
+        securityUtil.assignAllSystemRolesToUser(attacker.getUsername(), attacker.getId());
+
+        restAssuredExecutor.execute(victim, () -> triggerEmployeeRegistrationProcess(victim.getName() + "|victim"));
+
+        String victimInstanceId = restAssuredExecutor.executeWithResult(() -> given().when()
+                                                                                     .get("/services/bpm/bpm-processes/instances")
+                                                                                     .then()
+                                                                                     .statusCode(200)
+                                                                                     .body("", hasSize(1))
+                                                                                     .extract()
+                                                                                     .path("[0].id"),
+                victim.getHost(), victim.getUsername(), victim.getPassword());
+        LOGGER.info("[#8078] victim tenant [{}] has running instance id [{}]", victim.getId(), victimInstanceId);
+
+        int variableWriteStatus = restAssuredExecutor.executeWithResult(() -> given().contentType(ContentType.JSON)
+                                                                                     .body("{\"name\":\"pwnedByAttacker\",\"value\":\"attacker-controlled\"}")
+                                                                                     .when()
+                                                                                     .post("/services/bpm/bpm-processes/instance/"
+                                                                                             + victimInstanceId + "/variables")
+                                                                                     .then()
+                                                                                     .extract()
+                                                                                     .statusCode(),
+                attacker.getHost(), attacker.getUsername(), attacker.getPassword());
+        LOGGER.info("[#8078] attacker tenant [{}] variable write into victim instance returned HTTP [{}]", attacker.getId(),
+                variableWriteStatus);
+
+        int skipStatus = restAssuredExecutor.executeWithResult(() -> given().contentType(ContentType.JSON)
+                                                                            .body("{\"action\":\"SKIP\"}")
+                                                                            .when()
+                                                                            .post("/services/bpm/bpm-processes/instance/"
+                                                                                    + victimInstanceId)
+                                                                            .then()
+                                                                            .extract()
+                                                                            .statusCode(),
+                attacker.getHost(), attacker.getUsername(), attacker.getPassword());
+        LOGGER.info("[#8078] attacker tenant [{}] SKIP on victim instance returned HTTP [{}]", attacker.getId(), skipStatus);
+
+        List<String> victimVariableNames = restAssuredExecutor.executeWithResult(() -> given().when()
+                                                                                              .get("/services/bpm/bpm-processes/instance/"
+                                                                                                      + victimInstanceId + "/variables")
+                                                                                              .then()
+                                                                                              .statusCode(200)
+                                                                                              .extract()
+                                                                                              .path("name"),
+                victim.getHost(), victim.getUsername(), victim.getPassword());
+        LOGGER.info("[#8078] victim instance variable names after the attack: {}", victimVariableNames);
+
+        assertTrue(variableWriteStatus == 403 || variableWriteStatus == 404,
+                "A different tenant must not be allowed to write a variable into the victim's instance, but the endpoint answered HTTP "
+                        + variableWriteStatus);
+        assertFalse(victimVariableNames.contains("pwnedByAttacker"),
+                "Attacker-controlled variable 'pwnedByAttacker' must not be present on the victim's instance");
+        // DIRIGIBLE_BPM_INTERNAL_SKIP_STEP - the internal skip marker; a foreign tenant must not be able to
+        // plant it.
+        assertFalse(victimVariableNames.contains("DIRIGIBLE_BPM_INTERNAL_SKIP_STEP"),
+                "The internal SKIP marker must not be plantable on the victim's instance by another tenant");
     }
 
     private void assertEmployeeIsRegistered(String employeeName, String tenantHost, String employeeManagerUsername,

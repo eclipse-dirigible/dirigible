@@ -215,6 +215,7 @@ class ModelGenerationIT extends IntegrationTest {
             problems.addAll(check(testCase));
         }
         problems.addAll(listSortProblems());
+        problems.addAll(listHeaderProblems());
         assertTrue(problems.isEmpty(),
                 () -> "The generation pipeline has " + problems.size() + " problem(s):\n\n" + String.join("\n\n", problems));
     }
@@ -391,6 +392,43 @@ class ModelGenerationIT extends IntegrationTest {
         if (!"10,11,12".equals(descending)) {
             problems.add(
                     "[" + CATALOG + "] sorting the Category column descending must reverse the label order (10,11,12), got " + descending);
+        }
+        return problems;
+    }
+
+    /**
+     * Collects the list headers that print a property's name where its label belongs (dirigible #8132).
+     *
+     * <p>
+     * A header's text is {@code T(key, default)}, and the default is what shows wherever the catalog
+     * has no entry for the column - English, in a generated application. Both Name properties of the
+     * fixture carry a label, so both the LIST page (Item) and the manage list (Category) must default
+     * their Name header to it, as the record sheet and the forms do.
+     *
+     * @return the problems found, empty when both headers default to the label
+     * @throws IOException when the fixture or a template is missing, or rendering fails
+     */
+    private List<String> listHeaderProblems() throws IOException {
+        Map<String, String> rendered = render(workspaceName(CATALOG, TEMPLATE_APPLICATION), CATALOG, TEMPLATE_APPLICATION);
+        List<String> problems = new ArrayList<>();
+        for (Map.Entry<String, String> expected : Map.of("/Item-list.html", "Item Name", "/Category-manage-list.html", "Category Name")
+                                                     .entrySet()) {
+            String view = rendered.entrySet()
+                                  .stream()
+                                  .filter(file -> file.getKey()
+                                                      .endsWith(expected.getKey()))
+                                  .map(Map.Entry::getValue)
+                                  .findFirst()
+                                  .orElse(null);
+            if (view == null || view.indexOf("<thead") < 0) {
+                problems.add("[" + CATALOG + "] rendered no table header in " + expected.getKey() + ": " + rendered.keySet());
+                continue;
+            }
+            String header = view.substring(view.indexOf("<thead"), view.indexOf("</thead>"));
+            if (!header.contains("', '" + expected.getValue() + "')") || header.contains("', 'Name')")) {
+                problems.add("[" + CATALOG + "] the Name header of " + expected.getKey() + " must default to its label ["
+                        + expected.getValue() + "], not the property name: " + header);
+            }
         }
         return problems;
     }

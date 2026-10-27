@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-23T13:40:48.316447827Z",
+  "recordedAt": "2026-10-26T12:41:42.216786820Z",
   "environment": {
     "hikariMaximumPoolSize": {
       "DefaultDB": 20,
@@ -15,33 +15,33 @@
   },
   "steps": {
     "listPage": {
-      "p50Millis": 321.2,
-      "p95Millis": 436.4,
+      "p50Millis": 305.2,
+      "p95Millis": 428.3,
       "statements": 8
     },
     "search": {
-      "p50Millis": 311.9,
-      "p95Millis": 390.5,
+      "p50Millis": 291.6,
+      "p95Millis": 334.2,
       "statements": 8
     },
     "create": {
-      "p50Millis": 362.7,
-      "p95Millis": 492.0,
-      "statements": 12
+      "p50Millis": 367.4,
+      "p95Millis": 454.6,
+      "statements": 14
     },
     "transition": {
-      "p50Millis": 353.7,
-      "p95Millis": 523.8,
+      "p50Millis": 360.0,
+      "p95Millis": 484.3,
       "statements": 14
     },
     "print": {
-      "p50Millis": 656.9,
-      "p95Millis": 881.8,
+      "p50Millis": 715.1,
+      "p95Millis": 901.0,
       "statements": 7
     },
     "inbox": {
-      "p50Millis": 1149.1,
-      "p95Millis": 1398.3,
+      "p50Millis": 1103.0,
+      "p95Millis": 1351.4,
       "statements": 10
     }
   }

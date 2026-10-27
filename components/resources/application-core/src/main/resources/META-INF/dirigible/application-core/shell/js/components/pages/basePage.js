@@ -175,6 +175,16 @@ function basePage() {
       });
     },
 
+    /**
+     * Re-read this component's data when the user navigates to the page it already shows (issue
+     * #8130): the sidebar entry of the open list, or the hosting shell's entry of the app on screen.
+     * Neither re-renders the page, so without this the list kept its first visit's rows. See
+     * App.pageReentered. Removed in destroy().
+     */
+    onReentered(handler) {
+      this.listenOnWindow('harmonia:page-reentered', () => this.runReload(handler, 'page-reentered'));
+    },
+
     // A window listener this component owns, dropped in destroy() with the others.
     listenOnWindow(type, listener) {
       this._windowListeners = this._windowListeners || [];
@@ -190,6 +200,14 @@ function basePage() {
       } catch (e) {
         console.error('[' + source + '] reload failed', e);
       }
+    },
+
+    // When a list last read its rows from the server, for the "Updated <time>" stamp beside its
+    // Refresh button (issue #8130) - the Inbox's stamp, so it reads the same on every page.
+    lastUpdated: null,
+    updatedTime() {
+      if (!this.lastUpdated) return '';
+      try { return window.HarmoniaFormat.value(this.lastUpdated, true); } catch (e) { return String(this.lastUpdated); }
     },
 
     /**

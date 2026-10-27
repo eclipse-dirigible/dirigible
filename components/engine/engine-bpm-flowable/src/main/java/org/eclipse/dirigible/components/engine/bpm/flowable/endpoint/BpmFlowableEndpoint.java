@@ -344,6 +344,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
         dto.setAssignee(task.getAssignee());
         dto.setFormKey(task.getFormKey());
         dto.setCreateTime(task.getCreateTime());
+        dto.setDueDate(task.getDueDate());
         dto.setProcessInstanceId(task.getProcessInstanceId());
         dto.setCandidateUsers(identityLinks.stream()
                                            .map(IdentityLinkInfo::getUserId)
@@ -433,9 +434,28 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      */
     @PostMapping(value = "/bpm-processes/instance/{id}/variables")
     public ResponseEntity<Void> addProcessInstanceVariables(@PathVariable("id") String id, @RequestBody VariableData variableData) {
-        bpmService.addProcessInstanceVariable(id, variableData.getName(), variableData.getValue());
+        setProcessInstanceVariable(id, variableData.getName(), variableData.getValue());
         return ResponseEntity.ok()
                              .build();
+    }
+
+    /**
+     * Sets a variable on a process instance, answering {@code 404} when the instance does not belong to
+     * the current tenant. The write must not reach another tenant's instance (dirigible #8078), so the
+     * tenant check in the provider is surfaced as a not-found rather than as a server error, without
+     * disclosing whether the instance exists for another tenant.
+     *
+     * @param id the process instance id
+     * @param name the variable name
+     * @param value the variable value
+     */
+    private void setProcessInstanceVariable(String id, String name, String value) {
+        try {
+            bpmService.addProcessInstanceVariable(id, name, value);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Process instance with id [" + id + "] not found or does not belong to the current tenant", ex);
+        }
     }
 
     /**
@@ -467,7 +487,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             return retryJob(id);
         } else if (SKIP.getActionName()
                        .equals(actionData.getAction())) {
-            bpmService.addProcessInstanceVariable(id, DIRIGIBLE_BPM_INTERNAL_SKIP_STEP, SKIP.getActionName());
+            setProcessInstanceVariable(id, DIRIGIBLE_BPM_INTERNAL_SKIP_STEP, SKIP.getActionName());
             return retryJob(id);
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

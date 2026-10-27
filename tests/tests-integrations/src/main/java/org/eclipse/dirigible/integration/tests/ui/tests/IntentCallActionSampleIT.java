@@ -78,6 +78,8 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                   - { name: subject, type: string, required: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: TicketStatus, function: EntityStatus, init: 1 }
+                related:
+                  - { entity: Escalation, show: [id, reason, Status] }
               - name: Escalation
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -106,6 +108,7 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 fromStatus: [FAILED]
                 can: Escalation:retry
                 confirm: Run this escalation again?
+                primary: true
                 call:
                   method: POST
                   path: /services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry
@@ -272,6 +275,32 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         List<String> closedPage = pageMenu(2);
         assertFalse(closedPage.contains("Escalate"), "the CLOSED ticket's page does not: " + closedPage);
 
+        // The ticket's Escalations register offers the FAILED escalation's Retry beside Open (#8118).
+        List<String> register = registerRowMenu(1, "Pager down");
+        assertTrue(register.contains("Retry"), "the register row of a FAILED escalation offers Retry: " + register);
+
+        // Retry is declared primary (#8119): on the FAILED escalation it is the filled button - in the
+        // list's sheet and on its page - and Edit steps down.
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Escalation");
+        Selenide.refresh();
+        browser.clickOnElementContainingText("td", "Pager down");
+        Selenide.$$("[x-h-sheet] button[data-variant='primary']")
+                .findBy(Condition.exactText("Retry"))
+                .shouldBe(Condition.visible);
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Escalation/1/preview");
+        Selenide.refresh();
+        Selenide.$$("button[data-variant='primary']")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Retry"))
+                .shouldBe(Condition.visible);
+        Selenide.$$("button[data-variant='outline']")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Edit"))
+                .shouldBe(Condition.visible);
+
         // A CLOSED ticket is offered no Escalate button; forced anyway, the endpoint's own refusal is
         // what the user reads.
         assertEquals(Boolean.FALSE,
@@ -335,6 +364,30 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                                           .filterBy(Condition.visible)
                                           .first()
                                           .shouldBe(Condition.visible);
+        trigger.click();
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> texts = items.texts();
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return texts;
+    }
+
+    /**
+     * The items of a related register row's menu, on the given ticket's page, opened on the row with
+     * the text.
+     */
+    private List<String> registerRowMenu(int ticket, String text) {
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket/" + ticket + "/preview");
+        Selenide.refresh();
+        SelenideElement row = Selenide.$$("div[x-data^='relatedPanel'] tbody tr")
+                                      .findBy(Condition.text(text))
+                                      .shouldBe(Condition.visible);
+        SelenideElement trigger = row.$("button[aria-label='Row actions']")
+                                     .shouldBe(Condition.visible);
         trigger.click();
         ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
                                            .filterBy(Condition.visible);

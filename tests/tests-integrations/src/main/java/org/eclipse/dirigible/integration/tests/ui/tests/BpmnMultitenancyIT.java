@@ -29,4 +29,11 @@ public class BpmnMultitenancyIT extends MultitenancyUserInterfaceIntegrationTest
         testProject.test(tenants);
     }
 
+    @Test
+    void testCrossTenantProcessVariableWriteIsRejected() {
+        List<DirigibleTestTenant> tenants = provisionTenants();
+
+        testProject.demonstrateCrossTenantVariableWrite(tenants);
+    }
+
 }

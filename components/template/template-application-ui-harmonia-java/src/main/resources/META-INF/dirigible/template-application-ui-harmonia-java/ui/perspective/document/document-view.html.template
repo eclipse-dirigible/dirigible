@@ -719,6 +719,18 @@
                     </template>
                     <td x-h-table-cell data-row-actions>
                       <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><svg role="presentation" x-h-lucide data-lucide="external-link"></svg></button>
+                      <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
+                      <template x-if="rowActions(row).length">
+                        <span class="inline-flex">
+                          <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
+                          <ul x-h-menu data-align="bottom-end">
+                            <template x-for="action in rowActions(row)" :key="action.id">
+                              <li x-h-menu-item @click="runRowAction(action, row)"
+                                  x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                            </template>
+                          </ul>
+                        </span>
+                      </template>
                     </td>
                   </tr>
                 </template>

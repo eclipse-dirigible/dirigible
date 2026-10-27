@@ -137,6 +137,17 @@ class CallActionDescriptorTest {
     }
 
     /** The descriptor's JSON with its pretty-printing whitespace removed, for readable assertions. */
+    /** The descriptor carries {@code primary} when it is declared, and only then (#8119). */
+    @Test
+    void aPrimaryActionCarriesTheFlagOnlyWhenDeclared() {
+        String primary = compact(
+                descriptor(YAML.replace("    success: Escalation requested", "    success: Escalation requested\n    primary: true"),
+                        "EscalateTicket"));
+        assertTrue(primary.contains("\"primary\":true"), primary);
+        String plain = compact(descriptor(YAML, "EscalateTicket"));
+        assertTrue(!plain.contains("\"primary\""), plain);
+    }
+
     private static String compact(String descriptor) {
         return descriptor.replaceAll("\\s+", "");
     }

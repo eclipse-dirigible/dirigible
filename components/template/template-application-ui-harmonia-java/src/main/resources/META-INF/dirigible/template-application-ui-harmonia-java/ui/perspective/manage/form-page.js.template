@@ -933,20 +933,22 @@ document.addEventListener('alpine:init', () => {
 #end
     },
 
-    // 'task' | 'edit' | 'none' - the filled slot.
+    // 'task' | 'action' | 'edit' | 'none' - the filled slot: the record's pending process task, then a
+    // contributed action declared primary that applies to the record (#8119), then Edit.
     get primaryAction() {
       if (this.recordTasks.length) return 'task';
+      if (this.primaryCustomAction) return 'action';
       return this.canEdit ? 'edit' : 'none';
     },
 
-    // Edit steps down to the outlined slot when a task holds the primary one, and folds into the
-    // overflow menu on a narrow viewport.
+    // Edit steps down to the outlined slot when a task or a primary action holds the filled one, and
+    // folds into the overflow menu on a narrow viewport.
     get showsSecondaryEdit() {
-      return this.primaryAction === 'task' && this.canEdit && !this.isNarrow;
+      return (this.primaryAction === 'task' || this.primaryAction === 'action') && this.canEdit && !this.isNarrow;
     },
 
     get editInMenu() {
-      return this.primaryAction === 'task' && this.canEdit && this.isNarrow;
+      return (this.primaryAction === 'task' || this.primaryAction === 'action') && this.canEdit && this.isNarrow;
     },
 
     // The overflow menu renders only when it would carry something.
@@ -984,9 +986,33 @@ document.addEventListener('alpine:init', () => {
       return (store && this.isPreview && this.loadedRecord) ? store.getActions('${name}', 'entity', this.loadedRecord) : [];
     },
 
+    // The contributed action that is the page's filled button (#8119): the first of the record's
+    // actions that declares primary. recordActions has already applied preview-only, the loaded record,
+    // and the action's status guards and roles.
+    get primaryCustomAction() {
+      return this.recordActions.find((a) => a.primary) || null;
+    },
+
+    // The record's actions the overflow menu lists: all of them but the one in the filled slot.
+    get menuRecordActions() {
+      const primary = this.primaryAction === 'action' ? this.primaryCustomAction : null;
+      return this.recordActions.filter((a) => a !== primary);
+    },
+
+    runPrimaryAction() {
+      const action = this.primaryCustomAction;
+      if (action) Alpine.store('customActions').trigger(action, this.id, this.loadedRecord);
+    },
+
+    primaryActionLabel() {
+      const a = this.primaryCustomAction;
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
+
     // Everything that would sit above the destructive group.
     get menuHasAboveDelete() {
-      return this.recordActions.length > 0 || this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
+      return this.menuRecordActions.length > 0 || this.editInMenu || this.menuHasPrint || this.menuHasCalendars;
     },
 
     get hasOverflowMenu() {

@@ -35,12 +35,33 @@
                  the instance Date pattern, so the shape it shows and accepts is the one the cells
                  print. A native <input type="date"> renders in the BROWSER's locale instead, which is
                  how one screen could offer dd.mm.yyyy while the form beside it read the same digits as
-                 m/d/yyyy. The model stays the ISO the search expects. -->
+                 m/d/yyyy. The model stays the ISO the search expects.
+                 It takes a range (#8131): From and To, either left empty for an open end, and the
+                 quick periods, each of which fills both. -->
             <template x-if="editedFilterColumn &amp;&amp; editedFilterColumn.type === 'date'">
-              <div x-h-date-picker>
-                <input type="text" :placeholder="HarmoniaFormat.dateHint()" />
-                <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
-                <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft"></div>
+              <div class="vbox gap-3">
+                <div class="hbox flex-wrap gap-1">
+                  <template x-for="preset in datePresets" :key="preset.key">
+                    <button x-h-button data-variant="outline" data-size="sm" @click="applyDatePreset(preset.key)"
+                            x-text="T('application-core:shell.list.' + preset.key, preset.label)"></button>
+                  </template>
+                </div>
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateFrom', 'From')"></span>
+                  <div x-h-date-picker>
+                    <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateFrom', 'From')" />
+                    <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
+                    <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.from"></div>
+                  </div>
+                </div>
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateTo', 'To')"></span>
+                  <div x-h-date-picker>
+                    <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateTo', 'To')" />
+                    <button x-h-date-picker-trigger :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')"></button>
+                    <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.to"></div>
+                  </div>
+                </div>
               </div>
             </template>
             <template x-if="editedFilterColumn &amp;&amp; editedFilterColumn.type !== 'fk' &amp;&amp; editedFilterColumn.type !== 'date' &amp;&amp; editedFilterColumn.type !== 'boolean'">
@@ -56,7 +77,7 @@
        The page carries no title of its own either; the shell's breadcrumb names it. -->
   <div class="hbox flex-wrap items-center gap-2">
     <div x-h-input-group class="max-w-sm">
-      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${menuLabel}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"
+      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${menuLabel}...', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"
              x-model="searchTerm" @input="onSearchChange()" />
       <div x-h-input-group-addon data-align="inline-start">
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
@@ -90,7 +111,7 @@
             <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="openFilterEditor(col.name)">
               <span class="vbox min-w-0 flex-1 items-start">
                 <span class="truncate" x-text="filterLabel(col)"></span>
-                <span class="truncate text-xs text-muted-foreground" x-show="columnFilters[col.name]" x-text="filterValueText(col)"></span>
+                <span class="truncate text-xs text-muted-foreground" x-show="filterHasValue(col, columnFilters[col.name])" x-text="filterValueText(col)"></span>
               </span>
             </button>
           </template>
@@ -123,6 +144,14 @@
          spinner just signals the refresh so the empty state is never shown mid-query (#7461). -->
     <span x-show="filtering" x-h-spinner aria-hidden="true"></span>
     <div class="flex-1"></div>
+
+    <!-- The Inbox's Refresh (#8130): re-reads the rows under the search, filters, sort and page in
+         force, and the stamp says how old the rows on screen are. -->
+    <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
+    <button x-h-button data-variant="outline" @click="refresh()">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg>
+      <span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span>
+    </button>
 
 #if($hierarchyProperty || $calendarView || $slotsView)
     <!-- The view switch: one single-choice group, icon-only, always just before New. It holds the
@@ -255,7 +284,7 @@
   <div x-show="displayState === 'empty'" x-h-info-page>
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
-      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') })"></div>
       <div x-h-info-page-description x-show="canWrite()" x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
     <div x-h-info-page-content>
@@ -292,9 +321,12 @@
               <tr x-h-table-row>
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
+## showed raw wherever the catalog had no entry for the column, which is English.
+#if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
                 <th x-h-table-head scope="col"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <button class="hbox #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")w-full justify-end #{end}cursor-pointer items-center gap-1" @click="cycleSort('${property.name}')">
-                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
+                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
                     <svg x-h-lucide role="presentation" class="size-4"
                          :data-lucide="isSortedAsc('${property.name}') ? 'arrow-up' : (isSortedDesc('${property.name}') ? 'arrow-down' : 'chevrons-up-down')"></svg>
                   </button>
@@ -454,6 +486,11 @@
             <button x-h-button data-variant="primary" @click="$store.processTasks.openTask(primaryTask)">
               <svg role="presentation" x-h-lucide data-lucide="inbox"></svg>
               <span x-text="$store.processTasks.taskName(primaryTask)"></span>
+            </button>
+          </template>
+          <template x-if="primaryAction === 'action'">
+            <button x-h-button data-variant="primary" @click="runPrimaryAction()">
+              <span x-text="primaryActionLabel()"></span>
             </button>
           </template>
           <template x-if="primaryAction === 'edit'">

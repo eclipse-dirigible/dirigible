@@ -21,6 +21,11 @@
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
 #end
+    <!-- The Inbox's Refresh (#8130): re-reads the rows, and the stamp says how old the ones on screen are. -->
+    <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()">
+      <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span>
+    </button>
     <!-- Export the own rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="exportCsv()">
       <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>

@@ -2292,6 +2292,16 @@ check, so the endpoint must enforce its own rule. A `can:` token no role lists i
 would be shown to nobody), and a token an action binds is not reported as an advisory. The answer's
 body is not read: a 2xx toasts `success`, a 400/409 shows the endpoint's `message`.
 
+**`primary: true` - the record's filled button.** The list's details sheet and the record page each
+have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,
+`generates:` entry or `transitions:` entry that IS the next step declares `primary: true`; when it applies
+to the record (its `fromStatus` / `from` guard and its roles pass), it takes the filled slot, and Edit
+moves to the sheet's menu or to the page's outlined button. A pending process task still comes first, and
+several primary actions of one entity are fine when they apply in different statuses (the first that
+applies wins, in `order`). Refused on `scope: page`. Without it, the record's actions stay in its menus:
+the row's `⋯`, the sheet's More actions, the record page's `⋯` and, for a `related:` register's rows, a
+`⋯` beside Open.
+
 **`call:` or `generates:`?** `generates:` inserts the target row through its OWN generated controller -
 right when the rules fit `fromStatus:` / `defaults:`. When the rules live in the application's endpoint
 (and some cannot be expressed in the DSL at all), copying them into the intent duplicates them; `call:`

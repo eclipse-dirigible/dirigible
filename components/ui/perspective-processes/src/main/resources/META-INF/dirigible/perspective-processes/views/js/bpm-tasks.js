@@ -17,10 +17,12 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
     $scope.state = {
         loadingGroups: false,
         loadingAssignee: false,
+        loadingAll: false,
         busyText: 'Loading...',
     };
     $scope.tasksList = [];
     $scope.tasksListAssignee = [];
+    $scope.tasksListAll = [];
     $scope.currentProcessInstanceId;
     $scope.selectedClaimTask = null;
     $scope.selectedUnclaimTask = null;
@@ -48,6 +50,16 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
             }, (error) => {
                 console.error(error);
             });
+
+        // Every task of the instance, whoever holds it - an operator needs the instance's open tasks,
+        // not only their own candidate/assigned ones (type=all, dirigible #8076).
+        $http.get('/services/bpm/bpm-processes/instance/' + processInstanceId + '/tasks?type=all', { params: { 'limit': 100 } })
+            .then((response) => {
+                $scope.tasksListAll = response.data;
+                $scope.state.loadingAll = false;
+            }, (error) => {
+                console.error(error);
+            });
     };
 
     $scope.formatTime = (isoDate) => {
@@ -61,12 +73,14 @@ tasksView.controller('TasksController', ($scope, $http, $window, Dialogs, Notifi
                 if (data.deselect) {
                     $scope.tasksList.length = 0;
                     $scope.tasksListAssignee.length = 0;
+                    $scope.tasksListAll.length = 0;
                     $scope.currentProcessInstanceId = null;
                     $scope.selectedClaimTask = null;
                     $scope.selectedUnclaimTask = null;
                 } else {
                     $scope.state.loadingGroups = true;
                     $scope.state.loadingAssignee = true;
+                    $scope.state.loadingAll = true;
                     $scope.currentProcessInstanceId = data.instance;
                     $scope.fetchData(data.instance);
                 }

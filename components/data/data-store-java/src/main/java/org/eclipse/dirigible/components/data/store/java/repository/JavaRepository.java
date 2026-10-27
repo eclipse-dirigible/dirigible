@@ -375,6 +375,40 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Refuses a write whose to-one relation names a record that does not exist - the write-side twin of
+     * {@link #requireDeletable(Object)} (dirigible #8100). Without it a create or an update accepted
+     * any id, and the row it stored pointed at nothing: never refused, never used, and - on a numbered
+     * document - already numbered and handed to its process before anyone noticed.
+     *
+     * <p>
+     * The target is NAMED by its generated entity class rather than typed, the same identity the delete
+     * rules agree on, so a repository referencing a record another model generates does not compile
+     * against that model. A target whose entity is not registered - its model is not deployed - cannot
+     * be checked, and the write is let through with a warning rather than refused for a reason the
+     * caller cannot fix. A read-then-act guard, like every other reference check the platform
+     * generates: a target deleted between this lookup and the write is not seen.
+     *
+     * @param relation the referencing property, as the refusal names it
+     * @param targetEntityClass the fully-qualified name of the target's generated entity class
+     * @param targetId the referenced primary key; {@code null} references nothing and passes
+     * @throws ValidationException when no record of the target has that primary key
+     */
+    protected void requireReferenceExists(String relation, String targetEntityClass, Object targetId) {
+        if (targetId == null) {
+            return;
+        }
+        JavaEntityStore store = store();
+        if (!store.isRegistered(targetEntityClass)) {
+            LOGGER.warn("Cannot check that {}.{} {} exists - [{}] is not a registered entity; the write is let through", label(), relation,
+                    targetId, targetEntityClass);
+            return;
+        }
+        if (!store.existsById(targetEntityClass, targetId)) {
+            throw new ValidationException(relation + " " + targetId + " does not exist");
+        }
+    }
+
+    /**
      * Refuses the delete of a record while a record referencing it through a relation that RESTRICTS
      * its delete still exists (intent {@code whenTargetDeleted: restrict}, the default for a to-one,
      * dirigible #7547). Every delete runs it before anything is written; a generated repository whose

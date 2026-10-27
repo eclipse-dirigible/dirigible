@@ -490,6 +490,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+        // Before the number below is drawn: a create refused for a dangling reference must not spend one.
+        requireReferencesExist(entity, null);
+#end
 #if($hasStatusStamps)
         // A create that lands in a stamped status ENTERS it: stamped once every guard has passed and
         // filed the record where it belongs, so the stamp follows the status actually written.
@@ -641,6 +645,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+## The stored row is already in hand when system-owned fields were preserved - no second read.
+#if($preservedOnUpdate.size() > 0)
+        requireReferencesExist(entity, existingRow);
+#else
+        requireReferencesExist(entity, entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName}));
+#end
+#end
 #if($hasStatusStamps)
 ## A stamped field is read-only, so it is preserved and the stored row is already in hand - no second read.
 #if($preservedOnUpdate.size() > 0)
@@ -736,6 +748,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+        requireReferencesExist(entity, entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName}));
+#end
 #if($hasStatusStamps)
         applyStatusStamps(stampPrevious, entity);
 #end
@@ -1798,6 +1813,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
             ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
+        }
+#end
+#end
+    }
+#end
+#if($hasReferenceChecks)
+
+    /**
+     * Refuses a new ${name} that names, through one of its to-one relations, a record that does not
+     * exist (dirigible #8100) - the check save() makes, for a caller that must ask BEFORE a side effect
+     * the write cannot take back, as the attachment upload stores its files first.
+     */
+    public void requireReferencesExist(${name}Entity entity) {
+        requireReferencesExist(entity, null);
+    }
+
+    /**
+     * Refuses a write whose to-one relation names a record that does not exist (dirigible #8100):
+     * same-model and cross-model alike, by the target's generated entity class - a 400 naming the
+     * relation instead of a stored row pointing at nothing. On an update only a reference the write
+     * CHANGES is asked: one it carries back as stored is not the caller's choice, so a row stored
+     * before this check existed stays editable. A {@code whenTargetDeleted: keep} relation is not
+     * checked at all - its reference outlives its target by declaration.
+     *
+     * @param stored the row as stored before this write, {@code null} for a create
+     */
+    private void requireReferencesExist(${name}Entity entity, ${name}Entity stored) {
+#foreach($property in $properties)
+#if($property.targetEntityClass)
+        if (stored == null || !java.util.Objects.equals(stored.${property.name}, entity.${property.name})) {
+            requireReferenceExists("${property.name}", "${property.targetEntityClass}", entity.${property.name});
         }
 #end
 #end

@@ -444,8 +444,16 @@ document.addEventListener('alpine:init', () => {
         this.hostedUrl = this.appUrl(item, '');
         this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+      } else {
+        // The app is already on screen: its page re-reads instead (#8130).
+        this.reenterHostedApp();
       }
       this.closeSideNav();
+    },
+
+    /** Signal the page of the hosted app that the user came back to it, so it re-reads (#8130). */
+    reenterHostedApp() {
+      if (this.hostedId && this.$refs.hostedFrame) App.pageReentered(this.$refs.hostedFrame.contentWindow);
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
@@ -559,6 +567,17 @@ document.addEventListener('alpine:init', () => {
         if (res.ok) {
           const data = await res.json();
           this.projections = Array.isArray(data.projections) ? data.projections : [];
+          // A projection translates its name the way a navigation group does (#7610): it declares
+          // `translation: { key: '<project>:<path>' }`, adopted as its tkey. The key's project is a
+          // catalog namespace nothing else loads - a lens project contributes no perspective - so
+          // the shell adds it here, or the switcher stays in English (#8133).
+          this.projections.forEach(p => {
+            const key = p.translation && p.translation.key;
+            if (!p.tkey && typeof key === 'string' && key.indexOf(':') > 0) p.tkey = key;
+          });
+          const namespaces = [...new Set(this.projections.map(p => (p.tkey || '').split(':')[0])
+            .filter(ns => ns && ns !== 'application-core'))];
+          if (namespaces.length && window.AppI18nAddNamespaces) AppI18nAddNamespaces(namespaces);
         }
       } catch (e) {
         console.error('Failed to load application projections', e);
@@ -587,6 +606,9 @@ document.addEventListener('alpine:init', () => {
       try { localStorage.setItem(PROJECTION_KEY, p.id); } catch (e) { /* no storage */ }
       if (this.hostedId && !this.visibleGroups().some(g => (g.items || []).some(i => i.id === this.hostedId))) {
         this.navigate('/dashboard');
+      } else {
+        // The hosted app stays on screen under the new projection: its page re-reads (#8130).
+        this.reenterHostedApp();
       }
     },
 

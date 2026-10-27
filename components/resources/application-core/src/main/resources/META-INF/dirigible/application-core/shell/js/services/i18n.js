@@ -159,6 +159,15 @@
         interpolation: { skipOnVariables: false, escapeValue: false },
         resources: data.translations || {},
       });
+      // `{{name, lowercase}}`: a name that sits INSIDE a sentence. The labels interpolated into a
+      // phrase ("Search {{name}}...") are title-cased display names, and whether one keeps its capital
+      // mid-sentence is the language's rule, so the catalog that needs it opts in per phrase - bg
+      // "Търсене в {{name, lowercase}}..." - while English and German keep their capitals (#8133).
+      // An acronym (ДДС, VAT) is a word in capitals and stays one.
+      i18next.services.formatter.add('lowercase', (value, lng) => String(value)
+        .split(' ')
+        .map(word => word.length > 1 && word === word.toLocaleUpperCase(lng) ? word : word.toLocaleLowerCase(lng))
+        .join(' '));
       markReady();
       return true;
     } catch (e) {

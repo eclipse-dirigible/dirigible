@@ -697,11 +697,13 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final int PROCESS_INSTANCE_ID_CHUNK = 500;
 
     public void retryDeadLetterJob(String jobId, int retries) {
+        flowableArtefactsValidator.validateDeadLetterJob(jobId);
         processEngine.getManagementService()
                      .moveDeadLetterJobToExecutableJob(jobId, retries);
     }
 
     public void addProcessInstanceVariable(String processInstanceId, String key, String value) {
+        flowableArtefactsValidator.validateProcessInstanceId(processInstanceId);
         processEngine.getRuntimeService()
                      .setVariable(processInstanceId, key, value);
     }

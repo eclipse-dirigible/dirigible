@@ -37,6 +37,9 @@ public class TaskDTO {
     /** The create time. */
     private Date createTime;
 
+    /** The due date, null when the task declares none. */
+    private Date dueDate;
+
     /** The process instance id. */
     private String processInstanceId;
 
@@ -199,6 +202,24 @@ public class TaskDTO {
      */
     public void setCreateTime(Date createTime) {
         this.createTime = createTime;
+    }
+
+    /**
+     * Gets the due date.
+     *
+     * @return the due date
+     */
+    public Date getDueDate() {
+        return dueDate;
+    }
+
+    /**
+     * Sets the due date.
+     *
+     * @param dueDate the new due date
+     */
+    public void setDueDate(Date dueDate) {
+        this.dueDate = dueDate;
     }
 
     /**

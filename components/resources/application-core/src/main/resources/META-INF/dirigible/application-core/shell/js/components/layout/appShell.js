@@ -170,7 +170,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     navigate(route) {
-      window.PineconeRouter.navigate(route);
+      // The router ignores a navigation to the route on screen, so the page hears it from the shell
+      // instead (#8130). The live hash, not the router context: a list reflects its selected row in
+      // the hash through replaceState, which the context never sees.
+      const here = (window.location.hash || '').replace(/^#/, '').split('?')[0] || '/';
+      if (here === route) App.pageReentered();
+      else window.PineconeRouter.navigate(route);
       this.closeSideNav();
     },
 

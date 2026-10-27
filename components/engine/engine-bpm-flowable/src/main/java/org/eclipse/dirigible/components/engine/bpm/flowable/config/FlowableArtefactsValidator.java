@@ -22,6 +22,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.task.Attachment;
 import org.flowable.engine.task.Comment;
 import org.flowable.engine.task.Event;
+import org.flowable.job.api.Job;
 import org.flowable.task.api.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -149,6 +150,18 @@ class FlowableArtefactsValidator {
 
     void validateTasks(Collection<String> taskIds) {
         taskIds.forEach(this::validateTask);
+    }
+
+    void validateDeadLetterJob(String jobId) {
+        Job job = processEngine.getManagementService()
+                               .createDeadLetterJobQuery()
+                               .jobId(jobId)
+                               .jobTenantId(getTenantId())
+                               .singleResult();
+
+        if (job == null) {
+            throw new IllegalArgumentException("Dead-letter job with id [" + jobId + "] not found or does not belong to current tenant.");
+        }
     }
 
 }
