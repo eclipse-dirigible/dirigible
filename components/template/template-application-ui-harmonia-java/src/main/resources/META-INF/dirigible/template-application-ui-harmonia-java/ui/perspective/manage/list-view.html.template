@@ -342,7 +342,7 @@
 #else
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
 #end
-                <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
+                <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="rowClicked($event, row)" style="cursor:pointer;">
 #set($treeColumnDone = false)
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
@@ -354,7 +354,7 @@
                   <td x-h-table-cell#visibleGate($property)>
                     <div class="hbox items-center gap-1 min-w-0" :style="treeVisible ? 'padding-left: ' + (depth * 1.5) + 'rem' : ''">
                       <button type="button" x-h-button data-variant="transparent" data-size="icon-sm" class="shrink-0" x-show="treeVisible &amp;&amp; hasChildren"
-                              @click.stop="toggleNode(row)" :aria-expanded="isCollapsed(row) ? 'false' : 'true'"
+                              data-row-control @click="toggleNode(row)" :aria-expanded="isCollapsed(row) ? 'false' : 'true'"
                               :aria-label="isCollapsed(row) ? T('$projectName:${tprefix}.defaults.expand', 'Expand') : T('$projectName:${tprefix}.defaults.collapse', 'Collapse')">
                         <svg x-h-lucide role="presentation" :data-lucide="isCollapsed(row) ? 'chevron-right' : 'chevron-down'"></svg>
                       </button>
@@ -397,7 +397,7 @@
 #end
 #end
 #end
-                  <td x-h-table-cell data-row-actions class="text-right" @click.stop>
+                  <td x-h-table-cell data-row-actions class="text-right">
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
                       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
