@@ -13,6 +13,7 @@ import org.apache.commons.io.FilenameUtils;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
+import org.eclipse.dirigible.components.base.artefact.ArtefactProblemReporter;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologicalDepleter;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologicalSorter;
@@ -36,6 +37,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
@@ -94,6 +96,11 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     /** The outcome of each per-tenant artefact, per tenant. */
     private final TenantArtefactLedgerService tenantArtefactLedger;
 
+    /**
+     * Surfaces FAILED/FATAL artefacts in the Problems view; absent in an assembly without that store.
+     */
+    private final ObjectProvider<ArtefactProblemReporter> problemReporter;
+
     /** The initialized. */
     private final AtomicBoolean initialized;
 
@@ -123,7 +130,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     @Autowired
     public SynchronizationProcessor(IRepository repository, List<Synchronizer<?, ?>> synchronizers, DefinitionService definitionService,
             SynchronizationWatcher synchronizationWatcher, RegistryMutationTracker registryMutationTracker, TenantContext tenantContext,
-            TenantArtefactLedgerService tenantArtefactLedger) {
+            TenantArtefactLedgerService tenantArtefactLedger, ObjectProvider<ArtefactProblemReporter> problemReporter) {
         this.repository = repository;
         this.synchronizers = Collections.synchronizedList(synchronizers);
         logger.info("Registered [{}] synchronizers: [{}]", synchronizers.size(), synchronizers);
@@ -133,6 +140,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         this.registryMutationTracker = registryMutationTracker;
         this.tenantContext = tenantContext;
         this.tenantArtefactLedger = tenantArtefactLedger;
+        this.problemReporter = problemReporter;
         this.synchronizers.forEach(s -> s.setCallback(this));
 
         this.initialized = new AtomicBoolean(false);
@@ -457,6 +465,8 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             // The same walk takes the census of what stays registered (#7533), keyed so that a service
             // shared by two synchronizers counts its artefacts once.
             Map<String, Artefact> remaining = new HashMap<>();
+            // The artefacts still in a failed state after this pass - surfaced in the Problems view below.
+            List<Artefact> failedArtefacts = new ArrayList<>();
             for (Synchronizer synchronizer : synchronizers) {
                 List<? extends Artefact> registered = synchronizer.getService()
                                                                   .getAll();
@@ -477,10 +487,18 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                             }
                         } else {
                             remaining.put(artefact.getKey(), artefact);
+                            if (ArtefactLifecycle.FAILED == artefact.getLifecycle() || ArtefactLifecycle.FATAL == artefact.getLifecycle()) {
+                                failedArtefacts.add(artefact);
+                            }
                         }
                     }
                 }
             }
+            // Reflect the outcome in the Problems view: a failure (a deploy or parse that could not
+            // reconcile) becomes a problem the developer sees, and a healed or removed artefact's
+            // problem is cleared. One reconcile over the authoritative failed set, skipped where the
+            // Problems store is not on the classpath.
+            problemReporter.ifAvailable(reporter -> reporter.reconcileSynchronizationProblems(failedArtefacts));
             org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
                                                                              .recordArtefacts(ArtefactCensus.of(remaining.values()));
             logger.trace("Cleaning up removed artefacts done.");
