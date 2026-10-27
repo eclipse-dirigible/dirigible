@@ -32,7 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 /**
- * A decimal is checked and calculated as the value its column stores - dirigible #8107.
+ * A decimal is checked and calculated as the value its column stores - dirigible #8107, #8193.
  *
  * <p>
  * The checks and the calculated expressions read the payload's value, and the column then stored it
@@ -49,6 +49,7 @@ class IntentDecimalScaleIT extends IntegrationTest {
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String ALLOCATIONS = API + "/allocation/AllocationController";
+    private static final String PROTOCOLS = API + "/protocol/ProtocolController";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String INTENT_YAML = """
@@ -65,6 +66,15 @@ class IntentDecimalScaleIT extends IntegrationTest {
                   - { name: rate,   type: decimal, precision: 18, scale: 2 }
                   - { name: amount, type: decimal, precision: 18, scale: 2,
                       calculatedOnCreate: "Hours * Rate", calculatedOnUpdate: "Hours * Rate" }
+              # #8193: an `ne` bound, and a calculation reading an input of another scale than its own.
+              - name: Protocol
+                checks:
+                  - { kind: compare, field: taxBase, op: ne, value: 0, message: "A protocol carries a tax base" }
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: taxBase, type: decimal, precision: 18, scale: 2 }
+                  - { name: vatRate, type: decimal, precision: 9, scale: 4 }
+                  - { name: vat,     type: decimal, precision: 18, scale: 2, calculatedOnCreate: "TaxBase * VatRate / 100" }
             """;
 
     @Autowired
@@ -78,9 +88,7 @@ class IntentDecimalScaleIT extends IntegrationTest {
 
     @Test
     void a_decimal_is_checked_and_calculated_as_the_value_its_column_stores() {
-        generateProject();
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
+        deployProject();
 
         // Rounds to 0.00: the check refuses it instead of storing a zero row that bills 0.49.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -124,6 +132,36 @@ class IntentDecimalScaleIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("Hours", equalTo(2.01f))
                                                  .body("Amount", equalTo(201.0f)));
+    }
+
+    @Test
+    void a_not_equal_bound_and_a_calculation_from_an_input_of_another_scale_read_the_stored_value() {
+        deployProject();
+
+        // #8193: 0.001 rounds to 0.00, which `taxBase ne 0` refuses - no empty protocol is stored.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"TaxBase\":\"0.001\",\"VatRate\":\"20\"}")
+                                                 .when()
+                                                 .post(PROTOCOLS)
+                                                 .then()
+                                                 .statusCode(400),
+                TIMEOUT_SECONDS);
+        // A rate of 20.00004 is stored as 20.0000, so the VAT is 20 % of the base - 200000.00, not
+        // the 200000.40 the payload's rate would compute.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"TaxBase\":\"1000000\",\"VatRate\":\"20.00004\"}")
+                                                 .when()
+                                                 .post(PROTOCOLS)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("VatRate", equalTo(20.0f))
+                                                 .body("Vat", equalTo(200000.0f)));
+    }
+
+    private void deployProject() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     private void generateProject() {
