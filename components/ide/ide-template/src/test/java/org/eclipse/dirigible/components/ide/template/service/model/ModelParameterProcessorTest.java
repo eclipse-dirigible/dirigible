@@ -915,6 +915,48 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A relation's referenced row must exist (#7986): the foreign key never reaches the database, so
+     * the generated repository counts the target's rows by the dropdown's key before it writes. A
+     * relation without a dropdown key (a hand-authored {@code .model}) is left unchecked rather than
+     * checked against a guessed column, a {@code whenTargetDeleted: keep} relation - whose reference
+     * outlives its target by declaration - is never checked, and the entity is flagged only when one
+     * is.
+     */
+    @Test
+    void aRelationWithADropdownKeyIsCheckedForItsTarget() {
+        Map<String, Object> category = property("Category", "INTEGER");
+        category.put("relationshipEntityName", "ExpenseCategory");
+        category.put("relationshipEntityPerspectiveName", "Claims");
+        category.put("widgetType", "DROPDOWN");
+        category.put("widgetDropDownKey", "Id");
+        Map<String, Object> approver = property("Approver", "INTEGER");
+        approver.put("relationshipEntityName", "ExpenseCategory");
+        approver.put("relationshipEntityPerspectiveName", "Claims");
+        approver.put("widgetType", "DROPDOWN");
+        Map<String, Object> source = property("Source", "INTEGER");
+        source.put("relationshipEntityName", "ExpenseCategory");
+        source.put("relationshipEntityPerspectiveName", "Claims");
+        source.put("widgetType", "DROPDOWN");
+        source.put("widgetDropDownKey", "Id");
+        source.put("whenTargetDeleted", "keep");
+        Map<String, Object> parent = property("Parent", "INTEGER");
+        parent.put("relationshipEntityName", "ExpenseCategory");
+        parent.put("relationshipEntityPerspectiveName", "Claims");
+        parent.put("widgetType", "DROPDOWN");
+        Map<String, Object> claim = entity("ExpenseClaim", "Claims", property("Id", "INTEGER"), category, approver, source);
+        Map<String, Object> unchecked = entity("ExpenseCategory", "Claims", property("Id", "INTEGER"), parent);
+
+        ModelParameterProcessor.process(model(claim, unchecked), javaParameters());
+
+        assertEquals("Id", category.get("targetKeyProperty"));
+        assertEquals("gen.sales_order.data.claims.ExpenseCategoryRepository", category.get("targetRepositoryClass"));
+        assertEquals(Boolean.TRUE, claim.get("hasReferenceTargets"));
+        assertNull(approver.get("targetKeyProperty"));
+        assertNull(source.get("targetKeyProperty"), "a kept reference may outlive its target");
+        assertNull(unchecked.get("hasReferenceTargets"));
+    }
+
+    /**
      * The cross-model parent of a junction's {@code checks: agree} (#7701): the check names the
      * junction's foreign key and the parent's relied-on property, and this pass resolves the parent's
      * generated entity class in its OWNER model's package - what the parent's repository names itself

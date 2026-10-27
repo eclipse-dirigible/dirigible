@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -79,6 +80,39 @@ class TargetDeleteRuleRepositoryTemplateIT {
         assertFalse(rendered.contains("TargetDeleteRule"), "an entity referencing nothing must carry none of this machinery");
         assertFalse(rendered.contains("countRestricting") || rendered.contains("public void release("),
                 "an entity referencing nothing must carry none of this machinery");
+    }
+
+    /**
+     * dirigible #7986: a relation carrying a target key renders the existence check, called on create
+     * with nothing stored to compare against and on both update paths against the stored row.
+     */
+    @Test
+    void aReferencedRowIsCheckedBeforeTheWrite() throws Exception {
+        Map<String, Object> parameters = context(false);
+        Map<String, Object> category = relation("Category", "restrict", CATEGORY);
+        category.put("relationshipEntityName", "ExpenseCategory");
+        category.put("targetRepositoryClass", "gen.expenses.data.expenses.ExpenseCategoryRepository");
+        category.put("targetKeyProperty", "Id");
+        @SuppressWarnings("unchecked")
+        List<Object> properties = (List<Object>) parameters.get("properties");
+        properties.add(category);
+        parameters.put("hasReferenceTargets", Boolean.TRUE);
+
+        String rendered = render(parameters);
+
+        assertTrue(rendered.contains("import org.eclipse.dirigible.sdk.db.ValidationException;"), "the refusal type is imported");
+        assertTrue(rendered.contains("requireReferencedRowsExist(entity, true);"), "create checks every relation: " + rendered);
+        assertEquals(2, rendered.split("requireReferencedRowsExist\\(entity, false\\);", -1).length - 1,
+                "update and updateWithoutEvent check the changed relations: " + rendered);
+        String check = method(rendered, "private void requireReferencedRowsExist(ExpenseClaimEntity entity, boolean creating) {");
+        assertTrue(check.contains("new gen.expenses.data.expenses.ExpenseCategoryRepository().count(")
+                && check.contains(".eq(\"Id\", entity.Category)"), "the target is counted by its key, never loaded: " + check);
+        assertTrue(check.contains("\"ExpenseClaim.Category: there is no ExpenseCategory with Id \""),
+                "the refusal names the relation: " + check);
+        for (String line : rendered.split("\n")) {
+            assertFalse(line.contains("${") || line.contains("$property") || line.contains("$creating"),
+                    "an unresolved template reference survived: " + line);
+        }
     }
 
     private String render(Map<String, Object> parameters) throws Exception {

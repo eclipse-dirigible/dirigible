@@ -1025,6 +1025,16 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
+        // The referenced row must exist (#7986): a foreign key never reaches the database, so the
+        // generated repository refuses a write naming a target the dropdown's key matches no row of.
+        // `whenTargetDeleted: keep` declares the opposite - the reference outlives its target, and a
+        // posting's reversal is written against a source already deleted - so it is never checked.
+        String targetKey = str(property, "widgetDropDownKey");
+        if (targetKey != null && !targetKey.isEmpty() && !truthy(property, "dataPrimaryKey")
+                && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
+            property.put("targetKeyProperty", targetKey);
+            entity.put("hasReferenceTargets", Boolean.TRUE);
+        }
         // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
         // another model may - so this entity's repository contributes the rule the target's delete
         // applies, keyed by the target's generated entity class, which is what that delete names itself

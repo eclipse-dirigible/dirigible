@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
+import io.restassured.response.Response;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -136,6 +138,7 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertNullifyClearsTheReference();
         assertCascadeDeletesTheReferencingRecord();
         assertARestrictionIsCheckedBeforeAnythingIsReleased();
+        assertAReferenceToAMissingRecordIsRefused();
     }
 
     /** The issue's two reproductions, with nothing declared: both deletes are now refused. */
@@ -194,6 +197,54 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Reviewer", equalTo(dee)));
+    }
+
+    /**
+     * dirigible #7986: the other end of the same foreign key - a write naming a record that does not
+     * exist is refused with a 400 naming the relation, same-model and cross-model, on create and on an
+     * update that changes the relation. An update leaving the relation as it was is not re-checked.
+     */
+    private void assertAReferenceToAMissingRecordIsRefused() {
+        int eve = create(employees, "{\"Name\":\"Eve\"}");
+        int meals = create(categories, "{\"Name\":\"Meals\"}");
+        int missing = 999999;
+
+        assertWriteRefused(() -> given().contentType("application/json")
+                                        .body("{\"Employee\":" + eve + ",\"Category\":" + missing + ",\"Amount\":1}")
+                                        .when()
+                                        .post(claims),
+                "ExpenseClaim.Category: there is no ExpenseCategory with Id " + missing);
+        assertWriteRefused(() -> given().contentType("application/json")
+                                        .body("{\"Employee\":" + missing + ",\"Amount\":1}")
+                                        .when()
+                                        .post(claims),
+                "ExpenseClaim.Employee: there is no Employee with Id " + missing);
+
+        int claim = create(claims, "{\"Employee\":" + eve + ",\"Category\":" + meals + ",\"Amount\":4}");
+        assertWriteRefused(() -> given().contentType("application/json")
+                                        .body("{\"Id\":" + claim + ",\"Employee\":" + eve + ",\"Category\":" + missing + ",\"Amount\":4}")
+                                        .when()
+                                        .put(claims + "/" + claim),
+                "ExpenseClaim.Category: there is no ExpenseCategory with Id " + missing);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + claim + ",\"Employee\":" + eve + ",\"Category\":" + meals
+                                                         + ",\"Amount\":5}")
+                                                 .when()
+                                                 .put(claims + "/" + claim)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Category", equalTo(meals)));
+    }
+
+    private void assertWriteRefused(Supplier<Response> write, String message) {
+        restAssuredExecutor.execute(() -> {
+            String body = write.get()
+                               .then()
+                               .statusCode(400)
+                               .extract()
+                               .asString();
+            assertTrue(body.contains(message), "the 400 must name the relation and the missing id; got: " + body);
+        });
     }
 
     private void assertRefused(String record, String message) {

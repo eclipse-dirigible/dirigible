@@ -245,6 +245,18 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## omission. A column carrying a DEFAULT is excluded: the database supplies its value, so
 ## an empty one is not missing - an intent relation with `init:` is exactly that, and refusing it would
 ## reject every create that leaves the opening status to the model.
+## Referenced rows exist (#7986): a to-one relation's foreign key never reaches the database - the
+## referential check is this layer's, deliberately - so a write naming a target id that matches no row
+## used to be stored, and every rule keyed on the target (a gate on `Customer.Kind == 1`) silently never
+## applied to it. Refused here as a ValidationException naming the relation, a 400 over REST. A create
+## checks every relation it carries; an update only the ones it changes, so a row stored dangling before
+## this check existed stays editable. A `whenTargetDeleted: keep` relation is never checked: it declares
+## that the reference outlives its target (a posting's reversal is written against a deleted source).
+#macro(referenceCheck $creating)
+#if($hasReferenceTargets)
+        requireReferencedRowsExist(entity, ${creating});
+#end
+#end
 #macro(requiredCheck)
 #foreach($property in $properties)
 ## A text value that is blank is as missing as a null one (#7719): the write has trimmed it already, so
@@ -334,7 +346,7 @@ import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.eclipse.dirigible.sdk.utils.Json;
 #end
-#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired || $periodLock || $hasAgreeGuards)
+#if(($documentChecks && $documentChecks.size() > 0) || ($rollupGuards && $rollupGuards.size() > 0) || ($guardChecks && $guardChecks.size() > 0) || $lifecycleEdges || $haveSubsets || $haveRequired || $periodLock || $hasAgreeGuards || $hasReferenceTargets)
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -490,6 +502,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#referenceCheck(true)
 #if($hasStatusStamps)
         // A create that lands in a stamped status ENTERS it: stamped once every guard has passed and
         // filed the record where it belongs, so the stamp follows the status actually written.
@@ -641,6 +654,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#referenceCheck(false)
 #if($hasStatusStamps)
 ## A stamped field is read-only, so it is preserved and the stored row is already in hand - no second read.
 #if($preservedOnUpdate.size() > 0)
@@ -736,6 +750,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#referenceCheck(false)
 #if($hasStatusStamps)
         applyStatusStamps(stampPrevious, entity);
 #end
@@ -1798,6 +1813,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
             ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
+        }
+#end
+#end
+    }
+#end
+#if($hasReferenceTargets)
+
+    /**
+     * Refuses a write whose to-one relation names a record that does not exist (dirigible #7986). The
+     * foreign key is checked here rather than by the database, so this is the only place a dangling
+     * reference is stopped. On an update only a changed relation is checked, so a row stored before
+     * the check existed stays editable; a {@code whenTargetDeleted: keep} relation is not checked at all.
+     */
+    private void requireReferencedRowsExist(${name}Entity entity, boolean creating) {
+        ${name}Entity stored = creating || entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#foreach($property in $properties)
+#if($property.targetKeyProperty && $property.targetRepositoryClass)
+        if (entity.${property.name} != null && (stored == null || !entity.${property.name}.equals(stored.${property.name}))
+                && new ${property.targetRepositoryClass}().count(org.eclipse.dirigible.components.data.store.java.repository.Criteria
+                        .create().eq("${property.targetKeyProperty}", entity.${property.name})) == 0) {
+            throw new ValidationException("${name}.${property.name}: there is no ${property.relationshipEntityName} with ${property.targetKeyProperty} "
+                    + entity.${property.name});
         }
 #end
 #end
