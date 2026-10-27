@@ -174,6 +174,29 @@ class IntentAttachmentUploadIT extends IntegrationTest {
                                                  .body("FileSize", nullValue())
                                                  .body("StoragePath", nullValue())
                                                  .body("Uuid", nullValue()));
+
+        // (4) #8100: a required composition only checked that the master was named. A master that does
+        // not exist is now refused - by the plain create and by the upload, which refuses before it
+        // stores a file - and no photo row is left behind for it.
+        int missing = 999999;
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Person\":" + missing + ",\"Caption\":\"orphan\"}")
+                                                 .when()
+                                                 .post(PHOTOS)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Person " + missing + " does not exist")));
+        restAssuredExecutor.execute(() -> given().multiPart("file", "orphan.png", bytes, "image/png")
+                                                 .when()
+                                                 .post(PHOTOS + "/upload?Person=" + missing)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Person " + missing + " does not exist")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PHOTOS + "?Person=" + missing)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("", hasSize(0)));
     }
 
     /** The one photo row of a person, through the master-scoped list the details panel reads. */

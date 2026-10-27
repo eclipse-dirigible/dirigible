@@ -242,6 +242,17 @@ public class RelationIntent {
      */
     private String calculatedActionOnUpdate;
 
+    /**
+     * Marks this to-one relation as picked on CREATE and fixed from then on (dirigible #7903): the New
+     * form offers the picker, the Edit form renders it read-only, and a user update through any
+     * generated REST controller that carries a different value than the stored row is refused with a
+     * 409 whose message is translatable under {@code checks.<Entity>_fixed_<Relation>}. A payload that
+     * omits the relation keeps the stored value. System writes (roll-ups, workflow steps, generates)
+     * reach the repository directly and are unaffected. Valid on a {@code manyToOne}/{@code oneToOne}
+     * that is not a composition parent, not an EntityStatus and not recomputed on update.
+     */
+    private boolean fixedAfterCreate;
+
     public String getName() {
         return name;
     }
@@ -511,6 +522,14 @@ public class RelationIntent {
 
     public void setCalculatedActionOnUpdate(String calculatedActionOnUpdate) {
         this.calculatedActionOnUpdate = calculatedActionOnUpdate;
+    }
+
+    public boolean isFixedAfterCreate() {
+        return fixedAfterCreate;
+    }
+
+    public void setFixedAfterCreate(boolean fixedAfterCreate) {
+        this.fixedAfterCreate = fixedAfterCreate;
     }
 
     /** Whether this relation's FK is computed (has a create or update action). */

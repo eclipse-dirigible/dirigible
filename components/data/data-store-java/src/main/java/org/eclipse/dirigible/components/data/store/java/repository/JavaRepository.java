@@ -375,6 +375,48 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Refuses a write whose to-one relation names a record that does not exist - the write-side twin of
+     * {@link #requireDeletable(Object)} (dirigible #8100). Without it a create or an update accepted
+     * any id, and the row it stored pointed at nothing: never refused, never used, and - on a numbered
+     * document - already numbered and handed to its process before anyone noticed.
+     *
+     * <p>
+     * The target is NAMED by its generated entity class rather than typed, the same identity the delete
+     * rules agree on, so a repository referencing a record another model generates does not compile
+     * against that model. A target whose entity is not registered - its model is not deployed - cannot
+     * be checked, and the write is let through with a warning rather than refused for a reason the
+     * caller cannot fix.
+     *
+     * <p>
+     * Inside a unit of work - where a generated repository runs this check together with its insert or
+     * update - the target row is share-locked until the unit ends (dirigible #8252): a delete of the
+     * target, which locks it first and counts its references only then, either waits for this write's
+     * commit and is refused by the reference it now sees, or has already deleted the row this check
+     * waited for and refuses it here. Outside a unit it is a plain lookup, a read-then-act guard.
+     *
+     * @param relation the referencing property, as the refusal names it
+     * @param targetEntityClass the fully-qualified name of the target's generated entity class
+     * @param targetId the referenced primary key; {@code null} references nothing and passes
+     * @throws ValidationException when no record of the target has that primary key
+     */
+    protected void requireReferenceExists(String relation, String targetEntityClass, Object targetId) {
+        if (targetId == null) {
+            return;
+        }
+        JavaEntityStore store = store();
+        if (!store.isRegistered(targetEntityClass)) {
+            LOGGER.warn("Cannot check that {}.{} {} exists - [{}] is not a registered entity; the write is let through", label(), relation,
+                    targetId, targetEntityClass);
+            return;
+        }
+        boolean exists =
+                store.isInUnitOfWork() ? store.lockForShare(targetEntityClass, targetId) : store.existsById(targetEntityClass, targetId);
+        if (!exists) {
+            throw new ValidationException(relation + " " + targetId + " does not exist");
+        }
+    }
+
+    /**
      * Refuses the delete of a record while a record referencing it through a relation that RESTRICTS
      * its delete still exists (intent {@code whenTargetDeleted: restrict}, the default for a to-one,
      * dirigible #7547). Every delete runs it before anything is written; a generated repository whose
@@ -385,9 +427,15 @@ public abstract class JavaRepository<T> {
      * <p>
      * The rules come from the REFERENCING side: this entity's own generation cannot know which entities
      * point at it - another model may - so each referencing repository contributes a
-     * {@link TargetDeleteRule}, and this asks all of them. A read-then-act guard, like every reference
-     * check the platform generates: a referencing row inserted between this count and the delete is not
-     * seen.
+     * {@link TargetDeleteRule}, and this asks all of them.
+     *
+     * <p>
+     * Inside a unit of work - where every delete runs it, together with the delete - the record is
+     * locked for update BEFORE its references are counted (dirigible #8252): a write naming it holds a
+     * share lock until it commits, so the count waits for that commit and sees the new reference, and a
+     * write that comes later waits for this delete and finds the record gone. Counted first and locked
+     * never, a reference committed between the count and the delete was not seen, and both requests
+     * won.
      *
      * @param id the primary key of the record about to be deleted
      * @throws DeleteRestrictionException while a restricting reference to it exists
@@ -397,8 +445,12 @@ public abstract class JavaRepository<T> {
     }
 
     private void requireDeletable(Object id, List<TargetDeleteRule> rules) {
-        if (id == null) {
+        if (id == null || rules.isEmpty()) {
             return;
+        }
+        JavaEntityStore store = store();
+        if (store.isInUnitOfWork()) {
+            store.lockForUpdate(entityClass, id);
         }
         String target = entityClass.getName();
         for (TargetDeleteRule rule : rules) {
@@ -411,8 +463,8 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * The delete itself, with the referencing records' rules around it: first every restriction is
-     * checked, then - in ONE transaction with the delete - every rule releases its references (a
+     * The delete itself, with the referencing records' rules around it, all in ONE transaction: first
+     * the record is locked and every restriction is checked, then every rule releases its references (a
      * {@code nullify} clears the foreign key, a {@code cascade} deletes the referencing record through
      * its own repository, its own rules applying in turn). A cascade that comes back round to a record
      * already being deleted on this thread stops there, so a cycle of cascading relations terminates.
@@ -463,13 +515,13 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * One attempt at the delete: the restrictions checked, then the references released and the record
-     * deleted in ONE transaction.
+     * One attempt at the delete, in ONE transaction: the record locked and the restrictions checked,
+     * then the references released and the record deleted.
      */
     private void releaseAndDelete(Object id, List<TargetDeleteRule> rules, Runnable delete) {
-        requireDeletable(id, rules);
         String target = entityClass.getName();
         UnitOfWork.run(() -> {
+            requireDeletable(id, rules);
             rules.forEach(rule -> rule.release(target, id));
             delete.run();
         });

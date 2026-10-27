@@ -4725,6 +4725,9 @@ public final class IntentParser {
                 if (relation.isCalculated()) {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
+                if (relation.isFixedAfterCreate()) {
+                    validateFixedAfterCreate(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -4909,6 +4912,9 @@ public final class IntentParser {
         }
         if (relation.isCalculated()) {
             unsupported.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            unsupported.add("fixedAfterCreate");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -5590,6 +5596,35 @@ public final class IntentParser {
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (owned by the workflow transitions) so it cannot declare a calculated action"
                     + " - use init: for its starting value");
+        }
+    }
+
+    /**
+     * {@code fixedAfterCreate: true} (dirigible #7903) fixes a user-picked FK once the record exists,
+     * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
+     * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
+     * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+        }
+        if (!isBlank(relation.getCalculatedActionOnUpdate())) {
+            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+                    + " value on every update, so it cannot also be fixed; keep one");
         }
     }
 

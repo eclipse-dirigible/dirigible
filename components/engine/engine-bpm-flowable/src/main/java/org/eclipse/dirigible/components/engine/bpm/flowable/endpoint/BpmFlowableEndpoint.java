@@ -37,6 +37,7 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceD
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.StartProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ValidationErrorDTO;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.VariableData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
@@ -174,6 +175,21 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
         bpmService.saveModel(workspace, project, path, payload);
 
         return ResponseEntity.ok(getWorkspaceService().getURI(workspace, project, path));
+    }
+
+    /**
+     * Validate a BPMN model posted in the modeler's JSON form, returning the problems the Flowable
+     * process validator found - what the editor's Validate button reports before publish. The literal
+     * {@code /models/validate} path cannot match {@code /models/{workspace}/{project}/{*path}}, which
+     * needs both a workspace and a project segment.
+     *
+     * @param payload the modeler's JSON model
+     * @return the validation problems, an empty list when the model is valid
+     * @throws IOException when the payload is not readable JSON
+     */
+    @PostMapping(value = "/models/validate", produces = "application/json")
+    public ResponseEntity<List<ValidationErrorDTO>> validateModel(@RequestBody String payload) throws IOException {
+        return ResponseEntity.ok(bpmService.validateModel(payload));
     }
 
     /**

@@ -138,6 +138,7 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
+        resolveFixedAfterCreate(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
@@ -506,6 +507,33 @@ final class ModelParameterProcessor {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
             }
         }
+    }
+
+    /**
+     * Collects the relations fixed after create (intent {@code fixedAfterCreate: true}, #7903) into
+     * {@code fixedAfterCreateRelations}: each FK property's name and the arguments its refusal hands
+     * {@code CheckMessages} - the fully qualified catalog key the en-US catalog writes the message
+     * under and the default-language text - so every REST controller answers a changed value in the
+     * reader's language. Always present, empty when the entity fixes nothing.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveFixedAfterCreate(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Map<String, Object>> fixed = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String messageKey = ModelTranslations.fixedMessageKey(entity, property);
+            if (messageKey == null) {
+                continue;
+            }
+            String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+            Map<String, Object> relation = new LinkedHashMap<>();
+            relation.put("name", property.get("name"));
+            relation.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+                    + JavaLiterals.escape(str(property, "fixedAfterCreateMessage")) + "\"");
+            fixed.add(relation);
+        }
+        entity.put("fixedAfterCreateRelations", fixed);
     }
 
     /**
@@ -1025,14 +1053,19 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
-        // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
-        // another model may - so this entity's repository contributes the rule the target's delete
-        // applies, keyed by the target's generated entity class, which is what that delete names itself
-        // by. Same-model and cross-model alike: this is the package the target is generated into.
-        // `keep` (#7634) contributes nothing: the reference outlives its target.
-        if (truthy(property, "whenTargetDeleted") && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
+        // The target's generated entity class - the package its repository is resolved into, the owner
+        // model's for a cross-model target - is the identity both directions of a reference agree on.
+        // A write names it to check the referenced record exists (#8100), and a delete rule (#7547) is
+        // keyed by it: the target's repository cannot know which entities reference it - another model
+        // may - so this entity's repository contributes the rule the target's delete applies. `keep`
+        // (#7634) is held to neither: the reference outlives its target by declaration, and the
+        // reversal that posts a deleted source's storno creates a row naming a record already gone.
+        if (relationshipEntityName != null && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
             property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
-            entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            entity.put("hasReferenceChecks", Boolean.TRUE);
+            if (truthy(property, "whenTargetDeleted")) {
+                entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            }
         }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));

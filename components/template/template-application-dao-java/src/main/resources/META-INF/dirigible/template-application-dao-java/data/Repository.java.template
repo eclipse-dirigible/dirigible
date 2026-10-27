@@ -505,6 +505,36 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+        // The reference check and the insert are ONE transaction, and the check share-locks every row
+        // this create names until it commits (#8252): a delete of one of them either waits for the
+        // insert and then counts it, or has deleted the row the check waits for and refuses this create
+        // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
+        // the number is drawn, so a refused create spends none.
+        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, null);
+            return insert(entity);
+        });
+#else
+        ${name}Entity saved = insert(entity);
+#end
+#if($history == "true")
+        // Change history: the initial state as a null -> value delta per property, attributed to the
+        // user whose request created the row.
+        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
+#end
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
+#end
+        return saved;
+    }
+
+    /**
+     * The last steps of a create, once every guard has passed: the status stamps, the document number
+     * and the insert itself - run inside the reference check's transaction when this entity has one.
+     */
+    private ${name}Entity insert(${name}Entity entity) {
 #if($hasStatusStamps)
         // A create that lands in a stamped status ENTERS it: stamped once every guard has passed and
         // filed the record where it belongs, so the stamp follows the status actually written.
@@ -554,17 +584,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
         // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
-        ${name}Entity saved = super.save(entity, "${projectName}-${perspectiveName}-${name}");
-#if($history == "true")
-        // Change history: the initial state as a null -> value delta per property, attributed to the
-        // user whose request created the row.
-        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
-#end
-#if($documentItem)
-        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
-        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
-#end
-        return saved;
+        return super.save(entity, "${projectName}-${perspectiveName}-${name}");
     }
 
     @Override
@@ -657,6 +677,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+## The stored row is already in hand when system-owned fields were preserved - no second read.
+#if($preservedOnUpdate.size() > 0)
+        ${name}Entity referencesStored = existingRow;
+#else
+        ${name}Entity referencesStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
+#end
 #if($hasStatusStamps)
 ## A stamped field is read-only, so it is preserved and the stored row is already in hand - no second read.
 #if($preservedOnUpdate.size() > 0)
@@ -689,11 +717,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             // two separate publishes.
             rekeyEvents.add(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious)));
         }
+#if($hasReferenceChecks)
+        // The reference check and the update are ONE transaction, the rows it names share-locked until
+        // it commits - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+        });
+#else
         ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+#end
 #else
         // The update event is recorded in the event outbox inside this write's own transaction - see
         // save() - so the intent reactions under gen/events see exactly the changes that committed.
+#if($hasReferenceChecks)
+        // The reference check and the update are ONE transaction, the rows it names share-locked until
+        // it commits - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+        });
+#else
         ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+#end
 #end
 #if($history == "true")
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
@@ -753,6 +799,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasReferenceChecks)
+        ${name}Entity referencesStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#end
 #if($hasStatusStamps)
         applyStatusStamps(stampPrevious, entity);
 #end
@@ -764,12 +813,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#if($hasReferenceChecks)
+        // The reference check and the write are ONE transaction - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity);
+        });
+#else
         ${name}Entity updated = super.update(entity);
+#end
         // A system write (no user event), recorded as such so the trail separates what the application
         // did from what a person did.
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.SYSTEM, historyBefore, updated, HISTORY_PROPERTIES);
 #else
+#if($hasReferenceChecks)
+        // The reference check and the write are ONE transaction - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity);
+        });
+#else
         ${name}Entity updated = super.update(entity);
+#end
 #end
 #if($documentItem)
         // A system write is still a line change: the event is suppressed here, the arithmetic is not.
@@ -1716,14 +1781,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public void delete(${name}Entity entity) {
 #if($compositionChildren && $compositionChildren.size() > 0)
-        // Refused by a referencing record's whenTargetDeleted: restrict BEFORE the children are touched -
-        // the history trail is not part of the transaction, so a later refusal would leave it recording
-        // child deletes that were rolled back.
-        requireDeletable(entity.${pkPropertyName});
         // The record and the children it owns leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through the cascade would commit some of
         // the children and keep the record - the orphan state this cascade exists to prevent.
-        UnitOfWork.run(() -> deleteWithOwnedChildren(entity));
+        UnitOfWork.run(() -> {
+            // Refused by a referencing record's whenTargetDeleted: restrict BEFORE the children are
+            // touched - the history trail is not part of the transaction, so a later refusal would leave
+            // it recording child deletes that were rolled back. Inside the unit, so the record is locked
+            // before its references are counted and a write naming it cannot slip in between (#8252).
+            requireDeletable(entity.${pkPropertyName});
+            deleteWithOwnedChildren(entity);
+        });
     }
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
@@ -1760,10 +1828,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public void deleteById(Object id) {
 #if($compositionChildren && $compositionChildren.size() > 0)
-        // Refused before the children are touched - see delete(entity).
-        requireDeletable(id);
-        // One transaction for the record and the children it owns - see delete(entity).
-        UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
+        // One transaction for the record and the children it owns, the record locked and its references
+        // counted before the children are touched - see delete(entity).
+        UnitOfWork.run(() -> {
+            requireDeletable(id);
+            deleteByIdWithOwnedChildren(id);
+        });
     }
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
@@ -1843,6 +1913,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
             ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
+        }
+#end
+#end
+    }
+#end
+#if($hasReferenceChecks)
+
+    /**
+     * Refuses a new ${name} that names, through one of its to-one relations, a record that does not
+     * exist (dirigible #8100) - the check save() makes, for a caller that must ask BEFORE a side effect
+     * the write cannot take back, as the attachment upload stores its files first.
+     */
+    public void requireReferencesExist(${name}Entity entity) {
+        requireReferencesExist(entity, null);
+    }
+
+    /**
+     * Refuses a write whose to-one relation names a record that does not exist (dirigible #8100):
+     * same-model and cross-model alike, by the target's generated entity class - a 400 naming the
+     * relation instead of a stored row pointing at nothing. On an update only a reference the write
+     * CHANGES is asked: one it carries back as stored is not the caller's choice, so a row stored
+     * before this check existed stays editable. A {@code whenTargetDeleted: keep} relation is not
+     * checked at all - its reference outlives its target by declaration.
+     *
+     * @param stored the row as stored before this write, {@code null} for a create
+     */
+    private void requireReferencesExist(${name}Entity entity, ${name}Entity stored) {
+#foreach($property in $properties)
+#if($property.targetEntityClass)
+        if (stored == null || !java.util.Objects.equals(stored.${property.name}, entity.${property.name})) {
+            requireReferenceExists("${property.name}", "${property.targetEntityClass}", entity.${property.name});
         }
 #end
 #end

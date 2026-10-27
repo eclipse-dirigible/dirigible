@@ -53,9 +53,11 @@ public class HealthCheckFilter implements Filter {
      */
     private static final List<String> EXCLUDED_PREFIXES = List.of( //
             // Static and shared resources.
-            "/web/resources", "/js/resources", "/webjars", "/web/theme/", "/js/theme/", //
+            "/web/resources", "/js/resources", "/webjars", "/web/theme/", "/js/theme/", "/web/theme-", //
             // The platform's own status surfaces and the busy page itself.
             "/core/healthcheck", "/core/readiness", "/index-busy.html", "/ops", "/actuator", "/error", //
+            // The branding and the shell bootstrap - the busy page and every shell load them (#8142).
+            "/js/platform-branding/", "/web/platform-branding/", "/platform/", //
             // Authentication - a user must be able to reach the IDE while the instance boots.
             "/login", "/logout", "/oauth2", "/saml2", //
             // The IDE shell and the modules it loads.

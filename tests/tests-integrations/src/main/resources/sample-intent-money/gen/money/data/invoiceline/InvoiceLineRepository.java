@@ -41,12 +41,20 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         if (entity.VatRate == null) {
             throw new ValidationException("InvoiceLine.VatRate is required");
         }
+        InvoiceLineEntity saved = insert(entity);
+        return saved;
+    }
+
+    /**
+     * The last steps of a create, once every guard has passed: the status stamps, the document number
+     * and the insert itself - run inside the reference check's transaction when this entity has one.
+     */
+    private InvoiceLineEntity insert(InvoiceLineEntity entity) {
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
         // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
-        InvoiceLineEntity saved = super.save(entity, "sample-intent-money-InvoiceLine-InvoiceLine");
-        return saved;
+        return super.save(entity, "sample-intent-money-InvoiceLine-InvoiceLine");
     }
 
     @Override

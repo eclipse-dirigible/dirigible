@@ -63,6 +63,43 @@ class ModelParameterProcessorTest {
         assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
     }
 
+    /**
+     * A relation fixed after create (#7903): every controller refuses a changed value with the message
+     * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
+     * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes
+     * nothing.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfARelationFixedAfterCreate() {
+        Map<String, Object> project = property("Project", "INTEGER");
+        project.put("fixedAfterCreate", "true");
+        project.put("fixedAfterCreateMessage", "'Project' cannot change once the \"Timesheet\" is created");
+        Map<String, Object> reviewer = property("Reviewer", "INTEGER");
+        reviewer.put("fixedAfterCreate", "false");
+        reviewer.put("fixedAfterCreateMessage", "unused");
+        Map<String, Object> timesheet = entity("Timesheet", "Timesheets", property("Id", "INTEGER"), project, reviewer);
+        Map<String, Object> model = model(timesheet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "timesheets.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateRelations");
+        assertEquals(1, fixed.size());
+        assertEquals("Project", fixed.get(0)
+                                     .get("name"));
+        assertEquals(
+                "\"bookstore:timesheets-model.checks.Timesheet_fixed_Project\", "
+                        + "\"'Project' cannot change once the \\\"Timesheet\\\" is created\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("'Project' cannot change once the \"Timesheet\" is created", catalog.get("Timesheet_fixed_Project"));
+        assertFalse(catalog.containsKey("Timesheet_fixed_Reviewer"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");
@@ -881,8 +918,8 @@ class ModelParameterProcessorTest {
      * whenTargetDeleted (#7547): every relation carrying a rule learns the target's generated entity
      * class - the package its repository class is resolved into, the owner model's for a cross-model
      * target - and the entity is flagged, so its repository contributes the rule the target's delete
-     * applies. A relation carrying no rule (a hand-authored {@code .model} without the key) gets
-     * neither.
+     * applies. A relation carrying no rule (a hand-authored {@code .model} without the key) still
+     * learns the class, which its writes check the reference against (#8100).
      */
     @Test
     void aTargetDeleteRuleResolvesTheTargetsEntityClass() {
@@ -911,7 +948,33 @@ class ModelParameterProcessorTest {
                 "a cross-model target resolves to its owner");
         assertEquals("gen.sales_order.data.claims.ExpenseCategoryEntity", category.get("targetEntityClass"));
         assertEquals(Boolean.TRUE, claim.get("hasTargetDeleteRules"));
-        assertNull(approver.get("targetEntityClass"));
+        assertEquals("gen.hr.data.employees.EmployeeEntity", approver.get("targetEntityClass"));
+    }
+
+    /**
+     * A to-one is checked on write (#8100) whether or not it declares a delete rule - except a
+     * {@code keep}, whose reference outlives its target by declaration: a reversal posts the storno of
+     * a deleted source naming the source it reverses, so it is held to neither the check nor a rule.
+     */
+    @Test
+    void everyToOneButAKeepIsCheckedOnWrite() {
+        Map<String, Object> manager = property("Manager", "INTEGER");
+        manager.put("relationshipEntityName", "Employee");
+        manager.put("relationshipEntityPerspectiveName", "Employees");
+        manager.put("widgetType", "DROPDOWN");
+        Map<String, Object> payment = property("Payment", "INTEGER");
+        payment.put("relationshipEntityName", "Payment");
+        payment.put("relationshipEntityPerspectiveName", "Payments");
+        payment.put("widgetType", "DROPDOWN");
+        payment.put("whenTargetDeleted", "keep");
+        Map<String, Object> employee = entity("Employee", "Employees", property("Id", "INTEGER"), manager, payment);
+
+        ModelParameterProcessor.process(model(employee), javaParameters());
+
+        assertEquals("gen.sales_order.data.employees.EmployeeEntity", manager.get("targetEntityClass"));
+        assertEquals(Boolean.TRUE, employee.get("hasReferenceChecks"));
+        assertNull(payment.get("targetEntityClass"), "a keep reference is not checked against its target");
+        assertNull(employee.get("hasTargetDeleteRules"), "neither relation contributes a delete rule");
     }
 
     /**

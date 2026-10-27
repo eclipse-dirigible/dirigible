@@ -265,6 +265,9 @@ public class ${name}PartnerController {
 #if($workflowStatusProperty)
         applyWorkflowStatus(existing, entity);
 #end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+        applyFixedAfterCreate(existing, entity);
+#end
 #if($periodLock)
         // The stored date is checked above; this refuses a move INTO a closed period.
         requirePeriodOpen(entity.${periodLock.dateProperty});
@@ -644,6 +647,23 @@ public class ${name}PartnerController {
 
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+
+    // Relations fixed after create (intent `fixedAfterCreate: true`, dirigible #7903): picked on the
+    // New form and fixed from then on. An absent value is not a change - a caller PUTs the fields its
+    // form edits - so it is taken from the stored row; a value that DIFFERS is refused with a 409 in
+    // the reader's language. System writers (roll-ups, workflow steps, generates) reach the repository
+    // directly, never this controller, so they are unaffected.
+    private void applyFixedAfterCreate(${name}Entity stored, ${name}Entity entity) {
+#foreach($fixed in $fixedAfterCreateRelations)
+        if (entity.${fixed.name} == null) {
+            entity.${fixed.name} = stored.${fixed.name};
+        } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
 #end
 #if($processDeleteGuards)
 
