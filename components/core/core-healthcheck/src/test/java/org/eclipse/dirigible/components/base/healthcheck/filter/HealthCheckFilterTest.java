@@ -102,9 +102,26 @@ class HealthCheckFilterTest {
      */
     @Test
     void thePathsNeededToDiagnoseBootAreNeverGated() throws Exception {
-        for (String path : new String[] {"/services/web/shell-ide/index.html", "/services/core/readiness",
-                "/services/core/healthcheck/status", "/actuator/health/readiness", "/login", "/webjars/alpinejs/dist/cdn.min.js",
-                "/services/web/platform-core/ui/styles/fonts.css", "/index-busy.html"}) {
+        assertServedDuringBoot("/services/web/shell-ide/index.html", "/services/core/readiness", "/services/core/healthcheck/status",
+                "/actuator/health/readiness", "/login", "/webjars/alpinejs/dist/cdn.min.js",
+                "/services/web/platform-core/ui/styles/fonts.css", "/index-busy.html");
+    }
+
+    /**
+     * The busy page and the IDE shell cannot start without the branding script, and the shell also
+     * reads its bootstrap and theme from these paths - refused, the busy page never polled the health
+     * status and stayed on screen after the boot (#8142).
+     */
+    @Test
+    void theBrandingShellBootstrapAndThemesAreNeverGated() throws Exception {
+        assertServedDuringBoot("/services/js/platform-branding/branding.js", "/public/js/platform-branding/branding.js",
+                "/services/web/platform-branding/images/favicon.ico", "/services/platform/branding.js",
+                "/services/platform/extensions/shells", "/services/platform/extensions/modules/view-welcome/configs/welcome.json",
+                "/services/platform/user-name", "/services/platform/languages", "/services/web/theme-high-contrast/css/contrast-dark.css");
+    }
+
+    private void assertServedDuringBoot(String... paths) throws Exception {
+        for (String path : paths) {
             FilterChain freshChain = org.mockito.Mockito.mock(FilterChain.class);
             HttpServletRequest freshRequest = org.mockito.Mockito.mock(HttpServletRequest.class);
             when(freshRequest.getPathInfo()).thenReturn(null);
