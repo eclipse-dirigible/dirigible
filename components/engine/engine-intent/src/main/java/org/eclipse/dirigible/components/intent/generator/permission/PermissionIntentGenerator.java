@@ -67,9 +67,6 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PermissionIntentGenerator.class);
 
-    /** The perspective a generated report's controller lives under. */
-    private static final String REPORTS_PERSPECTIVE = "Reports";
-
     @Override
     public String name() {
         return "permission";
@@ -192,13 +189,8 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             }
             List<String> roles = gates.appendRead(gates.read()
                                                        .get(name));
-            // A report is generated from its own <Report>.report, so its generation folder is the
-            // report's name - not the intent's base name - sanitized for its Java and its page alike
-            // (#7889), and its controller sits under Reports.
-            String genFolder = IntentNaming.javaIdentifier(name);
-            constraints.add(constraint("/services/java/" + project + "/gen/" + genFolder + "/api/"
-                    + IntentNaming.javaIdentifier(REPORTS_PERSPECTIVE) + "/" + name + "Controller/**", roles));
-            constraints.add(constraint("/services/web/" + project + "/gen/" + genFolder + "/reports/" + name + "/**", roles));
+            constraints.add(constraint(IntentNaming.reportControllerUrl(project, name) + "/**", roles));
+            constraints.add(constraint(IntentNaming.reportPageFolderUrl(project, name) + "/**", roles));
         }
         return constraints;
     }

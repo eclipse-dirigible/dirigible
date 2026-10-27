@@ -3664,6 +3664,39 @@ class IntentEngineIT extends IntegrationTest {
                                                          + "?path=OrdersByMonth.report")
                                                  .then()
                                                  .statusCode(201));
+
+        // The shell lists the reports from the manifest the intent baked into its configuration
+        // (#8277), not from a walk of the registry through the core repository API - which only
+        // ADMINISTRATOR and OPERATOR may call. Run the SHIPPED reports store over the GENERATED
+        // config.js: every report is listed in the intent's order, one the reader may not read (its
+        // count probe answered 403) is left out, and nothing but those probes is requested.
+        String config = contentOf("gen/orders/js/config.js");
+        String store = runReportsStore(config, "OrdersByCustomer");
+        String[] listed = store.split("\n--\n", -1)[0].split("\n");
+        String requested = store.split("\n--\n", -1)[1];
+        assertEquals(List.of("OrdersByMonth", "BigOrderItems", "OrderBalance", "OrderItemCorrespondence", "OrderStatement"),
+                java.util.Arrays.stream(listed)
+                                .map(line -> line.substring(0, line.indexOf('|')))
+                                .toList(),
+                "every report but the forbidden OrdersByCustomer, in the intent's order: " + store);
+        assertFalse(requested.contains("/services/core/repository/"), "the store asks the repository API nothing: " + requested);
+        for (String line : requested.split("\n")) {
+            assertTrue(line.endsWith("Controller/count"), "the store only probes the reports' controllers: " + requested);
+        }
+        // The manifest's URLs are the paths the report-file template generated the page and controller
+        // to - asserted on the files, for the report generated just above.
+        String byMonth = java.util.Arrays.stream(listed)
+                                         .filter(line -> line.startsWith("OrdersByMonth|"))
+                                         .findFirst()
+                                         .orElseThrow(() -> new AssertionError("OrdersByMonth is listed: " + store));
+        String[] entry = byMonth.split("\\|");
+        assertEquals("Revenue (this month)", entry[3], "the entry carries its widget: " + byMonth);
+        String webPrefix = "/services/web/" + PROJECT + "/";
+        String javaPrefix = "/services/java/" + PROJECT + "/";
+        assertTrue(entry[1].startsWith(webPrefix) && resource(entry[1].substring(webPrefix.length())).exists(),
+                "the manifest's page url names the generated page: " + entry[1]);
+        assertTrue(entry[2].startsWith(javaPrefix) && resource(entry[2].substring(javaPrefix.length()) + ".java").exists(),
+                "the manifest's apiBase names the generated controller: " + entry[2]);
         String catalog = contentOf("i18n/en-US/OrdersByMonth.report.json");
         assertTrue(catalog.contains("\"OrdersByMonth-report\""), "the catalog should be keyed by the report translation prefix");
         assertTrue(catalog.contains("\"widgetOrdersByMonth\": \"Revenue (this month)\""),
@@ -5439,6 +5472,32 @@ class IntentEngineIT extends IntegrationTest {
             context.eval("js", pageScript);
             context.eval("js", "var __result; (async () => { const page = pages['" + componentName + "'](); " + body
                     + " })().then(r => { __result = String(r); }, e => { __result = 'ERROR ' + e; });");
+            return context.eval("js", "__result")
+                          .asString();
+        }
+    }
+
+    /**
+     * Runs the SHIPPED reports store over a generated {@code config.js}, with {@code fetch} answering
+     * 403 for the named report's requests and 200 for every other, and returns the listed reports as
+     * {@code name|url|apiBase|widget label} lines, a {@code --} line, and the requested URLs, one per
+     * line.
+     */
+    private static String runReportsStore(String config, String forbiddenReport) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var window = this; var App = {}; var stores = {}; var requested = [];"
+                    + " var document = { addEventListener: (event, callback) => { if (event === 'alpine:init') callback(); } };"
+                    + " var Alpine = { store: (name, definition) => { stores[name] = definition; } };"
+                    + " var fetch = async (url) => { requested.push(url); const status = url.indexOf('/" + forbiddenReport
+                    + "Controller') >= 0 ? 403 : 200;" + " return { ok: status === 200, status, json: async () => ({ count: 0 }) }; };");
+            context.eval("js", config);
+            context.eval("js", shellScript("stores/reports.js"));
+            context.eval("js",
+                    "var __result; stores.reports.load().then(() => { __result = stores.reports.items"
+                            + ".map(r => [r.name, r.url, r.apiBase, r.widget ? r.widget.label : ''].join('|')).join('\\n')"
+                            + " + '\\n--\\n' + requested.join('\\n'); }, e => { __result = 'ERROR ' + e; });");
             return context.eval("js", "__result")
                           .asString();
         }

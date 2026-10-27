@@ -37,5 +37,11 @@ App.config = {
   // prefers an entry here over the language catalogs whenever the tenant declares a country
   // (DIRIGIBLE_APPLICATION_COUNTRY): which term a national identifier goes by is a property of the
   // company, not of the language its users read the UI in. Empty for an app that declares none.
-  countryLabels: ${countryLabels}
+  countryLabels: ${countryLabels},
+
+  // The application's reports (the intent's `reports:`), with their display metadata and the URLs
+  // of their pages and controllers. The shared reports store lists these in the sidebar's Reports
+  // section and on the dashboard, so no user needs access to the core repository API to see them.
+  // null for an app whose model lists none - the store then discovers its reports at runtime.
+  reports: ${appReports}
 };

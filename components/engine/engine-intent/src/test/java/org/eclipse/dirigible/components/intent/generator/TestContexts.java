@@ -26,6 +26,11 @@ public final class TestContexts {
         return new IntentGenerationContext(model, "/proj", "proj", "workspace", "app", null);
     }
 
+    /** A repository-less context over the given model, in the named project. */
+    public static IntentGenerationContext context(IntentModel model, String project) {
+        return new IntentGenerationContext(model, "/" + project, project, "workspace", "app", null);
+    }
+
     /**
      * A context backed by a real repository, for exercising the write surface itself (what a generator
      * creates, overwrites, or leaves alone) rather than only the content it builds.

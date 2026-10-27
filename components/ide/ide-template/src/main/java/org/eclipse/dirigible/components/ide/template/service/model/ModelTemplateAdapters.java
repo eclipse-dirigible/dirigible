@@ -182,6 +182,12 @@ final class ModelTemplateAdapters {
         // Country-scoped field labels, rendered into the application's configuration as a JSON object
         // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).
         parameters.put("countryLabels", JavaScriptJson.compact(countryLabelOverlay(model, parameters)));
+        // The application's reports, as the intent generated them into the model (#8277): the shell's
+        // reports store lists these instead of discovering them through the core repository API,
+        // which a business user may not call. null - not an empty list - for a model that carries
+        // none, so the store keeps discovering the reports a developer generated outside the intent.
+        Object reports = model.get("reports");
+        parameters.put("appReports", reports instanceof List ? JavaScriptJson.compact(reports) : "null");
         return new PreparedModel(model, true);
     }
 
