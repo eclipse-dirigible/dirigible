@@ -47,6 +47,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code org.eclipse.dirigible.sdk.db.TargetDeleteRule} and every delete applies all of them: first
  * every restriction, before anything is written, then - in one transaction with the delete - every
  * nullify and cascade.
+ *
+ * <p>
+ * dirigible #8100 is the write side of the same references: a create or an update naming a record
+ * that does not exist - same-model, cross-model, a self-reference - answered 200 and stored a row
+ * pointing at nothing, a numbered one with its number already drawn. It is now a 400 naming the
+ * relation, decided before the number is allocated.
  */
 class IntentTargetDeleteRulesIT extends IntegrationTest {
 
@@ -68,6 +74,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
+                relations:
+                  - { name: Manager, kind: manyToOne, to: Employee }
             """;
 
     private static final String CONSUMER_INTENT = """
@@ -96,7 +104,18 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                   - { name: hours, type: decimal }
                 relations:
                   - { name: Employee, kind: manyToOne, to: Employee, model: staff, required: true, whenTargetDeleted: cascade }
+              - name: Advance
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string,  length: 100, number: { series: Advance, stampOn: create } }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Employee, kind: manyToOne, to: Employee, model: staff }
+                  - { name: Approver, kind: manyToOne, to: Employee, model: staff, whenTargetDeleted: keep }
             """;
+
+    /** The series the advances are numbered from: AD and a 7-digit sequence. */
+    private static final String CONSUMER_NUMBERS = "{\"series\": [{\"name\": \"Advance\", \"prefix\": \"AD\", \"size\": 9}]}";
 
     @Autowired
     private IRepository repository;
@@ -109,12 +128,14 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     private String categories;
     private String claims;
     private String timesheets;
+    private String advances;
 
     @Test
     void a_targets_delete_applies_the_rules_of_the_records_referencing_it() {
-        writeIntent(OWNER, OWNER_INTENT);
+        writeFile(OWNER, "app.intent", OWNER_INTENT);
         generateProject(OWNER);
-        writeIntent(CONSUMER, CONSUMER_INTENT);
+        writeFile(CONSUMER, "app.intent", CONSUMER_INTENT);
+        writeFile(CONSUMER, "claims.numbers", CONSUMER_NUMBERS);
         generateProject(CONSUMER);
 
         String claimRepository = contentOf(CONSUMER, "gen/" + CONSUMER_MODEL + "/data/expenseclaim/ExpenseClaimRepository.java");
@@ -131,11 +152,85 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         categories = consumerApi + "/expensecategory/ExpenseCategoryController";
         claims = consumerApi + "/expenseclaim/ExpenseClaimController";
         timesheets = consumerApi + "/timesheet/TimesheetController";
+        advances = consumerApi + "/advance/AdvanceController";
 
         assertRestrictIsTheDefaultSameModelAndCrossModel();
         assertNullifyClearsTheReference();
         assertCascadeDeletesTheReferencingRecord();
         assertARestrictionIsCheckedBeforeAnythingIsReleased();
+
+        assertACreateNamingNoRecordIsRefused();
+        assertAnUpdateNamingNoRecordIsRefused();
+        assertAKeepReferenceOutlivesItsTarget();
+    }
+
+    /**
+     * #8100: a create naming a record that does not exist - cross-model, same-model - is a 400 naming
+     * the relation, and a refused numbered create draws no number: the next one is the series' first.
+     */
+    private void assertACreateNamingNoRecordIsRefused() {
+        int eve = create(employees, "{\"Name\":\"Eve\"}");
+
+        assertWriteRefused(claims, false, "{\"Employee\":999999,\"Amount\":10}", "Employee 999999 does not exist");
+        assertWriteRefused(claims, false, "{\"Employee\":" + eve + ",\"Category\":99999,\"Amount\":10}", "Category 99999 does not exist");
+        assertWriteRefused(advances, false, "{\"Employee\":999999,\"Amount\":10}", "Employee 999999 does not exist");
+
+        int advance = create(advances, "{\"Employee\":" + eve + ",\"Amount\":10}");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(advances + "/" + advance)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Number", equalTo("AD0000001")));
+    }
+
+    /** #8100: an update re-pointing a relation at nothing is refused - a self-reference included. */
+    private void assertAnUpdateNamingNoRecordIsRefused() {
+        int fay = create(employees, "{\"Name\":\"Fay\"}");
+        int gus = create(employees, "{\"Name\":\"Gus\",\"Manager\":" + fay + "}");
+
+        assertWriteRefused(employees + "/" + gus, true, "{\"Id\":" + gus + ",\"Name\":\"Gus\",\"Manager\":888888}",
+                "Manager 888888 does not exist");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(employees + "/" + gus)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Manager", equalTo(fay)));
+    }
+
+    /**
+     * A {@code keep} reference outlives its target by declaration (#7634) - a reversal posts the storno
+     * of a deleted source naming the source it reverses - so it is not held to the target's existence:
+     * the record stays editable once its approver is gone, while its checked relation still is.
+     */
+    private void assertAKeepReferenceOutlivesItsTarget() {
+        int ida = create(employees, "{\"Name\":\"Ida\"}");
+        int hal = create(employees, "{\"Name\":\"Hal\"}");
+        int advance = create(advances, "{\"Employee\":" + ida + ",\"Approver\":" + hal + ",\"Amount\":5}");
+        assertDeleted(employees + "/" + hal);
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + advance + ",\"Employee\":" + ida + ",\"Approver\":" + hal
+                                                         + ",\"Amount\":6}")
+                                                 .when()
+                                                 .put(advances + "/" + advance)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Approver", equalTo(hal)));
+        assertWriteRefused(advances + "/" + advance, true,
+                "{\"Id\":" + advance + ",\"Employee\":777777,\"Approver\":" + hal + ",\"Amount\":6}", "Employee 777777 does not exist");
+    }
+
+    private void assertWriteRefused(String url, boolean update, String body, String message) {
+        restAssuredExecutor.execute(() -> {
+            var request = given().contentType("application/json")
+                                 .body(body)
+                                 .when();
+            String answer = (update ? request.put(url) : request.post(url)).then()
+                                                                           .statusCode(400)
+                                                                           .extract()
+                                                                           .asString();
+            assertTrue(answer.contains(message), "the 400 must name the relation and the missing id; got: " + answer);
+        });
     }
 
     /** The issue's two reproductions, with nothing declared: both deletes are now refused. */
@@ -260,13 +355,13 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                                  .statusCode(200));
     }
 
-    private void writeIntent(String project, String yaml) {
-        String path = projectPath(project) + "/app.intent";
+    private void writeFile(String project, String fileName, String content) {
+        String path = projectPath(project) + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
-            existing.setContent(yaml.getBytes(StandardCharsets.UTF_8));
+            existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
-            repository.createResource(path, yaml.getBytes(StandardCharsets.UTF_8));
+            repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
         }
     }
 

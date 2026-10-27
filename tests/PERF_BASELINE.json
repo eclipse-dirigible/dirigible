@@ -27,7 +27,7 @@
     "create": {
       "p50Millis": 367.4,
       "p95Millis": 454.6,
-      "statements": 12
+      "statements": 14
     },
     "transition": {
       "p50Millis": 360.0,

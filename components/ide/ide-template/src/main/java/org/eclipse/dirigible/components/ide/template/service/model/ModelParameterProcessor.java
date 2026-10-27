@@ -1025,14 +1025,19 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
-        // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
-        // another model may - so this entity's repository contributes the rule the target's delete
-        // applies, keyed by the target's generated entity class, which is what that delete names itself
-        // by. Same-model and cross-model alike: this is the package the target is generated into.
-        // `keep` (#7634) contributes nothing: the reference outlives its target.
-        if (truthy(property, "whenTargetDeleted") && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
+        // The target's generated entity class - the package its repository is resolved into, the owner
+        // model's for a cross-model target - is the identity both directions of a reference agree on.
+        // A write names it to check the referenced record exists (#8100), and a delete rule (#7547) is
+        // keyed by it: the target's repository cannot know which entities reference it - another model
+        // may - so this entity's repository contributes the rule the target's delete applies. `keep`
+        // (#7634) is held to neither: the reference outlives its target by declaration, and the
+        // reversal that posts a deleted source's storno creates a row naming a record already gone.
+        if (relationshipEntityName != null && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
             property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
-            entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            entity.put("hasReferenceChecks", Boolean.TRUE);
+            if (truthy(property, "whenTargetDeleted")) {
+                entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            }
         }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));

@@ -318,6 +318,13 @@ public class ${name}Controller {
 #if($masterLock)
         requireMasterMutable(${masterEntityId});
 #end
+#if($hasReferenceChecks)
+        // The master must exist BEFORE any file is stored (#8100): refused at save(), the upload would
+        // already have written document-store objects no reachable ${name} owns.
+        ${name}Entity referencing = new ${name}Entity();
+        referencing.${masterEntityId} = ${masterEntityId};
+        repository.requireReferencesExist(referencing);
+#end
         List<${name}Entity> uploaded = new java.util.ArrayList<>();
         // The SDK parses the multipart request and stores each file in the tenant CMS at
         // /Attachments/${name}/<yyyy>/<MM>/<uuid>/<file> (the multipart/FileItem handling stays inside
