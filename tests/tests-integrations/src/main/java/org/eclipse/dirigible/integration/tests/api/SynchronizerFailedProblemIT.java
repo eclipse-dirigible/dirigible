@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.emptyOrNullString;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 
@@ -104,7 +104,11 @@ class SynchronizerFailedProblemIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body(OUR_PROBLEM, hasSize(1))
-                                                 .body(OUR_PROBLEM + ".cause[0]", not(emptyOrNullString())),
+                                                 // The cause is the real deploy failure with the engine's
+                                                 // reason appended (#8269), not the nested "Undepleted..." wrapper.
+                                                 .body(OUR_PROBLEM + ".cause[0]", containsString("deploy"))
+                                                 .body(OUR_PROBLEM + ".cause[0]", containsString("mandatory"))
+                                                 .body(OUR_PROBLEM + ".cause[0]", not(containsString("Undepleted"))),
                 TIMEOUT_SECONDS);
 
         // Fixing the file heals the artefact on the next pass, and its problem is cleared.
