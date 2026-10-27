@@ -17,6 +17,9 @@
 ## A field shown as a value, not a control (the Details card): the row is shown only when the
 ## shared basePage.fieldDisplay text is non-empty and the caller may see the field (issue #7522).
 ## The value itself is printed by the record page's own fieldText helpers (issue #7491).
+## The column length the controller enforces, as the input's maxlength (#8135): a string column with a
+## declared length - the same set the server refuses past ("exceeds the maximum length of N").
+#macro(maxLength $p)#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time") maxlength="${p.dataLength}"#end#end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
 #macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
 #macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
@@ -411,18 +414,18 @@
                  :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
         </div>
 #elseif($property.widgetType == "TEXTAREA")
-        <textarea x-h-textarea id="f_${property.name}" rows="4" x-model="form.${property.name}"
+        <textarea x-h-textarea id="f_${property.name}" rows="4" x-model="form.${property.name}"#maxLength($property)
                   :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "COLOR")
         <input x-h-input type="color" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) readonly#end />
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property)
                :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "URL")
-        <input x-h-input type="url" id="f_${property.name}" x-model="form.${property.name}"
+        <input x-h-input type="url" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property)
                :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "TEL")
-        <input x-h-input type="tel" id="f_${property.name}" x-model="form.${property.name}"
+        <input x-h-input type="tel" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property)
                :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces), so
@@ -458,7 +461,7 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property)
                :aria-invalid="!!errors.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end />
 #end
 #end

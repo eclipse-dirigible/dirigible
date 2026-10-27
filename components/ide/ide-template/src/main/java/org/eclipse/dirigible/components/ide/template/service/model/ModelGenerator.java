@@ -383,6 +383,14 @@ class ModelGenerator {
                 Boolean.TRUE.equals(property.get("dataAutoIncrement")) || Boolean.TRUE.equals(property.get("isCalculatedProperty"))
                         || Boolean.TRUE.equals(property.get("isReadOnlyProperty")) || audit);
         descriptor.put("pk", Boolean.TRUE.equals(property.get("dataPrimaryKey")));
+        // The column length the controller enforces (#8135), so the text input stops where a save would
+        // be refused: a string column with a declared length, the same set the controller checks.
+        String dataLength = str(property, "dataLength");
+        if ("String".equals(str(property, "dataTypeJavaClass")) && !"time".equals(str(property, "dataTypeJava")) && dataLength != null
+                && dataLength.trim()
+                             .matches("\\d+")) {
+            descriptor.put("maxLength", Integer.valueOf(dataLength.trim()));
+        }
         descriptor.put("fk", property.get("relationshipEntityName"));
         // Every property carries a lookup URL key, empty unless the property is a relation, so this
         // tests the value rather than the key's presence. A MULTISELECT carries the same URL but is a
