@@ -189,6 +189,7 @@ class JavaEntityStoreUnitOfWorkTest {
     @Test
     void refusesARowLockOutsideAUnit() {
         assertThrows(IllegalStateException.class, () -> store.lockForUpdate(Object.class, 1));
+        assertThrows(IllegalStateException.class, () -> store.lockForShare(Object.class.getName(), 1));
     }
 
     private void assertRolledBackBeforeClose() {

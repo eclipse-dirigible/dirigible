@@ -16,11 +16,17 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -162,6 +168,53 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertACreateNamingNoRecordIsRefused();
         assertAnUpdateNamingNoRecordIsRefused();
         assertAKeepReferenceOutlivesItsTarget();
+
+        assertADeleteRacingAReferencingCreateLeavesNoDanglingReference();
+    }
+
+    /**
+     * #8252: the write's existence check and the delete's restriction count were both read-then-act,
+     * and a delete racing a referencing create left the claim pointing at a deleted employee (11 of 10
+     * attempts on the issue's reproduction). The create now holds the employee share-locked from its
+     * check to its commit, and the delete counts only once it holds the row, so in every round either
+     * the delete is refused or no create succeeded.
+     */
+    private void assertADeleteRacingAReferencingCreateLeavesNoDanglingReference() {
+        ExecutorService pool = Executors.newFixedThreadPool(3);
+        try {
+            for (int round = 0; round < 10; round++) {
+                int employee = create(employees, "{\"Name\":\"Racer " + round + "\"}");
+                List<Integer> outcomes = new java.util.ArrayList<>();
+                restAssuredExecutor.execute(() -> {
+                    outcomes.clear();
+                    Callable<Integer> delete = () -> given().when()
+                                                            .delete(employees + "/" + employee)
+                                                            .statusCode();
+                    Callable<Integer> reference = () -> given().contentType("application/json")
+                                                               .body("{\"Employee\":" + employee + ",\"Amount\":1}")
+                                                               .when()
+                                                               .post(claims)
+                                                               .statusCode();
+                    try {
+                        for (Future<Integer> outcome : pool.invokeAll(List.of(reference, delete, reference))) {
+                            outcomes.add(outcome.get());
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread()
+                              .interrupt();
+                        throw new IllegalStateException("interrupted while racing", e);
+                    } catch (ExecutionException e) {
+                        throw new IllegalStateException("a racing request failed", e);
+                    }
+                });
+                boolean deleted = outcomes.get(1) >= 200 && outcomes.get(1) < 300;
+                boolean referenced = outcomes.get(0) == 200 || outcomes.get(2) == 200;
+                assertFalse(deleted && referenced, "round " + round + ": the employee was deleted AND a claim referencing it was created"
+                        + " - a dangling reference; outcomes (create, delete, create): " + outcomes);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     /**

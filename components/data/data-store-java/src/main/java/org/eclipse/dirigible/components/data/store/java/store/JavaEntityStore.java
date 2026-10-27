@@ -168,18 +168,46 @@ public class JavaEntityStore {
      * @throws IllegalStateException when no unit of work is open on this thread
      */
     public <T> boolean lockForUpdate(Class<T> type, Object id) {
+        return lock(type.getName(), () -> resolve(type), id, LockModeType.PESSIMISTIC_WRITE);
+    }
+
+    /**
+     * Locks one row against its delete and update, but not against other share locks, until the current
+     * unit of work ends - a {@code SELECT ... FOR SHARE} where the database has one (a database without
+     * it takes the exclusive lock instead). The entity is named rather than typed, as for
+     * {@link #existsById(String, Object)}: this is the existence check of a to-one reference made
+     * inside the write's own transaction (#8252). The write holds the referenced row from its check to
+     * its commit, so a delete of that row waits for the commit and then sees the reference, or runs
+     * first and the check finds the row gone; concurrent writers referencing the same row do not wait
+     * for each other.
+     *
+     * @param entityClassName the entity class's fully-qualified name
+     * @param id the primary-key value
+     * @return {@code true} when the row exists and is now locked, {@code false} when there is no such
+     *         row
+     * @throws IllegalStateException when no unit of work is open on this thread, or no entity of that
+     *         class name is registered
+     */
+    public boolean lockForShare(String entityClassName, Object id) {
+        return lock(entityClassName, () -> entityManager.findForClassName(entityClassName)
+                                                        .orElseThrow(() -> new IllegalStateException(
+                                                                "Class [" + entityClassName + "] is not a registered @Entity")),
+                id, LockModeType.PESSIMISTIC_READ);
+    }
+
+    private boolean lock(String entityClassName, Supplier<RegisteredEntity> entity, Object id, LockModeType mode) {
         UnitOfWork unit = UNIT_OF_WORK.get();
         if (unit == null) {
             throw new IllegalStateException(
-                    "A row lock lasts as long as its transaction - lock [" + type.getName() + "] inside a unit of work (UnitOfWork.run)");
+                    "A row lock lasts as long as its transaction - lock [" + entityClassName + "] inside a unit of work (UnitOfWork.run)");
         }
-        RegisteredEntity meta = resolve(type);
+        RegisteredEntity meta = entity.get();
         unit.session.flush();
         return !unit.session.createQuery("from " + meta.entityName() + " where " + meta.idField()
                                                                                        .getName()
                 + " = :id", Map.class)
                             .setParameter("id", id)
-                            .setLockMode(LockModeType.PESSIMISTIC_WRITE)
+                            .setLockMode(mode)
                             .getResultList()
                             .isEmpty();
     }

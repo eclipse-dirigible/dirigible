@@ -385,8 +385,13 @@ public abstract class JavaRepository<T> {
      * rules agree on, so a repository referencing a record another model generates does not compile
      * against that model. A target whose entity is not registered - its model is not deployed - cannot
      * be checked, and the write is let through with a warning rather than refused for a reason the
-     * caller cannot fix. A read-then-act guard, like every other reference check the platform
-     * generates: a target deleted between this lookup and the write is not seen.
+     * caller cannot fix.
+     *
+     * <p>
+     * Inside a unit of work the target row is share-locked rather than read (#8252): called in the same
+     * unit as the write, it holds the target from this check to the write's commit, so a delete racing
+     * the write waits for it and then counts the new reference - see {@link #requireDeletable(Object)}
+     * - or runs first and this check finds the target gone. Outside a unit it is a plain read.
      *
      * @param relation the referencing property, as the refusal names it
      * @param targetEntityClass the fully-qualified name of the target's generated entity class
@@ -403,7 +408,9 @@ public abstract class JavaRepository<T> {
                     targetId, targetEntityClass);
             return;
         }
-        if (!store.existsById(targetEntityClass, targetId)) {
+        boolean exists =
+                store.isInUnitOfWork() ? store.lockForShare(targetEntityClass, targetId) : store.existsById(targetEntityClass, targetId);
+        if (!exists) {
             throw new ValidationException(relation + " " + targetId + " does not exist");
         }
     }
@@ -419,9 +426,8 @@ public abstract class JavaRepository<T> {
      * <p>
      * The rules come from the REFERENCING side: this entity's own generation cannot know which entities
      * point at it - another model may - so each referencing repository contributes a
-     * {@link TargetDeleteRule}, and this asks all of them. A read-then-act guard, like every reference
-     * check the platform generates: a referencing row inserted between this count and the delete is not
-     * seen.
+     * {@link TargetDeleteRule}, and this asks all of them. Inside the delete itself the count runs only
+     * once this record's row is locked, so a reference committed in between is counted (#8252).
      *
      * @param id the primary key of the record about to be deleted
      * @throws DeleteRestrictionException while a restricting reference to it exists
@@ -497,13 +503,22 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * One attempt at the delete: the restrictions checked, then the references released and the record
-     * deleted in ONE transaction.
+     * One attempt at the delete, in ONE transaction: this record's row locked, the restrictions
+     * checked, then the references released and the record deleted.
+     *
+     * <p>
+     * The lock comes first because a write referencing this record holds its row under a share lock
+     * from its existence check to its commit (dirigible #8252, see
+     * {@link #requireReferenceExists(String, String, Object)}). Locking waits for every such write in
+     * flight, so the count that follows sees what they committed; a write arriving later waits for this
+     * delete and then finds the record gone. Counted before the lock, a reference inserted between the
+     * count and the delete survived its target.
      */
     private void releaseAndDelete(Object id, List<TargetDeleteRule> rules, Runnable delete) {
-        requireDeletable(id, rules);
         String target = entityClass.getName();
         UnitOfWork.run(() -> {
+            store().lockForUpdate(entityClass, id);
+            requireDeletable(id, rules);
             rules.forEach(rule -> rule.release(target, id));
             delete.run();
         });
