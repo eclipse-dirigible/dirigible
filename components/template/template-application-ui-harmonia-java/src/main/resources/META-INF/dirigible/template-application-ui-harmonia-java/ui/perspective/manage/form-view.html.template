@@ -302,6 +302,9 @@
 ## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
+## fixedAfterCreate (#7903): the relation is picked on the New form and fixed once the record exists -
+## an Edit renders the picker read-only (the controller refuses a changed value with a 409).
+#set($fixed = $property.fixedAfterCreate == "true")
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 ## `inlineCreate: false` (#7748) keeps it to existing rows: the plain picker, no "New" button.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && $property.widgetInlineCreate != "false" && !$readonly))
@@ -354,7 +357,7 @@
 #if($lookup)
         <div class="hbox gap-1 items-center">
           <div x-h-select class="flex-1">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview#if($fixed) || isEdit#end" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"></div>
               <div x-h-select-list>
@@ -364,13 +367,13 @@
               </div>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')" :aria-label="T('$projectName:${tprefix}.defaults.new', 'New') + ' ' + T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')" :aria-label="T('$projectName:${tprefix}.defaults.new', 'New') + ' ' + T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
         </div>
 #else
         <div x-h-select>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
-                 :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end
+                 :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview#if($fixed) || isEdit#end"#end
                  :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>

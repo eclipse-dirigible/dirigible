@@ -89,8 +89,8 @@ public class ConsumedAttributesAudit {
      * in step with what the stages in this package actually read.
      */
     private static final Set<String> PIPELINE_CLAIMED = Set.of("dataCount", "dataNullable", "dataNotNull", "dataScale", "dataPrecision",
-            "dataOrderBy", "dataOrderBySort", "dataUnique", "generateBusinessKey", "generateDefaultRoles", "generateEvents",
-            "generateReopens", "generateReport", "identityProperty", "immutableStatusProperty", "immutableStatusValues",
+            "dataOrderBy", "dataOrderBySort", "dataUnique", "fixedAfterCreateMessage", "generateBusinessKey", "generateDefaultRoles",
+            "generateEvents", "generateReopens", "generateReport", "identityProperty", "immutableStatusProperty", "immutableStatusValues",
             "lifecycleStatusNameList", "lifecycleStatusNames", "listOrder", "locksWithMaster", "orderBy", "periodClosedValues",
             "periodEndProperty", "periodLockDateProperty", "periodLockEntity", "periodStartProperty", "periodStatusProperty",
             "perspectiveIcon", "perspectiveLabel", "projectionReferencedModel", "extensionReferencedEntity", "extensionReferencedModel",

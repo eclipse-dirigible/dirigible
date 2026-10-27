@@ -203,6 +203,12 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
+- **`fixedAfterCreate: true` on a plain (non-composition, non-`EntityStatus`) `manyToOne`/`oneToOne` = picked
+  on create, fixed from then on** (#7903): the New form offers the picker, the Edit form renders it
+  read-only, and an update that carries a different value is answered 409 (translatable under
+  `checks.<Entity>_fixed_<Relation>`); an update that omits it keeps the stored value. Workflow steps,
+  roll-ups and generates write through the repository and are unaffected. Not with
+  `calculatedActionOnUpdate` (that recomputes the value on every update).
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
@@ -5056,6 +5062,7 @@ or a seeded name.
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
+| relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not a composition, not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409 |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
@@ -5104,6 +5111,7 @@ or a seeded name.
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
+- "the user picks it when creating the record and it must never move afterwards" (a timesheet's project-month, an order's customer) -> the relation's `fixedAfterCreate: true`
 - "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)

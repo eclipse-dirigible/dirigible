@@ -1841,6 +1841,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
@@ -1949,8 +1950,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                    .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
+    }
+
+    /**
+     * Emit a {@code fixedAfterCreate: true} relation (#7903) as two scalars: {@code fixedAfterCreate} -
+     * which the REST controllers refuse a changed value of on update and the forms render read-only on
+     * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
+     * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
+     * catalog translates it like any check message. Nothing is emitted for an ordinary relation.
+     */
+    private static void putFixedAfterCreate(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
+        if (!relation.isFixedAfterCreate()) {
+            return;
+        }
+        p.put("fixedAfterCreate", "true");
+        p.put("fixedAfterCreateMessage",
+                "'" + IntentNaming.pascalCase(relation.getName()) + "' cannot change once the " + ownerEntity + " is created");
     }
 
     /**

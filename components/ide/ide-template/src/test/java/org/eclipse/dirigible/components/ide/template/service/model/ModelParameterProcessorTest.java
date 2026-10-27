@@ -63,6 +63,43 @@ class ModelParameterProcessorTest {
         assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
     }
 
+    /**
+     * A relation fixed after create (#7903): every controller refuses a changed value with the message
+     * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
+     * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes
+     * nothing.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfARelationFixedAfterCreate() {
+        Map<String, Object> project = property("Project", "INTEGER");
+        project.put("fixedAfterCreate", "true");
+        project.put("fixedAfterCreateMessage", "'Project' cannot change once the \"Timesheet\" is created");
+        Map<String, Object> reviewer = property("Reviewer", "INTEGER");
+        reviewer.put("fixedAfterCreate", "false");
+        reviewer.put("fixedAfterCreateMessage", "unused");
+        Map<String, Object> timesheet = entity("Timesheet", "Timesheets", property("Id", "INTEGER"), project, reviewer);
+        Map<String, Object> model = model(timesheet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "timesheets.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateRelations");
+        assertEquals(1, fixed.size());
+        assertEquals("Project", fixed.get(0)
+                                     .get("name"));
+        assertEquals(
+                "\"bookstore:timesheets-model.checks.Timesheet_fixed_Project\", "
+                        + "\"'Project' cannot change once the \\\"Timesheet\\\" is created\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("'Project' cannot change once the \"Timesheet\" is created", catalog.get("Timesheet_fixed_Project"));
+        assertFalse(catalog.containsKey("Timesheet_fixed_Reviewer"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");

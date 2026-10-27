@@ -501,6 +501,50 @@ class AppTestIntentGeneratorTest {
     }
 
     /**
+     * dirigible #7903: a relation fixed after create is picked on the New form and read-only on edit -
+     * marked for the edit only, so the create flow still picks it.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksARelationFixedAfterCreateReadOnlyOnEditOnly() {
+        String intent = """
+                name: timesheets
+                entities:
+                  - name: Project
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200 }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
+                      - { name: Reviewer, kind: manyToOne, to: Project }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Project",
+                edmEntity("Project", "Project", "Projects", "MANAGE_LIST", "Projects", "hr", "KF_MOD_TIMESHEETS_PROJECT", false));
+        edm.put("Timesheet",
+                edmEntity("Timesheet", "Timesheet", "Timesheets", "MANAGE_LIST", "Timesheets", "hr", "KF_MOD_TIMESHEETS_TIMESHEET", false));
+
+        Map<String, Object> timesheet =
+                entity(AppTestIntentGenerator.buildManifest("timesheets", "timesheets", IntentParser.parse(intent), edm), "Timesheet");
+        Map<String, Map<String, Object>> relations = new LinkedHashMap<>();
+        for (Map<String, Object> relation : (List<Map<String, Object>>) timesheet.get("relations")) {
+            relations.put(String.valueOf(relation.get("name")), relation);
+        }
+
+        assertEquals(Boolean.TRUE, relations.get("Project")
+                                            .get("readOnlyOnEdit"));
+        assertNull(relations.get("Project")
+                            .get("readOnly"),
+                "the create flow must still pick it");
+        assertNull(relations.get("Reviewer")
+                            .get("readOnlyOnEdit"));
+    }
+
+    /**
      * The three things a curated, guarded module needs the runner to know (#7663, #7664, #7667): which
      * target rows the picker actually offers, which columns the list actually renders, and which parent
      * state the child refuses outright.

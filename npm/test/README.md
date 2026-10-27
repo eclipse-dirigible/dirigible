@@ -85,7 +85,8 @@ Test records carry an `APPTEST-` prefix and are removed in teardown; seed data i
 A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
 is never written or flipped by a flow (the manifest marks it `readOnly`). A relation the form renders
 read-only — a `calculatedActionOnUpdate`, a platform-owned FK — carries the same flag and is never
-picked in the UI. A field declaring a
+picked in the UI. A relation fixed after create (`fixedAfterCreate: true`) carries `readOnlyOnEdit`: it is
+picked on create and never changed by an edit, which the generated app answers with a 409. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
 marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
