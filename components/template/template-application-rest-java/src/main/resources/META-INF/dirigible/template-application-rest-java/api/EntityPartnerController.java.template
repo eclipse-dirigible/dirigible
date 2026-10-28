@@ -131,7 +131,7 @@ public class ${name}PartnerController {
 #if($partnerParent)
     @Get
     @Documentation("List my ${name} of one ${partnerParent.entity}")
-    public List<${name}Entity> getAll(@QueryParam("${partnerParent.fkProperty}") String ${partnerParent.fkProperty},
+    public List<${name}Entity> getAll(@QueryParam("${partnerParent.fkProperty}") ${partnerParent.fkJavaClass} ${partnerParent.fkProperty},
                                       @QueryParam("$limit") Integer limit, @QueryParam("$offset") Integer offset) {
         if (${partnerParent.fkProperty} == null || me() == null) {
             return List.of();
@@ -190,7 +190,7 @@ public class ${name}PartnerController {
         if (entity.${partnerParent.fkProperty} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${partnerParent.fkProperty} is required");
         }
-        requireMyParent(String.valueOf(entity.${partnerParent.fkProperty}));
+        requireMyParent(entity.${partnerParent.fkProperty});
 #else
         ${partnerFkJavaClass} me = me();
         if (me == null) {
@@ -401,10 +401,10 @@ public class ${name}PartnerController {
 #if($partnerParent)
 
     /** Prove the ${partnerParent.entity} the operation targets is mine - else the same 404. */
-    private void requireMyParent(String parentId) {
+    private void requireMyParent(${partnerParent.fkJavaClass} parentId) {
         var me = me();
         var parent = me == null ? null
-                : parentRepository.findOne(${partnerParent.fkJavaClass}.valueOf(parentId))
+                : parentRepository.findOne(parentId)
                                   .orElse(null);
         if (parent == null || !me.equals(parent.${partnerParent.partnerProperty})) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${partnerParent.entity} not found");

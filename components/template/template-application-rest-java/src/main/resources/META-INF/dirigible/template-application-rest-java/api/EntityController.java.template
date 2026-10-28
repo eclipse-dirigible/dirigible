@@ -106,7 +106,7 @@ public class ${name}Controller {
     @Documentation("List ${name}")
     public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
                                       @QueryParam("$offset") Integer offset#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
-                                      @QueryParam("${masterEntityId}") String ${masterEntityId}#end) {
+                                      @QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}#end) {
 #if($needsRoles)
         checkPermissions("read");
 #end
@@ -308,7 +308,7 @@ public class ${name}Controller {
 
     @Post("/upload")
     @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
-    public List<${name}Entity> upload(@QueryParam("${masterEntityId}") Integer ${masterEntityId}) {
+    public List<${name}Entity> upload(@QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}) {
 #if($needsRoles)
         checkPermissions("write");
 #end

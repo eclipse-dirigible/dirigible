@@ -193,6 +193,21 @@ class IntentReversalIT extends IntegrationTest {
                                                  .body("Rate", equalTo(List.of(1.5f, 1.5f)))
                                                  .body("Note", equalTo(List.of("expense", "liability"))),
                 TIMEOUT_SECONDS);
+        // A typo in the master filter is the caller's mistake: a 400 naming the parameter, like an
+        // unparsable $limit, and never a 500 carrying Hibernate's coercion message (dirigible #8237).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(LINES + "?Entry=abc")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("Invalid value for query parameter [Entry]: abc"))
+                                                 .body("message", not(containsString("coercing"))),
+                TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ENTRIES + "?$limit=abc")
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", containsString("Invalid value for query parameter [$limit]: abc")),
+                TIMEOUT_SECONDS);
         // The original stays as it was, and names its reversal - written past its immutableWhen.
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(ENTRIES + "/" + original)
