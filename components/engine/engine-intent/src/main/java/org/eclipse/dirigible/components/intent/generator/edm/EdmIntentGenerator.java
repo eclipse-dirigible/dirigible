@@ -710,7 +710,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // List-only columns (intent `list:`, #7614): the named properties are the exact list column
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
-            applyListColumns(entityMap, properties, entity.getList());
+            applyListColumns(entityMap, properties, entity);
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
@@ -837,7 +837,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         // Read-only registers of the records REFERENCING an entity, resolved in their own sweep: a
         // same-model source may be declared after the entity that lists it, so every entity has to be
-        // built before any register can read one.
+        // built before any register can read one. The collection columns go first: a register
+        // reproduces its source's list columns, and they are some of them.
+        buildCollectionColumns(entities, builtByName, compositionParents, settingEntities);
         buildRelatedRegisters(context, entities, builtByName, usesByAlias);
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
@@ -1303,13 +1305,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * stops being one, whatever its {@code major}; the resolved names, in the authored sequence, are
      * put on the entity as the comma-separated {@code listOrder} the list templates iterate by. The
      * property list itself keeps the control order, so the form and the detail rows are unaffected. A
-     * blank/empty list leaves everything as it was.
+     * collection path (issue #8295) has no property: its column's name takes its place in
+     * {@code listOrder}, and {@link #buildCollectionColumns} emits the column itself. A blank/empty
+     * list leaves everything as it was.
      *
      * @param entityMap the entity being emitted
      * @param properties the entity's properties, in control order
-     * @param list the authored list column names (may be empty)
+     * @param entity the authored entity, whose {@code list:} (may be empty) names the columns
      */
-    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, List<String> list) {
+    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, EntityIntent entity) {
+        List<String> list = entity.getList();
         if (list == null || list.isEmpty()) {
             return;
         }
@@ -1319,13 +1324,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (wanted == null) {
                 continue;
             }
+            boolean matched = false;
             for (Map<String, Object> property : properties) {
                 if (!listed.contains(property) && wanted.trim()
                                                         .equalsIgnoreCase(String.valueOf(property.get("name")))) {
                     listed.add(property);
                     listOrder.add(String.valueOf(property.get("name")));
+                    matched = true;
                     break;
                 }
+            }
+            if (!matched && collectionOf(entity, wanted) != null) {
+                listOrder.add(IntentNaming.collectionColumnName(wanted));
             }
         }
         for (Map<String, Object> property : properties) {
@@ -1371,6 +1381,133 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         return applyOrder(properties, List.of(String.valueOf(listOrder)
                                                     .split(",")));
+    }
+
+    /**
+     * An entity's list columns, in list order: its properties and the collection columns its
+     * {@code list:} names (issue #8295), each where the author wrote it. Used where another entity's
+     * list columns are reproduced (a related register), so a collection column is one of them too.
+     *
+     * @param entity the built entity map - this model's, or one read from another model's
+     *        {@code .model}
+     * @return the properties and collection columns, in list order
+     */
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> listColumnsOf(Map<String, Object> entity) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        if (entity.get("properties") instanceof List<?> properties) {
+            columns.addAll((List<Map<String, Object>>) properties);
+        }
+        if (entity.get("collectionColumns") instanceof List<?> collectionColumns) {
+            columns.addAll((List<Map<String, Object>>) collectionColumns);
+        }
+        return listOrdered(columns, entity.get("listOrder"));
+    }
+
+    /**
+     * The entity's {@code oneToMany} relation a {@code list:} entry is a collection path of (issue
+     * #8295) - {@code <collection>.<property>}, or a bare {@code <collection>} - or {@code null} when
+     * the entry names something else.
+     */
+    private static RelationIntent collectionOf(EntityIntent entity, String entry) {
+        String collection = entry.trim()
+                                 .split("\\.", -1)[0].trim();
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && collection.equalsIgnoreCase(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Emits the collection columns each entity's {@code list:} names (issue #8295) as the
+     * {@code collectionColumns} model attribute - one entry per path, carrying FACTS the generation
+     * pipeline turns into the controller's batched read and the list cells: the column's name, header
+     * and catalog key, the child entity and its perspective, the child's foreign key back to this
+     * entity, the child property shown, and - when that property is a to-one - its target's display
+     * property, the text its dropdown shows. Each entry is also shaped as a list column
+     * ({@code widgetIsMajor}, {@code collectionColumn}), so wherever the list columns are reproduced it
+     * takes the place {@code listOrder} gives it.
+     *
+     * <p>
+     * A sweep after every entity is built: the child may be declared after its parent.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     * @param compositionParents the composition parent of each child entity
+     * @param settingEntities the entities rendered under the settings perspective
+     */
+    private static void buildCollectionColumns(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
+            Map<String, String> compositionParents, Set<String> settingEntities) {
+        for (EntityIntent entity : entities) {
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            if (entityMap == null || entity.getList() == null) {
+                continue;
+            }
+            List<Map<String, Object>> columns = new ArrayList<>();
+            for (String entry : entity.getList()) {
+                Map<String, Object> column = entry == null || propertyNamed(propertiesOf(entityMap), entry.trim()) != null ? null
+                        : collectionColumn(entity, entry.trim(), builtByName, compositionParents, settingEntities);
+                if (column != null) {
+                    columns.add(column);
+                }
+            }
+            if (!columns.isEmpty()) {
+                entityMap.put("collectionColumns", columns);
+            }
+        }
+    }
+
+    /** One collection column, or {@code null} when the entry is not one (the parser reported why). */
+    private static Map<String, Object> collectionColumn(EntityIntent entity, String entry, Map<String, Map<String, Object>> builtByName,
+            Map<String, String> compositionParents, Set<String> settingEntities) {
+        RelationIntent collection = collectionOf(entity, entry);
+        Map<String, Object> child = collection == null ? null : builtByName.get(collection.getTo());
+        if (child == null) {
+            return null;
+        }
+        String[] path = entry.split("\\.", -1);
+        Map<String, Object> shown = propertyNamed(propertiesOf(child), path.length > 1 ? path[1].trim() : "Name");
+        Map<String, Object> foreignKey = null;
+        for (Map<String, Object> property : propertiesOf(child)) {
+            if (entity.getName()
+                      .equals(property.get("relationshipEntityName"))) {
+                foreignKey = property;
+                break;
+            }
+        }
+        if (shown == null || foreignKey == null) {
+            return null;
+        }
+        String name = IntentNaming.collectionColumnName(entry);
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("name", name);
+        column.put("widgetLabel", notBlank(collection.getLabel()) ? collection.getLabel()
+                                                                              .trim()
+                : IntentNaming.humanize(collection.getName()));
+        column.put("dataName", IntentNaming.upperSnake(entity.getName()) + "_" + IntentNaming.upperSnake(name));
+        column.put("widgetIsMajor", "true");
+        column.put("collectionColumn", "true");
+        column.put("collectionEntity", collection.getTo());
+        column.put("collectionEntityPerspectiveName", perspectiveFor(collection.getTo(), compositionParents, settingEntities));
+        column.put("collectionForeignKey", foreignKey.get("name"));
+        column.put("collectionProperty", shown.get("name"));
+        if (shown.get("relationshipEntityName") != null) {
+            column.put("collectionToOne", "true");
+            column.put("collectionDisplayProperty", shown.get("widgetDropDownValue"));
+        }
+        return column;
+    }
+
+    /** The property of that name, matched case-insensitively, or {@code null}. */
+    private static Map<String, Object> propertyNamed(List<Map<String, Object>> properties, String name) {
+        for (Map<String, Object> property : properties) {
+            if (name.equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                return property;
+            }
+        }
+        return null;
     }
 
     /**
@@ -3620,7 +3757,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
             "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
             "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "widgetOptionsEntityPerspectiveName", "sensitiveProperty",
-            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber");
+            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber", "collectionColumn");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute
@@ -3674,7 +3811,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     LoggedValue.of(entity.getName()));
             return null;
         }
-        List<Map<String, Object>> properties = listOrdered(propertiesOf(source), source.get("listOrder"));
+        List<Map<String, Object>> properties = listColumnsOf(source);
         String fkProperty = relatedForeignKey(properties, entity.getName(), related);
         if (fkProperty == null) {
             return null; // reported by the parser
@@ -4965,7 +5102,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> STRUCTURED_ATTRIBUTES =
             Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
                     "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
-                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports");
+                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports", "collectionColumns");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

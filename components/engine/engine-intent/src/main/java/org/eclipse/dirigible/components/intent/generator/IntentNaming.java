@@ -207,6 +207,23 @@ public final class IntentNaming {
     }
 
     /**
+     * The read-only property a {@code list:} collection path is answered in (dirigible #8295): the path
+     * in PascalCase with the dot dropped - {@code skills.skill} -> {@code SkillsSkill}, a bare
+     * {@code skills} -> {@code Skills}.
+     *
+     * @param path the authored {@code <collection>} or {@code <collection>.<property>}
+     * @return the property name
+     */
+    public static String collectionColumnName(String path) {
+        StringBuilder name = new StringBuilder();
+        for (String segment : path.trim()
+                                  .split("\\.")) {
+            name.append(pascalCase(segment.trim()));
+        }
+        return name.toString();
+    }
+
+    /**
      * A valid PascalCase Java identifier from an arbitrary authored name: splits on every run of
      * non-alphanumeric separators ({@code -}, {@code _}, space, {@code .}) and capitalizes each
      * segment, so a kebab-case action name becomes a legal class name ({@code order-from-quote} ->

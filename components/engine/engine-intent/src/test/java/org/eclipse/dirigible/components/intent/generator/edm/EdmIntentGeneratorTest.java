@@ -2831,6 +2831,83 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code list:} collection path (#8295) is a column of its own: its name stands where the author
+     * wrote it in {@code listOrder}, and {@code collectionColumns} carries the facts the controller
+     * reads the child rows by - the child and its perspective, its foreign key back, the property shown
+     * and, for a to-one, its target's display property. A register reproducing the entity's list
+     * reproduces it too.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCollectionPathEmitsACollectionColumn() {
+        String yaml = """
+                name: team
+                entities:
+                  - name: Skill
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Team
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: members, kind: oneToMany, to: TeamMember }
+                  - name: Office
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                    related:
+                      - entity: TeamMember
+                  - name: TeamMember
+                    list: [email, skills.skill, skills.grantedBy, joinedOn]
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: email,    type: string }
+                      - { name: joinedOn, type: date }
+                    relations:
+                      - { name: Team,   kind: manyToOne, to: Team, composition: true }
+                      - { name: office, kind: manyToOne, to: Office }
+                      - { name: skills, kind: oneToMany, to: TeamMemberSkill, label: Skills held }
+                  - name: TeamMemberSkill
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: grantedBy, type: string }
+                    relations:
+                      - { name: TeamMember, kind: manyToOne, to: TeamMember, composition: true }
+                      - { name: skill,      kind: manyToOne, to: Skill }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "team");
+        Map<String, Object> member = entityByName(entities(model), "TeamMember");
+
+        assertEquals("Email,SkillsSkill,SkillsGrantedBy,JoinedOn", member.get("listOrder"));
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) member.get("collectionColumns");
+        Map<String, Object> skill = columns.get(0);
+        assertEquals("SkillsSkill", skill.get("name"));
+        assertEquals("Skills held", skill.get("widgetLabel"), "the collection's label heads the column");
+        assertEquals("TEAM_MEMBER_SKILLS_SKILL", skill.get("dataName"));
+        assertEquals("true", skill.get("collectionColumn"));
+        assertEquals("true", skill.get("widgetIsMajor"));
+        assertEquals("TeamMemberSkill", skill.get("collectionEntity"));
+        assertEquals(entityByName(entities(model), "TeamMemberSkill").get("perspectiveName"), skill.get("collectionEntityPerspectiveName"));
+        assertEquals("TeamMember", skill.get("collectionForeignKey"));
+        assertEquals("Skill", skill.get("collectionProperty"));
+        assertEquals("true", skill.get("collectionToOne"));
+        assertEquals("Name", skill.get("collectionDisplayProperty"), "the text the Skill dropdown shows");
+        Map<String, Object> granted = columns.get(1);
+        assertEquals("SkillsGrantedBy", granted.get("name"));
+        assertEquals("GrantedBy", granted.get("collectionProperty"));
+        assertNull(granted.get("collectionToOne"), "a field renders as its value");
+
+        Map<String, Object> register = ((List<Map<String, Object>>) entityByName(entities(model), "Office").get("relatedEntities")).get(0);
+        assertEquals(List.of("Email", "SkillsSkill", "SkillsGrantedBy", "JoinedOn"),
+                ((List<Map<String, Object>>) register.get("properties")).stream()
+                                                                        .map(c -> String.valueOf(c.get("name")))
+                                                                        .toList(),
+                "the register reproduces the list, its collection columns where they stand");
+    }
+
+    /**
      * {@code whenMasterDeleted: refuse} rides the composition FK property; the default (cascade) emits
      * no attribute at all, so a model that says nothing about it stays byte-identical.
      */

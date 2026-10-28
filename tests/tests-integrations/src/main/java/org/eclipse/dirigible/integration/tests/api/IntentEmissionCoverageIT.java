@@ -2335,10 +2335,44 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Tender, kind: manyToOne, to: Tender }
             """;
 
+    // Still the entities list. A list column may show a record's child rows (#8295): a team member's
+    // list shows the skills it was granted - a to-one's display text and a field's value - as the
+    // texts of its TeamMemberSkill rows.
+    private static final String INTENT_YAML_COLLECTION_COLUMNS = """
+              - name: Skill
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Team
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: TeamMember
+                list: [email, skills.skill, skills.grantedBy, joinedOn]
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: email,    type: string }
+                  - { name: joinedOn, type: date }
+                relations:
+                  - { name: Team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: TeamMemberSkill }
+              - name: TeamMemberSkill
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: grantedBy, type: string }
+                relations:
+                  - { name: TeamMember, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,      kind: manyToOne, to: Skill }
+            """;
+
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
                                                                   .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
                                                                   .concat(INTENT_YAML_SINGLE_FLAGS)
+                                                                  .concat(INTENT_YAML_COLLECTION_COLUMNS)
                                                                   .concat(INTENT_YAML_GLUE);
 
     @Autowired
@@ -2545,6 +2579,52 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
+        assertCollectionColumnsRuntime();
+    }
+
+    /**
+     * A list column may show a record's child rows (#8295), generated, published and running: the list,
+     * {@code POST /search} and {@code GET /{id}} answer each collection column as the texts of the
+     * record's child rows in the child's order - a to-one as its target's display text, a field as its
+     * value - and an empty array for a record without any; a write carrying the column changes nothing.
+     */
+    private void assertCollectionColumnsRuntime() {
+        String members = "/team/TeamMemberController";
+        int java = createRecord("/settings/SkillController", "{\"Name\":\"Java\"}");
+        int sql = createRecord("/settings/SkillController", "{\"Name\":\"SQL\"}");
+        int team = createRecord("/team/TeamController", "{\"Name\":\"Core\"}");
+        String annBody = "{\"Team\":" + team + ",\"Email\":\"ann@example.com\",\"JoinedOn\":\"2026-01-05\"";
+        int ann = createRecord(members, annBody + "}");
+        int bob = createRecord(members, "{\"Team\":" + team + ",\"Email\":\"bob@example.com\",\"JoinedOn\":\"2026-02-01\"}");
+        createRecord("/team/TeamMemberSkillController", "{\"TeamMember\":" + ann + ",\"Skill\":" + java + ",\"GrantedBy\":\"lead\"}");
+        createRecord("/team/TeamMemberSkillController", "{\"TeamMember\":" + ann + ",\"Skill\":" + sql + ",\"GrantedBy\":\"cto\"}");
+
+        String annRow = "find { it.Id == " + ann + " }.";
+        String bobRow = "find { it.Id == " + bob + " }.";
+        // a master's lines (the detail panel's read) and a plain page (the power list's)
+        for (String list : List.of(API + members + "?Team=" + team, API + members + "?$limit=100")) {
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get(list)
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body(annRow + "SkillsSkill", contains("Java", "SQL"))
+                                                     .body(annRow + "SkillsGrantedBy", contains("lead", "cto"))
+                                                     .body(bobRow + "SkillsSkill", hasSize(0)));
+        }
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Email\",\"operator\":\"EQ\","
+                                                         + "\"value\":\"ann@example.com\"}]}")
+                                                 .when()
+                                                 .post(API + members + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].SkillsSkill", contains("Java", "SQL")));
+        assertEquals(List.of("Java", "SQL"), readRecord(members, ann).get("SkillsSkill"));
+        assertEquals(List.of(), readRecord(members, bob).get("SkillsSkill"));
+
+        updateRecord(members, ann, annBody + ",\"SkillsSkill\":[\"COBOL\"]}", 200);
+        assertEquals(List.of("Java", "SQL"), readRecord(members, ann).get("SkillsSkill"), "a write must ignore the collection column");
     }
 
     /**
