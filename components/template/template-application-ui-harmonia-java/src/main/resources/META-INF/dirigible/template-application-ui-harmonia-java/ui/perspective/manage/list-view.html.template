@@ -622,7 +622,7 @@
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
       </div>
       <div x-h-dialog-content>
-        <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this record?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p>
+        <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: (T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' ' + recordLabel(deleteTarget)).trim() })"></p>
         <div x-show="deleteError" x-h-alert data-variant="negative" role="alert" class="mt-2">
           <div x-h-alert-description x-text="deleteError"></div>
         </div>

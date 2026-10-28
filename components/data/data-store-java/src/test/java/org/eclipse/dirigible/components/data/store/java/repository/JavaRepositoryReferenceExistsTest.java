@@ -69,6 +69,35 @@ class JavaRepositoryReferenceExistsTest {
         verifyNoInteractions(store);
     }
 
+    /**
+     * Inside a unit of work - a generated repository's check and its insert - the target is
+     * share-locked, not merely read, so a delete of it waits for this write (#8252).
+     */
+    @Test
+    void insideAUnitTheTargetIsShareLocked() {
+        when(store.isRegistered(EMPLOYEE)).thenReturn(true);
+        when(store.isInUnitOfWork()).thenReturn(true);
+        when(store.lockForShare(EMPLOYEE, 41)).thenReturn(true);
+
+        assertDoesNotThrow(() -> repository.requireReferenceExists("Employee", EMPLOYEE, 41));
+
+        verify(store).lockForShare(EMPLOYEE, 41);
+        verify(store, never()).existsById(EMPLOYEE, 41);
+    }
+
+    /** A delete that won the lock leaves the waiting check no row: the write is refused. */
+    @Test
+    void insideAUnitATargetDeletedMeanwhileIsRefused() {
+        when(store.isRegistered(EMPLOYEE)).thenReturn(true);
+        when(store.isInUnitOfWork()).thenReturn(true);
+        when(store.lockForShare(EMPLOYEE, 41)).thenReturn(false);
+
+        ValidationException refused =
+                assertThrows(ValidationException.class, () -> repository.requireReferenceExists("Employee", EMPLOYEE, 41));
+
+        assertEquals("Employee 41 does not exist", refused.getMessage());
+    }
+
     /** A target whose model is not deployed cannot be checked; the write is not refused for that. */
     @Test
     void aTargetThatIsNotRegisteredIsNotChecked() {

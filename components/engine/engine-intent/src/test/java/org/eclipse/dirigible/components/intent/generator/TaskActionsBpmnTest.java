@@ -33,7 +33,9 @@ import org.mockito.ArgumentCaptor;
  * A user task declares the actions its form completes it with, so the inbox can refuse a completion
  * carrying any other {@code action} before a decision downstream branches on it (issue #7551): the
  * form's {@code actions:} minus {@code close}, which leaves the task open. A task without a form
- * declares nothing and stays unchecked.
+ * declares nothing and stays unchecked. Every user task also declares the variables a completion
+ * may write, its form's editable fields without the key, so a completion cannot move the process
+ * onto another record (issue #8094).
  */
 class TaskActionsBpmnTest {
 
@@ -55,7 +57,7 @@ class TaskActionsBpmnTest {
                   - { name: followUp, kind: userTask, args: { assignee: agent, next: done } }
                   - { name: done,     kind: end }
             forms:
-              - { name: TriageTicket, forEntity: Ticket, fields: [status], actions: [confirm, reject, close] }
+              - { name: TriageTicket, forEntity: Ticket, fields: [id, status], editable: [id, status], actions: [confirm, reject, close] }
             permissions:
               - { role: Agent, description: Agent, can: [Ticket:read] }
             """;
@@ -73,6 +75,22 @@ class TaskActionsBpmnTest {
         String followUp = userTask(bpmn(), "followUp");
 
         assertEquals(-1, followUp.indexOf("taskActions"), "a task with no form has no actions to declare: " + followUp);
+    }
+
+    @Test
+    void aFormTaskDeclaresItsEditableFieldsWithoutTheKeyAsWhatItsCompletionWrites() {
+        String triage = userTask(bpmn(), "triage");
+
+        assertTrue(triage.contains("<flowable:property name=\"taskWrites\" value=\"Status\"></flowable:property>"),
+                "the triage task may write its editable status, never the key the delegates find the ticket by: " + triage);
+    }
+
+    @Test
+    void aTaskWithNothingEditableDeclaresThatItsCompletionWritesNothing() {
+        String followUp = userTask(bpmn(), "followUp");
+
+        assertTrue(followUp.contains("<flowable:property name=\"taskWrites\" value=\"\"></flowable:property>"),
+                "a task with nothing editable must still declare its writes, as none: " + followUp);
     }
 
     /** The whole {@code <userTask>} element with the given id. */

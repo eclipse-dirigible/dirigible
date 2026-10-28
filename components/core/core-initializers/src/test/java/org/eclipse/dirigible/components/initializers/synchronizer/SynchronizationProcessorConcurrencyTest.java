@@ -16,6 +16,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -82,8 +83,9 @@ class SynchronizationProcessorConcurrencyTest {
         IRepository repository = mock(IRepository.class);
         when(repository.getInternalResourcePath(anyString())).thenReturn(registry.toString());
 
-        SynchronizationProcessor processor = new SynchronizationProcessor(repository, new ArrayList<>(), definitionService, watcher,
-                new RegistryMutationTracker(), mock(TenantContext.class), mock(TenantArtefactLedgerService.class));
+        SynchronizationProcessor processor =
+                new SynchronizationProcessor(repository, new ArrayList<>(), definitionService, watcher, new RegistryMutationTracker(),
+                        mock(TenantContext.class), mock(TenantArtefactLedgerService.class), mock(ObjectProvider.class));
         processor.prepareSynchronizers();
 
         ExecutorService callers = Executors.newFixedThreadPool(2);

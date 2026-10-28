@@ -244,6 +244,14 @@ class EdmModelRoundTripIT extends IntegrationTest {
                 label: Open Claims
                 icon: activity
 
+            # The shell's report manifest (#8277): a structured document value, widget and columns included.
+            reports:
+              - name: FiledClaims
+                source: Claim
+                description: Claims with their filing date
+                dimensions: [number, filedOn]
+                widget: { kind: count, label: Claims, icon: file-text }
+
             seeds:
               - name: claim-statuses
                 entity: ClaimStatus
@@ -373,8 +381,8 @@ class EdmModelRoundTripIT extends IntegrationTest {
         JsonObject modelFromIntent = parseModel(contentOf(META_PROJECT_PATH, "meta.model"));
         JsonObject document = modelFromIntent.getAsJsonObject("model");
         // Fixture precondition: the model must actually carry each of them, or the diff proves nothing.
-        for (String key : new String[] {"title", "description", "icon", "languages", "widgets", "customActionLabels",
-                "processTaskLabels"}) {
+        for (String key : new String[] {"title", "description", "icon", "languages", "widgets", "customActionLabels", "processTaskLabels",
+                "reports"}) {
             assertTrue(document.has(key), "fixture precondition: the generated .model should carry document-level [" + key + "]");
         }
 

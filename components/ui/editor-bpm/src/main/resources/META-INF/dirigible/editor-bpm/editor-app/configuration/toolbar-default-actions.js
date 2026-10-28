@@ -197,6 +197,29 @@ FLOWABLE.TOOLBAR = {
                         });
                         statusBarHub.showMessage(`File '${editorParams.filePath}' saved`);
                         setEditorDirtyState(false);
+
+                        // Validate the saved model and surface any problems non-blockingly in the status
+                        // bar (dirigible #8256) - the same /models/validate the Validate button uses, so
+                        // the author is told about an unresolved implementation or a missing condition at
+                        // save time without the extra click. The save already succeeded; a validation issue
+                        // never undoes it, and a failure to validate is swallowed so it cannot disturb saving.
+                        $http({
+                            method: 'POST',
+                            data: json,
+                            ignoreErrors: true,
+                            headers: { 'Content-Type': 'application/json;charset=utf-8' },
+                            url: FLOWABLE.URL.validateModel()
+                        }).then(function (validation) {
+                            var problems = validation.data || [];
+                            if (problems.length > 0) {
+                                var first = problems[0];
+                                var detail = first.activityName ? `${first.activityName}: ${first.defaultDescription}` : first.defaultDescription;
+                                var more = problems.length > 1 ? ` (+${problems.length - 1} more - click Validate)` : '';
+                                statusBarHub.showError(`Saved with ${problems.length} validation issue(s) - ${detail}${more}`);
+                            }
+                        }, function () {
+                            // validation is advisory; its failure must not disturb the completed save
+                        });
                     }, function (response) {
                         var data = response.data;
                         var status = response.status;

@@ -15,6 +15,8 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -44,6 +46,12 @@ import org.springframework.test.annotation.DirtiesContext;
  * Now the writer validates the edited row with the entity controller's own rules inside the
  * completing transaction, so the refusal is the controller's message as a 400, the task stays in
  * the inbox, and nothing is written.
+ *
+ * <p>
+ * A completion writes only the task's own record and its form's editable fields (dirigible #8094):
+ * a completion carrying another ticket's {@code Id} used to send the write-back and the status set
+ * to that ticket, the {@code __} locators it carried made the Inbox present the next task as
+ * another record, and a field the form does not offer was planted for a later step's write-back.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentTaskWriteValidationIT extends IntegrationTest {
@@ -81,11 +89,13 @@ class IntentTaskWriteValidationIT extends IntegrationTest {
               - name: TicketResolution
                 trigger: { onCreate: Ticket }
                 steps:
+                  - { name: triage,  kind: userTask, args: { assignee: agent, form: TriageTicket } }
                   - { name: resolve, kind: userTask, args: { assignee: agent, form: ResolveTicket } }
                   - { name: close,   kind: serviceTask, args: { setRelationField: Status, value: 2 } }
                   - { name: end,     kind: end }
 
             forms:
+              - { name: TriageTicket,  forEntity: Ticket, fields: [subject], actions: [confirm] }
               - { name: ResolveTicket, forEntity: Ticket, fields: [subject, solution], editable: [solution], actions: [resolve] }
 
             seeds:
@@ -112,6 +122,7 @@ class IntentTaskWriteValidationIT extends IntegrationTest {
         synchronizationProcessor.forceProcessSynchronizers();
 
         int ticket = create("{\"Subject\":\"printer jam\"}");
+        complete(taskFor(ticket), "{\"action\":\"confirm\"}");
         String task = taskFor(ticket);
 
         // 23 characters into a 20-character column: the controller's own refusal, before anything
@@ -143,6 +154,54 @@ class IntentTaskWriteValidationIT extends IntegrationTest {
                                                  .body("Status", equalTo(2))
                                                  .body("Solution", equalTo("new drum")),
                 PROCESS_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void a_completion_writes_only_its_own_record_and_its_forms_editable_fields() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int other = create("{\"Subject\":\"someone else's\"}");
+        int ticket = create("{\"Subject\":\"paper tray\"}");
+
+        // The triage form offers no field, yet this completion names the other ticket as the record,
+        // rewrites the locators the Inbox presents the task by, and plants a solution for resolve.
+        String triage = taskFor(ticket);
+        complete(triage, "{\"action\":\"confirm\",\"Id\":" + other + ",\"__entityId\":" + other + ",\"Solution\":\"planted\"}");
+
+        String resolve = taskFor(ticket);
+        assertNotEquals(triage, resolve, "the ticket's own process must have moved on to its resolve task");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(TASKS + "/" + resolve + "/variables")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("variables.Id", equalTo(ticket))
+                                                 .body("variables.__entityId", equalTo(ticket))
+                                                 .body("variables.Solution", nullValue()));
+
+        // No solution entered, and the other ticket's key once more.
+        complete(resolve, "{\"action\":\"resolve\",\"Id\":" + other + "}");
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(TICKETS + "/" + ticket)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2))
+                                                 .body("Solution", nullValue()),
+                PROCESS_TIMEOUT_SECONDS);
+        read(other).body("Status", equalTo(1))
+                   .body("Solution", nullValue());
+        assertNotNull(taskFor(other), "the other ticket's own triage must still be waiting for it");
+    }
+
+    private void complete(String task, String data) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"action\":\"COMPLETE\",\"data\":" + data + "}")
+                                                 .when()
+                                                 .post(TASKS + "/" + task)
+                                                 .then()
+                                                 .statusCode(200));
     }
 
     private io.restassured.response.ValidatableResponse read(int ticket) {

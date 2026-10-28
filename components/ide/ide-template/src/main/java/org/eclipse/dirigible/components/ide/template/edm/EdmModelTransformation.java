@@ -71,7 +71,8 @@ final class EdmModelTransformation {
     /**
      * The structured document attributes: what the {@code .model} carries above its entities (#6882).
      */
-    private static final List<String> MODEL_STRUCTURED = List.of("languages", "widgets", "customActionLabels", "processTaskLabels");
+    private static final List<String> MODEL_STRUCTURED =
+            List.of("languages", "widgets", "customActionLabels", "processTaskLabels", "reports");
 
     /** The indentation of the {@code .model}. */
     private static final String INDENT = "    ";

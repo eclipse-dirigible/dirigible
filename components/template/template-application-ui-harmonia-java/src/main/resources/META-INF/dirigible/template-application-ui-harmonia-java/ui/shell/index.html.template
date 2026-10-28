@@ -149,10 +149,9 @@
               </div>
             </div>
 #end
-            <!-- Reports: one entry per report, discovered at RUNTIME (the reports store walks the
-                 project's registry tree) because intent reports are standalone pages in a different
-                 gen folder than the shell, invisible at generation time. Selecting one shows it
-                 embedded on /reports. -->
+            <!-- Reports: one entry per report the reader may read - the reports store lists the
+                 manifest the intent baked into App.config.reports, or, without one, walks the
+                 project's registry tree. Selecting one shows it embedded on /reports. -->
             <div x-h-sidebar-group x-show="$store.reports.items.length > 0" x-cloak>
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.reports', 'Reports')"></div>
               <div x-h-sidebar-group-content>

@@ -30,6 +30,9 @@ public class ProblemsFacade implements InitializingBean {
     /** The instance. */
     private static ProblemsFacade INSTANCE;
 
+    /** The problem category of a synchronizer failure (a deploy or parse that could not reconcile). */
+    public static final String CATEGORY_SYNCHRONIZATION = "Synchronization";
+
     private static final Logger logger = LoggerFactory.getLogger(ProblemsFacade.class);
 
     /** The problem service. */
@@ -119,7 +122,7 @@ public class ProblemsFacade implements InitializingBean {
         List<Problem> results = ProblemsFacade.get()
                                               .getProblemService()
                                               .findByLocationAndTypeAndCategory(artefact.getLocation(), artefact.getType(),
-                                                      "Synchronization");
+                                                      CATEGORY_SYNCHRONIZATION);
         return results.size() > 0 ? results.get(0) : null;
     }
 
@@ -130,7 +133,7 @@ public class ProblemsFacade implements InitializingBean {
      * @param errorMessage the errorMessage
      */
     public static final void saveArtefactSynchronizationProblem(Artefact artefact, String errorMessage) {
-        save(artefact.getLocation(), artefact.getType(), "", "", errorMessage, "", "Synchronization", "", "", "");
+        save(artefact.getLocation(), artefact.getType(), "", "", errorMessage, "", CATEGORY_SYNCHRONIZATION, "", "", "");
     }
 
     /**
@@ -142,7 +145,8 @@ public class ProblemsFacade implements InitializingBean {
     public static final void updateArtefactSynchronizationProblem(Artefact artefact, String errorMessage) {
         ProblemsFacade.get()
                       .getProblemService()
-                      .updateCauseByLocationAndTypeAndCategory(errorMessage, artefact.getLocation(), artefact.getType(), "Synchronization");
+                      .updateCauseByLocationAndTypeAndCategory(errorMessage, artefact.getLocation(), artefact.getType(),
+                              CATEGORY_SYNCHRONIZATION);
     }
 
     /**
@@ -174,7 +178,7 @@ public class ProblemsFacade implements InitializingBean {
     public static final void deleteArtefactSynchronizationProblem(Artefact artefact) {
         ProblemsFacade.get()
                       .getProblemService()
-                      .deleteByLocationAndTypeAndCategory(artefact.getLocation(), artefact.getType(), "Synchronization");
+                      .deleteByLocationAndTypeAndCategory(artefact.getLocation(), artefact.getType(), CATEGORY_SYNCHRONIZATION);
     }
 
     /**

@@ -138,6 +138,7 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
+        resolveFixedAfterCreate(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
@@ -506,6 +507,33 @@ final class ModelParameterProcessor {
                 constraint.put("nameJavaLiteral", JavaLiterals.escape(name));
             }
         }
+    }
+
+    /**
+     * Collects the relations fixed after create (intent {@code fixedAfterCreate: true}, #7903) into
+     * {@code fixedAfterCreateRelations}: each FK property's name and the arguments its refusal hands
+     * {@code CheckMessages} - the fully qualified catalog key the en-US catalog writes the message
+     * under and the default-language text - so every REST controller answers a changed value in the
+     * reader's language. Always present, empty when the entity fixes nothing.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveFixedAfterCreate(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Map<String, Object>> fixed = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String messageKey = ModelTranslations.fixedMessageKey(entity, property);
+            if (messageKey == null) {
+                continue;
+            }
+            String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+            Map<String, Object> relation = new LinkedHashMap<>();
+            relation.put("name", property.get("name"));
+            relation.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+                    + JavaLiterals.escape(str(property, "fixedAfterCreateMessage")) + "\"");
+            fixed.add(relation);
+        }
+        entity.put("fixedAfterCreateRelations", fixed);
     }
 
     /**

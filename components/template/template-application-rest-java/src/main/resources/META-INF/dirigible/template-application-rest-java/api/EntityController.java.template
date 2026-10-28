@@ -377,6 +377,9 @@ public class ${name}Controller {
 #if($workflowStatusProperty)
         applyWorkflowStatus(id, entity);
 #end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+        applyFixedAfterCreate(id, entity);
+#end
 #if($masterLock)
         // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
         repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
@@ -949,6 +952,27 @@ public class ${name}Controller {
 
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+    // Relations fixed after create (intent `fixedAfterCreate: true`, dirigible #7903): picked on the
+    // New form and fixed from then on. An absent value is not a change - a caller PUTs the fields its
+    // form edits - so it is taken from the stored row; a value that DIFFERS is refused with a 409 in
+    // the reader's language. System writers (roll-ups, workflow steps, generates) reach the repository
+    // directly, never this controller, so they are unaffected.
+    private void applyFixedAfterCreate(Object id, ${name}Entity entity) {
+        ${name}Entity stored = repository.findOne(id).orElse(null);
+        if (stored == null) {
+            return;
+        }
+#foreach($fixed in $fixedAfterCreateRelations)
+        if (entity.${fixed.name} == null) {
+            entity.${fixed.name} = stored.${fixed.name};
+        } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
 
 #end
 #if($processDeleteGuards)

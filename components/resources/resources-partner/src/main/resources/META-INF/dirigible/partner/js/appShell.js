@@ -182,10 +182,15 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Language coverage of the embedded apps: which languages each generated app PROVIDES
-    // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
-    // a JS file, so the array is read with a targeted match rather than executed). One entry per
-    // project; an app without a readable declaration counts as providing only the default language.
+    // Language coverage of the embedded apps, per platform language, in two parts (#8137):
+    // - their SCREENS: whether the app ships a label catalog in that language (its i18n/<locale>
+    //   files), asked of the locales service the i18n layer itself reads - one request for every app;
+    // - their DATA: the data languages its js/config.js declares (the intent's `languages:`; the config
+    //   is a JS file, so it is read with a targeted match rather than executed). Those only matter for
+    //   an app that HAS translatable data (`translatableData`: a multilingual entity); an app generated
+    //   before the flag existed is taken to have some.
+    // Checking only the declaration reported every fully translated module without translatable data as
+    // "missing translations". One entry per project.
     async loadLanguageCoverage(perspectives) {
       const bases = new Map();
       const collect = (item) => {
@@ -194,7 +199,7 @@ document.addEventListener('alpine:init', () => {
         if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
       };
       (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
-      const coverage = (await Promise.all([...bases].map(async ([app, base]) => {
+      const configs = (await Promise.all([...bases].map(async ([app, base]) => {
         // Only generated apps carry a js/config.js. A missing or unreadable config means this
         // perspective is a platform surface (Inbox, Documents, ...) translated through the shared
         // platform catalogs - it must not be reported as an untranslated app. A readable config
@@ -202,27 +207,61 @@ document.addEventListener('alpine:init', () => {
         try {
           const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
           if (!res.ok) return null;
-          const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
+          const text = await res.text();
+          const match = text.match(/languages:\s*(\[[^\]]*\])/);
           let provided = ['en'];
           if (match) {
             const codes = JSON.parse(match[1].replace(/'/g, '"'));
             if (Array.isArray(codes) && codes.length) provided = codes;
           }
-          return { app, provided };
+          const flag = text.match(/translatableData:\s*(true|false)/);
+          return { app, provided, translatableData: flag ? flag[1] === 'true' : true };
         } catch (e) {
           return null;
         }
       }))).filter(Boolean);
-      this.appLanguages = coverage;
+      const labelled = await this.loadLabelLanguages(configs.map(c => c.app));
+      this.appLanguages = configs.map(c => Object.assign(c, { labelled: labelled ? labelled(c.app) : null }));
     },
 
-    // Apps that do not provide every platform language - the developers' to-do list for missing
-    // translation content. Reactive on both the coverage scan and the platform set.
+    // The platform languages each app ships screen labels for, from one request to the locales
+    // service; null when it cannot be read - the screens are then not judged at all, only the data.
+    async loadLabelLanguages(apps) {
+      if (!apps.length) return null;
+      try {
+        const query = 'extensionPoints=platform-locales&extensionPoints=application-locales'
+            + apps.map(app => '&namespaces=' + encodeURIComponent(app)).join('');
+        const res = await fetch('/services/platform/extensions/locales?' + query,
+                { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const locales = (Array.isArray(data.locales) ? data.locales : []).map(l => l.id || '');
+        const translations = data.translations || {};
+        return (app) => Alpine.store('locale').languages().filter(code => {
+          const locale = locales.find(id => id === code) || locales.find(id => id.indexOf(code + '-') === 0);
+          const catalog = locale && translations[locale] && translations[locale][app];
+          return !!catalog && Object.keys(catalog).length > 0;
+        });
+      } catch (e) {
+        console.error('Failed to read the label catalogs of the applications', e);
+        return null;
+      }
+    },
+
+    // What each app does not translate into the platform languages - the developers' to-do list:
+    // `screens` lists the languages it has no label catalog for (its pages fall back to the baked
+    // English labels, which is why English itself never counts), `data` the languages it has labels
+    // for but declares no data in (its lists and documents show the default-language values). An app
+    // with nothing in either is not listed. Reactive on both the coverage scan and the platform set.
     languageWarnings() {
       const platform = Alpine.store('locale').languages();
       return this.appLanguages
-                 .map(({ app, provided }) => ({ app, missing: platform.filter(code => !provided.includes(code)) }))
-                 .filter(({ missing }) => missing.length > 0);
+                 .map(({ app, provided, translatableData, labelled }) => {
+                   const screens = labelled ? platform.filter(code => code !== 'en' && !labelled.includes(code)) : [];
+                   const data = translatableData ? platform.filter(code => !provided.includes(code) && !screens.includes(code)) : [];
+                   return { app, screens, data };
+                 })
+                 .filter(({ screens, data }) => screens.length > 0 || data.length > 0);
     },
 
     // The platform's language codes with display names for the Settings picker.
