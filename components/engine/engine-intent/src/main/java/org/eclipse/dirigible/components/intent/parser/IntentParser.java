@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.parser;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import javax.lang.model.SourceVersion;
 
@@ -29,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.action.ActionPlaceholders;
 import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
@@ -53,6 +58,7 @@ import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionCallIntent;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptOptionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
@@ -361,6 +367,7 @@ public final class IntentParser {
         wrapScalarNormalize(tree);
         expandSingleShorthand(tree);
         normalizeOrderBy(tree);
+        normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -7029,6 +7036,47 @@ public final class IntentParser {
     }
 
     /**
+     * A {@code call:} action's prompt input (#8296) may list a {@code multiselect}'s options as bare
+     * strings - a bare option is its value and its label - and may write a {@code date} default
+     * unquoted, which SnakeYAML reads as a {@link java.util.Date}. Both are brought to the typed shape
+     * on the raw tree here, before the typed mapping, where Gson would refuse a bare option and mangle
+     * a date.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeActionPrompts(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("actions") instanceof List<?> actions)) {
+            return;
+        }
+        for (Object actionNode : actions) {
+            if (!(actionNode instanceof Map<?, ?> action) || !(action.get("prompt") instanceof List<?> prompt)) {
+                continue;
+            }
+            for (Object inputNode : prompt) {
+                if (!(inputNode instanceof Map<?, ?> input)) {
+                    continue;
+                }
+                Map<Object, Object> writable = (Map<Object, Object>) input;
+                if (input.get("default") instanceof java.util.Date date) {
+                    writable.put("default", date.toInstant()
+                                                .atZone(ZoneOffset.UTC)
+                                                .toLocalDate()
+                                                .toString());
+                }
+                if (input.get("options") instanceof List<?> options) {
+                    List<Object> expanded = new ArrayList<>();
+                    for (Object option : options) {
+                        expanded.add(option == null || option instanceof Map ? option
+                                : new LinkedHashMap<>(Map.of("value", String.valueOf(option))));
+                    }
+                    writable.put("options", expanded);
+                }
+            }
+        }
+    }
+
+    /**
      * A field's {@code normalize:} is a list of transforms, and one transform may be written without
      * the list ({@code normalize: upper}, {@code normalize: {strip: " "}}, issue #7726). The scalar
      * form is wrapped on the raw tree here, before the typed mapping, where Gson would refuse anything
@@ -9681,6 +9729,12 @@ public final class IntentParser {
         if (action.getSuccess() != null) {
             keys.add("success");
         }
+        if (action.getDescription() != null) {
+            keys.add("description");
+        }
+        if (action.getSubmit() != null) {
+            keys.add("submit");
+        }
         if (!keys.isEmpty()) {
             issues.add("action [" + action.getName() + "] declares " + keys
                     + ", which only a call: action uses - a page action opens its page");
@@ -9728,7 +9782,16 @@ public final class IntentParser {
             if (!ActionPromptIntent.TYPES.contains(input.getType())) {
                 issues.add(subject + " prompt input [" + input.getName() + "] has type [" + input.getType() + "] - expected one of "
                         + new TreeSet<>(ActionPromptIntent.TYPES));
+                continue;
             }
+            validatePromptOptions(input, subject, issues);
+            validatePromptDefault(input, action, entity, subject, issues);
+        }
+        for (String name : ActionPlaceholders.in(action.getDescription())) {
+            validateRecordPlaceholder("description", name, action, entity, subject, issues);
+        }
+        for (String name : ActionPlaceholders.in(action.getConfirm())) {
+            validateRecordPlaceholder("confirm", name, action, entity, subject, issues);
         }
         if (call.getBody() != null) {
             validateCallBody(call.getBody(), inputs, subject, issues);
@@ -9752,6 +9815,110 @@ public final class IntentParser {
                                                         .isEmpty()) {
             issues.add(subject + " can [" + action.getCan()
                     + "] is listed by no role under permissions - the button would be shown to nobody");
+        }
+    }
+
+    /**
+     * A {@code multiselect} input chooses from its {@code options:} - required, each a unique,
+     * non-blank value - and no other input type has any (#8296).
+     */
+    private static void validatePromptOptions(ActionPromptIntent input, String subject, List<String> issues) {
+        String prefix = subject + " prompt input [" + input.getName() + "]";
+        if (!input.isMultiselect()) {
+            if (!input.getOptions()
+                      .isEmpty()) {
+                issues.add(prefix + " declares options but has type [" + input.getType() + "] - only a multiselect chooses from options");
+            }
+            return;
+        }
+        if (input.getOptions()
+                 .isEmpty()) {
+            issues.add(prefix + " is a multiselect without options - list the values it chooses from under options:");
+            return;
+        }
+        Set<String> values = new HashSet<>();
+        for (ActionPromptOptionIntent option : input.getOptions()) {
+            if (option == null || option.getValue() == null || option.getValue()
+                                                                     .isBlank()) {
+                issues.add(prefix + " has an option without a value");
+            } else if (!values.add(option.getValue())) {
+                issues.add(prefix + " lists the option [" + option.getValue() + "] twice");
+            }
+        }
+    }
+
+    /**
+     * A prompt input's {@code default:} (#8296) is a literal of its type - a list of option values for
+     * a multiselect - or a whole {@code "{property}"} of the clicked record.
+     */
+    private static void validatePromptDefault(ActionPromptIntent input, ActionIntent action, EntityIntent entity, String subject,
+            List<String> issues) {
+        Object value = input.getDefaultValue();
+        if (value == null) {
+            return;
+        }
+        String key = "prompt input [" + input.getName() + "] default";
+        String property = ActionPlaceholders.ofDefault(value);
+        if (property != null) {
+            validateRecordPlaceholder(key, property, action, entity, subject, issues);
+            return;
+        }
+        String expected = promptDefaultMismatch(input, value);
+        if (expected != null) {
+            issues.add(subject + " " + key + " [" + value + "] does not fit its type [" + input.getType() + "] - expected " + expected
+                    + " or \"{property}\" of the clicked record");
+            return;
+        }
+        if (input.isMultiselect()) {
+            Set<String> options = input.getOptions()
+                                       .stream()
+                                       .filter(option -> option != null && option.getValue() != null)
+                                       .map(ActionPromptOptionIntent::getValue)
+                                       .collect(Collectors.toCollection(LinkedHashSet::new));
+            for (Object ticked : (List<?>) value) {
+                if (!options.contains(ticked)) {
+                    issues.add(subject + " " + key + " names [" + ticked + "], which is not one of its options " + options);
+                }
+            }
+        }
+    }
+
+    /** What a literal default of the input's type looks like, or {@code null} when the value is one. */
+    private static String promptDefaultMismatch(ActionPromptIntent input, Object value) {
+        return switch (input.getType()) {
+            case "integer" -> value instanceof Long ? null : "a whole number";
+            case "decimal" -> value instanceof Number ? null : "a number";
+            case "boolean" -> value instanceof Boolean ? null : "true or false";
+            case "date" -> value instanceof String text && isIsoDate(text) ? null : "a date (yyyy-MM-dd)";
+            case ActionPromptIntent.MULTISELECT -> value instanceof List<?> list && list.stream()
+                                                                                        .allMatch(String.class::isInstance) ? null
+                                                                                                : "a list of its option values";
+            default -> value instanceof String ? null : "a string";
+        };
+    }
+
+    private static boolean isIsoDate(String text) {
+        try {
+            LocalDate.parse(text);
+            return true;
+        } catch (DateTimeParseException ex) {
+            return false;
+        }
+    }
+
+    /**
+     * A {@code {property}} a call action's dialog reads off the clicked record (#8296): only a
+     * per-record action has one, and the property must be a field or to-one relation of the
+     * {@code forEntity} - or the {@code Name} its {@code label:} generates.
+     */
+    private static void validateRecordPlaceholder(String key, String name, ActionIntent action, EntityIntent entity, String subject,
+            List<String> issues) {
+        if (!"entity".equals(action.getScope())) {
+            issues.add(subject + " " + key + " names [{" + name + "}] but the action has scope [" + action.getScope()
+                    + "] - only a per-record (scope: entity) action has a record to read it from");
+        } else if (entity != null && ActionPlaceholders.property(entity, name) == null) {
+            issues.add(
+                    subject + " " + key + " names [{" + name + "}], which is not a field or to-one relation of [" + entity.getName() + "]");
         }
     }
 

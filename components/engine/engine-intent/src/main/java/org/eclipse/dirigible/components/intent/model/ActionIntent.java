@@ -26,9 +26,10 @@ import java.util.List;
  * <p>
  * Instead of a page, an action may {@link #call} the application's own endpoint (issue #8090): the
  * shell sends the declared request after a confirmation ({@link #confirm}) or a dialog of
- * {@link #prompt} inputs, and toasts the outcome. {@link #fromStatus} hides the button outside the
- * listed statuses (advisory only - the endpoint decides), and {@link #can} offers it only to the
- * roles whose permissions list the token.
+ * {@link #prompt} inputs, and toasts the outcome. The dialog may say what the action does to which
+ * record ({@link #description}) and name its run button ({@link #submit}, issue #8296).
+ * {@link #fromStatus} hides the button outside the listed statuses (advisory only - the endpoint
+ * decides), and {@link #can} offers it only to the roles whose permissions list the token.
  */
 public class ActionIntent {
 
@@ -68,6 +69,15 @@ public class ActionIntent {
 
     /** The confirmation text of a {@link #call} without a {@link #prompt}. */
     private String confirm;
+
+    /**
+     * One paragraph under the title of a {@link #call}'s dialog, prompt or confirm (#8296). Like
+     * {@link #confirm} it may name the clicked record's properties as {@code {property}}.
+     */
+    private String description;
+
+    /** The caption of the run button of a {@link #call}'s dialog; the shell's "Run" when absent. */
+    private String submit;
 
     /** The {@code forEntity} statuses (seed ids) the button is offered in. */
     private List<Integer> fromStatus = new ArrayList<>();
@@ -169,6 +179,22 @@ public class ActionIntent {
 
     public void setConfirm(String confirm) {
         this.confirm = confirm;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public String getSubmit() {
+        return submit;
+    }
+
+    public void setSubmit(String submit) {
+        this.submit = submit;
     }
 
     public List<Integer> getFromStatus() {
