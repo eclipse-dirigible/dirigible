@@ -2316,9 +2316,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Status, kind: manyToOne, to: PermitStatus, function: EntityStatus, init: SUBMITTED }
             """;
 
+    // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
+    // on a create or an update; a Purse's base flag changes hands within its tender only, and its
+    // preferred flag refuses a second holder in the tender with 409.
+    private static final String INTENT_YAML_SINGLE_FLAGS = """
+              - name: Tender
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 10 }
+                  - { name: base, type: boolean, single: true }
+              - name: Purse
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: label,     type: string, length: 30 }
+                  - { name: base,      type: boolean, single: { per: Tender } }
+                  - { name: preferred, type: boolean, single: { per: Tender, onConflict: refuse } }
+                relations:
+                  - { name: Tender, kind: manyToOne, to: Tender }
+            """;
+
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
                                                                   .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
+                                                                  .concat(INTENT_YAML_SINGLE_FLAGS)
                                                                   .concat(INTENT_YAML_GLUE);
 
     @Autowired
@@ -2523,7 +2543,45 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
         assertStatusStampsRuntime();
+        assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
+    }
+
+    /**
+     * {@code single:} (#8101), generated, published and running: a write that takes a single flag
+     * demotes the row that held it - fleet-wide, or within its scope only - and a refusing flag answers
+     * 409 with its message while another row of the scope holds it, writing nothing.
+     */
+    private void assertSingleFlagsRuntime() {
+        String tenders = "/tender/TenderController";
+        int euro = createRecord(tenders, "{\"Code\":\"EUR\",\"Base\":true}");
+        int lev = createRecord(tenders, "{\"Code\":\"BGN\",\"Base\":true}");
+        assertEquals(Boolean.FALSE, readRecord(tenders, euro).get("Base"), "a create taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, lev).get("Base"));
+        updateRecord(tenders, euro, "{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":true}", 200);
+        assertEquals(Boolean.FALSE, readRecord(tenders, lev).get("Base"), "an update taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, euro).get("Base"));
+
+        String purses = "/purse/PurseController";
+        int first = createRecord(purses, "{\"Label\":\"first\",\"Tender\":" + euro + ",\"Base\":true,\"Preferred\":true}");
+        int second = createRecord(purses, "{\"Label\":\"second\",\"Tender\":" + euro + ",\"Base\":true}");
+        int other = createRecord(purses, "{\"Label\":\"other\",\"Tender\":" + lev + ",\"Base\":true,\"Preferred\":true}");
+        assertEquals(Boolean.FALSE, readRecord(purses, first).get("Base"), "the holder in the same scope is demoted");
+        assertEquals(Boolean.TRUE, readRecord(purses, second).get("Base"));
+        Map<String, Object> otherScope = readRecord(purses, other);
+        assertEquals(Boolean.TRUE, otherScope.get("Base"), "a holder in another scope keeps its flag: " + otherScope);
+        assertEquals(Boolean.TRUE, otherScope.get("Preferred"), "a refusing flag is single per scope, not fleet-wide: " + otherScope);
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + second + ",\"Label\":\"second\",\"Tender\":" + euro
+                                                         + ",\"Base\":true,\"Preferred\":true}")
+                                                 .when()
+                                                 .put(API + purses + "/" + second)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("Another Purse is already Preferred for this Tender")));
+        assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
+        assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
     }
 
     /**

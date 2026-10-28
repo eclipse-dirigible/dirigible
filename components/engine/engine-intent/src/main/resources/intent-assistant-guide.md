@@ -351,8 +351,10 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   other route), the reason a `required` field's **presence check is skipped** (the value is
   guaranteed), and the **seed for a new line in a document's item dialog** - the dialog opens on the
   standard value instead of a blank one, which is what makes a one-click affordance like **Fill Month**
-  actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
-  user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
+  actually one click. Only a create is defaulted: an existing row is never re-defaulted. An update
+  that leaves the field empty keeps the stored value instead (#8105, the same for a relation's
+  `init:`), so a PUT carrying only what it changed never erases it - and a defaulted field cannot be
+  cleared to null by an update. A `date`/`time`/`timestamp` or binary field is the exception
   to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
   (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. **`defaultValue:
   now`** is the one default that reaches a moment field on every leg (#7603): the current moment in the
@@ -1269,6 +1271,25 @@ entities:
       - { name: approvedAt,  type: timestamp, stampOn: { status: APPROVED } }
     relations:
       - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: SUBMITTED }
+```
+
+**A flag at most one row holds (`single:`).** For "the base currency", "the default unit", "the
+default bank account of a company", declare `single:` on the `boolean` field instead of a `unique:`
+(which allows only two rows) or a check (which cannot count sibling rows). `single: true` keeps one
+holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
+`manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
+the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
+must be a deliberate act - the write is then answered 409 while another row holds it. The form keeps
+the ordinary checkbox:
+
+```yaml
+entities:
+  - name: CompanyBankAccount
+    fields:
+      - { name: iban, type: string, length: 34 }
+      - { name: base, type: boolean, single: { per: Company } }
+    relations:
+      - { name: Company, kind: manyToOne, to: Company }
 ```
 
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
@@ -5059,6 +5080,7 @@ or a seeded name.
 | serviceTask `setField` value | a literal on a `string`/`text` field; exactly `"{now}"` on a `timestamp`/`date` field (the moment the step runs) - `{now}` nowhere else |
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
+| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |

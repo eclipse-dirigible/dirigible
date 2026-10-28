@@ -125,6 +125,17 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of a refusing single flag's conflict message (issue #8101).
+     *
+     * @param entity the entity
+     * @param flag the single flag
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String singleFlagMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
+        return str(entity, "name") + "_single_" + str(flag, "property");
+    }
+
+    /**
      * The catalog key of a {@code fixedAfterCreate} relation's refusal (issue #7903).
      *
      * @param entity the entity
@@ -304,6 +315,12 @@ final class ModelTranslations {
                 String key = uniqueMessageKey(entity, constraint);
                 if (key != null) {
                     messages.put(key, constraint.get("message"));
+                }
+            }
+            for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
+                String message = str(flag, "message");
+                if (message != null && !message.isBlank()) {
+                    messages.put(singleFlagMessageKey(entity, flag), message);
                 }
             }
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {

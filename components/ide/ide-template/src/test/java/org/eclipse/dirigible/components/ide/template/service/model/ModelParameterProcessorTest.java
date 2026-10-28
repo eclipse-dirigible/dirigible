@@ -64,6 +64,34 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
+     * flag, which refuses nothing, has no message to translate.
+     */
+    @Test
+    void refusingSingleFlagMessageBecomesACatalogKey() {
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("property", "Preferred");
+        refusing.put("refuse", "true");
+        refusing.put("message", "Another Wallet is already Preferred");
+        Map<String, Object> demoting = new LinkedHashMap<>();
+        demoting.put("property", "Base");
+        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"));
+        wallet.put("singleFlags", List.of(refusing, demoting));
+        Map<String, Object> model = model(wallet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"bookstore:billing-model.checks.Wallet_single_Preferred\", \"Another Wallet is already Preferred\"",
+                refusing.get("messageArgsJava"));
+        assertFalse(demoting.containsKey("messageArgsJava"));
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("Another Wallet is already Preferred", catalog.get("Wallet_single_Preferred"));
+        assertFalse(catalog.containsKey("Wallet_single_Base"));
+    }
+
+    /**
      * A relation fixed after create (#7903): every controller refuses a changed value with the message
      * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
      * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes
