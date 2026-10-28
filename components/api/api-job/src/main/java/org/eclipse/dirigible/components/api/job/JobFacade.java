@@ -15,6 +15,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.jobs.domain.Job;
+import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.service.JobService;
 import org.slf4j.Logger;
@@ -22,6 +23,11 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+
+import com.google.gson.ExclusionStrategy;
+import com.google.gson.FieldAttributes;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 /**
  * The Class JobFacade.
@@ -31,6 +37,16 @@ public class JobFacade implements InitializingBean {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(JobFacade.class);
+
+    /**
+     * Serialises jobs as {@link GsonHelper} does, minus the parameter's back-reference to its job: it
+     * is hidden from Jackson only, so Gson would follow job, parameters, job, ... until the stack
+     * overflows.
+     */
+    private static final Gson JOB_GSON = new GsonBuilder().setDateFormat("yyyy-MM-dd'T'HH:mm:ssZ")
+                                                          .setPrettyPrinting()
+                                                          .setExclusionStrategies(new ParameterJobExclusion())
+                                                          .create();
 
     /** The job facade. */
     private static JobFacade INSTANCE;
@@ -96,9 +112,9 @@ public class JobFacade implements InitializingBean {
      * @return the jobs
      */
     public static String getJobs() {
-        return GsonHelper.toJson(JobFacade.get()
-                                          .getJobService()
-                                          .getAll());
+        return toJson(JobFacade.get()
+                               .getJobService()
+                               .getAll());
     }
 
     /**
@@ -108,9 +124,9 @@ public class JobFacade implements InitializingBean {
      * @return the job
      */
     public static String getJob(String name) {
-        return GsonHelper.toJson(JobFacade.get()
-                                          .getJobService()
-                                          .findByName(name));
+        return toJson(JobFacade.get()
+                               .getJobService()
+                               .findByName(name));
     }
 
     /**
@@ -121,9 +137,9 @@ public class JobFacade implements InitializingBean {
      * @throws Exception the exception
      */
     public static String enable(String name) throws Exception {
-        return GsonHelper.toJson(JobFacade.get()
-                                          .getJobService()
-                                          .enable(name));
+        return toJson(JobFacade.get()
+                               .getJobService()
+                               .enable(name));
     }
 
     /**
@@ -134,9 +150,9 @@ public class JobFacade implements InitializingBean {
      * @throws Exception the exception
      */
     public static String disable(String name) throws Exception {
-        return GsonHelper.toJson(JobFacade.get()
-                                          .getJobService()
-                                          .disable(name));
+        return toJson(JobFacade.get()
+                               .getJobService()
+                               .disable(name));
     }
 
     /**
@@ -240,6 +256,32 @@ public class JobFacade implements InitializingBean {
         } else {
             String error = format("Job with name {0} does not exist, hence cannot be used to log messages", name);
             throw new Exception(error);
+        }
+    }
+
+    /**
+     * Serialises a job, or a list of jobs, with their declared parameters.
+     *
+     * @param jobs the job or jobs
+     * @return the JSON
+     */
+    static String toJson(Object jobs) {
+        return JOB_GSON.toJson(jobs);
+    }
+
+    /**
+     * Skips {@link JobParameter}'s reference back to the job that declares it.
+     */
+    private static final class ParameterJobExclusion implements ExclusionStrategy {
+
+        @Override
+        public boolean shouldSkipField(FieldAttributes field) {
+            return field.getDeclaringClass() == JobParameter.class && "job".equals(field.getName());
+        }
+
+        @Override
+        public boolean shouldSkipClass(Class<?> clazz) {
+            return false;
         }
     }
 
