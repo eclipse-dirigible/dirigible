@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
@@ -39,11 +41,9 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
     static final String TERMINAL_PREFIX = "[ws:terminal] {}";
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
     private static final String UNIX_FILE = "ttyd.sh";
-    private static volatile boolean started = false;
 
-    static {
-        runTTYD();
-    }
+    /** The ttyd process, started on context init and destroyed when the context closes. */
+    private ProcessRunnable ttydProcess;
 
     /**
      * Register web socket handlers.
@@ -65,15 +65,11 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
         return new TerminalWebsocketHandler();
     }
 
-    private synchronized static void runTTYD() {
-        if (started) {
-            logger.warn("TTYD is already started and will not be started again.");
-            return;
-        }
-        startTTYD();
-    }
-
-    private static void startTTYD() {
+    /**
+     * Starts ttyd when the context is initialized.
+     */
+    @PostConstruct
+    void startTTYD() {
         try {
             if (!SystemUtils.IS_OS_UNIX) {
                 logger.warn("OS [{}] is not supported", System.getProperty("os.name"));
@@ -85,11 +81,23 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
             logger.info("Starting ttyd using command [{}] and file [{}]", command, unixFile);
             ProcessRunnable processRunnable = new ProcessRunnable(command);
-            new Thread(processRunnable).start();
+            Thread ttydThread = new Thread(processRunnable, "dirigible-ttyd-launcher");
+            ttydThread.setDaemon(true);
+            ttydThread.start();
 
-            started = true;
+            this.ttydProcess = processRunnable;
         } catch (Exception e) {
             logger.error(TERMINAL_PREFIX, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Destroys ttyd when the context is closed, so its reader threads do not outlive the application.
+     */
+    @PreDestroy
+    void stopTTYD() {
+        if (ttydProcess != null) {
+            ttydProcess.destroy();
         }
     }
 
