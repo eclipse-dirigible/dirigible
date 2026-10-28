@@ -1171,6 +1171,21 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.FALSE, lock.get("always"));
     }
 
+    /**
+     * The master filter of the generated list is bound with the FK's own Java class, so a non-numeric
+     * value is a 400 from the controller invoker instead of a 500 out of Hibernate (dirigible #8237).
+     */
+    @Test
+    void aCompositionChildCarriesItsMasterFilterJavaClass() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertEquals("Invoice", child.get("masterEntityId"));
+        assertEquals("Integer", child.get("masterEntityIdJavaClass"));
+    }
+
     @Test
     void aCompositionChildInheritsAnAppendOnlyMaster() {
         Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));

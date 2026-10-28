@@ -781,6 +781,9 @@ final class ModelParameterProcessor {
         if ("COMPOSITION".equals(str(property, "relationshipType")) && "1_n".equals(str(property, "relationshipCardinality"))) {
             entity.put("masterEntity", property.get("relationshipEntityName"));
             entity.put("masterEntityId", name);
+            // The master filter of the generated list is declared with the FK's own Java class, so
+            // the controller invoker refuses a non-numeric value with a 400 (dirigible #8237).
+            entity.put("masterEntityIdJavaClass", property.get("dataTypeJavaClass"));
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
