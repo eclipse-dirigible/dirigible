@@ -973,6 +973,14 @@ schedules:
       defaults: { Period: now }
 ```
 
+`cron` is a Quartz expression (seconds first, six or seven fields), which is what the generated job
+hands the platform scheduler. Quartz cannot constrain day-of-month and day-of-week at once, so the
+Spring-style form - a `*` in the day field that carries no schedule (`"0 0 1 1 * *"`, `"0 0 8 * * MON"`,
+`"0 0 8 * * *"`) - is accepted and emitted with that field as `?`. A cron Quartz still cannot run
+(both day fields constrained, a five-field Unix cron, a mistyped token) is a parse error naming the
+schedule, not a job that is listed as enabled and never fires. A polled inbound folder's `cron` is held
+to the same rule.
+
 `unique:` names the TARGET properties that identify ONE tick's output. The generated job looks the
 target up by exactly those values - rendered from this same block's `map` / `defaults`, so what is
 looked up and what is written cannot drift - and skips the source row, `children` included, when it

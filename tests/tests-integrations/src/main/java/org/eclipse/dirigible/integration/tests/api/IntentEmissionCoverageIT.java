@@ -4377,6 +4377,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
         String job = contentOf("gen/events/emission/MonthlyClaimsJob.java");
+        // #8235: the fixture declares the Spring-style "0 0 4 1 * *" (day-of-month AND day-of-week
+        // set), which Quartz refuses - the job used to generate and publish clean, be listed as enabled
+        // and never fire. The generated cron() must carry the Quartz form; whether the scheduler then
+        // really accepts it is assertScheduledJobsRegistered() below.
+        assertTrue(job.contains("return \"0 0 4 1 * ?\";"), "a schedule's cron must reach Quartz with the unused day field as ?: " + job);
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
@@ -4402,6 +4407,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // publish (the loads became locals of the try block); the ordering is pinned once more, on a
         // real document.
         String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        assertTrue(dunning.contains("return \"0 0 5 1 * ?\";"), "the Quartz form of the declared cron (#8235): " + dunning);
         assertTrue(
                 dunning.contains("htmlPart.put(\"contentType\", \"text/html\");")
                         && dunning.contains("org.eclipse.dirigible.sdk.mail.Html.escape((Person == null ? null : Person.Name))"),
@@ -4423,6 +4429,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // typed local read for a `long` comparison and for an Integer foreign key, and the publish +
         // client-Java javac below is the first thing that proves it.
         String escalating = contentOf("gen/events/emission/BillDunningJob.java");
+        assertTrue(escalating.contains("return \"0 0 7 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + escalating);
         assertTrue(
                 escalating.contains("ReminderLevelEntity escalationCandidate = null;")
                         && escalating.contains("ReminderLevelEntity escalation = escalationCandidate;"),
@@ -4460,6 +4467,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // send time, not the key quoted as an address: emitted as a literal, the mail went to
         // `@config:BILLING_OPS_EMAIL` and the only trace anywhere was the delivery failure.
         String stuck = contentOf("gen/events/emission/StuckBillsJob.java");
+        assertTrue(stuck.contains("return \"0 0 6 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + stuck);
         assertTrue(stuck.contains("to = org.eclipse.dirigible.sdk.core.Configurations.get(\"BILLING_OPS_EMAIL\")"),
                 "a @config: recipient must resolve through the configuration facade at send time: " + stuck);
         assertFalse(stuck.contains("\"@config:BILLING_OPS_EMAIL\""), "the key must never reach the job as the address: " + stuck);
@@ -7589,6 +7597,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertGeneratesStepAxisRuntime();
         assertGeneratesItemsRuleRuntime();
         assertStalenessSweepRuntime();
+        assertScheduledJobsRegistered();
         assertFileFamiliesRuntime();
     }
 
@@ -7612,6 +7621,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200),
                 30);
+    }
+
+    /**
+     * Every schedule of the fixture is a registered, enabled job on the shared scheduler (#8235).
+     *
+     * <p>
+     * The emitted text cannot show this. Four of the schedules are declared Spring-style, with
+     * day-of-month AND day-of-week set, which the Quartz parser refuses; before the fix the generated
+     * {@code cron()} was handed over unchanged, and the registration saved the {@code Job} row and then
+     * failed the trigger build - so {@code /services/jobs} listed the job as enabled while it never
+     * fired, and the only trace was a WARN per reconciliation pass. The consumer now writes no row for
+     * a cron the scheduler cannot run, so a listed, enabled row is one Quartz accepted. The
+     * registration lands asynchronously after the publish, hence the retry.
+     */
+    private void assertScheduledJobsRegistered() {
+        for (String job : List.of("MonthlyClaimsJob", "OverdueBillsJob", "BillDunningJob", "StuckBillsJob", "StaleClaimsJob")) {
+            String name = "gen.events.emission." + job;
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get("/services/jobs")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body("findAll { it.name == '" + name + "' && it.enabled == true }.size()",
+                                                             equalTo(1)),
+                    30);
+        }
     }
 
     /**

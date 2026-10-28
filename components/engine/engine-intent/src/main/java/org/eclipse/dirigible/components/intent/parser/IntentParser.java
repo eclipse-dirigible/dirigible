@@ -41,6 +41,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
+import org.eclipse.dirigible.components.intent.generator.CronSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -1253,6 +1254,13 @@ public final class IntentParser {
             if (schedule.getCron() == null || schedule.getCron()
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
+            } else {
+                // Checked with the scheduler's own parser (#8235): a cron Quartz cannot run used to
+                // generate and publish clean and be listed as an enabled job that never fired.
+                String cronProblem = CronSupport.problem(schedule.getCron());
+                if (cronProblem != null) {
+                    issues.add("schedule [" + name + "] cron [" + schedule.getCron() + "] cannot be scheduled: " + cronProblem);
+                }
             }
             // A cross-model source (model: <uses alias>) lives in another model; its existence and its
             // where/map/match field references are validated at GENERATION time against the owner's
@@ -2545,6 +2553,12 @@ public final class IntentParser {
                                                           .isBlank();
         if (folder && !cron) {
             issues.add(subject + " source folder [" + source.getFolder() + "] has no cron to poll it on");
+        }
+        if (folder && cron) {
+            String cronProblem = CronSupport.problem(source.getCron());
+            if (cronProblem != null) {
+                issues.add(subject + " source cron [" + source.getCron() + "] cannot be scheduled: " + cronProblem);
+            }
         }
         if (!folder && cron) {
             issues.add(subject + " source declares a cron, which only a folder source polls on");

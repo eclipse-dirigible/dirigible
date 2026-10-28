@@ -4092,7 +4092,9 @@ schedules:
   install/publish its prebuilt module). A missing owner or a mistyped field drops that schedule with a
   warning in the generate response - it never emits a job that cannot compile.
 
-**Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
+**Rules:** unique name, a `cron` the Quartz scheduler can run (seconds first, six fields; a `*` in the
+day field that carries no schedule - `"0 0 1 1 * *"`, `"0 0 8 * * MON"` - is accepted and emitted as `?`,
+but both day fields constrained or a five-field Unix cron is a parse error), a declared `entity` (local, or a cross-model source via `model:`),
 `where` operators from the allowed list, and **exactly one** of `notify` (valid recipient) /
 `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
 a `unique:` natural key - target properties and/or the run's period, optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
