@@ -354,6 +354,23 @@ nothing. The field is read-only to callers. Refused at parse: any other field ty
 a `defaultValue` / `number:` / calculation / `aggregate:` / `dependsOn` beside it, two fields stamping
 the same status, and an entity without a status relation.
 
+## single - a flag at most one row holds
+
+```yaml
+- { name: base, type: boolean, single: true }                                 # one base currency
+- { name: base, type: boolean, single: { per: Company } }                     # one default account per company
+- { name: base, type: boolean, single: { per: Company, onConflict: refuse } } # 409 instead of handing over
+```
+
+The "default / base" flag every nomenclature carries. A write that sets it - a create, a REST update,
+a system `updateWithoutEvent` - demotes the row that held it in the same scope (fleet-wide, or the rows
+with the same `per:` relation value), through a targeted write that publishes the holder's `-updated`,
+in the same unit of work as the write itself. With `onConflict: refuse` the write is answered **409**
+while another row of the scope holds the flag, with a message translated through the module's catalog
+like a check's. The UI is the ordinary checkbox. Refused at parse: a non-boolean field, a `per:` that is
+not a `manyToOne`/`oneToOne` of the entity, an `onConflict` other than `demote`/`refuse`. Not covered: a
+targeted `updateProperty(ies)` write of the flag, and two concurrent writers that each find no holder.
+
 ## phases - the enrichment channel
 
 An enrichment a listener computes on create - a costing pool, a snapshot column, an external lookup -

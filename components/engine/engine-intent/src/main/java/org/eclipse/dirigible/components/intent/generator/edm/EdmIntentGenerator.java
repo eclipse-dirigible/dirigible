@@ -72,6 +72,7 @@ import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
@@ -740,6 +741,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             putWorkflowStatus(entityMap, entity, model, displacedStatuses);
             putLifecycle(entityMap, entity, model);
             putStatusStamps(entityMap, entity);
+            putSingleFlags(entityMap, entity);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
@@ -3358,6 +3360,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entityMap.put("statusStamps", stamps);
     }
 
+    /**
+     * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
+     * {@code singleFlags} lists one {@code { property, per, refuse, message }} per flagged boolean,
+     * {@code per} (the scoping relation's FK property) only when scoped and {@code refuse} with its
+     * conflict {@code message} only for {@code onConflict: refuse}. Absent when no field declares one,
+     * so a model without the key generates byte-identically.
+     */
+    private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
+        List<Map<String, Object>> flags = new ArrayList<>();
+        for (FieldIntent field : entity.getFields()) {
+            SingleIntent single = field.getSingle();
+            if (single == null) {
+                continue;
+            }
+            Map<String, Object> flag = new LinkedHashMap<>();
+            flag.put("property", IntentNaming.pascalCase(field.getName()));
+            RelationIntent per = single.getPer() == null ? null : CheckSupport.toOne(entity, single.getPer());
+            if (per != null) {
+                flag.put("per", IntentNaming.pascalCase(per.getName()));
+            }
+            if (single.isRefuse()) {
+                flag.put("refuse", "true");
+                flag.put("message",
+                        "Another " + IntentNaming.humanize(entity.getName()) + " is already " + IntentNaming.humanize(field.getName())
+                                + (per == null ? "" : " for this " + IntentNaming.humanize(per.getName())));
+            }
+            flags.add(flag);
+        }
+        if (!flags.isEmpty()) {
+            entityMap.put("singleFlags", flags);
+        }
+    }
+
     private static void putLifecycle(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
         LifecycleIntent lifecycle = entity.getLifecycle();
         RelationIntent status = lifecycle == null ? null : entityStatusRelation(entity);
@@ -4927,9 +4962,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
-    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels", "reports");
+    private static final Set<String> STRUCTURED_ATTRIBUTES =
+            Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
+                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
+                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

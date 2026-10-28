@@ -244,6 +244,12 @@ public class FieldIntent {
      */
     private StatusStampIntent stampOn;
 
+    /**
+     * Optional at-most-one-holder rule on a boolean field ({@code single: true} or {@code single: {
+     * per: <to-one relation>, onConflict: refuse }}, dirigible #8101). See {@link SingleIntent}.
+     */
+    private SingleIntent single;
+
     public String getFormat() {
         return format;
     }
@@ -583,6 +589,10 @@ public class FieldIntent {
 
     public void setStampOn(StatusStampIntent stampOn) {
         this.stampOn = stampOn;
+    }
+
+    public SingleIntent getSingle() {
+        return single;
     }
 
     public boolean isSensitive() {

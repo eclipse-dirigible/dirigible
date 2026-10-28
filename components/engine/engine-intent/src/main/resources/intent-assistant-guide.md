@@ -1273,6 +1273,25 @@ entities:
       - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: SUBMITTED }
 ```
 
+**A flag at most one row holds (`single:`).** For "the base currency", "the default unit", "the
+default bank account of a company", declare `single:` on the `boolean` field instead of a `unique:`
+(which allows only two rows) or a check (which cannot count sibling rows). `single: true` keeps one
+holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
+`manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
+the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
+must be a deliberate act - the write is then answered 409 while another row holds it. The form keeps
+the ordinary checkbox:
+
+```yaml
+entities:
+  - name: CompanyBankAccount
+    fields:
+      - { name: iban, type: string, length: 34 }
+      - { name: base, type: boolean, single: { per: Company } }
+    relations:
+      - { name: Company, kind: manyToOne, to: Company }
+```
+
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
 verbatim into that entity's generated repository, so a calculated-field action (or any custom class)
 can be referenced from the calculated fields by simple name. Pair it with `calculatedActionOnCreate`:
@@ -5061,6 +5080,7 @@ or a seeded name.
 | serviceTask `setField` value | a literal on a `string`/`text` field; exactly `"{now}"` on a `timestamp`/`date` field (the moment the step runs) - `{now}` nowhere else |
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
+| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |

@@ -10,6 +10,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasAgreeGuards = $agreeGuards && $agreeGuards.size() > 0)
 ## The status stamps (#7874): fields written with the moment of every move INTO their status.
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
+## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
+#set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
@@ -464,6 +466,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($hasSingleFlags)
+        // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
+        // it demotes and this row commit together or not at all.
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> saveInUnit(entity));
+    }
+
+    private ${name}Entity saveInUnit(${name}Entity entity) {
+#end
 #trimText()
 #roundDecimals()
 #applyDefaults()
@@ -553,6 +563,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // filed the record where it belongs, so the stamp follows the status actually written.
         applyStatusStamps(null, entity);
 #end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
+#end
 ## Allocated LAST, once every guard that can refuse this create has passed: the counter is a SEQUENCE,
 ## incremented in its own transaction so concurrent creates never serialize on it, which means an
 ## allocation cannot be rolled back with the insert - whatever it hands out is spent. A number consumed
@@ -602,6 +615,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#if($hasSingleFlags)
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+    }
+
+    private ${name}Entity updateInUnit(${name}Entity entity) {
+#end
 #trimText()
 #roundDecimals()
 #normalizeSubsets()
@@ -707,6 +726,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         applyStatusStamps(storedStatus(entity), entity);
 #end
 #end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
+#end
 #if($documentItem)
         // The document this line belongs to BEFORE the write: a full-row update may re-point the
         // line's FK to another document, and the one it leaves has no write of its own to resum it -
@@ -776,6 +798,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#if($hasSingleFlags)
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+    }
+
+    private ${name}Entity updateWithoutEventInUnit(${name}Entity entity) {
+#end
 #trimText()
 #roundDecimals()
 #normalizeSubsets()
@@ -819,6 +847,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($hasStatusStamps)
         applyStatusStamps(stampPrevious, entity);
+#end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
 #end
 #if($documentItem)
         // The document this line belongs to BEFORE the write - a system write can re-point the FK
@@ -1315,6 +1346,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
         ${name}Entity stored = findById(entity.${pkPropertyName});
         return stored == null ? null : stored.${statusStampProperty};
+    }
+#end
+#if($hasSingleFlags)
+
+    /**
+     * The single flags (intent {@code single:}): booleans at most one ${name} holds, fleet-wide or per
+     * scope. A write that sets one takes it over - the row holding it in the same scope is demoted by a
+     * targeted write publishing its "-updated", in this write's unit of work - or, declared
+     * {@code onConflict: refuse}, is answered 409 while another row holds it.
+     */
+## ponytail: two concurrent writers that each find no other holder can both commit one; a database
+## partial unique index (not portable to H2) or a lock on the scope would close it.
+    private void enforceSingleFlags(${name}Entity entity) {
+#foreach($flag in $singleFlags)
+        if (Boolean.TRUE.equals(entity.${flag.property})) {
+            for (${name}Entity holder : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                          .eq("${flag.property}", true)#if($flag.per)
+                                                                                                          .eq("${flag.per}", entity.${flag.per})#end)) {
+                if (java.util.Objects.equals(holder.${pkPropertyName}, entity.${pkPropertyName})) {
+                    continue;
+                }
+#if($flag.refuse == "true")
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${flag.messageArgsJava}));
+#else
+                updateProperties(holder.${pkPropertyName}, java.util.Map.<String, Object>of("${flag.property}", false),
+                        "${projectName}-${perspectiveName}-${name}-updated");
+#end
+            }
+        }
+#end
     }
 #end
 #if($entityStatusProperty != "")

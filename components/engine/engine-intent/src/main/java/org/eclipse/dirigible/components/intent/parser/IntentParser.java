@@ -103,6 +103,7 @@ import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.StatusStampIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
@@ -357,6 +358,7 @@ public final class IntentParser {
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
         wrapScalarNormalize(tree);
+        expandSingleShorthand(tree);
         normalizeOrderBy(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -432,6 +434,7 @@ public final class IntentParser {
         validateTransitions(model, entityNames, issues);
         validateLifecycles(model, issues);
         validateStatusStamps(model, issues);
+        validateSingleFlags(model, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -7044,6 +7047,44 @@ public final class IntentParser {
     }
 
     /**
+     * A field's {@code single: true} (#8101) is the empty mapping - fleet-wide, demoting - and
+     * {@code single: false} is removed, so the typed mapping and the unknown-key walk only ever see the
+     * object form, as {@link #normalizeDuplicable} does for an entity's {@code duplicable}.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void expandSingleShorthand(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("single")) {
+                    continue;
+                }
+                Object declared = field.get("single");
+                Map<Object, Object> writable = (Map<Object, Object>) field;
+                if (declared == null || Boolean.FALSE.equals(declared)) {
+                    writable.remove("single");
+                } else if (Boolean.TRUE.equals(declared)) {
+                    writable.put("single", new LinkedHashMap<>());
+                } else if (!(declared instanceof Map)) {
+                    issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] single [" + declared
+                            + "] is neither true/false nor a mapping - the object form takes per: and onConflict:");
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
      * A settlement's {@code order:} is EITHER one field ({@code order: date}) or a list of them
      * ({@code order: [date, number]}, issue #7556). Both map to the one typed list, so the scalar form
      * is wrapped on the raw tree here - before the typed mapping, where Gson would refuse a string for
@@ -11153,6 +11194,35 @@ public final class IntentParser {
                 String other = status == null ? null : stampedBy.putIfAbsent(status, field.getName());
                 if (other != null) {
                     issues.add(subject + " stamps the same status as field [" + other + "] - one field records one arrival");
+                }
+            }
+        }
+    }
+
+    /**
+     * Single flags ({@code single:}, #8101): a boolean at most one row holds, fleet-wide or per the
+     * value of one of the entity's own to-one relations. The flag is a boolean, the scope is a to-one
+     * (a collection has no column on this row to scope by), and a conflict either demotes the holder or
+     * is refused.
+     */
+    private static void validateSingleFlags(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            for (FieldIntent field : entity.getFields()) {
+                SingleIntent single = field.getSingle();
+                if (single == null) {
+                    continue;
+                }
+                String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] single";
+                if (!"boolean".equals(field.getType())) {
+                    issues.add(subject + " needs a boolean field, not [" + (field.getType() == null ? "string" : field.getType())
+                            + "] - it is the flag at most one row holds");
+                }
+                if (single.getPer() != null && CheckSupport.toOne(entity, single.getPer()) == null) {
+                    issues.add(subject + " per [" + single.getPer() + "] is not a manyToOne/oneToOne relation of [" + entity.getName()
+                            + "] - the scope is the record a holder belongs to");
+                }
+                if (single.getOnConflict() != null && !"demote".equals(single.getOnConflict()) && !single.isRefuse()) {
+                    issues.add(subject + " onConflict [" + single.getOnConflict() + "] is not one of: demote, refuse");
                 }
             }
         }

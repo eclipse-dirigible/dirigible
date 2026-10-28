@@ -63,7 +63,7 @@ final class EdmModelTransformation {
      */
     private static final List<String> ENTITY_STRUCTURED =
             List.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
-                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults");
+                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "singleFlags");
 
     /** The structured property attributes. */
     private static final List<String> PROPERTY_STRUCTURED = List.of("lookupColumns");
