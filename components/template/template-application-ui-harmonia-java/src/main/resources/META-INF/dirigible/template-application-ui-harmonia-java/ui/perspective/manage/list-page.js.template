@@ -411,6 +411,14 @@ document.addEventListener('alpine:init', () => {
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
     selectRow(row)   { this.selected = row; this.detailsOpen = true; this.refreshIcons(); this.syncSelectionUrl(row); },
+    // A click on a row acts on the row - except one that started in the row's own controls (the "..."
+    // menu, the tree toggle, a Delete button), which act on their own. The guard used to be @click.stop
+    // on those controls, which also kept the click from the document, where Harmonia closes an open
+    // menu - so every row menu opened stayed open and they stacked (#8259).
+    rowClicked(event, row) {
+      if (event.target.closest('[data-row-actions], [data-row-control]')) return;
+      this.selectRow(row);
+    },
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears, and take the record id back out of the URL (issue #7463).
     closeDetails()   { this.selected = null; this.detailsOpen = false; this.refreshIcons(); this.syncSelectionUrl(null); },

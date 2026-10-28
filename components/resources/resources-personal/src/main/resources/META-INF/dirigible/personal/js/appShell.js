@@ -354,7 +354,9 @@ document.addEventListener('alpine:init', () => {
             if (Array.isArray(g.items)) {
               // A navigation group: pull its SETTING entities into Settings, keep the rest in the sidebar.
               const isSetting = (it) => it.kind === 'SETTING' || g.id === 'settings';
-              settings.push(...g.items.filter(isSetting));
+              // Each setting remembers the group it came from, so a projection that lists the group
+              // keeps its settings as well as its sidebar items (#8138).
+              settings.push(...g.items.filter(isSetting).map(it => Object.assign({}, it, { groupId: g.id })));
               const keep = g.items.filter(it => !isSetting(it));
               if (g.id !== 'undefined-group' && keep.length) {
                 appGroups.push(Object.assign({}, g, { items: keep }));
@@ -754,12 +756,15 @@ document.addEventListener('alpine:init', () => {
     dashKpiReports() { return Alpine.store('reports').kpiReports().filter(r => this.inProjection(r.url)); },
     dashPreviewReports() { return Alpine.store('reports').previewReports().filter(r => this.inProjection(r.url)); },
 
-    /** Settings entities scoped to the projection: explicitly cherry-picked ones always show. */
+    /** Settings entities scoped to the projection: those of a group the projection lists (a group
+     *  means everything in it - sidebar items and settings, #8138), explicitly cherry-picked ones, and
+     *  those of a project with a visible sidebar item. */
     visibleSettingsItems() {
       const proj = this.activeProjection();
       if (!proj) return this.settingsItems;
+      const groupIds = proj.groups || [];
       const itemIds = proj.items || [];
-      return this.settingsItems.filter(it => itemIds.includes(it.id) || this.inProjection(it.path));
+      return this.settingsItems.filter(it => groupIds.includes(it.groupId) || itemIds.includes(it.id) || this.inProjection(it.path));
     },
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },

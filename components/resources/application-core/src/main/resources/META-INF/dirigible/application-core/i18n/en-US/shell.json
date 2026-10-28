@@ -156,7 +156,16 @@
       "false": "No",
       "min": "min",
       "max": "max",
-      "contains": "contains..."
+      "contains": "contains...",
+      "view": "View",
+      "moreActions": "More actions",
+      "chooseDate": "Choose date",
+      "dismiss": "Dismiss",
+      "notRun": "The report could not be run",
+      "retry": "Retry",
+      "noMatch": "No matching rows",
+      "noMatchHint": "Try adjusting the filters.",
+      "clearFilters": "Clear filters"
     },
     "notfound": {
       "title": "Page not found",

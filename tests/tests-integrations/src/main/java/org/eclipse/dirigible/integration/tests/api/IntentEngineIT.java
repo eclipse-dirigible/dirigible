@@ -4730,6 +4730,20 @@ class IntentEngineIT extends IntegrationTest {
                 "the report view should carry the filter panel and toolbar toggle");
         assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
                 "the report table should align and format cells from the column metadata");
+        // The page shape of #7390: one action row whose Chart / Table switch is the icon-only group
+        // every browse page carries (#7837), with Export / Print under More actions.
+        assertTrue(
+                view.contains("x-model=\"view\"") && view.contains("x-h-button-group-radio=\"'chart'\"")
+                        && view.contains("x-h-button-group-radio=\"'table'\""),
+                "the chart report should switch views through one button group");
+        assertTrue(view.contains("x-h-menu-trigger.dropdown") && view.contains("@click=\"exportCsv()\"")
+                && view.contains("@click=\"printReport()\""), "Export and Print should sit in the More actions menu");
+        assertTrue(view.contains("@click=\"refresh()\"") && view.contains("updatedTime()"),
+                "the report should carry the Refresh with its Updated stamp");
+        assertTrue(page.contains("conditions.length ? 'no-results' : 'empty'"),
+                "rows excluded by the column filters should read as no match, not as an empty report");
+        assertTrue(page.contains("this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Export failed.')"),
+                "a failed export should be shown beside the rows rather than lost in the error state");
         assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
         assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
         assertTrue(page.contains("limit: 20"), "an ordinary report should page in twenties");

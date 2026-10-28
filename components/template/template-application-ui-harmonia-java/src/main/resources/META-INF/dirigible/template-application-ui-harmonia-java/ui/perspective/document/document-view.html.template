@@ -520,7 +520,7 @@
                   </template>
                 </td>
               </template>
-              <td x-h-table-cell data-row-actions x-show="!isPreview" @click.stop>
+              <td x-h-table-cell data-row-actions x-show="!isPreview">
                 <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
                   <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                 </button>

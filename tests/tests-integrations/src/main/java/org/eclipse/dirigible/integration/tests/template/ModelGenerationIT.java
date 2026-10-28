@@ -181,6 +181,9 @@ class ModelGenerationIT extends IntegrationTest {
             // The LIST layout (an entity browsed read-only, no manage page), with a relation column -
             // the one layout no other fixture declares (#7721).
             new Case(CATALOG, TEMPLATE_APPLICATION, false), //
+            // The in-application report pages (#7390): a REPORT_TABLE and a REPORT_BAR entity, the
+            // layouts no other fixture declares.
+            new Case("reports.model", TEMPLATE_APPLICATION, false), //
             // The glue fixture's posting is deliberately written in the shape a .glue committed before
             // #7163 holds - a header assignment carrying its expression alone, none of the keys the
             // hoisted-local comparison reads. Velocity renders an undefined reference as its own
@@ -189,6 +192,8 @@ class ModelGenerationIT extends IntegrationTest {
             new Case("orders.glue", TEMPLATE_GLUE, false), //
             new Case("leave-request.form", TEMPLATE_FORM, false), //
             new Case("revenue.report", TEMPLATE_REPORT, false), //
+            // The same report drawn as a chart: the page's Chart / Table switch and chart surface.
+            new Case("revenue-chart.report", TEMPLATE_REPORT, false), //
             // The mapping compiler: the one template whose preparation derives Java expressions rather
             // than marshalling a model.
             new Case("prices.mapping", TEMPLATE_MAPPING, false), //

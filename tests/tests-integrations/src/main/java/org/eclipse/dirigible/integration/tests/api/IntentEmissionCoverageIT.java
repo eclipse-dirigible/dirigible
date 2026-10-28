@@ -3893,7 +3893,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!payslipMyDoc.contains("saveItem()"), "personalReadOnly my document must not render the item dialog's Save");
         assertTrue(!payslipMyDoc.contains("save()") && !payslipMyDoc.contains("deleteOpen = true"),
                 "personalReadOnly my document must not render the Save or Delete footer buttons");
-        assertTrue(payslipMyDoc.contains("openItem(row)"), "personalReadOnly my document must still open an item for reading");
+        // The line opens through the page's itemRowClicked, which skips the row's own controls (#8259).
+        assertTrue(payslipMyDoc.contains("itemRowClicked($event, row)"),
+                "personalReadOnly my document must still open an item for reading");
         // Positive control on the document shape too - the writable personal chat keeps its composer.
         String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
         assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
@@ -3914,7 +3916,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
                         && !timesheetMyDoc.contains("saveItem()"),
                 "a see-only items child must strip the items Add, the per-row Delete and the item dialog's Save");
-        assertTrue(timesheetMyDoc.contains("openItem(row)"), "a see-only items child must still open a line for reading");
+        assertTrue(timesheetMyDoc.contains("itemRowClicked($event, row)"), "a see-only items child must still open a line for reading");
         // The non-item panel is built at runtime, so the refusal travels as the panel's own flag.
         String timesheetMyDocPage = contentOf("gen/emission/js/components/pages/my/TimesheetMyDocumentPage.js");
         assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
