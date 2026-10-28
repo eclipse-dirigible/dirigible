@@ -164,7 +164,7 @@
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>5.5.0</okhttp.version>
+        <okhttp.version>5.5.1</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
 
@@ -253,7 +253,7 @@
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>26.3.6</i18next.version>
         <alpinejs.version>3.17.4</alpinejs.version>
-        <harmonia.version>3.6.1</harmonia.version>
+        <harmonia.version>3.6.2</harmonia.version>
         <opensans.version>5.3.0</opensans.version>
         <lucide.version>1.48.0</lucide.version>
         <pinecone-router.version>7.6.0</pinecone-router.version>
@@ -1039,7 +1039,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.31.1</version>
+                <version>2.33.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

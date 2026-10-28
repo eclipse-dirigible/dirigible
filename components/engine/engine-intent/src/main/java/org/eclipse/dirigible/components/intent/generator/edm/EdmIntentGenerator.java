@@ -50,6 +50,7 @@ import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.generator.report.ReportIntentGenerator;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -71,6 +72,7 @@ import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
@@ -172,6 +174,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName, IntentSettings settings) {
         return buildDocument(null, model, intentName, settings).modelJson;
+    }
+
+    /**
+     * Test seam: build the {@code .model} JSON within the given context - the one path that also
+     * carries what needs the project, such as the report manifest. Never use in production code.
+     */
+    static Map<String, Object> buildModelJsonForTest(IntentGenerationContext context) {
+        return buildDocument(context, context.getModel(), IntentNaming.baseName(context), new IntentSettings()).modelJson;
     }
 
     /**
@@ -731,6 +741,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             putWorkflowStatus(entityMap, entity, model, displacedStatuses);
             putLifecycle(entityMap, entity, model);
             putStatusStamps(entityMap, entity);
+            putSingleFlags(entityMap, entity);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
@@ -894,6 +905,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, String> processTaskLabels = buildProcessTaskLabels(model);
         if (!processTaskLabels.isEmpty()) {
             body.put("processTaskLabels", processTaskLabels);
+        }
+        // The application's reports, for the Harmonia shell to bake into config.js: its Reports
+        // section and dashboard tiles then need no runtime discovery through the core repository API,
+        // which only ADMINISTRATOR and OPERATOR may call (#8277). A model without the key keeps the
+        // shell's discovery, for the reports a developer generated outside the intent. The
+        // context-less test seams build no report.
+        if (context != null) {
+            List<Map<String, Object>> reports = ReportIntentGenerator.shellManifest(context);
+            if (!reports.isEmpty()) {
+                body.put("reports", reports);
+            }
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
@@ -1841,6 +1863,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
@@ -1949,8 +1972,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                    .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
+    }
+
+    /**
+     * Emit a {@code fixedAfterCreate: true} relation (#7903) as two scalars: {@code fixedAfterCreate} -
+     * which the REST controllers refuse a changed value of on update and the forms render read-only on
+     * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
+     * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
+     * catalog translates it like any check message. Nothing is emitted for an ordinary relation.
+     */
+    private static void putFixedAfterCreate(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
+        if (!relation.isFixedAfterCreate()) {
+            return;
+        }
+        p.put("fixedAfterCreate", "true");
+        p.put("fixedAfterCreateMessage",
+                "'" + IntentNaming.pascalCase(relation.getName()) + "' cannot change once the " + ownerEntity + " is created");
     }
 
     /**
@@ -3320,6 +3360,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entityMap.put("statusStamps", stamps);
     }
 
+    /**
+     * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
+     * {@code singleFlags} lists one {@code { property, per, refuse, message }} per flagged boolean,
+     * {@code per} (the scoping relation's FK property) only when scoped and {@code refuse} with its
+     * conflict {@code message} only for {@code onConflict: refuse}. Absent when no field declares one,
+     * so a model without the key generates byte-identically.
+     */
+    private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
+        List<Map<String, Object>> flags = new ArrayList<>();
+        for (FieldIntent field : entity.getFields()) {
+            SingleIntent single = field.getSingle();
+            if (single == null) {
+                continue;
+            }
+            Map<String, Object> flag = new LinkedHashMap<>();
+            flag.put("property", IntentNaming.pascalCase(field.getName()));
+            RelationIntent per = single.getPer() == null ? null : CheckSupport.toOne(entity, single.getPer());
+            if (per != null) {
+                flag.put("per", IntentNaming.pascalCase(per.getName()));
+            }
+            if (single.isRefuse()) {
+                flag.put("refuse", "true");
+                flag.put("message",
+                        "Another " + IntentNaming.humanize(entity.getName()) + " is already " + IntentNaming.humanize(field.getName())
+                                + (per == null ? "" : " for this " + IntentNaming.humanize(per.getName())));
+            }
+            flags.add(flag);
+        }
+        if (!flags.isEmpty()) {
+            entityMap.put("singleFlags", flags);
+        }
+    }
+
     private static void putLifecycle(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
         LifecycleIntent lifecycle = entity.getLifecycle();
         RelationIntent status = lifecycle == null ? null : entityStatusRelation(entity);
@@ -4471,10 +4544,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit the DOCUMENT-level metadata as attributes of the {@code <model>} element: the identity
      * scalars ({@code title}, {@code description}, {@code icon}) verbatim, and the structured values
-     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels}) as
-     * JSON strings - the same flat-attribute mechanism the entity/property level uses, for the same
-     * reason: a flat attribute survives both the mxGraph cell round-trip of a live editor save and the
-     * {@code .edm}-to-{@code .model} regeneration, which a nested element would not.
+     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels},
+     * {@code reports}) as JSON strings - the same flat-attribute mechanism the entity/property level
+     * uses, for the same reason: a flat attribute survives both the mxGraph cell round-trip of a live
+     * editor save and the {@code .edm}-to-{@code .model} regeneration, which a nested element would
+     * not.
      *
      * <p>
      * Without this the {@code <model>} element carried NO attributes at all, so everything the
@@ -4888,9 +4962,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
-    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+    private static final Set<String> STRUCTURED_ATTRIBUTES =
+            Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
+                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
+                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

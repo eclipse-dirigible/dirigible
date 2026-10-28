@@ -37,6 +37,7 @@
       "inputSearch": "Търсене в {{name, lowercase}}...",
       "inputEnter": "Въведете {{name}}...",
       "inputSelect": "Изберете {{name}}...",
+      "maxLengthReached": "Максимум {{count}} символа",
       "noData": "Няма налични данни.",
       "noDataYet": "Все още няма {{name, lowercase}}",
       "getStarted": "Започнете, като създадете първия запис.",

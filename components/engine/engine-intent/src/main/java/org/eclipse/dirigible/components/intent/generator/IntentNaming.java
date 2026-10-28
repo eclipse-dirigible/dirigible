@@ -21,6 +21,9 @@ import java.util.Locale;
  */
 public final class IntentNaming {
 
+    /** The perspective every standalone report's controller is generated under. */
+    private static final String REPORTS_PERSPECTIVE = "Reports";
+
     private IntentNaming() {}
 
     /**
@@ -157,6 +160,34 @@ public final class IntentNaming {
      */
     public static String eventsPackage(IntentGenerationContext context) {
         return "gen.events." + javaModule(context);
+    }
+
+    /**
+     * The folder a standalone report's page is served from:
+     * {@code /services/web/<project>/gen/<report folder>/reports/<Report>}. A report is generated from
+     * its own {@code <Report>.report}, so its generation folder is the report's name - not the intent's
+     * base name - sanitized for its Java and its page alike (#7889).
+     *
+     * @param project the project name
+     * @param report the report's name
+     * @return the page folder URL, without a trailing slash
+     */
+    public static String reportPageFolderUrl(String project, String report) {
+        return "/services/web/" + project + "/gen/" + javaIdentifier(report) + "/reports/" + report;
+    }
+
+    /**
+     * The URL of a standalone report's generated controller:
+     * {@code /services/java/<project>/gen/<report folder>/api/reports/<Report>Controller}, beside the
+     * page {@link #reportPageFolderUrl} names.
+     *
+     * @param project the project name
+     * @param report the report's name
+     * @return the controller URL
+     */
+    public static String reportControllerUrl(String project, String report) {
+        return "/services/java/" + project + "/gen/" + javaIdentifier(report) + "/api/" + javaIdentifier(REPORTS_PERSPECTIVE) + "/" + report
+                + "Controller";
     }
 
     /**

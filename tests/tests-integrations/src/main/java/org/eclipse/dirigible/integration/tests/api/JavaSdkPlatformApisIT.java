@@ -52,12 +52,16 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
 
     private static final String PROJECT = "java-sdk-platform-apis-it";
     private static final String JOB_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/platformapis/SdkManagedJob.java";
+    private static final String PARAMETERISED_JOB_PATH =
+            IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/platformapis/SdkParameterisedJob.job";
     private static final String CONTROLLER_PATH =
             IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/platformapis/PlatformApisController.java";
     private static final String ENDPOINT = "/services/java/" + PROJECT + "/platformapis/PlatformApisController";
 
     /** A client-Java JobHandler's job is named after its class. */
     private static final String JOB = "platformapis.SdkManagedJob";
+    /** A .job file's job is named after the file. */
+    private static final String PARAMETERISED_JOB = "SdkParameterisedJob";
     private static final String LOGGED_MESSAGE = "logged through the Java SDK";
     private static final String TOKEN_RESPONSE = "{\"access_token\":\"it-token\",\"token_type\":\"Bearer\",\"expires_in\":60}";
 
@@ -95,7 +99,7 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
     void cleanup() {
         server.stop(0);
         boolean cleaned = false;
-        for (String path : new String[] {CONTROLLER_PATH, JOB_PATH}) {
+        for (String path : new String[] {CONTROLLER_PATH, JOB_PATH, PARAMETERISED_JOB_PATH}) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
                 cleaned = true;
@@ -112,7 +116,7 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
 
         // One pass: a compile-readiness retry re-runs the whole sequence, and every step is relative to
         // the state the pass found, so a re-run holds as well.
-        restAssuredExecutor.execute(() -> assertEquals("disabled,enabled,ran,refused,logged,listed", call("/scheduler")),
+        restAssuredExecutor.execute(() -> assertEquals("disabled,enabled,ran,refused,logged,listed,described", call("/scheduler")),
                 ASSERTION_TIMEOUT_SECONDS);
 
         assertTrue(jobLogService.findByJob(JOB)
@@ -147,6 +151,8 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
 
     private void publish() {
         repository.createResource(JOB_PATH, jobSource().getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        repository.createResource(PARAMETERISED_JOB_PATH, parameterisedJobSource().getBytes(StandardCharsets.UTF_8), false,
+                "application/json", true);
         repository.createResource(CONTROLLER_PATH, controllerSource().getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
         synchronizationProcessor.forceProcessSynchronizers();
     }
@@ -203,6 +209,22 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
                 """;
     }
 
+    /**
+     * A job declaring a parameter: its parameter refers back to it, which the scheduler's JSON must not
+     * follow (#8145). Never scheduled to fire, so its handler is never looked up.
+     */
+    private static String parameterisedJobSource() {
+        return """
+                {
+                    "expression": "0 0 0 1 1 ? 2099",
+                    "group": "defined",
+                    "handler": "%s/platformapis/never-run.ts",
+                    "description": "A job declaring a parameter",
+                    "parameters": [{"name": "region", "type": "string", "defaultValue": "EU"}]
+                }
+                """.formatted(PROJECT);
+    }
+
     private static String controllerSource() {
         return """
                 package platformapis;
@@ -225,6 +247,7 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
                 public class PlatformApisController {
 
                     private static final String JOB = "%s";
+                    private static final String PARAMETERISED_JOB = "%s";
 
                     @Get("/scheduler")
                     public String scheduler() throws Exception {
@@ -249,7 +272,9 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
                         Scheduler.info(JOB, "%s");
                         steps.add("logged");
 
-                        steps.add(Scheduler.list().contains(JOB) ? "listed" : "unlisted");
+                        String jobs = Scheduler.list();
+                        steps.add(jobs.contains(JOB) && jobs.contains(PARAMETERISED_JOB) ? "listed" : "unlisted");
+                        steps.add(Scheduler.getJob(PARAMETERISED_JOB).contains("region") ? "described" : "undescribed");
                         return String.join(",", steps);
                     }
 
@@ -282,6 +307,6 @@ class JavaSdkPlatformApisIT extends IntegrationTest {
                         return Boolean.TRUE.equals(Converter.fromJson(Scheduler.getJob(JOB), Map.class).get("enabled"));
                     }
                 }
-                """.formatted(JOB, LOGGED_MESSAGE);
+                """.formatted(JOB, PARAMETERISED_JOB, LOGGED_MESSAGE);
     }
 }

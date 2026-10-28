@@ -2316,9 +2316,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Status, kind: manyToOne, to: PermitStatus, function: EntityStatus, init: SUBMITTED }
             """;
 
+    // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
+    // on a create or an update; a Purse's base flag changes hands within its tender only, and its
+    // preferred flag refuses a second holder in the tender with 409.
+    private static final String INTENT_YAML_SINGLE_FLAGS = """
+              - name: Tender
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 10 }
+                  - { name: base, type: boolean, single: true }
+              - name: Purse
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: label,     type: string, length: 30 }
+                  - { name: base,      type: boolean, single: { per: Tender } }
+                  - { name: preferred, type: boolean, single: { per: Tender, onConflict: refuse } }
+                relations:
+                  - { name: Tender, kind: manyToOne, to: Tender }
+            """;
+
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
                                                                   .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
+                                                                  .concat(INTENT_YAML_SINGLE_FLAGS)
                                                                   .concat(INTENT_YAML_GLUE);
 
     @Autowired
@@ -2523,7 +2543,45 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
         assertStatusStampsRuntime();
+        assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
+    }
+
+    /**
+     * {@code single:} (#8101), generated, published and running: a write that takes a single flag
+     * demotes the row that held it - fleet-wide, or within its scope only - and a refusing flag answers
+     * 409 with its message while another row of the scope holds it, writing nothing.
+     */
+    private void assertSingleFlagsRuntime() {
+        String tenders = "/tender/TenderController";
+        int euro = createRecord(tenders, "{\"Code\":\"EUR\",\"Base\":true}");
+        int lev = createRecord(tenders, "{\"Code\":\"BGN\",\"Base\":true}");
+        assertEquals(Boolean.FALSE, readRecord(tenders, euro).get("Base"), "a create taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, lev).get("Base"));
+        updateRecord(tenders, euro, "{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":true}", 200);
+        assertEquals(Boolean.FALSE, readRecord(tenders, lev).get("Base"), "an update taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, euro).get("Base"));
+
+        String purses = "/purse/PurseController";
+        int first = createRecord(purses, "{\"Label\":\"first\",\"Tender\":" + euro + ",\"Base\":true,\"Preferred\":true}");
+        int second = createRecord(purses, "{\"Label\":\"second\",\"Tender\":" + euro + ",\"Base\":true}");
+        int other = createRecord(purses, "{\"Label\":\"other\",\"Tender\":" + lev + ",\"Base\":true,\"Preferred\":true}");
+        assertEquals(Boolean.FALSE, readRecord(purses, first).get("Base"), "the holder in the same scope is demoted");
+        assertEquals(Boolean.TRUE, readRecord(purses, second).get("Base"));
+        Map<String, Object> otherScope = readRecord(purses, other);
+        assertEquals(Boolean.TRUE, otherScope.get("Base"), "a holder in another scope keeps its flag: " + otherScope);
+        assertEquals(Boolean.TRUE, otherScope.get("Preferred"), "a refusing flag is single per scope, not fleet-wide: " + otherScope);
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + second + ",\"Label\":\"second\",\"Tender\":" + euro
+                                                         + ",\"Base\":true,\"Preferred\":true}")
+                                                 .when()
+                                                 .put(API + purses + "/" + second)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("Another Purse is already Preferred for this Tender")));
+        assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
+        assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
     }
 
     /**
@@ -3068,11 +3126,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a composition master must delete the children it owns through their own repository, got: " + entryRepository);
         // ...and the record and its children leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through would commit some of the
-        // children and keep the record - the very orphan state the cascade exists to prevent.
-        assertTrue(
-                entryRepository.contains("UnitOfWork.run(() -> deleteWithOwnedChildren(entity))")
-                        && entryRepository.contains("UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id))"),
-                "the cascade must run as one unit of work with the record's own delete, got: " + entryRepository);
+        // children and keep the record - the very orphan state the cascade exists to prevent. The
+        // refusal runs in that same unit, ahead of the children: the record is locked before its
+        // references are counted (#8252).
+        assertTrue(Pattern.compile(
+                "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(entity\\.Id\\);\\s*deleteWithOwnedChildren\\(entity\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find()
+                && Pattern.compile(
+                        "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(id\\);\\s*deleteByIdWithOwnedChildren\\(id\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find(),
+                "the cascade must run as one unit of work with the record's own delete, its refusal first, got: " + entryRepository);
         // ...and the author's alternative is the refusal, on the child that declared it - naming both
         // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
         assertTrue(
@@ -3886,7 +3951,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!payslipMyDoc.contains("saveItem()"), "personalReadOnly my document must not render the item dialog's Save");
         assertTrue(!payslipMyDoc.contains("save()") && !payslipMyDoc.contains("deleteOpen = true"),
                 "personalReadOnly my document must not render the Save or Delete footer buttons");
-        assertTrue(payslipMyDoc.contains("openItem(row)"), "personalReadOnly my document must still open an item for reading");
+        // The line opens through the page's itemRowClicked, which skips the row's own controls (#8259).
+        assertTrue(payslipMyDoc.contains("itemRowClicked($event, row)"),
+                "personalReadOnly my document must still open an item for reading");
         // Positive control on the document shape too - the writable personal chat keeps its composer.
         String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
         assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
@@ -3907,7 +3974,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
                         && !timesheetMyDoc.contains("saveItem()"),
                 "a see-only items child must strip the items Add, the per-row Delete and the item dialog's Save");
-        assertTrue(timesheetMyDoc.contains("openItem(row)"), "a see-only items child must still open a line for reading");
+        assertTrue(timesheetMyDoc.contains("itemRowClicked($event, row)"), "a see-only items child must still open a line for reading");
         // The non-item panel is built at runtime, so the refusal travels as the panel's own flag.
         String timesheetMyDocPage = contentOf("gen/emission/js/components/pages/my/TimesheetMyDocumentPage.js");
         assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
@@ -4310,6 +4377,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
         String job = contentOf("gen/events/emission/MonthlyClaimsJob.java");
+        // #8235: the fixture declares the Spring-style "0 0 4 1 * *" (day-of-month AND day-of-week
+        // set), which Quartz refuses - the job used to generate and publish clean, be listed as enabled
+        // and never fire. The generated cron() must carry the Quartz form; whether the scheduler then
+        // really accepts it is assertScheduledJobsRegistered() below.
+        assertTrue(job.contains("return \"0 0 4 1 * ?\";"), "a schedule's cron must reach Quartz with the unused day field as ?: " + job);
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
@@ -4335,6 +4407,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // publish (the loads became locals of the try block); the ordering is pinned once more, on a
         // real document.
         String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        assertTrue(dunning.contains("return \"0 0 5 1 * ?\";"), "the Quartz form of the declared cron (#8235): " + dunning);
         assertTrue(
                 dunning.contains("htmlPart.put(\"contentType\", \"text/html\");")
                         && dunning.contains("org.eclipse.dirigible.sdk.mail.Html.escape((Person == null ? null : Person.Name))"),
@@ -4356,6 +4429,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // typed local read for a `long` comparison and for an Integer foreign key, and the publish +
         // client-Java javac below is the first thing that proves it.
         String escalating = contentOf("gen/events/emission/BillDunningJob.java");
+        assertTrue(escalating.contains("return \"0 0 7 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + escalating);
         assertTrue(
                 escalating.contains("ReminderLevelEntity escalationCandidate = null;")
                         && escalating.contains("ReminderLevelEntity escalation = escalationCandidate;"),
@@ -4393,6 +4467,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // send time, not the key quoted as an address: emitted as a literal, the mail went to
         // `@config:BILLING_OPS_EMAIL` and the only trace anywhere was the delivery failure.
         String stuck = contentOf("gen/events/emission/StuckBillsJob.java");
+        assertTrue(stuck.contains("return \"0 0 6 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + stuck);
         assertTrue(stuck.contains("to = org.eclipse.dirigible.sdk.core.Configurations.get(\"BILLING_OPS_EMAIL\")"),
                 "a @config: recipient must resolve through the configuration facade at send time: " + stuck);
         assertFalse(stuck.contains("\"@config:BILLING_OPS_EMAIL\""), "the key must never reach the job as the address: " + stuck);
@@ -7522,6 +7597,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertGeneratesStepAxisRuntime();
         assertGeneratesItemsRuleRuntime();
         assertStalenessSweepRuntime();
+        assertScheduledJobsRegistered();
         assertFileFamiliesRuntime();
     }
 
@@ -7545,6 +7621,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200),
                 30);
+    }
+
+    /**
+     * Every schedule of the fixture is a registered, enabled job on the shared scheduler (#8235).
+     *
+     * <p>
+     * The emitted text cannot show this. Four of the schedules are declared Spring-style, with
+     * day-of-month AND day-of-week set, which the Quartz parser refuses; before the fix the generated
+     * {@code cron()} was handed over unchanged, and the registration saved the {@code Job} row and then
+     * failed the trigger build - so {@code /services/jobs} listed the job as enabled while it never
+     * fired, and the only trace was a WARN per reconciliation pass. The consumer now writes no row for
+     * a cron the scheduler cannot run, so a listed, enabled row is one Quartz accepted. The
+     * registration lands asynchronously after the publish, hence the retry.
+     */
+    private void assertScheduledJobsRegistered() {
+        for (String job : List.of("MonthlyClaimsJob", "OverdueBillsJob", "BillDunningJob", "StuckBillsJob", "StaleClaimsJob")) {
+            String name = "gen.events.emission." + job;
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get("/services/jobs")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body("findAll { it.name == '" + name + "' && it.enabled == true }.size()",
+                                                             equalTo(1)),
+                    30);
+        }
     }
 
     /**

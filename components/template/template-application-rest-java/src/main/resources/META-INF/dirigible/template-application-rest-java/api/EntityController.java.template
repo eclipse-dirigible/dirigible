@@ -106,7 +106,7 @@ public class ${name}Controller {
     @Documentation("List ${name}")
     public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
                                       @QueryParam("$offset") Integer offset#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
-                                      @QueryParam("${masterEntityId}") String ${masterEntityId}#end) {
+                                      @QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}#end) {
 #if($needsRoles)
         checkPermissions("read");
 #end
@@ -308,7 +308,7 @@ public class ${name}Controller {
 
     @Post("/upload")
     @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
-    public List<${name}Entity> upload(@QueryParam("${masterEntityId}") Integer ${masterEntityId}) {
+    public List<${name}Entity> upload(@QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}) {
 #if($needsRoles)
         checkPermissions("write");
 #end
@@ -376,6 +376,9 @@ public class ${name}Controller {
 #end
 #if($workflowStatusProperty)
         applyWorkflowStatus(id, entity);
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+        applyFixedAfterCreate(id, entity);
 #end
 #if($masterLock)
         // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
@@ -949,6 +952,27 @@ public class ${name}Controller {
 
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+    // Relations fixed after create (intent `fixedAfterCreate: true`, dirigible #7903): picked on the
+    // New form and fixed from then on. An absent value is not a change - a caller PUTs the fields its
+    // form edits - so it is taken from the stored row; a value that DIFFERS is refused with a 409 in
+    // the reader's language. System writers (roll-ups, workflow steps, generates) reach the repository
+    // directly, never this controller, so they are unaffected.
+    private void applyFixedAfterCreate(Object id, ${name}Entity entity) {
+        ${name}Entity stored = repository.findOne(id).orElse(null);
+        if (stored == null) {
+            return;
+        }
+#foreach($fixed in $fixedAfterCreateRelations)
+        if (entity.${fixed.name} == null) {
+            entity.${fixed.name} = stored.${fixed.name};
+        } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
 
 #end
 #if($processDeleteGuards)

@@ -23,87 +23,120 @@
     </style>
   </head>
   <body class="vbox size-full" x-data="reportPage" x-cloak>
-    <div class="vbox size-full">
-      <!-- Hidden in preview mode (the dashboard tile): no title/badge/toolbar, just the data. -->
-      <div x-show="!preview" x-h-toolbar data-variant="transparent">
-        <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName)"></span>
+    <!-- The page gutter belongs to the page, not to the dashboard tile (?preview=1) that embeds it:
+         the tile's card already frames the rows. -->
+    <div class="vbox size-full gap-4" :class="preview ? '' : 'p-4'">
+      <!-- One action row, the manage list's (#7491): what the report is, then its Filters, and on the
+           right the Refresh with its Updated stamp, the Chart / Table switch and a More actions menu
+           for Export and Print. Unlike a list page this one keeps its title: the page is a document
+           of its own, opened at its own URL or in the application shell's Reports, where no
+           breadcrumb names it. Hidden in preview mode (the dashboard tile): just the data. -->
+      <div x-show="!preview" class="hbox flex-wrap items-center gap-2">
+        <h1 class="truncate text-xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName)"></h1>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="T('application-core:shell.report.rows', '{{count}} rows', { count: count })"></span>
-        <div x-h-toolbar-spacer></div>
-#if($chart)
-        <button x-h-button data-variant="outline" data-size="sm" @click="toggleView()">
-          <svg x-h-lucide role="presentation" data-lucide="table-2" x-show="view === 'chart'"></svg>
-          <svg x-h-lucide role="presentation" data-lucide="chart-column" x-show="view !== 'chart'"></svg>
-          <span x-text="view === 'chart' ? T('application-core:shell.report.table', 'Table') : T('application-core:shell.report.chart', 'Chart')"></span>
-        </button>
-#end
-        <button x-h-button data-variant="outline" data-size="sm" @click="showFilters = !showFilters; refreshIcons()">
+        <button x-h-button data-variant="outline" :data-toggled="showFilters" :aria-expanded="showFilters ? 'true' : 'false'" aria-controls="report-filters" @click="showFilters = !showFilters">
           <svg role="presentation" x-h-lucide data-lucide="filter"></svg><span x-text="T('application-core:shell.report.filters', 'Filters')"></span>
           <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
         </button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="load()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.report.refresh', 'Refresh')"></span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('application-core:shell.report.export', 'Export')"></span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('application-core:shell.report.print', 'Print')"></span></button>
+        <!-- A re-read is in flight: the rows on screen stay (see load(quiet)), this only signals it. -->
+        <span x-show="reloading" x-h-spinner aria-hidden="true"></span>
+        <div class="flex-1"></div>
+        <!-- The Inbox's Refresh (#8130): re-reads under the parameters, filters and page in force,
+             and the stamp says how old the rows on screen are. -->
+        <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: updatedTime() })"></span>
+        <button x-h-button data-variant="outline" @click="refresh()">
+          <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.report.refresh', 'Refresh')"></span>
+        </button>
+#if($chart)
+        <!-- The view switch (#7837): one icon-only single-choice group, the same shape every browse
+             page carries. Both views draw the same fetched rows. -->
+        <div x-h-button-group x-model="view" :aria-label="T('application-core:shell.report.view', 'View')">
+          <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'chart'"
+                  :aria-label="T('application-core:shell.report.chart', 'Chart')" :title="T('application-core:shell.report.chart', 'Chart')">
+            <svg role="presentation" x-h-lucide data-lucide="chart-column"></svg>
+          </button>
+          <button type="button" x-h-button data-variant="outline" data-size="icon" x-h-button-group-radio="'table'"
+                  :aria-label="T('application-core:shell.report.table', 'Table')" :title="T('application-core:shell.report.table', 'Table')">
+            <svg role="presentation" x-h-lucide data-lucide="table"></svg>
+          </button>
+        </div>
+#end
+        <button x-h-button data-variant="outline" data-size="icon" x-h-menu-trigger.dropdown
+                :aria-label="T('application-core:shell.report.moreActions', 'More actions')">
+          <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+        </button>
+        <ul x-h-menu data-align="bottom-end">
+          <!-- Both take the FULL filtered result, not the page on screen. -->
+          <li x-h-menu-item :aria-disabled="state !== 'default'" @click="exportCsv()">
+            <svg role="presentation" x-h-lucide data-lucide="download"></svg>
+            <span x-text="T('application-core:shell.report.export', 'Export')"></span>
+          </li>
+          <li x-h-menu-item :aria-disabled="state !== 'default'" @click="printReport()">
+            <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
+            <span x-text="T('application-core:shell.report.print', 'Print')"></span>
+          </li>
+        </ul>
       </div>
 
       <!-- Declared report parameters (the .report `parameters` block - e.g. the balance report's
            fromDate/toDate window): first-class inputs sent by name with every query. An empty value
            uses the parameter's server-side default. Renders nothing for parameter-less reports. -->
-      <div x-show="!preview && reportParams.length" class="hbox items-end gap-2 mx-4 flex-wrap">
-        <template x-for="p in reportParams" :key="p.name">
-          <div class="vbox">
-            <label class="text-xs text-muted-foreground" x-text="paramLabel(p.name)"></label>
+      <div x-show="!preview && reportParams.length" class="hbox items-end gap-2 flex-wrap">
+        <template x-for="(p, pi) in reportParams" :key="p.name">
+          <div class="vbox gap-1">
+            <label x-h-label :for="'report-param-' + pi" x-text="paramLabel(p.name)"></label>
             <template x-if="p.kind === 'date'">
               <div x-h-date-picker>
-                <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
-                <button x-h-date-picker-trigger aria-label="Pick date"></button>
+                <input type="text" :id="'report-param-' + pi" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
+                <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
                 <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="params[p.name]"></div>
               </div>
             </template>
             <template x-if="p.kind === 'number'">
-              <div x-h-input-number><input type="number" step="any" x-model.number="params[p.name]" @keydown.enter="applyFilters()" /></div>
+              <div x-h-input-number><input type="number" step="any" :id="'report-param-' + pi" x-model.number="params[p.name]" @keydown.enter="applyFilters()" /></div>
             </template>
             <template x-if="p.kind === 'text'">
-              <input x-h-input type="text" x-model="params[p.name]" @keydown.enter="applyFilters()" />
+              <input x-h-input type="text" :id="'report-param-' + pi" x-model="params[p.name]" @keydown.enter="applyFilters()" />
             </template>
           </div>
         </template>
-        <button x-h-button data-size="sm" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
+        <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
       </div>
 
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
            boolean -> select, text -> contains. Applied server-side (the query is wrapped with the
            conditions), so pagination, count and export all reflect them. -->
-      <div x-show="showFilters && !preview" x-h-card class="mx-4">
+      <div id="report-filters" x-show="showFilters && !preview" x-h-card>
         <div x-h-card-content class="vbox gap-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
-            <template x-for="col in reportColumns" :key="col.key">
-              <div class="vbox">
-                <label class="text-xs text-muted-foreground" x-text="col.key"></label>
+            <template x-for="(col, ci) in reportColumns" :key="col.key">
+              <div class="vbox gap-1">
+                <label x-h-label :for="'report-filter-' + ci" x-text="col.key"></label>
                 <template x-if="col.kind === 'date'">
                   <div class="hbox gap-1 items-center">
                     <div x-h-date-picker>
-                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
-                      <button x-h-date-picker-trigger aria-label="From date"></button>
+                      <input type="text" :id="'report-filter-' + ci" :placeholder="HarmoniaFormat.dateHint()" :aria-label="col.key + ' ' + T('application-core:shell.list.dateFrom', 'From')" @keydown.enter="applyFilters()" />
+                      <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
                       <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].from"></div>
                     </div>
                     <span x-h-text.muted>&ndash;</span>
                     <div x-h-date-picker>
-                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" @keydown.enter="applyFilters()" />
-                      <button x-h-date-picker-trigger aria-label="To date"></button>
+                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="col.key + ' ' + T('application-core:shell.list.dateTo', 'To')" @keydown.enter="applyFilters()" />
+                      <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
                       <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].to"></div>
                     </div>
                   </div>
                 </template>
                 <template x-if="col.kind === 'number'">
                   <div class="hbox gap-1 items-center">
-                    <div x-h-input-number><input type="number" step="any" :placeholder="T('application-core:shell.report.min', 'min')" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
+                    <div x-h-input-number><input type="number" step="any" :id="'report-filter-' + ci" :placeholder="T('application-core:shell.report.min', 'min')" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
                     <span x-h-text.muted>&ndash;</span>
-                    <div x-h-input-number><input type="number" step="any" :placeholder="T('application-core:shell.report.max', 'max')" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
+                    <div x-h-input-number><input type="number" step="any" :aria-label="col.key + ' ' + T('application-core:shell.report.max', 'max')" :placeholder="T('application-core:shell.report.max', 'max')" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
                   </div>
                 </template>
                 <template x-if="col.kind === 'boolean'">
                   <div x-h-select>
-                    <input x-h-select-input x-model="filters[col.key].equals" :placeholder="T('application-core:shell.report.any', 'any')" />
+                    <input x-h-select-input :id="'report-filter-' + ci" x-model="filters[col.key].equals" :placeholder="T('application-core:shell.report.any', 'any')" />
                     <div x-h-select-content>
                       <div x-h-select-list>
                         <div x-h-select-option="T('application-core:shell.report.any', 'any')" data-value=""></div>
@@ -114,42 +147,76 @@
                   </div>
                 </template>
                 <template x-if="col.kind === 'text'">
-                  <input x-h-input type="text" :placeholder="T('application-core:shell.report.contains', 'contains...')" x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
+                  <input x-h-input type="text" :id="'report-filter-' + ci" :placeholder="T('application-core:shell.report.contains', 'contains...')" x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
                 </template>
               </div>
             </template>
           </div>
           <div class="hbox gap-2">
-            <button x-h-button data-size="sm" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
-            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><svg role="presentation" x-h-lucide data-lucide="x"></svg><span x-text="T('application-core:shell.report.clear', 'Clear')"></span></button>
+            <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
+            <button x-h-button data-variant="outline" @click="clearFilters()"><svg role="presentation" x-h-lucide data-lucide="x"></svg><span x-text="T('application-core:shell.report.clear', 'Clear')"></span></button>
           </div>
         </div>
       </div>
 
-      <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
-      <div x-show="state === 'error'" x-h-alert data-variant="negative" role="alert" class="m-4"><div x-h-alert-description x-text="error"></div></div>
-      <div x-show="state === 'empty'" x-h-info-page class="p-4">
+      <!-- An Export or Print that failed: the rows on screen are still good, so the failure is said
+           beside them rather than replacing them. -->
+      <div x-show="actionError" x-h-alert data-variant="negative" role="alert">
+        <div x-h-alert-description x-text="actionError"></div>
+        <div x-h-alert-actions>
+          <button x-h-button data-variant="transparent" data-size="icon-sm" @click="actionError = null"
+                  :aria-label="T('application-core:shell.report.dismiss', 'Dismiss')">
+            <svg role="presentation" x-h-lucide data-lucide="x"></svg>
+          </button>
+        </div>
+      </div>
+
+      <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+      <div x-show="state === 'error'" x-h-info-page>
         <div x-h-info-page-header>
-          <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
+          <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></div>
+          <div x-h-info-page-title x-text="T('application-core:shell.report.notRun', 'The report could not be run')"></div>
+          <div x-h-info-page-description x-text="error"></div>
+        </div>
+        <div x-h-info-page-content x-show="!preview">
+          <button x-h-button data-variant="primary" @click="load()" x-text="T('application-core:shell.report.retry', 'Retry')"></button>
+        </div>
+      </div>
+      <div x-show="state === 'empty'" x-h-info-page>
+        <div x-h-info-page-header>
+          <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="inbox"></svg></div>
           <div x-h-info-page-title x-text="T('application-core:shell.report.noData', 'No data')"></div>
           <div x-h-info-page-description x-text="T('application-core:shell.report.noRows', 'The ${name} report returned no rows.', { name: '${name}' })"></div>
         </div>
       </div>
+      <!-- The column filters match nothing: an answer, not an empty report, so it says so and offers
+           the way back. -->
+      <div x-show="state === 'no-results'" x-h-info-page>
+        <div x-h-info-page-header>
+          <div x-h-info-page-media.icon><svg role="presentation" x-h-lucide data-lucide="search-x"></svg></div>
+          <div x-h-info-page-title x-text="T('application-core:shell.report.noMatch', 'No matching rows')"></div>
+          <div x-h-info-page-description x-text="T('application-core:shell.report.noMatchHint', 'Try adjusting the filters.')"></div>
+        </div>
+        <div x-h-info-page-content x-show="!preview">
+          <button x-h-button data-variant="outline" @click="clearFilters()" x-text="T('application-core:shell.report.clearFilters', 'Clear filters')"></button>
+        </div>
+      </div>
 
       <!-- The dashboard embeds this page in a tile (?preview=1) whose card already frames the rows,
-           so preview drops this page's own gutter and the table's box and grid lines - the reference's
-           dashboard table card is flush and borderless, while the report page itself keeps all three.
-           The container's data-border is read ONCE when the directive initializes (it just adds
+           so preview drops the table's box and grid lines - the reference's dashboard table card is
+           flush and borderless, while the report page itself keeps both. The container's
+           data-border is read ONCE when the directive initializes (it just adds
            `border rounded-md`), so the preview branch sets those classes directly rather than binding
            the attribute and racing Alpine's directive order; data-borders is a pure CSS hook and does
            bind. -->
-      <div x-show="state === 'default'" class="vbox gap-2 flex-1 overflow-auto" :class="preview ? '' : 'p-4'">
+      <div x-show="state === 'default'" class="vbox gap-2 flex-1 min-h-0 overflow-auto">
 #if($chart)
 ## Native Harmonia chart directive for this report's chart type (a generation-time constant).
 #if($chart == "line")#set($chartDirective = "x-h-chart-line")#elseif($chart == "pie")#set($chartDirective = "x-h-chart-pie")#elseif($chart == "doughnut")#set($chartDirective = "x-h-chart-doughnut")#elseif($chart == "polarArea")#set($chartDirective = "x-h-chart-polar-area")#elseif($chart == "radar")#set($chartDirective = "x-h-chart-radar")#else#set($chartDirective = "x-h-chart-bar")#end
-        <!-- Chart surface: the report's aggregated rows rendered as a native ${chart} Harmonia chart. -->
+        <!-- Chart surface: the report's aggregated rows rendered as a native ${chart} Harmonia chart,
+             named for assistive technology by the report it draws (as the reference's charts are). -->
         <div x-show="view === 'chart'" class="flex-1" style="min-height: 60vh;">
-          <div x-ref="chartEl" ${chartDirective}="chartConfig" class="size-full"></div>
+          <div x-ref="chartEl" ${chartDirective}="chartConfig" class="size-full" :aria-label="T('$projectName:${tprefix}.t.${tId}', displayName)"></div>
         </div>
         <div x-show="view === 'table'" class="vbox gap-2">
 #end

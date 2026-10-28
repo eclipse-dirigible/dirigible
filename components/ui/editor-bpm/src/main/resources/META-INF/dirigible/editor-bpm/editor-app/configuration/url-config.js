@@ -31,6 +31,6 @@ FLOWABLE.URL = {
     },
     
     validateModel: function(){
-		return FLOWABLE.CONFIG.contextRoot + '/app/rest/model/validate';
+		return FLOWABLE.CONFIG.contextRoot + '/models/validate';
     }
 };

@@ -41,6 +41,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
+import org.eclipse.dirigible.components.intent.generator.CronSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -103,6 +104,7 @@ import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.StatusStampIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
@@ -357,6 +359,7 @@ public final class IntentParser {
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
         wrapScalarNormalize(tree);
+        expandSingleShorthand(tree);
         normalizeOrderBy(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
@@ -432,6 +435,7 @@ public final class IntentParser {
         validateTransitions(model, entityNames, issues);
         validateLifecycles(model, issues);
         validateStatusStamps(model, issues);
+        validateSingleFlags(model, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -1250,6 +1254,13 @@ public final class IntentParser {
             if (schedule.getCron() == null || schedule.getCron()
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
+            } else {
+                // Checked with the scheduler's own parser (#8235): a cron Quartz cannot run used to
+                // generate and publish clean and be listed as an enabled job that never fired.
+                String cronProblem = CronSupport.problem(schedule.getCron());
+                if (cronProblem != null) {
+                    issues.add("schedule [" + name + "] cron [" + schedule.getCron() + "] cannot be scheduled: " + cronProblem);
+                }
             }
             // A cross-model source (model: <uses alias>) lives in another model; its existence and its
             // where/map/match field references are validated at GENERATION time against the owner's
@@ -2542,6 +2553,12 @@ public final class IntentParser {
                                                           .isBlank();
         if (folder && !cron) {
             issues.add(subject + " source folder [" + source.getFolder() + "] has no cron to poll it on");
+        }
+        if (folder && cron) {
+            String cronProblem = CronSupport.problem(source.getCron());
+            if (cronProblem != null) {
+                issues.add(subject + " source cron [" + source.getCron() + "] cannot be scheduled: " + cronProblem);
+            }
         }
         if (!folder && cron) {
             issues.add(subject + " source declares a cron, which only a folder source polls on");
@@ -4725,6 +4742,9 @@ public final class IntentParser {
                 if (relation.isCalculated()) {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
+                if (relation.isFixedAfterCreate()) {
+                    validateFixedAfterCreate(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -4909,6 +4929,9 @@ public final class IntentParser {
         }
         if (relation.isCalculated()) {
             unsupported.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            unsupported.add("fixedAfterCreate");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -5590,6 +5613,35 @@ public final class IntentParser {
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (owned by the workflow transitions) so it cannot declare a calculated action"
                     + " - use init: for its starting value");
+        }
+    }
+
+    /**
+     * {@code fixedAfterCreate: true} (dirigible #7903) fixes a user-picked FK once the record exists,
+     * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
+     * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
+     * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+        }
+        if (!isBlank(relation.getCalculatedActionOnUpdate())) {
+            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+                    + " value on every update, so it cannot also be fixed; keep one");
         }
     }
 
@@ -7005,6 +7057,44 @@ public final class IntentParser {
                     writable.put("normalize", new ArrayList<>(List.of(declared)));
                 }
             }
+        }
+    }
+
+    /**
+     * A field's {@code single: true} (#8101) is the empty mapping - fleet-wide, demoting - and
+     * {@code single: false} is removed, so the typed mapping and the unknown-key walk only ever see the
+     * object form, as {@link #normalizeDuplicable} does for an entity's {@code duplicable}.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void expandSingleShorthand(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("single")) {
+                    continue;
+                }
+                Object declared = field.get("single");
+                Map<Object, Object> writable = (Map<Object, Object>) field;
+                if (declared == null || Boolean.FALSE.equals(declared)) {
+                    writable.remove("single");
+                } else if (Boolean.TRUE.equals(declared)) {
+                    writable.put("single", new LinkedHashMap<>());
+                } else if (!(declared instanceof Map)) {
+                    issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] single [" + declared
+                            + "] is neither true/false nor a mapping - the object form takes per: and onConflict:");
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
         }
     }
 
@@ -11118,6 +11208,35 @@ public final class IntentParser {
                 String other = status == null ? null : stampedBy.putIfAbsent(status, field.getName());
                 if (other != null) {
                     issues.add(subject + " stamps the same status as field [" + other + "] - one field records one arrival");
+                }
+            }
+        }
+    }
+
+    /**
+     * Single flags ({@code single:}, #8101): a boolean at most one row holds, fleet-wide or per the
+     * value of one of the entity's own to-one relations. The flag is a boolean, the scope is a to-one
+     * (a collection has no column on this row to scope by), and a conflict either demotes the holder or
+     * is refused.
+     */
+    private static void validateSingleFlags(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            for (FieldIntent field : entity.getFields()) {
+                SingleIntent single = field.getSingle();
+                if (single == null) {
+                    continue;
+                }
+                String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] single";
+                if (!"boolean".equals(field.getType())) {
+                    issues.add(subject + " needs a boolean field, not [" + (field.getType() == null ? "string" : field.getType())
+                            + "] - it is the flag at most one row holds");
+                }
+                if (single.getPer() != null && CheckSupport.toOne(entity, single.getPer()) == null) {
+                    issues.add(subject + " per [" + single.getPer() + "] is not a manyToOne/oneToOne relation of [" + entity.getName()
+                            + "] - the scope is the record a holder belongs to");
+                }
+                if (single.getOnConflict() != null && !"demote".equals(single.getOnConflict()) && !single.isRefuse()) {
+                    issues.add(subject + " onConflict [" + single.getOnConflict() + "] is not one of: demote, refuse");
                 }
             }
         }

@@ -125,6 +125,33 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of a refusing single flag's conflict message (issue #8101).
+     *
+     * @param entity the entity
+     * @param flag the single flag
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String singleFlagMessageKey(Map<String, Object> entity, Map<String, Object> flag) {
+        return str(entity, "name") + "_single_" + str(flag, "property");
+    }
+
+    /**
+     * The catalog key of a {@code fixedAfterCreate} relation's refusal (issue #7903).
+     *
+     * @param entity the entity
+     * @param property the relation's FK property
+     * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
+     *         property is not fixed after create or carries no message
+     */
+    static String fixedMessageKey(Map<String, Object> entity, Map<String, Object> property) {
+        String message = str(property, "fixedAfterCreateMessage");
+        if (!ModelValues.isTrue(property, "fixedAfterCreate") || message == null || message.isBlank()) {
+            return null;
+        }
+        return str(entity, "name") + "_fixed_" + str(property, "name");
+    }
+
+    /**
      * Derives the path a catalog is written to.
      *
      * @param filePath the model file path
@@ -265,9 +292,10 @@ final class ModelTranslations {
     }
 
     /**
-     * Collects the user-facing messages of the entities' checks, business keys and picker rules (issue
-     * #7611), in the default language, keyed as the generated code resolves them - so a language
-     * catalog translates a refusal, a warning or a picker hint exactly as it translates a label.
+     * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
+     * #7611) and fixed relations (#7903), in the default language, keyed as the generated code resolves
+     * them - so a language catalog translates a refusal, a warning or a picker hint exactly as it
+     * translates a label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
@@ -289,7 +317,17 @@ final class ModelTranslations {
                     messages.put(key, constraint.get("message"));
                 }
             }
+            for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
+                String message = str(flag, "message");
+                if (message != null && !message.isBlank()) {
+                    messages.put(singleFlagMessageKey(entity, flag), message);
+                }
+            }
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+                String fixedKey = fixedMessageKey(entity, property);
+                if (fixedKey != null) {
+                    messages.put(fixedKey, property.get("fixedAfterCreateMessage"));
+                }
                 String pickable = str(property, "widgetPickable");
                 if (pickable == null || !pickable.contains("\"messageKey\"")) {
                     continue;

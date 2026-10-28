@@ -21,6 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -53,6 +58,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  * that does not exist - same-model, cross-model, a self-reference - answered 200 and stored a row
  * pointing at nothing, a numbered one with its number already drawn. It is now a 400 naming the
  * relation, decided before the number is allocated.
+ *
+ * <p>
+ * dirigible #8252 is the two sides at once: both checks read before they write, so a create naming
+ * a record and the delete of that record, arriving together, both passed - the delete counted no
+ * reference yet, the create still found its target - and the create committed a reference to a
+ * record that was gone. Now the delete locks its record before it counts, and the create locks the
+ * records it names in the transaction it inserts in, so one of the two waits for the other and is
+ * refused as it would be in sequence.
  */
 class IntentTargetDeleteRulesIT extends IntegrationTest {
 
@@ -114,6 +127,10 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                   - { name: Approver, kind: manyToOne, to: Employee, model: staff, whenTargetDeleted: keep }
             """;
 
+    /** How many times the create/delete race is run; the unfixed platform lost it in most attempts. */
+    private static final int RACE_ATTEMPTS = 20;
+    private static final long RACE_TIMEOUT_SECONDS = 60;
+
     /** The series the advances are numbered from: AD and a 7-digit sequence. */
     private static final String CONSUMER_NUMBERS = "{\"series\": [{\"name\": \"Advance\", \"prefix\": \"AD\", \"size\": 9}]}";
 
@@ -162,6 +179,64 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertACreateNamingNoRecordIsRefused();
         assertAnUpdateNamingNoRecordIsRefused();
         assertAKeepReferenceOutlivesItsTarget();
+
+        assertACreateAndADeleteOfItsTargetNeverBothWin();
+    }
+
+    /**
+     * #8252: a create naming an employee and the delete of that employee, released at once. Exactly one
+     * may win - the claim stored and the delete refused, or the employee deleted and the claim refused
+     * - and never both, which is the claim pointing at a record that is gone. Repeated, because a race
+     * that is lost only sometimes proves nothing when it is not lost once.
+     */
+    private void assertACreateAndADeleteOfItsTargetNeverBothWin() {
+        ExecutorService racers = Executors.newFixedThreadPool(2);
+        try {
+            for (int attempt = 0; attempt < RACE_ATTEMPTS; attempt++) {
+                int target = create(employees, "{\"Name\":\"Racer " + attempt + "\"}");
+                int[] outcome = restAssuredExecutor.executeWithResult(() -> race(racers, target));
+                int posted = outcome[0];
+                int deleted = outcome[1];
+                String attemptSaid = "attempt " + attempt + ": POST " + posted + ", DELETE " + deleted;
+                assertTrue(posted == 200 || posted == 400 || posted == 409, attemptSaid + " - the create must win or be refused");
+                assertTrue(isSuccess(deleted) || deleted == 409, attemptSaid + " - the delete must win or be refused");
+                assertTrue(posted != 200 || !isSuccess(deleted), attemptSaid + " - both won: the claim references a deleted employee");
+            }
+        } finally {
+            racers.shutdownNow();
+        }
+    }
+
+    /** One POST and one DELETE released by the same barrier; answers their two status codes. */
+    private int[] race(ExecutorService racers, int target) {
+        CyclicBarrier start = new CyclicBarrier(2);
+        Future<Integer> post = racers.submit(() -> {
+            start.await();
+            return given().contentType("application/json")
+                          .body("{\"Employee\":" + target + ",\"Amount\":1}")
+                          .when()
+                          .post(claims)
+                          .statusCode();
+        });
+        Future<Integer> delete = racers.submit(() -> {
+            start.await();
+            return given().when()
+                          .delete(employees + "/" + target)
+                          .statusCode();
+        });
+        try {
+            return new int[] {post.get(RACE_TIMEOUT_SECONDS, TimeUnit.SECONDS), delete.get(RACE_TIMEOUT_SECONDS, TimeUnit.SECONDS)};
+        } catch (InterruptedException e) {
+            Thread.currentThread()
+                  .interrupt();
+            throw new IllegalStateException("interrupted while racing a create against a delete", e);
+        } catch (Exception e) {
+            throw new IllegalStateException("a racing request did not answer", e);
+        }
+    }
+
+    private static boolean isSuccess(int status) {
+        return status >= 200 && status < 300;
     }
 
     /**

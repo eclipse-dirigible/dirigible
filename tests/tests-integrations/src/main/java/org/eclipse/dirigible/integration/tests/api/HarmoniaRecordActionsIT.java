@@ -38,6 +38,8 @@ class HarmoniaRecordActionsIT {
 
     private static final String RELATED = "/META-INF/dirigible/application-core/shell/js/components/relatedPanel.js";
 
+    private static final String DETAIL = "/META-INF/dirigible/application-core/shell/js/components/detailPanel.js";
+
     /**
      * The proforma's three actions: Print-like (unguarded), a create-from guarded by {@code allowed},
      * and a transition guarded by {@code from}.
@@ -150,6 +152,28 @@ class HarmoniaRecordActionsIT {
             context.eval("js", "register.def.local = false;");
             assertEquals("", ids(context, "register.rowActions({ Id: 1, Status: 2 })"), "a cross-project register offers none");
         }
+    }
+
+    /**
+     * A composition child's detail panel row offers its record's actions by the row's status (#8289) -
+     * every panel, since a composition child belongs to this application - and the panel's row menu
+     * lists them, on the master's preview too, where Edit and Delete stay withheld.
+     */
+    @Test
+    void aDetailPanelRowOffersItsChildsActionsByStatus() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "var panel = { def: { entity: 'ProformaInvoice', primaryKey: 'Id' }, "
+                    + method(DETAIL, "    rowActions(row) {") + " };");
+            assertEquals("notes,invoice,void", ids(context, "panel.rowActions({ Id: 1, Status: 2 })"), "an ISSUED row offers all three");
+            assertEquals("notes", ids(context, "panel.rowActions({ Id: 2, Status: 3 })"), "an INVOICED row only the unguarded one");
+        }
+        String view = read(MANAGE + "form-view.html.template");
+        assertTrue(view.contains("x-show=\"!isPreview || def.locksWithMaster === false || rowActions(row).length\""),
+                "the panel's row menu must show on the master's preview for a row with actions");
+        assertTrue(view.contains("x-show=\"(!isPreview || def.locksWithMaster === false) && !isForbidden('update')\""),
+                "Edit must stay withheld on the master's preview");
+        assertTrue(view.contains("x-show=\"(!isPreview || def.locksWithMaster === false) && !isForbidden('delete')\""),
+                "Delete must stay withheld on the master's preview");
     }
 
     /**

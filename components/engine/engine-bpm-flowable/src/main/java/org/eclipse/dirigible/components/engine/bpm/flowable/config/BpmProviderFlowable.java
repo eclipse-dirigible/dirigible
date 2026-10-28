@@ -79,6 +79,8 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final String TASK_LABEL_CATALOG_PROPERTY = "taskLabelCatalog";
     /** The user-task property listing the actions its form completes the task with. */
     private static final String TASK_ACTIONS_PROPERTY = "taskActions";
+    /** The user-task property listing the variables a completion may write besides its action. */
+    private static final String TASK_WRITES_PROPERTY = "taskWrites";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
@@ -512,6 +514,24 @@ public class BpmProviderFlowable implements BpmProvider {
      * @return the declared actions, empty for a task (e.g. a hand-authored one) that declares none
      */
     public List<String> getTaskActions(String taskId) {
+        return getTaskProperty(taskId, TASK_ACTIONS_PROPERTY).orElse(List.of());
+    }
+
+    /**
+     * The variables a completion of the task may write besides its {@code action}, as its user task
+     * declares them ({@code <flowable:property name="taskWrites" value="Solution"/>}): an
+     * intent-generated task declares its form's editable fields, possibly none, and never the key its
+     * delegates find the record by (issue #8094).
+     *
+     * @param taskId the task id
+     * @return the declared variables, empty for a task (e.g. a hand-authored one) that declares none
+     */
+    public Optional<List<String>> getTaskWrites(String taskId) {
+        return getTaskProperty(taskId, TASK_WRITES_PROPERTY);
+    }
+
+    /** The comma-separated list a user task's named property declares, empty when it has none. */
+    private Optional<List<String>> getTaskProperty(String taskId, String name) {
         Task task = processEngine.getTaskService()
                                  .createTaskQuery()
                                  .taskTenantId(getTenantId())
@@ -521,20 +541,19 @@ public class BpmProviderFlowable implements BpmProvider {
                 : processEngine.getRepositoryService()
                                .getBpmnModel(task.getProcessDefinitionId());
         if (bpmnModel == null || !(bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask)) {
-            return List.of();
+            return Optional.empty();
         }
         return userTask.getExtensionElements()
                        .getOrDefault(TASK_LABEL_CATALOG_ELEMENT, List.of())
                        .stream()
-                       .filter(element -> TASK_ACTIONS_PROPERTY.equals(element.getAttributeValue(null, "name")))
+                       .filter(element -> name.equals(element.getAttributeValue(null, "name")))
                        .map(element -> element.getAttributeValue(null, "value"))
-                       .filter(value -> value != null && !value.isBlank())
+                       .filter(Objects::nonNull)
                        .findFirst()
                        .map(value -> Arrays.stream(value.split(","))
                                            .map(String::trim)
-                                           .filter(action -> !action.isEmpty())
-                                           .toList())
-                       .orElse(List.of());
+                                           .filter(item -> !item.isEmpty())
+                                           .toList());
     }
 
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {

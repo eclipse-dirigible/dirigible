@@ -14,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
@@ -31,6 +32,7 @@ import org.eclipse.dirigible.sdk.extensions.Extensions;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.MockedStatic;
 
 /**
@@ -117,6 +119,28 @@ class JavaRepositoryConcurrentDeleteTest {
 
         assertSame(first, thrown);
         verify(store, times(1)).deleteById(Payment.class, 7);
+    }
+
+    /**
+     * #8252: the record is locked BEFORE its references are counted, in the transaction that releases
+     * and deletes it - so a write naming it, which share-locks it until it commits, is either waited
+     * for and counted, or waits for this delete and finds the record gone.
+     */
+    @Test
+    void theRecordIsLockedBeforeItsReferencesAreCounted() {
+        when(store.isInUnitOfWork()).thenReturn(true);
+
+        repository.deleteById(7);
+
+        InOrder order = inOrder(store, rule);
+        order.verify(store)
+             .lockForUpdate(Payment.class, 7);
+        order.verify(rule)
+             .countRestricting(TARGET, 7);
+        order.verify(rule)
+             .release(TARGET, 7);
+        order.verify(store)
+             .deleteById(Payment.class, 7);
     }
 
     private static ConcurrentWriteException collision() {

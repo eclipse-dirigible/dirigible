@@ -11,6 +11,8 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
@@ -30,7 +32,9 @@ import ch.qos.logback.classic.Level;
  * The deprecation signals of server-side JavaScript and TypeScript (#8049): publishing a project
  * that has some logs one warning and adds one Problems view entry naming what was found and linking
  * the migration guide; a republish replaces the entry, an unpublish removes it, and a project with
- * Java and browser JavaScript only gets neither. HTTP only - the publish is the IDE's own endpoint.
+ * Java and browser JavaScript only gets neither. A project migrated off them by deleting the files
+ * from its workspace is clear after its next publish (#8195). HTTP only - the publish is the IDE's
+ * own endpoint.
  */
 // One boot for the class: each method works on its own project and asserts only about it.
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
@@ -42,6 +46,10 @@ class ServerSideScriptDeprecationIT extends IntegrationTest {
 
     private static final String JAVA_PROJECT = "deprecation-java";
 
+    private static final String MIGRATED_PROJECT = "deprecation-migrated";
+
+    private static final String MIGRATED_JOB = "/" + MIGRATED_PROJECT + "/jobs/conv.job";
+
     private static final String GUIDE = "https://www.dirigible.io/help/develop/migrate-typescript-to-java";
 
     private static final String EXPECTED_WARNING =
@@ -51,6 +59,10 @@ class ServerSideScriptDeprecationIT extends IntegrationTest {
     private static final String PROBLEMS = "/services/ide/problems";
 
     private static final String NOTICE = "/services/ide/javascript-deprecation";
+
+    private static final String ARTEFACTS = "/services/core/artefacts";
+
+    private static final long SYNCHRONIZATION_TIMEOUT_SECONDS = 60;
 
     private static final String DEPRECATION_LOGGER =
             "org.eclipse.dirigible.components.ide.workspace.deprecation.ServerSideScriptDeprecation";
@@ -120,6 +132,61 @@ class ServerSideScriptDeprecationIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("projects", not(hasItem(JAVA_PROJECT))));
         assertThat(logsAsserter.containsMessage("Project [" + JAVA_PROJECT + "]", Level.WARN)).isFalse();
+    }
+
+    @Test
+    void aRepublishAfterDeletingTheScriptsFromTheWorkspaceRemovesThemAndTheirArtefacts() {
+        projectDeployer.deploy(FIXTURES + MIGRATED_PROJECT);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ARTEFACTS)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(artefactsAt(MIGRATED_JOB) + ".status", contains("CREATED")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(NOTICE)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("projects", hasItem(MIGRATED_PROJECT)));
+
+        deleteFromWorkspace(MIGRATED_PROJECT + "/jobs/conv.job");
+        deleteFromWorkspace(MIGRATED_PROJECT + "/jobs/handler.js");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post("/services/ide/publisher/workspace/" + MIGRATED_PROJECT)
+                                                 .then()
+                                                 .statusCode(200));
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/web" + MIGRATED_JOB)
+                                                 .then()
+                                                 .statusCode(404));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ARTEFACTS)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(artefactsAt(MIGRATED_JOB), empty()),
+                SYNCHRONIZATION_TIMEOUT_SECONDS);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(NOTICE)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("projects", not(hasItem(MIGRATED_PROJECT))));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PROBLEMS)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(entriesOf(MIGRATED_PROJECT) + ".size()", equalTo(0)));
+    }
+
+    private void deleteFromWorkspace(String path) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete("/services/ide/workspaces/workspace/" + path)
+                                                 .then()
+                                                 .statusCode(204));
+    }
+
+    /** A GPath selecting the artefacts synchronized from the location. */
+    private static String artefactsAt(String location) {
+        return "findAll { it.location == '" + location + "' }";
     }
 
     private void assertOneEntry() {

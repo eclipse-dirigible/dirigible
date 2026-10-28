@@ -13,20 +13,36 @@ document.addEventListener('alpine:init', () => {
     rows: [],
     state: 'loading',   // loading | error | empty | default
     error: null,
+    // An Export or Print that failed. Kept apart from `error`, which replaces the rows: those are
+    // still good when only the download failed.
+    actionError: null,
+    // A quiet re-read (Refresh) is in flight; the rows on screen stay until it answers.
+    reloading: false,
 
-    async init() { await this.load(); },
+    async init() {
+      // The sidebar entry of the report on screen re-renders nothing, so it re-reads instead (#8130).
+      this.onReentered(() => this.refresh());
+      await this.load();
+    },
 
-    async load() {
-      this.state = 'loading';
+    // Re-read the report, keeping the rows on screen meanwhile.
+    refresh() { return this.load(true); },
+
+    async load(quiet) {
+      const keepRows = quiet && (this.state === 'default' || this.state === 'empty');
+      if (keepRows) this.reloading = true;
+      else this.state = 'loading';
       this.error = null;
       try {
         this.rows = await App.services.api.get(this.apiPath);
         this.state = this.rows.length === 0 ? 'empty' : 'default';
+        this.lastUpdated = new Date();
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not run the ${name} report.');
         this.state = 'error';
+      } finally {
+        this.reloading = false;
       }
-      this.refreshIcons();
     },
 
     // Format a float using a DecimalFormat-style pattern (decimals from the part after '.', grouping
@@ -37,6 +53,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async exportCsv() {
+      this.actionError = null;
       try {
         const data = await App.services.api.post(this.apiPath + '/export', {});
         const csv = Array.isArray(data) ? toCsv(data) : '';
@@ -47,7 +64,7 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Export failed.');
+        this.actionError = App.services.apiErrors.messageFor(e, 'Export failed.');
       }
       function toCsv(rows) {
         if (!rows.length) return '';
@@ -67,6 +84,7 @@ document.addEventListener('alpine:init', () => {
     // Print the report: the FULL result set (POST /export, same as the CSV export) rendered into a
     // minimal print document in a new window.
     async printReport() {
+      this.actionError = null;
       try {
         const data = await App.services.api.post(this.apiPath + '/export', {});
         const rows = Array.isArray(data) ? data : [];
@@ -95,7 +113,7 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, 'Print failed.');
+        this.actionError = App.services.apiErrors.messageFor(e, 'Print failed.');
       }
     },
   }));

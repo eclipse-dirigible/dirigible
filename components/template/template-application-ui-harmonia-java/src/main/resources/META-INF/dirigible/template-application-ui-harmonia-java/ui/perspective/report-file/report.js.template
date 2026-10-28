@@ -69,8 +69,15 @@ document.addEventListener('alpine:init', () => {
     params: {},         // parameter name -> value ('' = use the server-side default)
     showFilters: false,
     filters: {},        // column key -> { from, to, min, max, contains, equals } (per kind)
-    state: 'loading',   // loading | error | empty | default
+    state: 'loading',   // loading | error | empty | no-results | default
     error: null,
+    // An Export or Print that failed. Kept apart from `error`, which replaces the rows: those are
+    // still good when only the download failed.
+    actionError: null,
+    // A quiet re-read (Refresh) is in flight; the rows on screen stay until it answers.
+    reloading: false,
+    // When the rows on screen were read, for the "Updated <time>" stamp beside Refresh (#8130).
+    lastUpdated: null,
     page: 1,
 #if($kind == 'statement')
     // A statement's rows ARE its structure - a balance sheet split across pages stops being one, and
@@ -88,7 +95,7 @@ document.addEventListener('alpine:init', () => {
     // Chart rendering (chart: ${chart} in the .report), drawn by the native x-h-chart-* directive in
     // the view (no external chart library). `view` toggles the chart/table surfaces; labels come from
     // the grouping dimension column and one series per aggregate (measure). chartConfig is reactive -
-    // the directive redraws whenever it changes.
+    // the directive redraws whenever it changes. `view` is the value of the view switch's group.
     chartType: '${chart}',
     view: 'chart',      // 'chart' | 'table'
     chartConfig: { labels: [], series: [] },
@@ -163,8 +170,15 @@ document.addEventListener('alpine:init', () => {
       this.load();
     },
 
-    async load() {
-      this.state = 'loading';
+    // Re-read under the parameters, filters and page in force, keeping the rows on screen meanwhile.
+    refresh() { return this.load(true); },
+
+    // `quiet` keeps the current rows on screen while the query runs (Refresh); otherwise the page
+    // shows the loading state, as on a first load or a filter change.
+    async load(quiet) {
+      const keepRows = quiet && (this.state === 'default' || this.state === 'no-results' || this.state === 'empty');
+      if (keepRows) this.reloading = true;
+      else this.state = 'loading';
       this.error = null;
       try {
         const conditions = this.conditions();
@@ -193,23 +207,21 @@ document.addEventListener('alpine:init', () => {
         if (this.rows.length) this.columns = Object.keys(this.rows[0]);
         else if (!this.columns.length && this.reportColumns.length) this.columns = this.reportColumns.map(c => c.key);
         if (!this.count) this.count = this.rows.length;
-        this.state = this.rows.length ? 'default' : 'empty';
+        // Rows the column filters exclude are an answer about the filters, not an empty report.
+        if (this.rows.length) this.state = 'default';
+        else this.state = conditions.length ? 'no-results' : 'empty';
+        this.lastUpdated = new Date();
       } catch (e) {
         this.error = App.services.apiErrors.refusalMessageFor(e, 'Could not run the ${name} report.');
         this.state = 'error';
+      } finally {
+        this.reloading = false;
       }
-      this.refreshIcons();
 #if($chart)
       if (this.chartType && this.rows.length) this.chartConfig = this.buildChartConfig();
 #end
     },
 #if($chart)
-
-    // Toggle between the chart and the raw data table (both driven by the same fetched rows).
-    toggleView() {
-      this.view = this.view === 'chart' ? 'table' : 'chart';
-      this.refreshIcons();
-    },
 
     // Build the native chart config from the aggregated rows: the grouping dimension (aggregate NONE)
     // labels the axis, each aggregate column becomes a series. Recomputed on every load/filter.
@@ -288,6 +300,12 @@ document.addEventListener('alpine:init', () => {
       return v;
     },
 
+    // The stamp's time, in the instance's date-time format - the Inbox's and the lists' stamp.
+    updatedTime() {
+      if (!this.lastUpdated) return '';
+      try { return window.HarmoniaFormat.value(this.lastUpdated, true); } catch (e) { return String(this.lastUpdated); }
+    },
+
     // Decimals from the column pattern, separators from the instance Number setting (shell format.js).
     displayNumber(v, pattern) {
       return window.HarmoniaFormat.number(v, pattern, '');
@@ -329,6 +347,7 @@ document.addEventListener('alpine:init', () => {
 
     // Export the FULL result set (POST /export returns all rows) as CSV.
     async exportCsv() {
+      this.actionError = null;
       try {
         // The export honors the active per-column filters and parameters - it downloads what the
         // table shows.
@@ -345,13 +364,14 @@ document.addEventListener('alpine:init', () => {
         a.click();
         URL.revokeObjectURL(a.href);
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Export failed.');
+        this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Export failed.');
       }
     },
 
     // Print the report: the FULL filtered result set (POST /export, same as the CSV export - not
     // just the on-screen page) rendered into a minimal print document in a new window.
     async printReport() {
+      this.actionError = null;
       try {
         const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
         const rows = Array.isArray(data) ? data : [];
@@ -380,10 +400,8 @@ document.addEventListener('alpine:init', () => {
         w.focus();
         w.print();
       } catch (e) {
-        this.error = App.services.apiErrors.refusalMessageFor(e, 'Print failed.');
+        this.actionError = App.services.apiErrors.refusalMessageFor(e, 'Print failed.');
       }
     },
-
-    refreshIcons() {}, // no-op: Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle)
   }));
 }, { once: true });

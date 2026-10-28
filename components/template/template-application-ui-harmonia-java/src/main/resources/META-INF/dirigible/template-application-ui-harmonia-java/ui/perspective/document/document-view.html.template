@@ -23,6 +23,16 @@
 ## shared basePage.fieldDisplay - option label(s), instance date format, a float's own pattern, the
 ## translated Yes/No (a checkbox's options are its two states) - and the row shown only when that
 ## text is non-empty and the caller may see the field (issue #7522).
+## The column length the controller enforces, as the input's maxlength (#8135): a string column with a
+## declared length - the same set the server refuses past ("exceeds the maximum length of N").
+#macro(maxLength $p)#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time") maxlength="${p.dataLength}"#end#end
+## ...and says why it stops (#8135): once the value fills the column, the field's description names the
+## limit - nothing is shown before, so a long form stays as it was.
+#macro(maxLengthHint $p)
+#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time")
+        <p x-h-field-description x-show="String(form.${p.name} ?? '').length >= ${p.dataLength}" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: ${p.dataLength} })"></p>
+#end
+#end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
 #macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
 #macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
@@ -265,6 +275,9 @@
 ## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
 ## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
 #set($readonly = ($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)))
+## fixedAfterCreate (#7903): the relation is picked on the New form and fixed once the record exists -
+## an Edit renders the picker read-only (the controller refuses a changed value with a 409).
+#set($fixed = $property.fixedAfterCreate == "true")
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 ## `inlineCreate: false` (#7748) keeps it to existing rows: the plain picker, no "New" button.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && $property.widgetInlineCreate != "false" && !$readonly))
@@ -296,7 +309,7 @@
              dialog) + Refresh, all on one full-width row. -->
         <div class="hbox gap-1 items-center">
           <div x-h-select class="flex-1">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview#if($fixed) || isEdit#end" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search data-filter="contains"></div>
               <div x-h-select-list>
@@ -306,12 +319,12 @@
               </div>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')" :aria-label="T('$projectName:${tprefix}.defaults.new', 'New') + ' ' + T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')" :aria-label="T('$projectName:${tprefix}.defaults.new', 'New') + ' ' + T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"><svg role="presentation" x-h-lucide data-lucide="plus" class="size-4"></svg> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview#if($fixed) &amp;&amp; !isEdit#end" aria-label="Refresh" @click="loadOptions()"><svg role="presentation" x-h-lucide data-lucide="refresh-cw" class="size-4"></svg></button>
         </div>
 #else
         <div x-h-select>
-          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview#if($fixed) || isEdit#end"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
@@ -345,7 +358,7 @@
         <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end /></div>
 #elseif($property.widgetType == "TEXTAREA")
-        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end></textarea>
+        <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
         <div x-h-date-picker>
@@ -379,12 +392,13 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "EMAIL")
-        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #else
-        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" id="f_${property.name}" x-model="form.${property.name}"#maxLength($property) :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #end
         <p x-h-field-error x-show="errors.${property.name}" x-text="errors.${property.name}"></p>
+#maxLengthHint($property)
           </div>
         </template>
       </div>
@@ -506,7 +520,7 @@
                   </template>
                 </td>
               </template>
-              <td x-h-table-cell data-row-actions x-show="!isPreview" @click.stop>
+              <td x-h-table-cell data-row-actions x-show="!isPreview">
                 <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
                   <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                 </button>
@@ -920,8 +934,9 @@
                 </div>
               </template>
               <template x-if="!col.readonly && !['DROPDOWN','MULTISELECT','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="draftFieldError === col.name" />
+                <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="draftFieldError === col.name" />
               </template>
+              <p x-h-field-description x-show="col.maxLength && String(draft[col.name] ?? '').length >= col.maxLength" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: col.maxLength })"></p>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    save path already ignores it - rendering an input only faked editability. Live
                    recalculated previews still update (the text binds the same draft slot). -->

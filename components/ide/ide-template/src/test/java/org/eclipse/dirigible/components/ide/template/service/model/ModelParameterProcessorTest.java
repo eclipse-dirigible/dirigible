@@ -63,6 +63,71 @@ class ModelParameterProcessorTest {
         assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
     }
 
+    /**
+     * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
+     * flag, which refuses nothing, has no message to translate.
+     */
+    @Test
+    void refusingSingleFlagMessageBecomesACatalogKey() {
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("property", "Preferred");
+        refusing.put("refuse", "true");
+        refusing.put("message", "Another Wallet is already Preferred");
+        Map<String, Object> demoting = new LinkedHashMap<>();
+        demoting.put("property", "Base");
+        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"));
+        wallet.put("singleFlags", List.of(refusing, demoting));
+        Map<String, Object> model = model(wallet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"bookstore:billing-model.checks.Wallet_single_Preferred\", \"Another Wallet is already Preferred\"",
+                refusing.get("messageArgsJava"));
+        assertFalse(demoting.containsKey("messageArgsJava"));
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("Another Wallet is already Preferred", catalog.get("Wallet_single_Preferred"));
+        assertFalse(catalog.containsKey("Wallet_single_Base"));
+    }
+
+    /**
+     * A relation fixed after create (#7903): every controller refuses a changed value with the message
+     * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
+     * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes
+     * nothing.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfARelationFixedAfterCreate() {
+        Map<String, Object> project = property("Project", "INTEGER");
+        project.put("fixedAfterCreate", "true");
+        project.put("fixedAfterCreateMessage", "'Project' cannot change once the \"Timesheet\" is created");
+        Map<String, Object> reviewer = property("Reviewer", "INTEGER");
+        reviewer.put("fixedAfterCreate", "false");
+        reviewer.put("fixedAfterCreateMessage", "unused");
+        Map<String, Object> timesheet = entity("Timesheet", "Timesheets", property("Id", "INTEGER"), project, reviewer);
+        Map<String, Object> model = model(timesheet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "timesheets.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateRelations");
+        assertEquals(1, fixed.size());
+        assertEquals("Project", fixed.get(0)
+                                     .get("name"));
+        assertEquals(
+                "\"bookstore:timesheets-model.checks.Timesheet_fixed_Project\", "
+                        + "\"'Project' cannot change once the \\\"Timesheet\\\" is created\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("'Project' cannot change once the \"Timesheet\" is created", catalog.get("Timesheet_fixed_Project"));
+        assertFalse(catalog.containsKey("Timesheet_fixed_Reviewer"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");
@@ -1104,6 +1169,21 @@ class ModelParameterProcessorTest {
         assertEquals("Status", lock.get("statusProperty"));
         assertEquals("2,3", lock.get("statusValues"));
         assertEquals(Boolean.FALSE, lock.get("always"));
+    }
+
+    /**
+     * The master filter of the generated list is bound with the FK's own Java class, so a non-numeric
+     * value is a 400 from the controller invoker instead of a 500 out of Hibernate (dirigible #8237).
+     */
+    @Test
+    void aCompositionChildCarriesItsMasterFilterJavaClass() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertEquals("Invoice", child.get("masterEntityId"));
+        assertEquals("Integer", child.get("masterEntityIdJavaClass"));
     }
 
     @Test

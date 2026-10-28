@@ -2,6 +2,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #set($preservedOnUpdate = [])
 #set($reportedOnUpdate = [])
+#set($keptWhenOmitted = [])
 ## The document's status (the `function: EntityStatus` relation, rendered as DOCUMENT_STATUS): the
 ## property every status-gated rule is keyed on, and what checkFor() asks about (#7577).
 #set($entityStatusProperty = "")
@@ -9,6 +10,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasAgreeGuards = $agreeGuards && $agreeGuards.size() > 0)
 ## The status stamps (#7874): fields written with the moment of every move INTO their status.
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
+## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
+#set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
 #foreach ($property in $properties)
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
@@ -46,6 +49,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
         #set($haveText = "true")
     #end
+    #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
+        #set($haveScaledDecimals = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -68,6 +74,13 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         #if(!$property.isDateType)
             #set($ignore = $reportedOnUpdate.add($property))
         #end
+    #end
+## A user-editable field the model gives a default - a field's defaultValue:, a relation's init: - is
+## kept from the stored row when an update leaves it null (#8105): a caller PUTs the fields its form
+## edits, so an omitted one is not a clear. Defaults apply on create only, so without this the update
+## wrote NULL - and a 500 quoting the statement when the column is also NOT NULL.
+    #if(!$property.dataPrimaryKey && $property.dataDefaultValue && !$preservedOnUpdate.contains($property))
+        #set($ignore = $keptWhenOmitted.add($property))
     #end
 #end
 ## Does any owned child REFUSE the master's delete (whenMasterDeleted: refuse)? Those checks are
@@ -207,14 +220,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## and server-side create that silently got a wrong total. Applying it here makes the guarantee the one
 ## the intent guide states ("a row inserted without the column gets it") hold for the value the
 ## calculations, guards and checks see, not just for the value that lands in the column.
-## Only create() defaults: an existing row is never re-defaulted, so a value the user deliberately
-## cleared stays cleared.
+## Only create() defaults: an existing row is never re-defaulted. An update keeps the stored value of a
+## defaulted field it leaves null instead (keepDefaultedWhenOmitted, #8105).
 ## A date/time or binary column is excluded: its DEFAULT is emitted verbatim into the DDL and is
 ## typically a SQL expression (CURRENT_DATE, now()), which has no Java literal to stand in for it.
 ## The literal itself is resolved in Java (ModelParameterProcessor / JavaLiterals) and is present only
 ## on a property that has one, so the type list lives in one place - and an authored value carrying a
 ## quote or a backslash is escaped rather than ending the literal it is written into and failing the
 ## compile of the whole generated module (dirigible #7154).
+## On update, the defaulted fields an update leaves null keep their stored values (#8105) - the
+## counterpart of applyDefaults: never re-defaulted, never erased.
+#macro(keepDefaultedWhenOmitted)
+#if($keptWhenOmitted.size() > 0)
+        keepDefaultedWhenOmitted(entity);
+#end
+#end
 #macro(applyDefaults)
 #foreach($property in $properties)
 #if($property.dataDefaultValueJavaLiteral)
@@ -231,6 +251,15 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(trimText)
 #if($haveText)
         trimText(entity);
+#end
+#end
+## Decimal input is rounded to its column's scale on every write, before anything reads it (#8107): the
+## column stores 0.0049 hours as 0.00, so a check, a calculation and a guard that read the payload's
+## 0.0049 judged and priced a value the row does not hold - a `> 0` passed on a stored zero, and an
+## amount was billed on hours nobody recorded.
+#macro(roundDecimals)
+#if($haveScaledDecimals)
+        roundDecimals(entity);
 #end
 #end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
@@ -437,7 +466,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($hasSingleFlags)
+        // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
+        // it demotes and this row commit together or not at all.
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> saveInUnit(entity));
+    }
+
+    private ${name}Entity saveInUnit(${name}Entity entity) {
+#end
 #trimText()
+#roundDecimals()
 #applyDefaults()
 #normalizeSubsets()
 #normalizeInput()
@@ -491,13 +529,42 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #requiredCheck()
 #if($hasReferenceChecks)
-        // Before the number below is drawn: a create refused for a dangling reference must not spend one.
-        requireReferencesExist(entity, null);
+        // The reference check and the insert are ONE transaction, and the check share-locks every row
+        // this create names until it commits (#8252): a delete of one of them either waits for the
+        // insert and then counts it, or has deleted the row the check waits for and refuses this create
+        // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
+        // the number is drawn, so a refused create spends none.
+        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, null);
+            return insert(entity);
+        });
+#else
+        ${name}Entity saved = insert(entity);
 #end
+#if($history == "true")
+        // Change history: the initial state as a null -> value delta per property, attributed to the
+        // user whose request created the row.
+        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
+#end
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
+#end
+        return saved;
+    }
+
+    /**
+     * The last steps of a create, once every guard has passed: the status stamps, the document number
+     * and the insert itself - run inside the reference check's transaction when this entity has one.
+     */
+    private ${name}Entity insert(${name}Entity entity) {
 #if($hasStatusStamps)
         // A create that lands in a stamped status ENTERS it: stamped once every guard has passed and
         // filed the record where it belongs, so the stamp follows the status actually written.
         applyStatusStamps(null, entity);
+#end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
 #end
 ## Allocated LAST, once every guard that can refuse this create has passed: the counter is a SEQUENCE,
 ## incremented in its own transaction so concurrent creates never serialize on it, which means an
@@ -543,24 +610,22 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
         // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
-        ${name}Entity saved = super.save(entity, "${projectName}-${perspectiveName}-${name}");
-#if($history == "true")
-        // Change history: the initial state as a null -> value delta per property, attributed to the
-        // user whose request created the row.
-        History.recordCreate(HISTORY_TABLE, saved.${pkPropertyName}, History.USER, saved, HISTORY_PROPERTIES);
-#end
-#if($documentItem)
-        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
-        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
-#end
-        return saved;
+        return super.save(entity, "${projectName}-${perspectiveName}-${name}");
     }
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#if($hasSingleFlags)
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+    }
+
+    private ${name}Entity updateInUnit(${name}Entity entity) {
+#end
 #trimText()
+#roundDecimals()
 #normalizeSubsets()
 #normalizeInput()
+#keepDefaultedWhenOmitted()
 #if($lifecycleEdges)
         enforceLifecycle(entity);
 #end
@@ -648,9 +713,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasReferenceChecks)
 ## The stored row is already in hand when system-owned fields were preserved - no second read.
 #if($preservedOnUpdate.size() > 0)
-        requireReferencesExist(entity, existingRow);
+        ${name}Entity referencesStored = existingRow;
 #else
-        requireReferencesExist(entity, entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName}));
+        ${name}Entity referencesStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
 #end
 #if($hasStatusStamps)
@@ -660,6 +725,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
         applyStatusStamps(storedStatus(entity), entity);
 #end
+#end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
 #end
 #if($documentItem)
         // The document this line belongs to BEFORE the write: a full-row update may re-point the
@@ -685,11 +753,29 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             // two separate publishes.
             rekeyEvents.add(new DomainEvent("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(groupingPrevious)));
         }
+#if($hasReferenceChecks)
+        // The reference check and the update are ONE transaction, the rows it names share-locked until
+        // it commits - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+        });
+#else
         ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
+#end
 #else
         // The update event is recorded in the event outbox inside this write's own transaction - see
         // save() - so the intent reactions under gen/events see exactly the changes that committed.
+#if($hasReferenceChecks)
+        // The reference check and the update are ONE transaction, the rows it names share-locked until
+        // it commits - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+        });
+#else
         ${name}Entity updated = super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
+#end
 #end
 #if($history == "true")
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.USER, historyBefore, updated, HISTORY_PROPERTIES);
@@ -712,9 +798,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#if($hasSingleFlags)
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
+    }
+
+    private ${name}Entity updateWithoutEventInUnit(${name}Entity entity) {
+#end
 #trimText()
+#roundDecimals()
 #normalizeSubsets()
 #normalizeInput()
+#keepDefaultedWhenOmitted()
 #if($hasStatusStamps)
         // The status the record stands in BEFORE this write: a stamp records an arrival, and the
         // lifecycle (when declared) judges the same move - one read serves both.
@@ -749,10 +843,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #requiredCheck()
 #if($hasReferenceChecks)
-        requireReferencesExist(entity, entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName}));
+        ${name}Entity referencesStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
 #if($hasStatusStamps)
         applyStatusStamps(stampPrevious, entity);
+#end
+#if($hasSingleFlags)
+        enforceSingleFlags(entity);
 #end
 #if($documentItem)
         // The document this line belongs to BEFORE the write - a system write can re-point the FK
@@ -762,12 +859,28 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #if($history == "true")
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+#if($hasReferenceChecks)
+        // The reference check and the write are ONE transaction - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity);
+        });
+#else
         ${name}Entity updated = super.update(entity);
+#end
         // A system write (no user event), recorded as such so the trail separates what the application
         // did from what a person did.
         History.recordUpdate(HISTORY_TABLE, updated.${pkPropertyName}, History.SYSTEM, historyBefore, updated, HISTORY_PROPERTIES);
 #else
+#if($hasReferenceChecks)
+        // The reference check and the write are ONE transaction - see save() (#8252).
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            requireReferencesExist(entity, referencesStored);
+            return super.update(entity);
+        });
+#else
         ${name}Entity updated = super.update(entity);
+#end
 #end
 #if($documentItem)
         // A system write is still a line change: the event is suppressed here, the arithmetic is not.
@@ -1235,6 +1348,37 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return stored == null ? null : stored.${statusStampProperty};
     }
 #end
+#if($hasSingleFlags)
+
+    /**
+     * The single flags (intent {@code single:}): booleans at most one ${name} holds, fleet-wide or per
+     * scope. A write that sets one takes it over - the row holding it in the same scope is demoted by a
+     * targeted write publishing its "-updated", in this write's unit of work - or, declared
+     * {@code onConflict: refuse}, is answered 409 while another row holds it.
+     */
+## ponytail: two concurrent writers that each find no other holder can both commit one; a database
+## partial unique index (not portable to H2) or a lock on the scope would close it.
+    private void enforceSingleFlags(${name}Entity entity) {
+#foreach($flag in $singleFlags)
+        if (Boolean.TRUE.equals(entity.${flag.property})) {
+            for (${name}Entity holder : findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                          .eq("${flag.property}", true)#if($flag.per)
+                                                                                                          .eq("${flag.per}", entity.${flag.per})#end)) {
+                if (java.util.Objects.equals(holder.${pkPropertyName}, entity.${pkPropertyName})) {
+                    continue;
+                }
+#if($flag.refuse == "true")
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${flag.messageArgsJava}));
+#else
+                updateProperties(holder.${pkPropertyName}, java.util.Map.<String, Object>of("${flag.property}", false),
+                        "${projectName}-${perspectiveName}-${name}-updated");
+#end
+            }
+        }
+#end
+    }
+#end
 #if($entityStatusProperty != "")
 
     /**
@@ -1426,6 +1570,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveText)
         trimText(submitted);
 #end
+#if($haveScaledDecimals)
+        roundDecimals(submitted);
+#end
 #if($haveCalculatedExpressionOnCreate)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
@@ -1459,8 +1606,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveText)
         trimText(submitted);
 #end
-#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
+#if($haveScaledDecimals)
+        roundDecimals(submitted);
+#end
+#if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
         ${name}Entity entity = copyOf(submitted);
+#keepDefaultedWhenOmitted()
 #if($preservedOnUpdate.size() > 0)
         ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
         if (stored != null) {
@@ -1502,6 +1653,26 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+#if($haveScaledDecimals)
+
+    /**
+     * Rounds the decimal fields of a record about to be written to their column's scale, half up
+     * (#8107) - the value the column will hold. Applied by every write path and by the controllers'
+     * pre-write reads, so a check, a calculation and the stored row all see the same value. A value
+     * within its scale is left as it is.
+     *
+     * @param entity the record, changed in place
+     */
+    public static void roundDecimals(${name}Entity entity) {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
+        if (entity.${property.name} != null && entity.${property.name}.scale() > ${property.dataScale}) {
+            entity.${property.name} = entity.${property.name}.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP);
+        }
+#end
+#end
+    }
+#end
 #if($hasNormalize)
 
     /**
@@ -1519,7 +1690,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
-#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0)
+#if($haveCalculatedExpressionOnCreate || $haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
 
     private static ${name}Entity copyOf(${name}Entity source) {
         ${name}Entity copy = new ${name}Entity();
@@ -1527,6 +1698,33 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         copy.${property.name} = source.${property.name};
 #end
         return copy;
+    }
+#end
+#if($keptWhenOmitted.size() > 0)
+
+    /**
+     * Keeps the stored value of every defaulted field ({@code defaultValue:}, a relation's
+     * {@code init:}) this update leaves null (#8105). A caller sends the fields its form edits, so a
+     * field it leaves out is not a clear - and the default applies on create only, so without this the
+     * update erased it, or failed on the NOT NULL column with a 500 quoting the statement. The stored row
+     * is read only when such a field is actually null, through the base find, so a translated read never
+     * stands in for the stored value.
+     *
+     * @param entity the record about to be updated, completed in place
+     */
+    private void keepDefaultedWhenOmitted(${name}Entity entity) {
+        if (entity.${pkPropertyName} == null#foreach($property in $keptWhenOmitted)#if($foreach.first) || (#else && #end entity.${property.name} != null#end)) {
+            return;
+        }
+        ${name}Entity stored = super.findById(entity.${pkPropertyName});
+        if (stored == null) {
+            return;
+        }
+#foreach($property in $keptWhenOmitted)
+        if (entity.${property.name} == null) {
+            entity.${property.name} = stored.${property.name};
+        }
+#end
     }
 #end
 #if($warningChecks && $warningChecks.size() > 0)
@@ -1686,14 +1884,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public void delete(${name}Entity entity) {
 #if($compositionChildren && $compositionChildren.size() > 0)
-        // Refused by a referencing record's whenTargetDeleted: restrict BEFORE the children are touched -
-        // the history trail is not part of the transaction, so a later refusal would leave it recording
-        // child deletes that were rolled back.
-        requireDeletable(entity.${pkPropertyName});
         // The record and the children it owns leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through the cascade would commit some of
         // the children and keep the record - the orphan state this cascade exists to prevent.
-        UnitOfWork.run(() -> deleteWithOwnedChildren(entity));
+        UnitOfWork.run(() -> {
+            // Refused by a referencing record's whenTargetDeleted: restrict BEFORE the children are
+            // touched - the history trail is not part of the transaction, so a later refusal would leave
+            // it recording child deletes that were rolled back. Inside the unit, so the record is locked
+            // before its references are counted and a write naming it cannot slip in between (#8252).
+            requireDeletable(entity.${pkPropertyName});
+            deleteWithOwnedChildren(entity);
+        });
     }
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
@@ -1730,10 +1931,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public void deleteById(Object id) {
 #if($compositionChildren && $compositionChildren.size() > 0)
-        // Refused before the children are touched - see delete(entity).
-        requireDeletable(id);
-        // One transaction for the record and the children it owns - see delete(entity).
-        UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id));
+        // One transaction for the record and the children it owns, the record locked and its references
+        // counted before the children are touched - see delete(entity).
+        UnitOfWork.run(() -> {
+            requireDeletable(id);
+            deleteByIdWithOwnedChildren(id);
+        });
     }
 
     /** The delete of this ${name} itself, running inside the unit of work above. */
