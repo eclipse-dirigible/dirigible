@@ -26,6 +26,11 @@
  * `harmonia:tasks-changed` naming the processes that differ (basePage.onTasksChanged is the consumer),
  * and a completed task form is followed by a bounded series of re-fetches, because the chain behind the
  * task keeps writing the record after the completion returned (#7612).
+ *
+ * A reading of the inbox fetches the task LIST only. The subject lines (which record a task is about) are
+ * resolved on demand - resolveSubjects(tasks) - for the rows the Inbox actually shows: resolving every
+ * task on each load, route change and poll cost one record GET per task plus one per relation label,
+ * hundreds of requests at ~200 visible tasks, for lines nothing on the page displayed (#8313).
  */
 document.addEventListener('alpine:init', () => {
   // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
@@ -109,6 +114,7 @@ document.addEventListener('alpine:init', () => {
     formProcessInstanceId: '',   // the open task's process, so the record's page is told to re-read once the form closed
     subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
+    _baseline: false,   // byProcessId holds a successful reading a later one may be compared against
     _poll: null,
     _settle: null,      // the pending follow-up re-read after a completed task form closed (see settle)
 
@@ -164,13 +170,16 @@ document.addEventListener('alpine:init', () => {
         });
         collect(mine, true);
         collect(groups, false);
-        // The first reading is a baseline, not a change: the page that is open loaded its own record.
-        const changed = this.loaded ? changedProcesses(this.byProcessId, map) : [];
+        // The first reading is a baseline, not a change: the page that is open loaded its own record. So is
+        // the first one after a failed reading, which emptied byProcessId - compared against that, every
+        // process would be announced and every open page re-read itself (#8313).
+        const changed = this._baseline ? changedProcesses(this.byProcessId, map) : [];
         this.byProcessId = map;
         this.tasks = flat;
         this.loaded = true;
+        this._baseline = true;
         this.loadTaskLabelCatalogs(flat);
-        this.resolveSubjects(flat);
+        this.forgetGoneSubjects(flat);
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
@@ -191,16 +200,16 @@ document.addEventListener('alpine:init', () => {
         }
         this.byProcessId = {};
         this.tasks = [];
+        this._baseline = false;
         console.error('processTasks: unable to load inbox tasks', e);
         return [];
       }
     },
 
-    // An explicit refresh — the Inbox's Refresh button — re-reads the records the subject lines are built
-    // from, which is what makes it authoritative. Everything automatic (the 30s poll, the Inbox's 15s
-    // auto-refresh) goes through load() instead and only resolves the tasks it has not seen yet, so a
-    // shell sitting open does not re-fetch every document, and the subject lines do not blank out and
-    // repopulate on every cycle (#7157).
+    // An explicit refresh — the Inbox's Refresh button — drops the records the subject lines are built
+    // from, so the rows it resolves next read them afresh, which is what makes it authoritative. Everything
+    // automatic (the 30s poll, the Inbox's 15s auto-refresh) goes through load() instead and keeps the
+    // resolved subjects, so the subject lines do not blank out and repopulate on every cycle (#7157).
     refresh() {
       recordCache.clear();
       subjectKeys.clear();
@@ -231,14 +240,20 @@ document.addEventListener('alpine:init', () => {
       return (task && this.subjects[task.id]) || '';
     },
 
-    async resolveSubjects(tasks) {
+    // A task no longer in the inbox takes its subject with it.
+    forgetGoneSubjects(tasks) {
       const current = new Set(tasks.map((t) => t.id));
       Object.keys(this.subjects).forEach((id) => {
         if (current.has(id)) return;
         delete this.subjects[id];
         subjectKeys.delete(id);   // the records stay cached (another task may share them); they age out on TTL
       });
-      const pending = tasks.filter((t) => t.subject && this.subjects[t.id] === undefined);
+    },
+
+    // Resolve the subject lines of these tasks - the rows a view shows, never the whole inbox (#8313). A
+    // task already resolved (or being resolved) is skipped, so a view may ask again after every re-read.
+    async resolveSubjects(tasks) {
+      const pending = (tasks || []).filter((t) => t && t.subject && this.subjects[t.id] === undefined);
       if (!pending.length) return;
       await Promise.all(pending.map((t) => this.resolveSubject(t)));
       // The bell bakes an item's text in when it arrives, so it is re-titled once the subjects are in.

@@ -15,8 +15,17 @@
  * groups) come from the shared processTasks store; selecting a task shows it on the right, where a
  * candidate task is claimed first and a claimed task's form is rendered inline in an <iframe>. When
  * the form completes it posts `harmonia.form.close`; we drop the selection and re-fetch.
+ *
+ * A row's subject line (which record the task is about) costs a record read, so only the rows on screen
+ * are resolved: each row is observed as it renders, and the store is asked for the visible ones as they
+ * scroll in and after every re-read of the list (#8313).
  */
 document.addEventListener('alpine:init', () => {
+  // The ids of the task rows on screen, and the observer reporting them - one Inbox is open at a time. Not
+  // view state, so kept out of the reactive component.
+  const visibleIds = new Set();
+  let rowObserver = null;
+
   Alpine.data('inboxPage', () => ({
     ...basePage(),
     searchTerm: '',
@@ -50,11 +59,34 @@ document.addEventListener('alpine:init', () => {
         }
       };
       window.addEventListener('message', this._onMessage);
+      if (window.IntersectionObserver) {
+        rowObserver = new IntersectionObserver((entries) => {
+          entries.forEach((entry) => {
+            const id = entry.target.dataset.taskId;
+            if (entry.isIntersecting) visibleIds.add(id);
+            else visibleIds.delete(id);
+          });
+          this.resolveVisibleSubjects();
+        });
+      }
     },
 
     destroy() {
       if (this._onMessage) window.removeEventListener('message', this._onMessage);
+      if (rowObserver) rowObserver.disconnect();
+      rowObserver = null;
+      visibleIds.clear();
       this.stopAuto();
+    },
+
+    // Called by each task row as it renders (x-init), so its subject is resolved once it is on screen.
+    observeRow(el) {
+      if (rowObserver) rowObserver.observe(el);
+    },
+
+    resolveVisibleSubjects() {
+      if (!visibleIds.size) return;
+      Alpine.store('processTasks').resolveSubjects(this.tasks.filter(t => visibleIds.has(t.id)));
     },
 
     get tasks() { return Alpine.store('processTasks').tasks; },
@@ -132,8 +164,8 @@ document.addEventListener('alpine:init', () => {
       if (res.ok) window.location.reload();
     },
 
-    // The Refresh button: authoritative, so it drops the subject cache and re-reads every record the
-    // subject lines are built from.
+    // The Refresh button: authoritative, so it drops the subject cache and re-reads the records the
+    // subject lines on screen are built from.
     refresh() {
       return this._load(true);
     },
@@ -153,6 +185,8 @@ document.addEventListener('alpine:init', () => {
       this.lastUpdated = new Date();
       // A completed task drops out of the list — clear a stale selection.
       if (this.selectedId && !this.tasks.some(t => t.id === this.selectedId)) this.selectedId = null;
+      // A refresh dropped the subjects and a completed form invalidated one; the rows on screen ask again.
+      this.resolveVisibleSubjects();
       this.refreshIcons();
     },
 
