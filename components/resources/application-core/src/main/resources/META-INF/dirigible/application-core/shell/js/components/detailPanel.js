@@ -266,6 +266,22 @@ function detailPanel(def, masterId, master) {
       this.openForm("/" + this.def.entity + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/preview?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
     },
 
+    // A row's record's own contributed actions (#8289), for the row menu: the child entity's actions its
+    // status guards and roles allow - the rule of the list's row menu (#8116). A composition child has no
+    // list, and the record dialog Preview opens shows no actions, so the row menu is the one place they
+    // can be offered. A composition child belongs to this application, so every panel asks; relatedPanel
+    // keeps its own rule (#8118: a cross-project register asks nothing). An action is the child's own
+    // declared operation, guarded by its own endpoint - not an edit through the master - so the row menu
+    // offers it on the master's preview too, and the panel re-reads after it (onActionDone in init).
+    rowActions(row) {
+      const store = Alpine.store("customActions");
+      return row && store ? store.getActions(this.def.entity, "entity", row) : [];
+    },
+
+    runRowAction(action, row) {
+      Alpine.store("customActions").trigger(action, row[this.def.primaryKey], row);
+    },
+
     // --- embedded calendar (calendar defs only) -------------------------------------------------
     // Row -> event mapping, the same conventions as the standalone calendar page: Jackson java.time
     // arrays / epoch seconds / ISO strings normalize via toISO; rows with no start are skipped.

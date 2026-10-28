@@ -580,7 +580,7 @@
                     <template x-for="col in def.columns" :key="col.name">
                       <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                     </template>
-                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length)"></th>
+                    <th x-h-table-head scope="col" x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length || rowActions(r).length)"></th>
                   </tr>
                 </thead>
                 <tbody x-h-table-body>
@@ -594,7 +594,7 @@
                           </template>
                         </td>
                       </template>
-                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length)">
+                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length || rowActions(r).length)">
                         <div class="hbox items-center justify-end gap-2">
                           <!-- The child row's own actionable user tasks (a review its process waits on),
                                one button each - offered on Preview too, where the row menu is withheld:
@@ -604,13 +604,24 @@
                               <svg role="presentation" x-h-lucide data-lucide="inbox"></svg><span x-text="$store.processTasks.taskName(task)"></span>
                             </button>
                           </template>
-                          <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false">
+                          <!-- The row menu. On the master's preview it is shown only for a row whose record has
+                               actions (#8289), and then offers them and Preview: an action is the child's own
+                               declared operation, not an edit, so Edit and Delete stay withheld there. -->
+                          <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false || rowActions(row).length">
                             <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
+                              <!-- The row's record's own actions (#8289), first, as in the record page's menu. -->
+                              <template x-for="action in rowActions(row)" :key="action.id">
+                                <li x-h-menu-item @click="runRowAction(action, row)"
+                                    x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                              </template>
+                              <template x-if="rowActions(row).length">
+                                <li x-h-menu-separator></li>
+                              </template>
                               <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                              <li x-h-menu-item x-show="!isForbidden('update')" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                              <li x-h-menu-separator x-show="!isForbidden('update') && !isForbidden('delete')"></li>
-                              <li x-h-menu-item x-show="!isForbidden('delete')" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                              <li x-h-menu-item x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('update')" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                              <li x-h-menu-separator x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('update') && !isForbidden('delete')"></li>
+                              <li x-h-menu-item x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('delete')" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                             </ul>
                           </div>
                         </div>

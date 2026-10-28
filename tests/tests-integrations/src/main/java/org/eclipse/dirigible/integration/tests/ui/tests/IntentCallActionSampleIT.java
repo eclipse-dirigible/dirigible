@@ -72,12 +72,18 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
+              - name: WatcherStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
               - name: Ticket
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: subject, type: string, required: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: TicketStatus, function: EntityStatus, init: 1 }
+                  - { name: watchers, kind: oneToMany, to: Watcher }
                 related:
                   - { entity: Escalation, show: [id, reason, Status] }
               - name: Escalation
@@ -87,6 +93,13 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket }
                   - { name: Status, kind: manyToOne, to: EscalationStatus, function: EntityStatus, init: 1 }
+              - name: Watcher
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string }
+                relations:
+                  - { name: Ticket, kind: manyToOne, to: Ticket, composition: true }
+                  - { name: Status, kind: manyToOne, to: WatcherStatus, function: EntityStatus, init: 1 }
             actions:
               - name: EscalateTicket
                 forEntity: Ticket
@@ -112,11 +125,19 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 call:
                   method: POST
                   path: /services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry
+              - name: MuteWatcher
+                forEntity: Watcher
+                label: Mute
+                fromStatus: [ACTIVE]
+                can: Watcher:mute
+                call:
+                  method: POST
+                  path: /services/java/helpdesk/custom/api/TicketApi/watchers/{id}/mute
             permissions:
               - role: SupportLead
-                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry]
+                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute]
               - role: Agent
-                can: [Ticket:read, Escalation:read]
+                can: [Ticket:read, Escalation:read, Watcher:read]
             seeds:
               - name: ticket-statuses
                 entity: TicketStatus
@@ -139,6 +160,16 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 entity: Escalation
                 rows:
                   - { id: 1, reason: Pager down, Ticket: 1, Status: 3 }
+              - name: watcher-statuses
+                entity: WatcherStatus
+                rows:
+                  - { id: 1, name: ACTIVE }
+                  - { id: 2, name: MUTED }
+              - name: watchers
+                entity: Watcher
+                rows:
+                  - { id: 1, email: ann@example.com, Ticket: 1, Status: 1 }
+                  - { id: 2, email: bob@example.com, Ticket: 1, Status: 2 }
             """;
 
     /**
@@ -196,6 +227,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/watchers/{id}/mute")
+                public void mute(@PathParam("id") Integer id) {
+                    received.add(Map.of("call", "mute " + id));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Get("/received")
                 public List<Map<String, Object>> received() {
                     return received;
@@ -227,7 +264,8 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Ticket-EscalateTicket"), actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Ticket-EscalateTicket", "helpdesk-Watcher-MuteWatcher"),
+                actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -278,6 +316,33 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // The ticket's Escalations register offers the FAILED escalation's Retry beside Open (#8118).
         List<String> register = registerRowMenu(1, "Pager down");
         assertTrue(register.contains("Retry"), "the register row of a FAILED escalation offers Retry: " + register);
+
+        // A composition child's detail panel offers its rows' actions (#8289). On the ticket's preview the
+        // ACTIVE watcher's menu offers Mute and Preview - not Edit or Delete, which stay withheld there -
+        // and
+        // the MUTED watcher, with no action allowed, has no menu at all. On the ticket's edit the actions
+        // come
+        // first, before the panel's own Preview, Edit and Delete.
+        assertEquals(List.of("Mute", "Preview"), panelRowMenu("/Ticket/1/preview", "ann@example.com"),
+                "the ACTIVE watcher's row on the ticket's preview");
+        assertEquals(List.of(), panelRowMenu("/Ticket/1/preview", "bob@example.com"), "the MUTED watcher's row on the ticket's preview");
+        assertEquals(List.of("Mute", "Preview", "Edit", "Delete"), panelRowMenu("/Ticket/1/edit", "ann@example.com"),
+                "the ACTIVE watcher's row on the ticket's edit");
+        // Running it from the panel asks for the confirmation a call action without a prompt always gets,
+        // then
+        // posts the call, as from any other menu.
+        openPanelRowMenu("/Ticket/1/preview", "ann@example.com");
+        Selenide.$$("li[x-h-menu-item]")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Mute"))
+                .click();
+        assertEquals("Mute", Selenide.executeJavaScript("var a = Alpine.store('customActions').confirmAction; return a ? a.label : null;"),
+                "the panel row's Mute asks for its confirmation");
+        Selenide.executeJavaScript("Alpine.store('customActions').confirmRun();");
+        awaitAnnouncement("Mute completed");
+        List<Map<String, Object>> muted = received();
+        assertEquals("mute 1", muted.get(muted.size() - 1)
+                                    .get("call"));
 
         // Retry is declared primary (#8119): on the FAILED escalation it is the filled button - in the
         // list's sheet and on its page - and Edit steps down.
@@ -398,6 +463,45 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 .sendKeys(Keys.ESCAPE)
                 .perform();
         return texts;
+    }
+
+    /**
+     * The items of a detail panel row's menu, on the given ticket route, opened on the row with the
+     * text - empty when the row offers no menu there.
+     */
+    private List<String> panelRowMenu(String route, String text) {
+        SelenideElement trigger = openPanelRowMenu(route, text);
+        if (trigger == null) {
+            return List.of();
+        }
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> texts = items.texts();
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return texts;
+    }
+
+    /**
+     * Opens a detail panel row's menu and answers its trigger, or answers null when the row shows none.
+     */
+    private SelenideElement openPanelRowMenu(String route, String text) {
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#" + route);
+        Selenide.refresh();
+        SelenideElement row = Selenide.$$("div[x-data^='detailPanel'] tbody tr")
+                                      .findBy(Condition.text(text))
+                                      .shouldBe(Condition.visible);
+        // The panel's rows render with the store's actions already loaded; give the guards a moment.
+        Selenide.sleep(500);
+        SelenideElement trigger = row.$("button[aria-label='Row actions']");
+        if (!trigger.isDisplayed()) {
+            return null;
+        }
+        trigger.click();
+        return trigger;
     }
 
     /** The custom-action descriptors the given user is offered, by id. */
