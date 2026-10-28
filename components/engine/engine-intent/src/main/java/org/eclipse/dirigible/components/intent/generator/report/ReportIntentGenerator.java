@@ -289,6 +289,58 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return columns instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
     }
 
+    /**
+     * The reports a generated application's shell lists, in the intent's order: one entry per report
+     * this generator writes, carrying what the shell's reports store needs to render the Reports
+     * section and the dashboard tiles - the display metadata exactly as the {@code .report} carries it,
+     * plus the URLs of the report's page and controller (#8277).
+     *
+     * <p>
+     * The shell used to discover its reports at runtime through the core repository API, which only
+     * {@code ADMINISTRATOR} and {@code OPERATOR} may call, so a business user holding just the
+     * application's roles saw neither. The manifest makes that walk unnecessary: everything in it is
+     * known at generation time. It skips the reports {@link #generate} skips (an unnamed one, a
+     * repeated name), so it never lists a report that has no page.
+     *
+     * @param context the generation context
+     * @return the manifest, empty when the intent declares no report
+     */
+    public static List<Map<String, Object>> shellManifest(IntentGenerationContext context) {
+        List<Map<String, Object>> manifest = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ReportIntent report : context.getModel()
+                                          .getReports()) {
+            String name = report.getName();
+            if (name == null || name.isBlank() || !seen.add(name)) {
+                continue;
+            }
+            manifest.add(shellManifestEntry(context.getProjectName(), build(context, report).document()));
+        }
+        return manifest;
+    }
+
+    /** One report's shell manifest entry, projected from its assembled {@code .report} document. */
+    private static Map<String, Object> shellManifestEntry(String project, Map<String, Object> document) {
+        String name = (String) document.get("name");
+        Map<String, Object> entry = new LinkedHashMap<>();
+        entry.put("name", name);
+        entry.put("label", document.get("label"));
+        for (String key : List.of("description", "dashboard", "chart", "tId", "descriptionTId")) {
+            if (document.containsKey(key)) {
+                entry.put(key, document.get(key));
+            }
+        }
+        // Only a KPI tile reads the columns (a list widget shows the report's selected ones), so a
+        // report without a widget does not carry them into every page of the shell.
+        if (document.containsKey("widget")) {
+            entry.put("widget", document.get("widget"));
+            entry.put("columns", columnsOf(document));
+        }
+        entry.put("url", IntentNaming.reportPageFolderUrl(project, name) + "/index.html");
+        entry.put("apiBase", IntentNaming.reportControllerUrl(project, name));
+        return entry;
+    }
+
     /** Test hook: the assembled {@code .report} document for one report. */
     static Map<String, Object> buildForTest(IntentGenerationContext context, ReportIntent report) {
         return build(context, report).document();

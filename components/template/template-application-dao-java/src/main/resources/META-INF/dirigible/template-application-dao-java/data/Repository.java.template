@@ -47,6 +47,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
         #set($haveText = "true")
     #end
+    #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
+        #set($haveScaledDecimals = "true")
+    #end
 ## The comments below start at column 0 on purpose: Velocity gobbles the indentation of a line that
 ## holds only a directive, but NOT of a line that holds only a ## comment - it emits the leading
 ## whitespace and swallows the rest. Indented inside this loop they contributed 28 characters per
@@ -246,6 +249,15 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(trimText)
 #if($haveText)
         trimText(entity);
+#end
+#end
+## Decimal input is rounded to its column's scale on every write, before anything reads it (#8107): the
+## column stores 0.0049 hours as 0.00, so a check, a calculation and a guard that read the payload's
+## 0.0049 judged and priced a value the row does not hold - a `> 0` passed on a stored zero, and an
+## amount was billed on hours nobody recorded.
+#macro(roundDecimals)
+#if($haveScaledDecimals)
+        roundDecimals(entity);
 #end
 #end
 ## Required values: refuse a write that leaves a NOT NULL column empty, naming the property, instead of
@@ -453,6 +465,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public ${name}Entity save(${name}Entity entity) {
 #trimText()
+#roundDecimals()
 #applyDefaults()
 #normalizeSubsets()
 #normalizeInput()
@@ -590,6 +603,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     @Override
     public ${name}Entity update(${name}Entity entity) {
 #trimText()
+#roundDecimals()
 #normalizeSubsets()
 #normalizeInput()
 #keepDefaultedWhenOmitted()
@@ -763,6 +777,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
 #trimText()
+#roundDecimals()
 #normalizeSubsets()
 #normalizeInput()
 #keepDefaultedWhenOmitted()
@@ -1493,6 +1508,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($haveText)
         trimText(submitted);
 #end
+#if($haveScaledDecimals)
+        roundDecimals(submitted);
+#end
 #if($haveCalculatedExpressionOnCreate)
         ${name}Entity entity = copyOf(submitted);
 #applyDefaults()
@@ -1525,6 +1543,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public ${name}Entity calculatedForUpdate(${name}Entity submitted) {
 #if($haveText)
         trimText(submitted);
+#end
+#if($haveScaledDecimals)
+        roundDecimals(submitted);
 #end
 #if($haveCalculatedExpressionOnUpdate || $preservedOnUpdate.size() > 0 || $keptWhenOmitted.size() > 0)
         ${name}Entity entity = copyOf(submitted);
@@ -1565,6 +1586,26 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
         if (entity.${property.name} != null) {
             entity.${property.name} = entity.${property.name}.strip();
+        }
+#end
+#end
+    }
+#end
+#if($haveScaledDecimals)
+
+    /**
+     * Rounds the decimal fields of a record about to be written to their column's scale, half up
+     * (#8107) - the value the column will hold. Applied by every write path and by the controllers'
+     * pre-write reads, so a check, a calculation and the stored row all see the same value. A value
+     * within its scale is left as it is.
+     *
+     * @param entity the record, changed in place
+     */
+    public static void roundDecimals(${name}Entity entity) {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
+        if (entity.${property.name} != null && entity.${property.name}.scale() > ${property.dataScale}) {
+            entity.${property.name} = entity.${property.name}.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP);
         }
 #end
 #end

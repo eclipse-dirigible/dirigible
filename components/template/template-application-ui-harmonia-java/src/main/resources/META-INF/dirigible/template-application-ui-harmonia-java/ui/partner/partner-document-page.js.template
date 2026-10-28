@@ -413,6 +413,17 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
+    // A click on a line opens it - except one on the line's own Delete button, which acts on its own. The
+    // guard used to be @click.stop on the button, which also kept the click from the document, where
+    // Harmonia closes an open menu, so a menu open elsewhere stayed open (#8259).
+    itemRowClicked(event, row) {
+      if (event.target.closest('[data-row-control]')) return;
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
+      if (!this.mutable) return;
+#end
+      this.openItem(row);
+    },
+
     // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
     // calendar).
     async openItem(row, preset) {

@@ -178,10 +178,22 @@ final class ModelTemplateAdapters {
         List<Object> languages = ModelValues.asList(model.get("languages"));
         parameters.put("appLanguages",
                 JavaScriptJson.compact(languages.isEmpty() ? List.of(DEFAULT_APP_LANGUAGE) : new ArrayList<>(languages)));
+        // Whether the application has data to translate at all - a multilingual entity. The shell's
+        // translation check holds the declared data languages against the platform's only then, so a
+        // fully translated application without such data is not reported as untranslated (#8137).
+        parameters.put("appTranslatableData", ModelValues.asMaps(model.get("entities"))
+                                                         .stream()
+                                                         .anyMatch(entity -> ModelValues.isTrue(entity, "multilingual")));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
         // Country-scoped field labels, rendered into the application's configuration as a JSON object
         // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).
         parameters.put("countryLabels", JavaScriptJson.compact(countryLabelOverlay(model, parameters)));
+        // The application's reports, as the intent generated them into the model (#8277): the shell's
+        // reports store lists these instead of discovering them through the core repository API,
+        // which a business user may not call. null - not an empty list - for a model that carries
+        // none, so the store keeps discovering the reports a developer generated outside the intent.
+        Object reports = model.get("reports");
+        parameters.put("appReports", reports instanceof List ? JavaScriptJson.compact(reports) : "null");
         return new PreparedModel(model, true);
     }
 

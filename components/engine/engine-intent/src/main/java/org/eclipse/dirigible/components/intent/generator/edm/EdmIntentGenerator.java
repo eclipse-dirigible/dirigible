@@ -50,6 +50,7 @@ import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.generator.report.ReportIntentGenerator;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -172,6 +173,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName, IntentSettings settings) {
         return buildDocument(null, model, intentName, settings).modelJson;
+    }
+
+    /**
+     * Test seam: build the {@code .model} JSON within the given context - the one path that also
+     * carries what needs the project, such as the report manifest. Never use in production code.
+     */
+    static Map<String, Object> buildModelJsonForTest(IntentGenerationContext context) {
+        return buildDocument(context, context.getModel(), IntentNaming.baseName(context), new IntentSettings()).modelJson;
     }
 
     /**
@@ -894,6 +903,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, String> processTaskLabels = buildProcessTaskLabels(model);
         if (!processTaskLabels.isEmpty()) {
             body.put("processTaskLabels", processTaskLabels);
+        }
+        // The application's reports, for the Harmonia shell to bake into config.js: its Reports
+        // section and dashboard tiles then need no runtime discovery through the core repository API,
+        // which only ADMINISTRATOR and OPERATOR may call (#8277). A model without the key keeps the
+        // shell's discovery, for the reports a developer generated outside the intent. The
+        // context-less test seams build no report.
+        if (context != null) {
+            List<Map<String, Object>> reports = ReportIntentGenerator.shellManifest(context);
+            if (!reports.isEmpty()) {
+                body.put("reports", reports);
+            }
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
@@ -4489,10 +4509,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit the DOCUMENT-level metadata as attributes of the {@code <model>} element: the identity
      * scalars ({@code title}, {@code description}, {@code icon}) verbatim, and the structured values
-     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels}) as
-     * JSON strings - the same flat-attribute mechanism the entity/property level uses, for the same
-     * reason: a flat attribute survives both the mxGraph cell round-trip of a live editor save and the
-     * {@code .edm}-to-{@code .model} regeneration, which a nested element would not.
+     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels},
+     * {@code reports}) as JSON strings - the same flat-attribute mechanism the entity/property level
+     * uses, for the same reason: a flat attribute survives both the mxGraph cell round-trip of a live
+     * editor save and the {@code .edm}-to-{@code .model} regeneration, which a nested element would
+     * not.
      *
      * <p>
      * Without this the {@code <model>} element carried NO attributes at all, so everything the
@@ -4908,7 +4929,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     // authored before that keeps round-tripping as an object rather than a JSON string.
     private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
             "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels", "reports");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

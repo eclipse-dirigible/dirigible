@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -83,7 +84,7 @@ class SynchronizationProcessorTenantInitializationTest {
         List<Synchronizer<?, ?>> synchronizers = new ArrayList<>();
         synchronizers.add(synchronizer.mock);
         processor = new SynchronizationProcessor(repository, synchronizers, definitionService, mock(SynchronizationWatcher.class),
-                new RegistryMutationTracker(), tenantContext, ledger);
+                new RegistryMutationTracker(), tenantContext, ledger, mock(ObjectProvider.class));
         processor.prepareSynchronizers();
         // the boot pass, which an initialization waits for
         processor.processSynchronizers();
