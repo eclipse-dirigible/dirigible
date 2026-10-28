@@ -18,6 +18,7 @@ import org.eclipse.dirigible.components.engine.camel.processor.CamelProcessor;
 import org.eclipse.dirigible.components.engine.camel.service.CamelService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 import java.util.HashMap;
 
@@ -57,7 +58,7 @@ class CamelSynchronizerRetryTest {
         CamelService camelService = mock(CamelService.class);
         when(camelService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         camelProcessor = mock(CamelProcessor.class);
-        synchronizer = new CamelSynchronizer(camelService, camelProcessor);
+        synchronizer = new CamelSynchronizer(camelService, camelProcessor, mock(ObjectProvider.class));
 
         SynchronizerCallback callback = mock(SynchronizerCallback.class);
         doAnswer(invocation -> {
