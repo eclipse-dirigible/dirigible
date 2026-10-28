@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.api.db.DatabaseFacade;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.database.sql.DataType;
@@ -613,12 +614,16 @@ class DatabaseFacadeIT extends IntegrationTest {
         void createBinaryTable() throws SQLException {
             dropTableIfExists(BINARY_TABLE);
             DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            // PostgreSQL has no VARBINARY: its variable-length binary type is BYTEA, which takes no length.
+            boolean postgres = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL);
+            DataType varbinaryType = postgres ? DataType.BYTEA : DataType.VARBINARY;
+            String[] varbinaryArgs = postgres ? new String[0] : new String[] {"(100)"};
             String createTableSql = SqlDialectFactory.getDialect(defaultDataSource)
                                                      .create()
                                                      .table(BINARY_TABLE)
                                                      .columnInteger(ID_COLUMN)
                                                      .columnBlob("BL", true)
-                                                     .column("VB", DataType.VARBINARY, false, true, false, "(100)")
+                                                     .column("VB", varbinaryType, false, true, false, varbinaryArgs)
                                                      .build();
             try (DirigibleConnection connection = defaultDataSource.getConnection();
                     PreparedStatement preparedStatement = connection.prepareStatement(createTableSql)) {
