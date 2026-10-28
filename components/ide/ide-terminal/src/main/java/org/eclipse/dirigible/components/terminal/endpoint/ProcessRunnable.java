@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Map;
 
 import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TERMINAL_PREFIX;
 
@@ -25,6 +26,9 @@ class ProcessRunnable implements Runnable {
     /** The command. */
     private final String command;
 
+    /** The variables added to the environment the command is started with. */
+    private final Map<String, String> environment;
+
     /** The process. */
     private Process process;
 
@@ -32,9 +36,11 @@ class ProcessRunnable implements Runnable {
      * Instantiates a new process runnable.
      *
      * @param command the command
+     * @param environment the variables added to the environment the command is started with
      */
-    ProcessRunnable(String command) {
+    ProcessRunnable(String command, Map<String, String> environment) {
         this.command = command;
+        this.environment = Map.copyOf(environment);
     }
 
     /**
@@ -52,8 +58,10 @@ class ProcessRunnable implements Runnable {
     @Override
     public void run() {
         try {
-            this.process = Runtime.getRuntime()
-                                  .exec(this.command);
+            ProcessBuilder processBuilder = new ProcessBuilder(this.command);
+            processBuilder.environment()
+                          .putAll(this.environment);
+            this.process = processBuilder.start();
 
             Thread reader = new Thread(() -> {
                 try {

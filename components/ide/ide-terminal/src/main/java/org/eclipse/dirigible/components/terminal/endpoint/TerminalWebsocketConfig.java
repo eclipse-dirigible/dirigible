@@ -27,6 +27,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 
 /**
  * The Class TerminalWebsocketConfig.
@@ -37,8 +38,12 @@ import java.nio.charset.StandardCharsets;
 public class TerminalWebsocketConfig implements WebSocketConfigurer {
 
     static final String TERMINAL_PREFIX = "[ws:terminal] {}";
+    static final String TTYD_HOST = "127.0.0.1";
+    static final int TTYD_PORT = 9000;
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketConfig.class);
     private static final String UNIX_FILE = "ttyd.sh";
+    private static final String CREDENTIAL_VARIABLE = "DIRIGIBLE_TERMINAL_CREDENTIAL";
+    private static final TtydCredential CREDENTIAL = TtydCredential.generate();
     private static volatile boolean started = false;
 
     static {
@@ -62,7 +67,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
      */
     @Bean
     public WebSocketHandler getConsoleWebsocketHandler() {
-        return new TerminalWebsocketHandler();
+        return new TerminalWebsocketHandler(CREDENTIAL.token());
     }
 
     private synchronized static void runTTYD() {
@@ -84,7 +89,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
             String command = "./" + unixFile.getName();
 
             logger.info("Starting ttyd using command [{}] and file [{}]", command, unixFile);
-            ProcessRunnable processRunnable = new ProcessRunnable(command);
+            ProcessRunnable processRunnable = new ProcessRunnable(command, Map.of(CREDENTIAL_VARIABLE, CREDENTIAL.credential()));
             new Thread(processRunnable).start();
 
             started = true;
@@ -106,7 +111,9 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
     }
 
     /**
-     * Creates the shell script.
+     * Creates the shell script. The backend listens on the loopback interface only, where the terminal
+     * websocket connects to it, and takes its credential from the environment the script is started
+     * with, so it is written neither to the file nor to the log.
      *
      * @param file the file
      * @throws FileNotFoundException the file not found exception
@@ -115,8 +122,8 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
     private static void createShellScriptFile(File file) throws FileNotFoundException, IOException {
         String command = """
                 #!/bin/sh
-                ttyd -p 9000 --writable sh
-                """;
+                ttyd -i %s -p %d -c "$%s" --writable sh
+                """.formatted(TTYD_HOST, TTYD_PORT, CREDENTIAL_VARIABLE);
         logger.info("Creating file [{}] with content [{}]", file, command);
         try (FileOutputStream fos = new FileOutputStream(file)) {
             IOUtils.write(command, fos, StandardCharsets.UTF_8);
