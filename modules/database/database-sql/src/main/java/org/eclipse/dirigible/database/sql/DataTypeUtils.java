@@ -47,6 +47,10 @@ public class DataTypeUtils {
     private static final String BINARY = "BINARY";
     /** The Constant BLOB. */
     private static final String BLOB = "BLOB";
+    /** The Constant VARBINARY. */
+    private static final String VARBINARY = "VARBINARY";
+    /** The Constant LONGVARBINARY. */
+    private static final String LONGVARBINARY = "LONGVARBINARY";
     /** The Constant CHARACTER_LARGE_OBJECT. */
     private static final String CHARACTER_LARGE_OBJECT = "CHARACTER LARGE OBJECT";
     /** The Constant CLOB. */
@@ -152,6 +156,13 @@ public class DataTypeUtils {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DATE, DataType.DATE);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BOOLEAN, DataType.BOOLEAN);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BLOB, DataType.BLOB);
+        // the fixed-size and variable-size binary JDBC types are handled exactly like BLOB (setBinaryStream
+        // /
+        // getBytes); without these entries a VARBINARY parameter or column fails with "Type [-3] not
+        // supported"
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.BINARY, DataType.BLOB);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.VARBINARY, DataType.BLOB);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.LONGVARBINARY, DataType.BLOB);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.CLOB, DataType.CLOB);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.NCLOB, DataType.NCLOB);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DECIMAL, DataType.DECIMAL);
@@ -228,6 +239,8 @@ public class DataTypeUtils {
         STRING_TO_DATABASE_TYPE.put(BINARY_VARYING, Types.BLOB);
         STRING_TO_DATABASE_TYPE.put(BINARY_LARGE_OBJECT, Types.BLOB);
         STRING_TO_DATABASE_TYPE.put(BYTEA, Types.BLOB);
+        STRING_TO_DATABASE_TYPE.put(VARBINARY, Types.BLOB);
+        STRING_TO_DATABASE_TYPE.put(LONGVARBINARY, Types.BLOB);
         // arrays
         STRING_TO_DATABASE_TYPE.put(ARRAY, Types.ARRAY);
         // json
@@ -302,6 +315,8 @@ public class DataTypeUtils {
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_VARYING, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BINARY_LARGE_OBJECT, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BYTEA, BLOB);
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(VARBINARY, BLOB);
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(LONGVARBINARY, BLOB);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(DATETIME, TIMESTAMP);
 
     }
