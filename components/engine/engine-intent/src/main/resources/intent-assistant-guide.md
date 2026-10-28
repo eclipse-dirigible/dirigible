@@ -2292,7 +2292,7 @@ actions:
     label: Escalate
     fromStatus: [OPEN, ON_HOLD]   # hides the button elsewhere - ADVISORY: the endpoint's 409 decides
     can: Ticket:escalate          # offered only to the roles whose permissions list this token
-    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date
+    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date | multiselect
       - { name: level, type: integer, label: Level, required: true }
       - { name: note,  type: text,    label: Note }
     call:
@@ -2318,6 +2318,46 @@ declared prompt input, and without `body` none is sent. `fromStatus` names seede
 check, so the endpoint must enforce its own rule. A `can:` token no role lists is refused (the button
 would be shown to nobody), and a token an action binds is not reported as an advisory. The answer's
 body is not read: a 2xx toasts `success`, a 400/409 shows the endpoint's `message`.
+
+**Make the dialog say what it acts on.** A dialog that only says "Run" leaves the user unsure which
+record they are acting on. Use `description:` for one paragraph under the title, in the prompt and the
+confirm dialog alike, and `submit:` for the run button's caption. A prompt input may also open with a
+`default:` and explain itself with a `help:` line. A choice of several values is ONE `multiselect`
+input, never one boolean per value:
+
+```yaml
+actions:
+  - name: InviteMember
+    forEntity: Team
+    label: Invite member
+    description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+    submit: Invite                         # the run button; default "Run"
+    prompt:
+      - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+      - name: roles
+        type: multiselect
+        label: Roles
+        required: true                     # at least one ticked
+        default: [Member]
+        options:                           # { value, label?, help? } or a bare string
+          - { value: Member, help: Uses the team's workspace }
+          - { value: Lead,   help: Manages the team's members }
+    call:
+      path: /services/java/teams/custom/api/TeamApi/teams/{id}/invitations
+      body: { email: "{email}", roles: "{roles}" }   # "{roles}" is a JSON array, in options order
+    success: Invitation sent
+```
+
+Rules: `description` and `confirm` may name the clicked record's properties as `{property}`: a field, a
+to-one relation (shown by its target's display text) or the `Name` a `label:` generates, of
+`forEntity`. An unknown property is refused, and so is any placeholder on `scope: page`, which has no
+record. A property the record lacks renders empty. `options` is required for `multiselect` and refused
+on every other type, and its values are unique strings. `"{roles}"` sends the ticked values as an
+array (`[]` when none), and `required: true` means at least one. A `default` is a literal of the
+input's type (a list of option values for a `multiselect`, a `yyyy-MM-dd` date), or a whole
+`"{property}"` of the record, read when the dialog opens. A record value the control cannot hold is
+left empty. `description` and `submit` belong to a `call:` only. A boolean's caption sits beside its
+box and toggles it.
 
 **`primary: true` - the record's filled button.** The list's details sheet and the record page each
 have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,

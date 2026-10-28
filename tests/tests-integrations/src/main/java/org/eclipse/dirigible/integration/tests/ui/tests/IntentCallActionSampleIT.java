@@ -48,7 +48,9 @@ import com.codeborne.selenide.SelenideElement;
  * <p>
  * The roles are checked over HTTP, as the users who hold them: the views aggregation is what drops
  * the button for a caller without the token, so a SupportLead receives it and an Agent does not.
- * The rest runs in the browser, as the administrator, who is offered every button.
+ * The rest runs in the browser, as the administrator, who is offered every button - including the
+ * dialog that says what it acts on (issue #8296): a description naming the record, a help line, a
+ * multiselect with its default ticked and captions that toggle their boxes, and a named run button.
  */
 class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
 
@@ -93,6 +95,10 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket }
                   - { name: Status, kind: manyToOne, to: EscalationStatus, function: EntityStatus, init: 1 }
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
               - name: Watcher
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -133,11 +139,31 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 call:
                   method: POST
                   path: /services/java/helpdesk/custom/api/TicketApi/watchers/{id}/mute
+              - name: InviteMember
+                forEntity: Team
+                label: Invite member
+                can: Team:invite
+                description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+                submit: Invite
+                prompt:
+                  - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+                  - name: roles
+                    type: multiselect
+                    label: Roles
+                    required: true
+                    default: [Member]
+                    options:
+                      - { value: Member, help: Uses the team's workspace }
+                      - { value: Lead,   help: Manages the team's members }
+                call:
+                  path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/invitations
+                  body: { email: "{email}", roles: "{roles}" }
+                success: Invitation sent
             permissions:
               - role: SupportLead
-                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute]
+                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite]
               - role: Agent
-                can: [Ticket:read, Escalation:read, Watcher:read]
+                can: [Ticket:read, Escalation:read, Watcher:read, Team:read]
             seeds:
               - name: ticket-statuses
                 entity: TicketStatus
@@ -160,6 +186,10 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 entity: Escalation
                 rows:
                   - { id: 1, reason: Pager down, Ticket: 1, Status: 3 }
+              - name: teams
+                entity: Team
+                rows:
+                  - { id: 1, name: Platform }
               - name: watcher-statuses
                 entity: WatcherStatus
                 rows:
@@ -233,6 +263,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/teams/{id}/invitations")
+                public void invite(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "invite " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Get("/received")
                 public List<Map<String, Object>> received() {
                     return received;
@@ -264,8 +300,8 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Ticket-EscalateTicket", "helpdesk-Watcher-MuteWatcher"),
-                actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-Ticket-EscalateTicket",
+                "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -386,6 +422,48 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         assertTrue(((Number) received.get(received.size() - 1)
                                      .get("contentLength")).longValue() <= 0,
                 "a call without a body sends none: " + received);
+
+        // The dialog says what it acts on (#8296): the description names the team, the email's help line
+        // shows, Member is ticked by default, the caption Lead ticks its box, and the run button reads
+        // Invite. The controller receives the roles as a list, in the options' order.
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Team");
+        Selenide.refresh();
+        browser.clickOnElementContainingText("td", "Platform");
+        Selenide.$("[x-h-sheet] button[aria-label='More actions']")
+                .shouldBe(Condition.visible)
+                .click();
+        browser.clickOnElementContainingText(HtmlElementType.LI, "Invite member");
+        SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        dialog.$("[data-slot='dialog-description']")
+              .shouldHave(Condition.exactText("Invite a person to Platform. They get an email with a link to the team's workspace."));
+        dialog.$$("[data-slot='field-description']")
+              .findBy(Condition.exactText("name@company.com"))
+              .shouldBe(Condition.visible);
+        dialog.$$("[data-slot='field-description']")
+              .findBy(Condition.exactText("Manages the team's members"))
+              .shouldBe(Condition.visible);
+        dialog.$("#prompt-roles-0")
+              .shouldBe(Condition.checked);
+        dialog.$("#prompt-roles-1")
+              .shouldNotBe(Condition.checked);
+        dialog.$("label[for='prompt-roles-1']")
+              .shouldHave(Condition.exactText("Lead"))
+              .click();
+        dialog.$("#prompt-roles-1")
+              .shouldBe(Condition.checked);
+        dialog.$("input[data-prompt-field='email']")
+              .setValue("new@example.com");
+        dialog.$$("button")
+              .findBy(Condition.exactText("Invite"))
+              .shouldBe(Condition.visible)
+              .click();
+        awaitAnnouncement("Invitation sent");
+        List<Map<String, Object>> invitations = received();
+        Map<String, Object> invitation = invitations.get(invitations.size() - 1);
+        assertEquals("invite 1", invitation.get("call"));
+        assertEquals(Map.of("email", "new@example.com", "roles", List.of("Member", "Lead")), invitation.get("body"),
+                "the controller receives the ticked roles as a list, in the options' order");
     }
 
     /**
