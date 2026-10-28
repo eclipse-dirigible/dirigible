@@ -41,6 +41,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ide-template</artifactId>
 		</dependency>
+		<!-- A schedule's cron is validated at parse with the scheduler's own parser (#8235) -->
+		<dependency>
+			<groupId>org.quartz-scheduler</groupId>
+			<artifactId>quartz</artifactId>
+		</dependency>
 		<!-- The logged-in user each stored conversation message is attributed to -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

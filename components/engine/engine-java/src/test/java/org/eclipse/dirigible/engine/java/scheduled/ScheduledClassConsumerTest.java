@@ -56,6 +56,23 @@ class ScheduledClassConsumerTest {
         }
     }
 
+    /**
+     * A client job whose cron sets day-of-month AND day-of-week - the Spring-style form Quartz refuses
+     * (#8235).
+     */
+    static class MonthlyStarJob implements JobHandler {
+
+        @Override
+        public String cron() {
+            return "0 0 4 1 * *";
+        }
+
+        @Override
+        public void run() {
+            // nothing - the schedule registration is what is under test
+        }
+    }
+
     private static final String JOB_NAME = CleanupJob.class.getName();
 
     private ComponentContainer componentContainer;
@@ -79,6 +96,7 @@ class ScheduledClassConsumerTest {
             return List.of();
         });
         when(componentContainer.instanceOf(CleanupJob.class)).thenReturn(Optional.of(new CleanupJob()));
+        when(componentContainer.instanceOf(MonthlyStarJob.class)).thenReturn(Optional.of(new MonthlyStarJob()));
 
         consumer = new ScheduledClassConsumer(componentContainer, jobsManager, jobService, tenantContext);
     }
@@ -91,6 +109,23 @@ class ScheduledClassConsumerTest {
         ArgumentCaptor<Job> saved = ArgumentCaptor.forClass(Job.class);
         verify(jobService, times(1)).save(saved.capture());
         return saved.getValue();
+    }
+
+    /**
+     * A cron the scheduler cannot parse used to be SAVED as an enabled Job row and then fail the
+     * trigger build, so {@code /services/jobs} listed a job that never fired and the reconciliation
+     * timer retried it for the life of the process (#8235). Nothing may be written for it.
+     */
+    @Test
+    void aJobWhoseCronTheSchedulerCannotRunIsNotRegisteredAtAll() throws Exception {
+        String name = MonthlyStarJob.class.getName();
+        when(jobService.findByName(name)).thenThrow(new IllegalArgumentException("Job with name does not exist: " + name));
+
+        consumer.onClassLoaded(new LoadedClass("sample", name, MonthlyStarJob.class, MonthlyStarJob.class.getClassLoader()));
+        consumer.reconcile();
+
+        verify(jobService, never()).save(any());
+        verify(jobsManager, never()).scheduleJob(any());
     }
 
     @Test

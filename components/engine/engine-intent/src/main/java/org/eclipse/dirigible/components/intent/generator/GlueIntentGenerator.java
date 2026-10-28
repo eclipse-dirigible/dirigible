@@ -4483,7 +4483,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             entry.put("folder", source.getFolder());
-            entry.put("cron", source.getCron());
+            // In Quartz form (#8235): the day field the author left at * becomes the ? Quartz needs.
+            entry.put("cron", CronSupport.toQuartz(source.getCron()));
             files.add(entry);
         }
         return files;
@@ -4788,7 +4789,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", schedule.getName());
             // pascalIdentifier (not pascalCase) so a hyphenated schedule name yields a valid Java class.
             entry.put("className", IntentNaming.pascalIdentifier(schedule.getName()));
-            entry.put("cron", schedule.getCron());
+            // In Quartz form (#8235): the generated cron() is handed to the scheduler unchanged, and
+            // the Spring-style "0 0 4 1 * *" it would reject is emitted as "0 0 4 1 * ?".
+            entry.put("cron", CronSupport.toQuartz(schedule.getCron()));
             entry.put("entity", entity);
             // A cross-model source's generated job imports the OWNER's gen classes (the leafOnly
             // precedent); sourceModel drives the sanitized gen folder in the template, and the

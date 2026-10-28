@@ -11,6 +11,7 @@ package org.eclipse.dirigible.engine.java.scheduled;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -32,6 +33,7 @@ import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.job.JobHandler;
 import org.eclipse.dirigible.sdk.job.Scheduled;
+import org.quartz.CronExpression;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -309,6 +311,20 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         String handler = declaration.handler();
         String expression = declaration.expression();
         String key = key(name, tenantId);
+        String cronProblem = cronProblem(expression);
+        if (cronProblem != null) {
+            // Not a transient failure: no reconciliation pass can land a cron the scheduler cannot
+            // parse, and saving the row before scheduling listed the job as enabled with a schedule that
+            // never fired (#8235). Nothing is written; the class is registered when it is fixed and
+            // reloaded. The hand-written case reaching Problems is #8151.
+            if (reportedFailures.add(key)) {
+                LOGGER.error(
+                        "Client-Java job [{}] declares cron '{}', which the scheduler cannot run, so it is NOT registered for tenant"
+                                + " [{}] and does not fire until the class is fixed and reloaded: {}",
+                        handler, expression, tenantId, cronProblem);
+            }
+            return false;
+        }
         try {
             // findByName THROWS when absent (it does not return null) - treat that as "new", and
             // otherwise mutate the existing managed row so save() updates it rather than duplicating.
@@ -355,6 +371,23 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 LOGGER.debug("{} {}", message, e.getMessage(), e);
             }
             return false;
+        }
+    }
+
+    /**
+     * Why Quartz cannot schedule the declared cron, or {@code null} when it can. Quartz's own parser,
+     * so the reason is the one the trigger build would have thrown - "day-of-week AND day-of-month" for
+     * the Spring-style {@code "0 0 4 1 * *"} above all.
+     */
+    private static String cronProblem(String expression) {
+        if (expression == null || expression.isBlank()) {
+            return "the cron expression is empty";
+        }
+        try {
+            new CronExpression(expression);
+            return null;
+        } catch (ParseException e) {
+            return e.getMessage();
         }
     }
 
