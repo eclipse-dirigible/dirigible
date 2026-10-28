@@ -6190,7 +6190,9 @@ class IntentEngineIT extends IntegrationTest {
     private void assertReport() {
         String body = contentOf("OrdersByCustomer.report");
         assertTrue(body.contains("\"name\": \"OrdersByCustomer\""), "report should carry its declared name");
-        assertTrue(body.contains("\"alias\": \"Order\""), "report alias should be the source entity");
+        // Order is a reserved word, so the base alias carries the #8234 suffix - the same alias the query
+        // uses.
+        assertTrue(body.contains("\"alias\": \"Order_\""), "report alias should be the source entity, suffixed off the keyword list");
         assertTrue(body.contains("\"table\": \"ORDERS_ORDER\""),
                 "report table should be the same intent-prefixed table name the EDM declares as dataName");
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
@@ -6199,7 +6201,7 @@ class IntentEngineIT extends IntegrationTest {
         String monthly = contentOf("OrdersByMonth.report");
         assertTrue(
                 monthly.contains(
-                        "(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))"),
+                        "(EXTRACT(YEAR FROM Order_.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order_.\\\"ORDER_ORDER_DATE\\\"))"),
                 "a month(field) dimension should emit the YYYYMM EXTRACT expression");
         assertTrue(monthly.contains("as \\\"Month Order Date\\\""), "the bucketed column should carry a humanized alias");
         assertTrue(monthly.contains("GROUP BY (EXTRACT(YEAR"), "the aggregation should group by the bucket expression");
@@ -6212,16 +6214,17 @@ class IntentEngineIT extends IntegrationTest {
         // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds
         // unquoted identifiers to lower case); aliases stay unquoted.
         // The quotes are escaped (\") inside the JSON .report file's query string, so match that form.
-        assertTrue(body.contains("SELECT ") && body.contains("FROM \\\"ORDERS_ORDER\\\" as Order") && body.contains("GROUP BY"),
+        assertTrue(body.contains("SELECT ") && body.contains("FROM \\\"ORDERS_ORDER\\\" as Order_") && body.contains("GROUP BY"),
                 "report query should be a materialised SQL statement with GROUP BY, not empty");
-        assertTrue(body.contains("SUM(Order.\\\"ORDER_TOTAL\\\")"), "sum(total) should aggregate the quoted, qualified ORDER_TOTAL column");
+        assertTrue(body.contains("SUM(Order_.\\\"ORDER_TOTAL\\\")"),
+                "sum(total) should aggregate the quoted, qualified ORDER_TOTAL column");
         assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
         // A bare to-one relation dimension (customer) joins the related table and shows its name field,
         // grouping by the name - not the raw FK id. The relation is optional, so the join is LEFT: an
         // order without a customer stays in the report with the dimension empty (dirigible #7105).
         assertTrue(
                 body.contains(
-                        "LEFT JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
+                        "LEFT JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order_.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
                 "a bare optional relation dimension (customer) should LEFT JOIN the related entity with quoted identifiers");
         assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
@@ -6233,10 +6236,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"joins\": ["), "the resolved joins should be part of the model the report editor edits");
         assertTrue(
                 body.contains("\"name\": \"ORDERS_CUSTOMER\"") && body.contains("\"type\": \"LEFT\"")
-                        && body.contains("\"condition\": \"Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
+                        && body.contains("\"condition\": \"Order_.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\"\""),
                 "a join row should carry the physical table, the join type and the ON condition");
         assertTrue(monthly.contains(
-                "\"expression\": \"(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))\""),
+                "\"expression\": \"(EXTRACT(YEAR FROM Order_.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order_.\\\"ORDER_ORDER_DATE\\\"))\""),
                 "a computed dimension should carry its expression on the column, else it degrades to the raw column on save");
         assertFalse(body.contains("\"conditions\""),
                 "an unfiltered report should emit no conditions at all - an empty array makes the editor emit a bare WHERE");
@@ -6245,7 +6248,8 @@ class IntentEngineIT extends IntegrationTest {
         // order is the line's composition parent - never missing - so that join stays INNER.
         String joined = contentOf("BigOrderItems.report");
         assertTrue(
-                joined.contains("INNER JOIN \\\"ORDERS_ORDER\\\" as Order ON OrderItem.\\\"ORDER_ITEM_ORDER\\\" = Order.\\\"ORDER_ID\\\""),
+                joined.contains(
+                        "INNER JOIN \\\"ORDERS_ORDER\\\" as Order_ ON OrderItem.\\\"ORDER_ITEM_ORDER\\\" = Order_.\\\"ORDER_ID\\\""),
                 "a relation.field dimension over a composition parent (order.orderDate) should INNER JOIN it on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
@@ -6259,13 +6263,13 @@ class IntentEngineIT extends IntegrationTest {
         String balance = contentOf("OrderBalance.report");
         assertTrue(balance.contains("\"kind\": \"balance\""), "the balance report should carry its kind");
         assertTrue(balance.contains(
-                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" < :fromDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Opening Debit\\\""),
+                "SUM(CASE WHEN Order_.\\\"ORDER_ORDER_DATE\\\" < :fromDate THEN COALESCE(Order_.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Opening Debit\\\""),
                 "the opening debit should sum the debit amount strictly before :fromDate");
         assertTrue(balance.contains(
-                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" >= :fromDate AND Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_CREDIT_SNAPSHOT\\\", 0) ELSE 0 END) as \\\"Credit\\\""),
+                "SUM(CASE WHEN Order_.\\\"ORDER_ORDER_DATE\\\" >= :fromDate AND Order_.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order_.\\\"ORDER_CREDIT_SNAPSHOT\\\", 0) ELSE 0 END) as \\\"Credit\\\""),
                 "the period credit should sum the credit amount inside the inclusive window");
         assertTrue(balance.contains(
-                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
+                "SUM(CASE WHEN Order_.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order_.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
                 "the closing debit should sum everything up to and including :toDate");
 
         assertTrue(balance.contains("\"name\": \"fromDate\"") && balance.contains("\"name\": \"toDate\""),
