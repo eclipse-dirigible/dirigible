@@ -1,0 +1,7 @@
+{
+    "expression": "0 0 0 1 1 ? 2099",
+    "group": "defined",
+    "handler": "deprecation-migrated/jobs/handler.js",
+    "description": "A JavaScript job migrated away from",
+    "parameters": []
+}
