@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatu
 import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatus.Jobs.JobStatus;
 import org.eclipse.dirigible.components.base.readiness.ArtefactCensus;
 import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
+import org.eclipse.dirigible.components.base.script.ScriptEngineUnavailableException;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
@@ -50,6 +51,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.text.ParseException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -115,6 +117,14 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      * when the last pass left none. JVM-local on purpose: the boot pass processes everything anyway.
      */
     private final AtomicLong failedRetryDueAt = new AtomicLong(-1);
+
+    /**
+     * The keys of the artefacts that failed because the script engine their handler needs is not
+     * deployed (#8176). That is a property of the edition, not a transient failure, so such an artefact
+     * is not attempted again until its file changes. JVM-local on purpose: the process that recorded it
+     * is the one without the engine, and the boot pass of another one attempts everything anyway.
+     */
+    private final Set<String> missingEngineFailures = ConcurrentHashMap.newKeySet();
 
     /**
      * Instantiates a new synchronization processor.
@@ -431,7 +441,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                     logger.debug("Processing a modified artefact: {}", artefact.getKey());
                     countModified++;
                 }
-                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle())) {
+                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle()) && !isMissingItsEngine(artefact)) {
                     countFailed++;
                 }
             }
@@ -440,7 +450,10 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                     artefacts.size(), countNew, countModified);
 
             if (countNew > 0 || countModified > 0 || !initialized.get()) {
-                completeArtefacts(artefacts.values());
+                completeArtefacts(artefacts.values()
+                                           .stream()
+                                           .filter(artefact -> !isMissingItsEngine(artefact))
+                                           .toList());
             } else if (countFailed > 0) {
                 retryFailed();
             }
@@ -481,6 +494,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                                 remaining.put(artefact.getKey(), artefact);
                             } else {
                                 synchronizer.cleanup(artefact);
+                                missingEngineFailures.remove(artefact.getKey());
                                 if (synchronizer.multitenantExecution()) {
                                     forgetTenantOutcomes(artefact);
                                 }
@@ -526,7 +540,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                     countCreated++;
                 if (ArtefactLifecycle.UPDATED.equals(artefact.getLifecycle()))
                     countUpdated++;
-                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle()))
+                if (ArtefactLifecycle.FAILED.equals(artefact.getLifecycle()) && !isMissingItsEngine(artefact))
                     countFailed++;
                 if (ArtefactLifecycle.FATAL.equals(artefact.getLifecycle()))
                     countFatal++;
@@ -643,12 +657,20 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         int crossRetryCount = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_COUNT.getIntValue();
         int crossRetryInterval = DirigibleConfig.SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS.getIntValue();
         int retryCount = 0;
+        // No retry gives an artefact the engine its handler needs (#8176).
+        undepleted.removeIf(wrapper -> isMissingItsEngine(wrapper.getArtefact()));
         if (!undepleted.isEmpty()) {
             logger.warn("Cross-processing of undepleated artefacts...");
             try {
                 while (!undepleted.isEmpty()) {
                     logger.info("Wait [{}] millis before next retry", crossRetryInterval);
                     Thread.sleep(crossRetryInterval);
+                    // An artefact unpublished while the loop waits is the cleanup's, not the retry's: kept,
+                    // it held the pass - and with it its own removal - for the rest of the loop (#8218).
+                    undepleted.removeIf(wrapper -> isSourceGone(wrapper.getArtefact()));
+                    if (undepleted.isEmpty()) {
+                        break;
+                    }
 
                     logger.info("Retry [{}] - cross-processing of [{}] undepleated artefacts: [{}]", (retryCount + 1), undepleted.size(),
                             undepleted);
@@ -776,6 +798,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         List<Artefact> failed = artefacts.values()
                                          .stream()
                                          .filter(a -> ArtefactLifecycle.FAILED.equals(a.getLifecycle()))
+                                         .filter(a -> !isMissingItsEngine(a))
                                          .collect(Collectors.toList());
         List<TopologyWrapper<? extends Artefact>> wrappers = TopologyFactory.wrap(failed, synchronizers);
         logger.info("Retrying [{}] FAILED artefacts: [{}]", wrappers.size(), wrappers);
@@ -801,6 +824,42 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
     public boolean isSynchronizationRunning() {
         return processing.get();
+    }
+
+    /**
+     * Whether the artefact is FAILED because the script engine its handler needs is not deployed - a
+     * failure no retry heals, so it is left alone until its file changes (#8176). A changed file brings
+     * the artefact back NEW or MODIFIED, which attempts it again.
+     *
+     * @param artefact the artefact
+     * @return whether the artefact waits for its file to change
+     */
+    private boolean isMissingItsEngine(Artefact artefact) {
+        return ArtefactLifecycle.FAILED == artefact.getLifecycle() && missingEngineFailures.contains(artefact.getKey());
+    }
+
+    private void recordMissingEngine(Artefact artefact, ArtefactLifecycle lifecycle, Throwable cause) {
+        if (ArtefactLifecycle.FAILED == lifecycle || ArtefactLifecycle.FATAL == lifecycle) {
+            if (isScriptEngineUnavailable(cause)) {
+                missingEngineFailures.add(artefact.getKey());
+            }
+        } else {
+            missingEngineFailures.remove(artefact.getKey());
+        }
+    }
+
+    private static boolean isScriptEngineUnavailable(Throwable cause) {
+        for (Throwable current = cause; current != null; current = current.getCause() == current ? null : current.getCause()) {
+            if (current instanceof ScriptEngineUnavailableException) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isSourceGone(Artefact artefact) {
+        return !repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + artefact.getLocation())
+                          .exists();
     }
 
     /**
@@ -1189,6 +1248,10 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         if (remained.size() > 0) {
             for (TopologyWrapper<? extends Artefact> wrapper : remained) {
                 Artefact artefact = wrapper.getArtefact();
+                if (isMissingItsEngine(artefact)) {
+                    // Already FAILED with the missing engine as its reason, and reported once (#8176).
+                    continue;
+                }
                 String cause = artefact.getError();
                 boolean hasCause = cause != null && !cause.isBlank();
                 String context =
@@ -1257,6 +1320,7 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     @Override
     public void registerState(Synchronizer<? extends Artefact, ?> synchronizer, Artefact artefact, ArtefactLifecycle lifecycle,
             String message, Throwable cause) {
+        recordMissingEngine(artefact, lifecycle, cause);
         switch (lifecycle) {
 
             case FAILED:

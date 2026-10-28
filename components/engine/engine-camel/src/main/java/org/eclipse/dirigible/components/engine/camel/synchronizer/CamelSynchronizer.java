@@ -16,13 +16,16 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
+import org.eclipse.dirigible.components.base.script.ScriptEngineUnavailableException;
 import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
+import org.eclipse.dirigible.components.engine.camel.components.DirigibleJavaScriptInvoker;
 import org.eclipse.dirigible.components.engine.camel.domain.Camel;
 import org.eclipse.dirigible.components.engine.camel.processor.CamelProcessor;
 import org.eclipse.dirigible.components.engine.camel.service.CamelService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -45,6 +48,10 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
 
     /** The camel processor. */
     private final CamelProcessor camelProcessor;
+
+    /** The runner of the routes' script handlers, absent where no script engine is deployed. */
+    private final ObjectProvider<DirigibleJavaScriptInvoker> javaScriptInvoker;
+
     /** The synchronization callback. */
     private SynchronizerCallback callback;
 
@@ -53,11 +60,14 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
      *
      * @param camelService the camel service
      * @param camelProcessor the camel processor
+     * @param javaScriptInvoker the runner of the routes' script handlers
      */
     @Autowired
-    public CamelSynchronizer(CamelService camelService, CamelProcessor camelProcessor) {
+    public CamelSynchronizer(CamelService camelService, CamelProcessor camelProcessor,
+            ObjectProvider<DirigibleJavaScriptInvoker> javaScriptInvoker) {
         this.camelService = camelService;
         this.camelProcessor = camelProcessor;
+        this.javaScriptInvoker = javaScriptInvoker;
     }
 
     /**
@@ -209,11 +219,30 @@ public class CamelSynchronizer extends BaseSynchronizer<Camel, Long> {
      * @param camel the camel
      */
     private void addToProcessor(Camel camel) {
+        verifyRunnable(camel);
         // remove trace context to decouple async routes from the synchronizer job
         Context rootContext = Context.root();
         try (Scope scope = rootContext.makeCurrent()) {
             camelProcessor.onCreateOrUpdate(camel);
         }
+    }
+
+    /**
+     * A route whose step is a script would start and fail every exchange where the script engine is not
+     * deployed - an empty 500 to every caller, a failed delivery on every timer firing - so it is
+     * refused instead, with the missing engine as the reason (#8174).
+     *
+     * @param camel the route
+     * @throws ScriptEngineUnavailableException when the route runs a script and no engine can run it
+     */
+    private void verifyRunnable(Camel camel) {
+        if (javaScriptInvoker.getIfAvailable() != null) {
+            return;
+        }
+        CamelScriptHandlers.find(camel.getLocation(), camel.getContent())
+                           .ifPresent(handler -> {
+                               throw new ScriptEngineUnavailableException(handler);
+                           });
     }
 
     /**
