@@ -325,7 +325,7 @@ class ReportEditorRoundTripTest {
         // The self-join and the second copy of the account join live in the view, aliased apart -
         // the dimension's account keeps its own INNER join, so neither copy drops the other.
         String view = ledgerViews("correspondence: account.code").get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
-        assertTrue(view.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account "), view);
+        assertTrue(view.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account_ "), view);
         assertTrue(view.contains("LEFT JOIN \"LEDGER_JOURNAL_ENTRY_ITEM\" as JournalEntryItemCorrespondent"), view);
         assertTrue(view.contains("LEFT JOIN \"LEDGER_ACCOUNT\" as AccountCorrespondent"), view);
     }

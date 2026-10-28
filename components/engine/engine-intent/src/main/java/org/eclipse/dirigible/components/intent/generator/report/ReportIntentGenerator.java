@@ -187,6 +187,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * second join would collide with the first on its alias and be dropped.
      */
     private static final String CORRESPONDENT_SUFFIX = "Correspondent";
+    /** What a reserved-word entity name is suffixed with to become a legal unquoted alias (#8234). */
+    private static final String RESERVED_ALIAS_SUFFIX = "_";
 
     /** The alias suffix of the correlated subquery that totals the document's counter side. */
     private static final String DOCUMENT_TOTAL_SUFFIX = "DocumentTotal";
@@ -384,7 +386,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static Emission build(IntentGenerationContext context, ReportIntent report) {
         IntentModel model = context.getModel();
         EntityIntent source = entityByName(model, report.getSource());
-        String baseAlias = report.getSource() == null ? report.getName() : report.getSource();
+        String baseAlias = tableAlias(report.getSource() == null ? report.getName() : report.getSource());
         String baseTable = report.getSource() == null ? "" : IntentNaming.tableName(context, report.getSource());
 
         boolean balance = report.isBalance();
@@ -1662,13 +1664,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         String viewName = IntentNaming.tableName(context, report.getName()) + "_ACCOUNT_TREE";
         String tree = "ACCOUNT_TREE";
+        String root = tableAlias("Account");
         String view = "WITH RECURSIVE " + tree + " (" + quote(ACCOUNT_TREE_ANCESTOR) + ", " + quote(ACCOUNT_TREE_ACCOUNT) + ", "
-                + quote(ACCOUNT_TREE_DEPTH) + ") AS (\nSELECT Account." + quote(keyColumn) + ", Account." + quote(keyColumn) + ", 0 FROM "
-                + quote(table) + " as Account\nUNION ALL\nSELECT " + tree + "." + quote(ACCOUNT_TREE_ANCESTOR) + ", Child."
-                + quote(keyColumn) + ", " + tree + "." + quote(ACCOUNT_TREE_DEPTH) + " + 1 FROM " + tree + " INNER JOIN " + quote(table)
-                + " as Child ON Child." + quote(parentColumn) + " = " + tree + "." + quote(ACCOUNT_TREE_ACCOUNT) + " WHERE " + tree + "."
-                + quote(ACCOUNT_TREE_DEPTH) + " < " + ACCOUNT_TREE_MAX_DEPTH + "\n)\nSELECT " + tree + "." + quote(ACCOUNT_TREE_ANCESTOR)
-                + ", " + tree + "." + quote(ACCOUNT_TREE_ACCOUNT) + " FROM " + tree;
+                + quote(ACCOUNT_TREE_DEPTH) + ") AS (\nSELECT " + root + "." + quote(keyColumn) + ", " + root + "." + quote(keyColumn)
+                + ", 0 FROM " + quote(table) + " as " + root + "\nUNION ALL\nSELECT " + tree + "." + quote(ACCOUNT_TREE_ANCESTOR)
+                + ", Child." + quote(keyColumn) + ", " + tree + "." + quote(ACCOUNT_TREE_DEPTH) + " + 1 FROM " + tree + " INNER JOIN "
+                + quote(table) + " as Child ON Child." + quote(parentColumn) + " = " + tree + "." + quote(ACCOUNT_TREE_ACCOUNT) + " WHERE "
+                + tree + "." + quote(ACCOUNT_TREE_DEPTH) + " < " + ACCOUNT_TREE_MAX_DEPTH + "\n)\nSELECT " + tree + "."
+                + quote(ACCOUNT_TREE_ANCESTOR) + ", " + tree + "." + quote(ACCOUNT_TREE_ACCOUNT) + " FROM " + tree;
         Join join = new Join(viewName, ACCOUNT_TREE_ALIAS, ACCOUNT_TREE_ALIAS + "." + quote(ACCOUNT_TREE_ACCOUNT) + " = " + accountKey
                 + " AND " + ACCOUNT_TREE_ALIAS + "." + quote(ACCOUNT_TREE_ANCESTOR) + " = " + marker, REQUIRED_JOIN_TYPE);
         return new AccountMatch(join, null, new ViewArtifact(report.getName() + "AccountTree.view", viewName, view));
@@ -2451,7 +2454,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (relation != null && relation.getTo() != null) {
                 EntityIntent target = entityByName(model, relation.getTo());
                 String targetName = relation.getTo();
-                String targetAlias = joinAlias(source, relation, targetName) + aliasSuffix;
+                String targetAlias = joinAlias(source, relation, targetName, aliasSuffix);
                 ref.tableAlias = targetAlias;
                 ref.physicalColumn = column(targetName, fieldName);
                 FieldIntent targetField = fieldByName(target, fieldName);
@@ -2484,7 +2487,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
             EntityIntent target = entityByName(model, relation.getTo());
             String targetName = relation.getTo();
-            String targetAlias = joinAlias(source, relation, targetName) + aliasSuffix;
+            String targetAlias = joinAlias(source, relation, targetName, aliasSuffix);
             // A cross-model target's label comes from the resolved owner model (its Name-like field).
             CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
             String labelField = info != null ? info.labelField() : labelFieldName(target);
@@ -2713,6 +2716,30 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         String pascal = IntentNaming.pascalCase(relation.getName());
         return references > 1 && !pascal.equals(targetName) ? targetName + "_" + pascal : targetName;
+    }
+
+    /**
+     * {@link #joinAlias(EntityIntent, RelationIntent, String)} with {@code aliasSuffix} appended, made
+     * safe to emit - the one place a join alias is minted, so the resolver and the filter rewriter
+     * agree.
+     */
+    private static String joinAlias(EntityIntent source, RelationIntent relation, String targetName, String aliasSuffix) {
+        return tableAlias(joinAlias(source, relation, targetName) + aliasSuffix);
+    }
+
+    /**
+     * The unquoted table alias for a name - the name itself, unless some supported database parses it
+     * as a keyword (dirigible #8234): then it carries {@link #RESERVED_ALIAS_SUFFIX}, so an entity may
+     * be called {@code Order}, {@code User}, {@code Group}, {@code Value}, {@code Year} or {@code Key}
+     * and its reports, balance views and correspondence views still run. The suffix keeps every other
+     * alias byte-identical, and a suffixed alias ({@code OrderCorrespondent}, {@code Order__LANG}) is
+     * never a keyword, so only the bare name is ever touched.
+     *
+     * @param name the entity name (or a derived alias)
+     * @return the alias to emit
+     */
+    private static String tableAlias(String name) {
+        return SqlReservedWords.isReserved(name) ? name + RESERVED_ALIAS_SUFFIX : name;
     }
 
     /**
@@ -3006,7 +3033,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             String targetName = relation.getTo();
             // The alias may be suffixed per relation (two hops to one target); the physical column is
             // always prefixed with the target ENTITY - the table it lives on has one name.
-            String targetAlias = joinAlias(source, relation, targetName);
+            String targetAlias = joinAlias(source, relation, targetName, "");
             joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetName, targetAlias, baseAlias, null));
             return targetAlias + "." + quote(column(targetName, fieldName));
         });
@@ -3298,7 +3325,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * tables/columns as quoted UPPER_SNAKE, and PostgreSQL folds <i>unquoted</i> identifiers to lower
      * case - so an unquoted {@code LIBRARY_LOAN} / {@code LOAN_DUE_ON} would never match the actual
      * object on Postgres. Table aliases are intentionally left unquoted (they fold consistently on both
-     * sides). H2 accepts the quoted form too, so the output runs on both.
+     * sides), which is why an alias must not be a keyword - see {@link #tableAlias(String)}. H2 accepts
+     * the quoted form too, so the output runs on both.
      */
     private static String quote(String identifier) {
         return "\"" + identifier + "\"";

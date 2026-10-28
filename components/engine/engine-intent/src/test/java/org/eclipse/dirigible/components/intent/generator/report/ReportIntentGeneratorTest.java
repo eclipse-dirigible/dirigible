@@ -470,8 +470,8 @@ class ReportIntentGeneratorTest {
                 query);
         // The date rides in over the composition join; the dimensions join the account.
         assertTrue(query.contains("INNER JOIN \"LEDGER_JOURNAL_ENTRY\" as JournalEntry"), query);
-        assertTrue(query.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account"), query);
-        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\", Account.\"ACCOUNT_NAME\""), query);
+        assertTrue(query.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account_"), query);
+        assertTrue(query.contains("GROUP BY Account_.\"ACCOUNT_CODE\", Account_.\"ACCOUNT_NAME\""), query);
         // The intent-guard-style `==` is normalized to SQL's single `=` (PostgreSQL rejects `==`).
         assertTrue(query.contains("WHERE JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\" = 0"), query);
 
@@ -596,8 +596,8 @@ class ReportIntentGeneratorTest {
         String query = (String) document.get("query");
         // The ledger is reduced to one balance per account FIRST: a net measure nets an account's two
         // sides before a line sums it, so the reduction cannot happen per line.
-        assertTrue(query.contains("WITH \"ACCOUNT_BALANCES\" as (\nSELECT Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""), query);
-        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\""), query);
+        assertTrue(query.contains("WITH \"ACCOUNT_BALANCES\" as (\nSELECT Account_.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""), query);
+        assertTrue(query.contains("GROUP BY Account_.\"ACCOUNT_CODE\""), query);
         // The windows are the balance report's, to the token.
         assertTrue(query.contains(
                 "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"CLOSING_DEBIT\""),
@@ -629,14 +629,14 @@ class ReportIntentGeneratorTest {
                 + " CAST(NULL AS VARCHAR(255)) as \"TERM_MEASURE\", CAST(NULL AS VARCHAR(255)) as \"ACCOUNT_CODE\""), view);
         assertTrue(view.contains("SELECT DISTINCT 1 as \"LINE_ORDINAL\", CAST('A.I' AS VARCHAR(255)) as \"LINE_CODE\","
                 + " CAST('Fixed assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
-                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
-                + "\nFROM \"LEDGER_ACCOUNT\" as Account"
-                + "\nWHERE (Account.\"ACCOUNT_CODE\" LIKE '20%' OR Account.\"ACCOUNT_CODE\" LIKE '21%')"), view);
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account_.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account_"
+                + "\nWHERE (Account_.\"ACCOUNT_CODE\" LIKE '20%' OR Account_.\"ACCOUNT_CODE\" LIKE '21%')"), view);
         // A computed line is FLATTENED into its leaves' own terms, so no line waits for another.
         assertTrue(view.contains("SELECT DISTINCT 3 as \"LINE_ORDINAL\", CAST('A' AS VARCHAR(255)) as \"LINE_CODE\","
                 + " CAST('Total assets' AS VARCHAR(4000)) as \"LINE_LABEL\", 1 as \"TERM_SIGN\","
-                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
-                + "\nFROM \"LEDGER_ACCOUNT\" as Account" + "\nWHERE Account.\"ACCOUNT_CODE\" LIKE '41%'"), view);
+                + " CAST('closingNetDebit' AS VARCHAR(255)) as \"TERM_MEASURE\", Account_.\"ACCOUNT_CODE\" as \"ACCOUNT_CODE\""
+                + "\nFROM \"LEDGER_ACCOUNT\" as Account_" + "\nWHERE Account_.\"ACCOUNT_CODE\" LIKE '41%'"), view);
         // ... and the split IS the parameter boundary: nothing in the view binds a named marker.
         assertFalse(view.contains(":fromDate") || view.contains(":toDate"), view);
 
@@ -1261,7 +1261,7 @@ class ReportIntentGeneratorTest {
         String query = (String) document.get("query");
 
         // The FIRST composition is the one the EDM emits NOT NULL, so its hop stays INNER...
-        assertTrue(query.contains("INNER JOIN \"SHIPPING_ORDER\" as Order ON Shipment.\"SHIPMENT_ORDER\" = Order.\"ORDER_ID\""), query);
+        assertTrue(query.contains("INNER JOIN \"SHIPPING_ORDER\" as Order_ ON Shipment.\"SHIPMENT_ORDER\" = Order_.\"ORDER_ID\""), query);
         // ...and the second one is a plain nullable association in the schema: INNER JOINing it dropped
         // every shipment with no batch, which is #7105 all over again (dirigible #7140).
         assertTrue(query.contains("LEFT JOIN \"SHIPPING_BATCH\" as Batch ON Shipment.\"SHIPMENT_BATCH\" = Batch.\"BATCH_ID\""), query);
@@ -1271,7 +1271,7 @@ class ReportIntentGeneratorTest {
         for (Map<String, Object> join : joins) {
             types.put((String) join.get("alias"), (String) join.get("type"));
         }
-        assertEquals("INNER", types.get("Order"), joins.toString());
+        assertEquals("INNER", types.get("Order_"), joins.toString());
         assertEquals("LEFT", types.get("Batch"), joins.toString());
     }
 
