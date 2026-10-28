@@ -42,4 +42,12 @@ public class ${name}Entity {
     public ${property.dataTypeJavaClass} ${property.name};
 
 #end
+## A collection column (intent `list:` collection path, dirigible #8295): the texts of the record's child
+## rows, answered by the controller's reads and never persisted - a write that carries it changes nothing.
+#foreach($column in $collectionColumns)
+    @org.eclipse.dirigible.sdk.db.Transient
+    @Documentation("${column.name} - read-only, the texts of the record's ${column.collectionEntity} rows")
+    public java.util.List<String> ${column.name};
+
+#end
 }

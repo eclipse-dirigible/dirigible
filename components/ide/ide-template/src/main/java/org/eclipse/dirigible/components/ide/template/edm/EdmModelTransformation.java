@@ -61,9 +61,9 @@ final class EdmModelTransformation {
      * The structured entity attributes. The singular {@code rollupGuard} is the shape before #7448,
      * kept so that an {@code .edm} authored before the guard became a list still parses into an object.
      */
-    private static final List<String> ENTITY_STRUCTURED =
-            List.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
-                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "singleFlags");
+    private static final List<String> ENTITY_STRUCTURED = List.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
+            "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
+            "duplicateDefaults", "singleFlags", "collectionColumns");
 
     /** The structured property attributes. */
     private static final List<String> PROPERTY_STRUCTURED = List.of("lookupColumns");

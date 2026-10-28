@@ -94,11 +94,18 @@ public class ${name}Controller {
 #if($masterLock)
     private final ${masterLock.repositoryClass} masterRepository;
 #end
+## The repositories the collection columns (intent `list:` collection paths, #8295) read their rows through.
+#foreach($collectionRepository in $collectionRepositories)
+    private final ${collectionRepository.className} ${collectionRepository.field};
+#end
 
-    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end) {
+    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end#foreach($collectionRepository in $collectionRepositories), ${collectionRepository.className} ${collectionRepository.field}#end) {
         this.repository = repository;
 #if($masterLock)
         this.masterRepository = masterRepository;
+#end
+#foreach($collectionRepository in $collectionRepositories)
+        this.${collectionRepository.field} = ${collectionRepository.field};
 #end
     }
 
@@ -127,6 +134,9 @@ public class ${name}Controller {
         }
 #else
         List<${name}Entity> result = repository.findAll(actualLimit, actualOffset#if($orderByHql), "${orderByHql}"#end);
+#end
+#if($collectionColumns)
+        fillCollectionColumns(result);
 #end
 #if($isEntityPropertySecurityEnabled)
         result.forEach(this::redactRead);
@@ -162,6 +172,9 @@ public class ${name}Controller {
         checkPermissions("read");
 #end
         List<${name}Entity> result = runFilter(filter);
+#if($collectionColumns)
+        fillCollectionColumns(result);
+#end
 #if($isEntityPropertySecurityEnabled)
         result.forEach(this::redactRead);
 #end
@@ -176,6 +189,9 @@ public class ${name}Controller {
 #end
         ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+#if($collectionColumns)
+        fillCollectionColumns(List.of(entity));
+#end
 #if($isEntityPropertySecurityEnabled)
         redactRead(entity);
 #end
@@ -661,6 +677,67 @@ public class ${name}Controller {
         // shell's report widgets ask for $limit 1 or 5 and were handed every matching row.
         return repository.query(hql.toString(), params, pageParameter(filter, "$limit", -1), pageParameter(filter, "$offset", 0));
     }
+#if($collectionColumns)
+
+    /**
+     * Answers the collection columns of a page of ${name} (intent `list:` collection paths, dirigible
+     * #8295): each one the texts of the record's child rows in the child's order - a field's value, or
+     * the display text of a to-one's target, the one that relation's dropdown shows. The rows are read
+     * for the whole page at once through the child's repository, and a to-one's targets through
+     * theirs, so a page costs one read per column (two for a to-one), never one per record. The columns
+     * are not persisted: a write that carries them changes nothing.
+     */
+    private void fillCollectionColumns(List<${name}Entity> page) {
+        if (page.isEmpty()) {
+            return;
+        }
+        List<Object> keys = new java.util.ArrayList<>(page.size());
+        for (${name}Entity entity : page) {
+            keys.add(entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end);
+        }
+#foreach($column in $collectionColumns)
+        // ${column.name}: ${column.collectionEntity}.${column.collectionProperty} of each record's ${column.collectionEntity} rows
+        Map<Object, List<String>> ${column.variable}Texts = new java.util.HashMap<>();
+        List<${column.childEntityClass}> ${column.variable}Rows = ${column.childRepository}.findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().in("${column.collectionForeignKey}", keys)${column.childOrderCriteria});
+#if($column.collectionToOne)
+        java.util.Set<Object> ${column.variable}Targets = new java.util.HashSet<>();
+        for (var row : ${column.variable}Rows) {
+            if (row.${column.collectionProperty} != null) {
+                ${column.variable}Targets.add(row.${column.collectionProperty});
+            }
+        }
+        Map<Object, String> ${column.variable}Labels = new java.util.HashMap<>();
+        if (!${column.variable}Targets.isEmpty()) {
+            for (var target : ${column.targetRepository}.findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().in("${column.targetKey}", ${column.variable}Targets))) {
+                if (target.${column.targetText} != null) {
+                    ${column.variable}Labels.put(target.${column.targetKey}, String.valueOf(target.${column.targetText}));
+                }
+            }
+        }
+        for (var row : ${column.variable}Rows) {
+            String label = ${column.variable}Labels.get(row.${column.collectionProperty});
+            if (label != null) {
+                ${column.variable}Texts.computeIfAbsent(row.${column.collectionForeignKey}, key -> new java.util.ArrayList<>()).add(label);
+            }
+        }
+#else
+        for (var row : ${column.variable}Rows) {
+            if (row.${column.collectionProperty} != null) {
+                ${column.variable}Texts.computeIfAbsent(row.${column.collectionForeignKey}, key -> new java.util.ArrayList<>())
+                        .add(String.valueOf(row.${column.collectionProperty}));
+            }
+        }
+#end
+#end
+        for (${name}Entity entity : page) {
+#foreach($column in $collectionColumns)
+            entity.${column.name} = ${column.variable}Texts.getOrDefault(entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end, List.of());
+#end
+        }
+    }
+#end
 
     /**
      * The {@code $limit} / {@code $offset} of a search body - a number or a numeric string.

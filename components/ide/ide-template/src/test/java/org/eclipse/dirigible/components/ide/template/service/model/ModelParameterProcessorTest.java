@@ -181,6 +181,69 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A collection column (a {@code list:} collection path, dirigible #8295) takes its place in
+     * {@code listProperties} as the {@code listOrder} gives it, and is resolved into what the
+     * controller reads the child rows by: the child's entity and repository, its order, and - for a
+     * to-one - the target the to-one's dropdown reads. Every entity of the model is then marked to
+     * render the cell.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCollectionColumnIsListedAndResolvedForTheController() {
+        Map<String, Object> memberId = property("Id", "INTEGER");
+        memberId.put("dataPrimaryKey", "true");
+        Map<String, Object> email = property("Email", "VARCHAR");
+        Map<String, Object> skills = new LinkedHashMap<>();
+        skills.put("name", "SkillsSkill");
+        skills.put("widgetLabel", "Skill's held");
+        skills.put("dataName", "TEAM_MEMBER_SKILLS_SKILL");
+        skills.put("widgetIsMajor", "true");
+        skills.put("collectionColumn", "true");
+        skills.put("collectionEntity", "TeamMemberSkill");
+        skills.put("collectionEntityPerspectiveName", "team");
+        skills.put("collectionForeignKey", "TeamMember");
+        skills.put("collectionProperty", "Skill");
+        skills.put("collectionToOne", "true");
+        skills.put("collectionDisplayProperty", "Name");
+        Map<String, Object> member = entity("TeamMember", "team", memberId, email);
+        member.put("listOrder", "SkillsSkill,Email");
+        member.put("collectionColumns", List.of(skills));
+
+        Map<String, Object> childId = property("Id", "INTEGER");
+        childId.put("dataPrimaryKey", "true");
+        Map<String, Object> skill = property("Skill", "INTEGER");
+        skill.put("widgetType", "DROPDOWN");
+        skill.put("relationshipEntityName", "Skill");
+        skill.put("relationshipEntityPerspectiveName", "Settings");
+        skill.put("widgetDropDownKey", "Id");
+        skill.put("widgetDropDownValue", "Name");
+        Map<String, Object> child = entity("TeamMemberSkill", "team", childId, skill);
+        Map<String, Object> other = entity("Skill", "Settings", property("Id", "INTEGER"));
+        Map<String, Object> parameters = javaParameters();
+
+        ModelParameterProcessor.process(model(member, child, other), parameters);
+
+        List<Map<String, Object>> listed = (List<Map<String, Object>>) member.get("listProperties");
+        assertSame(skills, listed.get(0), "the column stands where listOrder puts it");
+        assertSame(email, listed.get(1));
+        assertEquals("Skill\\'s held", skills.get("widgetLabelJs"), "the header is printed into a JS string");
+        String data = "gen." + parameters.get("javaGenFolderName") + ".data.";
+        assertEquals("skillsSkill", skills.get("variable"));
+        assertEquals(data + "team.TeamMemberSkillEntity", skills.get("childEntityClass"));
+        assertEquals("teamMemberSkillRepository", skills.get("childRepository"));
+        assertEquals(".orderByAsc(\"Id\")", skills.get("childOrderCriteria"), "without an orderBy: the child's primary key");
+        assertEquals(data + "settings.SkillEntity", skills.get("targetEntityClass"));
+        assertEquals("skillRepository", skills.get("targetRepository"));
+        assertEquals("Id", skills.get("targetKey"));
+        assertEquals("Name", skills.get("targetText"));
+        assertEquals(
+                List.of(Map.of("className", data + "team.TeamMemberSkillRepository", "field", "teamMemberSkillRepository"),
+                        Map.of("className", data + "settings.SkillRepository", "field", "skillRepository")),
+                member.get("collectionRepositories"));
+        assertEquals(Boolean.TRUE, child.get("rendersCollectionColumns"), "a master page renders its child's panel");
+    }
+
+    /**
      * The entity's default row order (intent {@code orderBy:}, dirigible #7727) reaches the generated
      * list endpoint twice, because the two paths query differently: as the HQL fragment the paged and
      * filtered queries append, and as the Criteria chain the scoped (my / partner) surfaces list

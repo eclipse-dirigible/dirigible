@@ -654,8 +654,11 @@
                   <tr x-h-table-row data-hoverable="true">
                     <template x-for="col in def.columns" :key="col.name">
                       <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+#if($rendersCollectionColumns)
+                        <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
+#end
                         <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
-                        <template x-if="!col.number">
+                        <template x-if="!col.number#if($rendersCollectionColumns) &amp;&amp; !col.list#end">
                           <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
                         </template>
                       </td>
@@ -725,8 +728,11 @@
                   <tr x-h-table-row data-hoverable="true">
                     <template x-for="col in def.columns" :key="col.name">
                       <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+#if($rendersCollectionColumns)
+                        <template x-if="col.list"><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row[col.name] || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></template>
+#end
                         <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
-                        <template x-if="!col.number">
+                        <template x-if="!col.number#if($rendersCollectionColumns) &amp;&amp; !col.list#end">
                           <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
                         </template>
                       </td>

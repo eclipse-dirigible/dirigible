@@ -1574,7 +1574,7 @@ document.addEventListener('alpine:init', () => {
       if (!(this.isEdit || this.isPreview)) return '';
       const parts = [];
 #foreach($property in $listProperties)
-#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "CHECKBOX" && !$property.isHiddenProperty)
+#if(!$property.dataAutoIncrement && !$property.collectionColumn && $property.widgetIsMajor && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "CHECKBOX" && !$property.isHiddenProperty)
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end

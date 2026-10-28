@@ -140,7 +140,7 @@ document.addEventListener('alpine:init', () => {
 
     columns: [
 #foreach($property in $listProperties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+#if(!$property.dataAutoIncrement && !$property.collectionColumn && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && !$property.isHiddenProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
       { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
 #end
 #end
