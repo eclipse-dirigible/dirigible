@@ -37,7 +37,6 @@ public class JavaDebugWebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(handler, BaseEndpoint.PREFIX_ENDPOINT_WEBSOCKETS + "ide/java-debug")
-                .addInterceptors(new JavaDebugAvailabilityInterceptor(manager))
-                .setAllowedOrigins("*");
+                .addInterceptors(new JavaDebugAvailabilityInterceptor(manager));
     }
 }
