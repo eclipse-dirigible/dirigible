@@ -1154,7 +1154,7 @@ document.addEventListener('alpine:init', () => {
         if (this.isDialog) { this.emitClose(); return; }
         this.navigateBack('/${name}');
       } catch (e) {
-        this.deleteError = App.services.apiErrors.messageFor(e, 'Could not delete the ${name} record.');
+        this.deleteError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the ${name} record.');
       } finally {
         this.deleteBusy = false;
       }

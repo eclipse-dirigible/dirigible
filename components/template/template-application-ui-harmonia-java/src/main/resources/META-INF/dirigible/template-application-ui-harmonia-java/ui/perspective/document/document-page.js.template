@@ -1323,7 +1323,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       this.draftFieldError = null;
-      this.draftError = App.services.apiErrors.messageFor(e, fallback);
+      this.draftError = App.services.apiErrors.refusalMessageFor(e, fallback);
     },
 
     closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; this.draftFieldError = null; this.draftInlineCreated = []; },
@@ -1463,7 +1463,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.loadHeader();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.messageFor(e, 'Could not delete the line.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the line.');
       }
     },
 

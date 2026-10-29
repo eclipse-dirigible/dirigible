@@ -449,7 +449,7 @@ function detailPanel(def, masterId, master) {
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, "Could not delete.");
+        this.error = App.services.apiErrors.refusalMessageFor(e, "Could not delete.");
       } finally {
         this.deleteBusy = false;
       }
