@@ -692,7 +692,7 @@ Notable env-vars (non-exhaustive — full list lives in the source):
 | ------- | ------- | ------- |
 | `DIRIGIBLE_SERVER_PORT` | `8080` | HTTP listen port. |
 | `DIRIGIBLE_HOME_URL` | `services/web/shell-ide/` | Landing URL after `/`. |
-| `DIRIGIBLE_BASIC_USERNAME` / `_PASSWORD` | `admin` / `admin` | Default basic-auth credentials. |
+| `DIRIGIBLE_BASIC_USERNAME` / `_PASSWORD` | `admin` / `admin` | Default basic-auth credentials. Values are Base64-encoded (e.g. `printf '%s' 'admin' \| base64`); a value that is not valid Base64 is refused at startup. |
 | `DIRIGIBLE_REPOSITORY_LOCAL_ROOT_FOLDER` | `./target/` | On-disk root for the registry. |
 | `DIRIGIBLE_DATASOURCE_DEFAULT_DRIVER` / `_URL` / `_USERNAME` / `_PASSWORD` | H2 file-backed | Default JDBC datasource. |
 | `DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT` / `_SYSTEM` | `DefaultDB` / `SystemDB` | Logical names. |

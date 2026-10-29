@@ -977,13 +977,19 @@ public enum DirigibleConfig {
     }
 
     /**
-     * Gets the from base 64 value.
+     * Gets the Base64-decoded value of this configuration.
      *
-     * @return the from base 64 value
+     * @return the decoded value
+     * @throws InvalidConfigException if the configured value is not valid Base64
      */
     public String getFromBase64Value() {
         String val = getStringValue();
-        return fromBase64(val);
+        try {
+            return fromBase64(val);
+        } catch (IllegalArgumentException ex) {
+            throw new InvalidConfigException("The value of [" + key + "] must be Base64-encoded, but it could not be decoded ("
+                    + ex.getMessage() + "). Encode the plain value, e.g. `printf '%s' '<value>' | base64`.", key);
+        }
     }
 
     /**
