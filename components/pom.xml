@@ -27,6 +27,9 @@
         <module>core/core-healthcheck</module>
         <module>core/core-spring</module>
         <module>core/core-project</module>
+        <module>core/core-problems</module>
+        <module>core/core-workspace</module>
+        <module>core/core-git</module>
         <module>core/core-tenants</module>
         <module>core/core-tenants-provisioning</module>
 		<module>core/core-tenants-users</module>
@@ -675,6 +678,21 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-project</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-problems</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-workspace</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-git</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

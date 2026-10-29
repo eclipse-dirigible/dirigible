@@ -18,8 +18,8 @@ import jakarta.validation.Valid;
 
 import org.apache.commons.codec.DecoderException;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.json.FileDescriptor;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.json.FileDescriptor;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

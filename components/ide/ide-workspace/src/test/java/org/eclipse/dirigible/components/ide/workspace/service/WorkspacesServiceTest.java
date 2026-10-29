@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.util.List;
 
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;

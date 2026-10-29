@@ -13,8 +13,8 @@ import java.io.File;
 import java.io.IOException;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;

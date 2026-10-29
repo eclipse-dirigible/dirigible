@@ -11,7 +11,7 @@ package org.eclipse.dirigible.components.ide.git.model;
 
 import java.util.List;
 
-import org.eclipse.dirigible.components.ide.git.domain.GitBranch;
+import org.eclipse.dirigible.components.git.domain.GitBranch;
 
 /**
  * The Class GitProjectRemoteBranches.

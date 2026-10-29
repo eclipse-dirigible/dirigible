@@ -25,12 +25,6 @@
             <artifactId>dirigible-components-data-csvim</artifactId>
         </dependency>
 
-        <!-- Test -->
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ide-git</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <properties>

@@ -14,11 +14,12 @@ import java.util.List;
 
 import org.eclipse.dirigible.commons.api.helpers.BytesHelper;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.service.UserWorkspaces;
+import org.eclipse.dirigible.components.workspace.service.WorkspaceUnavailableException;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,17 +31,16 @@ public class WorkspaceFacade implements InitializingBean {
     /** The instance. */
     private static WorkspaceFacade INSTANCE;
 
-    /** The workspace service. */
-    private WorkspaceService workspaceService;
+    /** The workspaces of the IDE, absent where the IDE is not deployed. */
+    private final ObjectProvider<UserWorkspaces> workspaces;
 
     /**
      * Instantiates a new workspace facade.
      *
-     * @param workspaceService the workspace service
+     * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      */
-    @Autowired
-    public WorkspaceFacade(WorkspaceService workspaceService) {
-        this.workspaceService = workspaceService;
+    public WorkspaceFacade(ObjectProvider<UserWorkspaces> workspaces) {
+        this.workspaces = workspaces;
     }
 
     /**
@@ -62,13 +62,12 @@ public class WorkspaceFacade implements InitializingBean {
         return INSTANCE;
     }
 
-    /**
-     * Gets the workspace service.
-     *
-     * @return the workspace service
-     */
-    public WorkspaceService getWorkspaceService() {
-        return workspaceService;
+    private UserWorkspaces workspaces(String operation) {
+        UserWorkspaces available = workspaces.getIfAvailable();
+        if (available == null) {
+            throw new WorkspaceUnavailableException(operation);
+        }
+        return available;
     }
 
     /**
@@ -79,7 +78,7 @@ public class WorkspaceFacade implements InitializingBean {
      */
     public static Workspace createWorkspace(String name) {
         return WorkspaceFacade.get()
-                              .getWorkspaceService()
+                              .workspaces("createWorkspace")
                               .createWorkspace(name);
     }
 
@@ -91,7 +90,7 @@ public class WorkspaceFacade implements InitializingBean {
      */
     public static Workspace getWorkspace(String name) {
         return WorkspaceFacade.get()
-                              .getWorkspaceService()
+                              .workspaces("getWorkspace")
                               .getWorkspace(name);
     }
 
@@ -103,7 +102,7 @@ public class WorkspaceFacade implements InitializingBean {
     public static String getWorkspacesNames() {
         List<String> names = new ArrayList<String>();
         for (Workspace workspace : WorkspaceFacade.get()
-                                                  .getWorkspaceService()
+                                                  .workspaces("getWorkspacesNames")
                                                   .getWorkspaces()) {
             names.add(workspace.getName());
         }
@@ -117,7 +116,7 @@ public class WorkspaceFacade implements InitializingBean {
      */
     public static void deleteWorkspace(String name) {
         WorkspaceFacade.get()
-                       .getWorkspaceService()
+                       .workspaces("deleteWorkspace")
                        .deleteWorkspace(name);
     }
 

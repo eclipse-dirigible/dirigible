@@ -20,8 +20,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import org.apache.commons.io.FileUtils;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.git.domain.GitConnectorFactory;
+import org.eclipse.dirigible.components.git.domain.IGitConnector;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.InvalidRemoteException;

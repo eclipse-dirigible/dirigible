@@ -10,14 +10,14 @@
 package org.eclipse.dirigible.components.ide.git.command;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.GitConnectorFactory;
 import org.eclipse.dirigible.components.ide.git.model.GitCloneModel;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
-import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.project.ProjectMetadataManager;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.workspace.domain.Folder;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.project.ProjectMetadataManager;
 import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.components.project.ProjectMetadataDependency;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -242,7 +242,7 @@ public class CloneCommand {
     protected void cloneNPMDependencies(final String user, Workspace workspace, String projectName)
             throws IOException, GitConnectorException {
         Project selectedProject = workspace.getProject(projectName);
-        org.eclipse.dirigible.components.ide.workspace.domain.File packageJson = selectedProject.getFile(PACKAGE_JSON);
+        org.eclipse.dirigible.components.workspace.domain.File packageJson = selectedProject.getFile(PACKAGE_JSON);
         if (!packageJson.exists()) {
             logger.info("Will not get the NPM dependencies of the project [{}] since there is NO [{}] file.", projectName, PACKAGE_JSON);
             return;

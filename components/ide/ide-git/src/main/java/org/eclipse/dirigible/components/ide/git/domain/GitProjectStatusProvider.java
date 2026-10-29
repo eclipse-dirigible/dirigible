@@ -12,8 +12,9 @@ package org.eclipse.dirigible.components.ide.git.domain;
 import java.io.File;
 import java.io.IOException;
 
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
 import org.eclipse.dirigible.components.ide.git.command.StatusCommand;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatus;
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatusProvider;
 import org.slf4j.Logger;

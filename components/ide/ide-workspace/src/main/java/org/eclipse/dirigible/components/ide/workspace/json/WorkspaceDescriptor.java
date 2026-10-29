@@ -13,6 +13,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.eclipse.dirigible.repository.local.LocalWorkspaceMapper;

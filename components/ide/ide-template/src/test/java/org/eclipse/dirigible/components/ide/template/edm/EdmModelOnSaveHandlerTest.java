@@ -20,8 +20,8 @@ import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.junit.jupiter.api.Test;
 
 /**

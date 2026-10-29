@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.components.ide.workspace.service;
 
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 
 /**
  * A platform hook that runs after a file of a workspace project is saved - created or updated

@@ -73,12 +73,6 @@
 		    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
 		    <version>${springdoc.version}</version>
 		</dependency>
-		 <!-- Tests -->
-		 <dependency>
-	    	<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ide-git</artifactId>
-			<scope>test</scope>
-    	</dependency>
 
     </dependencies>
     
