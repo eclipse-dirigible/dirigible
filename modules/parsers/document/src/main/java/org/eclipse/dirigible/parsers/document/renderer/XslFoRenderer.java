@@ -55,7 +55,6 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     private static final double DEFAULT_PAGE_WIDTH = 595;
     private static final double DEFAULT_PAGE_HEIGHT = 842;
     private static final double DEFAULT_PAGE_PADDING = 40;
-    private static final double MIN_AUTOMATIC_TABLE_FONT_SIZE = 8;
     private static final String FONT_SIZE = "fontSize";
 
     /** Resolves an {@code <image>} source into something FOP can read. */
@@ -102,7 +101,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
           .append(points(padding))
           .append("\"><fo:region-body/></fo:simple-page-master></fo:layout-master-set>\n");
         fo.append("<fo:page-sequence master-reference=\"page\"><fo:flow flow-name=\"xsl-region-body\">\n");
-        appendChildren(fo, page == null ? root : page);
+        appendChildren(fo, page == null ? root : page, width - 2 * padding);
         fo.append("</fo:flow></fo:page-sequence>\n");
         fo.append("</fo:root>\n</xsl:template>\n</xsl:stylesheet>\n");
         return fo.toString();
@@ -134,42 +133,48 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         return measurement.type() == Measurement.Type.ABSOLUTE_PX ? measurement.value() : fallback;
     }
 
-    private void appendChildren(StringBuilder fo, LayoutNode node) {
+    /**
+     * Emits the children of a node.
+     *
+     * @param width the width the children span, in points; {@link Double#NaN} where it is not known
+     *        (inside a row), which leaves a table there to the column-count rule
+     */
+    private void appendChildren(StringBuilder fo, LayoutNode node, double width) {
         for (LayoutNode child : node.children()) {
-            appendNode(fo, child);
+            appendNode(fo, child, width);
         }
     }
 
-    private void appendNode(StringBuilder fo, LayoutNode node) {
+    private void appendNode(StringBuilder fo, LayoutNode node, double width) {
         switch (node.source()) {
-            case HeaderNode ignored -> appendBlockContainer(fo, node, "space-after=\"10pt\"");
-            case FooterNode ignored -> appendBlockContainer(fo, node, "space-before=\"14pt\" font-size=\"8pt\" color=\"#666666\"");
-            case SectionNode ignored -> appendBlockContainer(fo, node, "space-after=\"8pt\"");
-            case StackNode ignored -> appendBlockContainer(fo, node, "");
-            case ColumnNode ignored -> appendBlockContainer(fo, node, "");
+            case HeaderNode ignored -> appendBlockContainer(fo, node, width, "space-after=\"10pt\"");
+            case FooterNode ignored -> appendBlockContainer(fo, node, width, "space-before=\"14pt\" font-size=\"8pt\" color=\"#666666\"");
+            case SectionNode ignored -> appendBlockContainer(fo, node, width, "space-after=\"8pt\"");
+            case StackNode ignored -> appendBlockContainer(fo, node, width, "");
+            case ColumnNode ignored -> appendBlockContainer(fo, node, width, "");
             case TextNode text -> appendText(fo, node, text);
             case FieldNode field -> appendField(fo, node, field);
             case TotalNode total -> appendTotal(fo, node, total);
             case RowNode ignored -> appendRow(fo, node);
-            case TableNode ignored -> appendTable(fo, node);
+            case TableNode ignored -> appendTable(fo, node, width);
             case ImageNode image -> appendImage(fo, node, image);
             case LineNode ignored -> fo.append(
                     "<fo:block space-before=\"4pt\" space-after=\"4pt\"><fo:leader leader-pattern=\"rule\" leader-length=\"100%\" rule-thickness=\"0.5pt\" color=\"#999999\"/></fo:block>\n");
             case SpaceNode ignored -> fo.append("<fo:block space-after=\"")
                                         .append(points(heightOr(node, 10)))
                                         .append("\"><fo:leader/></fo:block>\n");
-            case DocumentNode ignored -> appendChildren(fo, node);
-            case PageNode ignored -> appendChildren(fo, node);
-            case IfNode ignored -> appendChildren(fo, node); // pre-expanded by the DataBinder
-            case ForNode ignored -> appendChildren(fo, node); // pre-expanded by the DataBinder
+            case DocumentNode ignored -> appendChildren(fo, node, width);
+            case PageNode ignored -> appendChildren(fo, node, width);
+            case IfNode ignored -> appendChildren(fo, node, width); // pre-expanded by the DataBinder
+            case ForNode ignored -> appendChildren(fo, node, width); // pre-expanded by the DataBinder
             case CustomNode custom -> {
                 appendTextBlock(fo, node, custom.text(), "");
-                appendChildren(fo, node);
+                appendChildren(fo, node, width);
             }
         }
     }
 
-    private void appendBlockContainer(StringBuilder fo, LayoutNode node, String extraAttributes) {
+    private void appendBlockContainer(StringBuilder fo, LayoutNode node, double width, String extraAttributes) {
         fo.append("<fo:block")
           .append(alignAttribute(node))
           .append(extraAttributes.isEmpty() ? "" : " " + extraAttributes)
@@ -182,7 +187,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
                                  .text()))
               .append("</fo:block>\n");
         }
-        appendChildren(fo, node);
+        appendChildren(fo, node, width);
         fo.append("</fo:block>\n");
     }
 
@@ -205,7 +210,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
           .append(">")
           .append(escape(text))
           .append("</fo:block>\n");
-        appendChildren(fo, node);
+        appendChildren(fo, node, Double.NaN);
     }
 
     private void appendField(StringBuilder fo, LayoutNode node, FieldNode field) {
@@ -246,7 +251,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         fo.append("<fo:table-body><fo:table-row>\n");
         for (LayoutNode child : node.children()) {
             fo.append("<fo:table-cell>");
-            appendNode(fo, child);
+            appendNode(fo, child, Double.NaN);
             fo.append("</fo:table-cell>\n");
         }
         fo.append("</fo:table-row></fo:table-body></fo:table>\n");
@@ -256,7 +261,7 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
      * A data table: column definitions carry widths and optional {@code label}s (a header row is
      * emitted when any label is present); the {@code row} children are the data rows.
      */
-    private void appendTable(StringBuilder fo, LayoutNode node) {
+    private void appendTable(StringBuilder fo, LayoutNode node, double width) {
         List<LayoutNode> columns = new ArrayList<>();
         List<LayoutNode> rows = new ArrayList<>();
         for (LayoutNode child : node.children()) {
@@ -269,14 +274,14 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         if (rows.isEmpty()) {
             return; // FOP rejects an empty fo:table-body
         }
-        fo.append("<fo:table table-layout=\"fixed\" width=\"100%\" space-after=\"8pt\" font-size=\"")
-          .append(points(tableFontSize(node, columns.size())))
-          .append("\">\n");
         List<Measurement> widths = new ArrayList<>();
         for (LayoutNode column : columns) {
             widths.add(column.width()
                              .type() == Measurement.Type.AUTO ? Measurement.fraction(1) : column.width());
         }
+        fo.append("<fo:table table-layout=\"fixed\" width=\"100%\" space-after=\"8pt\" font-size=\"")
+          .append(points(tableFontSize(node, width, widths, columns, rows)))
+          .append("\">\n");
         appendColumnDefinitions(fo, widths);
         boolean hasLabels = columns.stream()
                                    .anyMatch(column -> column.source()
@@ -312,16 +317,32 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     }
 
     /**
-     * The table's {@code fontSize} in points when the template sets one, else the automatic size.
-     * Narrow columns can't fit long labels/values at the 10pt body size, and FOP bleeds an overflowing
-     * (right-aligned) line over its neighbour instead of clipping it, so the automatic size drops a
-     * point for every column beyond three - down to a readable floor of 8pt (#8321).
+     * The table's {@code fontSize} in points when the template sets one, else the automatic size: the
+     * body size when the columns' content fits, else the largest size at which it does, never below 8pt
+     * ({@link TableFontSizer}, #8321). Where the table's width is not known (inside a row) the size
+     * drops a point for every column beyond three instead, to the same floor.
      */
-    private static double tableFontSize(LayoutNode table, int columnCount) {
+    private static double tableFontSize(LayoutNode table, double width, List<Measurement> widths, List<LayoutNode> columns,
+            List<LayoutNode> rows) {
         Attributes attributes = table.source()
                                      .attributes();
         if (!attributes.has(FONT_SIZE)) {
-            return Math.max(MIN_AUTOMATIC_TABLE_FONT_SIZE, 10 - Math.max(0, columnCount - 3));
+            if (Double.isNaN(width)) {
+                return Math.max(TableFontSizer.MIN_SIZE, TableFontSizer.MAX_SIZE - Math.max(0, columns.size() - 3));
+            }
+            List<String> labels = columns.stream()
+                                         .map(column -> column.source()
+                                                              .attributes()
+                                                              .getOrDefault("label", ""))
+                                         .toList();
+            List<List<String>> cells = rows.stream()
+                                           .map(row -> row.children()
+                                                          .stream()
+                                                          .map(cell -> cell.source()
+                                                                           .text())
+                                                          .toList())
+                                           .toList();
+            return TableFontSizer.fit(width, widths, labels, cells);
         }
         String raw = attributes.get(FONT_SIZE);
         String amount = raw.trim();

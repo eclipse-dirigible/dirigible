@@ -139,58 +139,87 @@ public class XslFoRendererTest {
         assertEquals(1, fo.split(">20%</fo:block>", -1).length - 1);
     }
 
-    @Test
-    public void wideTableScalesTheFontDownSoContentFits() {
-        // Three columns keep the body font size; every column beyond that drops it a point down to a
-        // readable 8pt floor, so a nine-column financial table renders at 8pt, not 6pt (#8321).
-        String threeColumns = renderTemplate("""
-                <document>
-                    <table source="items">
-                        <column label="A">{{a}}</column>
-                        <column label="B">{{b}}</column>
-                        <column label="C">{{c}}</column>
-                    </table>
-                </document>
-                """, Map.of("items", List.of(Map.of("a", "1", "b", "2", "c", "3"))));
-        assertTrue(threeColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"10pt\""));
+    private static final String GOODS_RECEIPT_TABLE = """
+            <document>
+                <table source="items"%s>
+                    <column width="3*" label="Name">{{Name}}</column>
+                    <column width="*" align="right" label="Qty">{{Quantity}}</column>
+                    <column width="*" align="right" label="Unit Price">{{Price}}</column>
+                    <column width="*" align="right" label="VAT %%">{{VatRate}}</column>
+                    <column width="*" align="right" label="Net">{{Net}}</column>
+                    <column width="*" align="right" label="VAT">{{Vat}}</column>
+                    <column width="*" align="right" label="Total">{{Total}}</column>
+                </table>
+            </document>
+            """;
 
+    private static Map<String, Object> goodsReceiptItem(String total) {
+        return Map.of("items", List.of(Map.of("Name", "Hex bolt M8 x 40, zinc plated", "Quantity", "200", "Price", "0.35", "VatRate", "20",
+                "Net", "70.00", "Vat", "14.00", "Total", total)));
+    }
+
+    @Test
+    public void aTableWhoseContentFitsKeepsTheBodySize() {
+        // A Goods Receipt's seven columns hold short figures that fit at 10pt - the column count alone
+        // used to print them at 6pt (#8321).
+        String fo = renderTemplate(GOODS_RECEIPT_TABLE.formatted(""), goodsReceiptItem("1 254.00"));
+        assertTrue(fo.contains("width=\"100%\" space-after=\"8pt\" font-size=\"10pt\""));
+    }
+
+    @Test
+    public void aFigureTooWideForItsColumnScalesTheTableDown() {
+        // a figure is never wrapped at its grouping space, so the table shrinks until it fits
+        String fo = renderTemplate(GOODS_RECEIPT_TABLE.formatted(""), goodsReceiptItem("123 456.00"));
+        assertTrue(fo.contains("width=\"100%\" space-after=\"8pt\" font-size=\"9pt\""));
+    }
+
+    @Test
+    public void theAutomaticSizeNeverDropsBelowEightPoints() {
         String nineColumns = renderTemplate("""
                 <document>
                     <table source="items">
-                        <column label="C1">{{c1}}</column>
-                        <column label="C2">{{c2}}</column>
-                        <column label="C3">{{c3}}</column>
-                        <column label="C4">{{c4}}</column>
-                        <column label="C5">{{c5}}</column>
-                        <column label="C6">{{c6}}</column>
-                        <column label="C7">{{c7}}</column>
-                        <column label="C8">{{c8}}</column>
-                        <column label="C9">{{c9}}</column>
+                        <column label="C1">{{c}}</column>
+                        <column label="C2">{{c}}</column>
+                        <column label="C3">{{c}}</column>
+                        <column label="C4">{{c}}</column>
+                        <column label="C5">{{c}}</column>
+                        <column label="C6">{{c}}</column>
+                        <column label="C7">{{c}}</column>
+                        <column label="C8">{{c}}</column>
+                        <column label="C9">{{c}}</column>
                     </table>
                 </document>
-                """, Map.of("items", List.of(Map.of("c1", "1"))));
+                """, Map.of("items", List.of(Map.of("c", "1 234 567.89"))));
         assertTrue(nineColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"8pt\""));
     }
 
     @Test
-    public void fontSizeOnATableReplacesTheAutomaticSize() {
-        String seven = """
+    public void aTableInARowScalesByItsColumnCount() {
+        // inside a row the table's width is not known, so the size drops a point per column beyond three
+        String fo = renderTemplate("""
                 <document>
-                    <table source="items"%s>
-                        <column label="Name">{{c1}}</column>
-                        <column label="Qty">{{c2}}</column>
-                        <column label="Unit Price">{{c3}}</column>
-                        <column label="VAT %%">{{c4}}</column>
-                        <column label="Net">{{c5}}</column>
-                        <column label="VAT">{{c6}}</column>
-                        <column label="Total">{{c7}}</column>
-                    </table>
+                    <row>
+                        <table source="items">
+                            <column>{{a}}</column>
+                            <column>{{a}}</column>
+                            <column>{{a}}</column>
+                            <column>{{a}}</column>
+                            <column>{{a}}</column>
+                        </table>
+                    </row>
                 </document>
-                """;
-        Map<String, Object> data = Map.of("items", List.of(Map.of("c1", "Bolt")));
-        assertTrue(renderTemplate(seven.formatted(""), data).contains("space-after=\"8pt\" font-size=\"8pt\""));
-        assertTrue(renderTemplate(seven.formatted(" fontSize=\"9\""), data).contains("space-after=\"8pt\" font-size=\"9pt\""));
-        assertTrue(renderTemplate(seven.formatted(" fontSize=\"7.5pt\""), data).contains("space-after=\"8pt\" font-size=\"7.5pt\""));
+                """, Map.of("items", List.of(Map.of("a", "1"))));
+        assertTrue(fo.contains("width=\"100%\" space-after=\"8pt\" font-size=\"8pt\""));
+    }
+
+    @Test
+    public void fontSizeOnATableReplacesTheAutomaticSize() {
+        Map<String, Object> data = goodsReceiptItem("1 234 567.89");
+        assertTrue(renderTemplate(GOODS_RECEIPT_TABLE.formatted(""), data).contains("space-after=\"8pt\" font-size=\"8pt\""));
+        assertTrue(
+                renderTemplate(GOODS_RECEIPT_TABLE.formatted(" fontSize=\"10\""), data).contains("space-after=\"8pt\" font-size=\"10pt\""));
+        assertTrue(renderTemplate(GOODS_RECEIPT_TABLE.formatted(" fontSize=\"7.5pt\""), data).contains(
+                "space-after=\"8pt\" font-size=\"7.5pt\""));
     }
 
     @Test

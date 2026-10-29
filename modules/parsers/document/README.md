@@ -257,9 +257,11 @@ integral numbers print unformatted.
 `renderBound(boundAst)` emits a self-contained XSLT/XSL-FO stylesheet (all data already merged,
 so it transforms any XML input, e.g. `<data/>`) — the exact input of the platform's FOP-based
 `PDFFacade`. Tables get proportional/percent/px column widths and a bold header row when any
-column carries a `label`; a table's font is 10pt up to three columns and a point smaller for each
-column beyond that, never below 8pt, unless the table sets `fontSize` (`<table source="items"
-fontSize="9">`, points; `9pt`/`9px` accepted, anything but a positive number is a layout error);
+column carries a `label`; a table's font is the 10pt body size when its columns' content fits them,
+else the largest size at which it does, never below 8pt (a figure has to fit whole, other text and
+the bold labels word by word; inside a `row`, where the table's width is not known, a point smaller
+per column beyond three), unless the table sets `fontSize` (`<table source="items" fontSize="9">`,
+points; `9pt`/`9px` accepted, anything but a positive number is a layout error);
 fields render as **Label:** value; `text` styles map `title`/`subtitle`/
 `caption` to font presets. v1 limits (deliberate, documented in the class): header/footer render
 once in-flow, `repeatHeader`/`pageBreak` are ignored, 1 px = 1 pt, and a table with no data rows
