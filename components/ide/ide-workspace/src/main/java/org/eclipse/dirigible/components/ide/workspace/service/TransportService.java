@@ -15,8 +15,8 @@ import java.util.zip.ZipInputStream;
 
 import org.apache.commons.codec.DecoderException;
 import org.eclipse.dirigible.components.api.utils.UrlFacade;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;

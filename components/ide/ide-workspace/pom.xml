@@ -34,7 +34,11 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ide-problems</artifactId>
+            <artifactId>dirigible-components-core-problems</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-workspace</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

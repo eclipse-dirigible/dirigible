@@ -15,8 +15,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceParser;
 import org.eclipse.dirigible.repository.api.ICollection;

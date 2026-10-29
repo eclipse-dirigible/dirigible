@@ -13,9 +13,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.problems.domain.Problem;
-import org.eclipse.dirigible.components.ide.problems.domain.Problems;
-import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
+import org.eclipse.dirigible.components.problems.domain.Problem;
+import org.eclipse.dirigible.components.problems.domain.Problems;
+import org.eclipse.dirigible.components.problems.service.ProblemService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;

@@ -23,7 +23,7 @@ import java.util.concurrent.CompletableFuture;
 
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.local.LocalRepository;

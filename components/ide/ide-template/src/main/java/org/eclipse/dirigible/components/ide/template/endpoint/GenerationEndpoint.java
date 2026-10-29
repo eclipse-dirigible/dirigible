@@ -23,7 +23,7 @@ import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateParameters;
 import org.eclipse.dirigible.components.ide.template.service.GenerationService;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -41,7 +41,6 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ValidationErrorD
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.VariableData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -96,12 +95,6 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      */
     @Autowired
     private BpmService bpmService;
-
-    /**
-     * The workspace service.
-     */
-    @Autowired
-    private WorkspaceService workspaceService;
 
     /**
      * Gets the process definition xml.
@@ -172,9 +165,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
 
         path = sanitizePath(path);
 
-        bpmService.saveModel(workspace, project, path, payload);
-
-        return ResponseEntity.ok(getWorkspaceService().getURI(workspace, project, path));
+        return ResponseEntity.ok(bpmService.saveModel(workspace, project, path, payload));
     }
 
     /**
@@ -190,15 +181,6 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     @PostMapping(value = "/models/validate", produces = "application/json")
     public ResponseEntity<List<ValidationErrorDTO>> validateModel(@RequestBody String payload) throws IOException {
         return ResponseEntity.ok(bpmService.validateModel(payload));
-    }
-
-    /**
-     * Gets the workspace service.
-     *
-     * @return the workspace service
-     */
-    public WorkspaceService getWorkspaceService() {
-        return workspaceService;
     }
 
     /**

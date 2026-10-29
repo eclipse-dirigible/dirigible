@@ -13,6 +13,8 @@ import static java.text.MessageFormat.format;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -26,8 +28,9 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitio
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ValidationErrorDTO;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.service.UserWorkspaces;
+import org.eclipse.dirigible.components.workspace.service.WorkspaceUnavailableException;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.flowable.common.engine.impl.history.HistoryLevel;
@@ -49,7 +52,7 @@ import org.flowable.variable.api.history.HistoricVariableInstance;
 import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 // Jackson 2 ON PURPOSE (#7790): Flowable's BpmnJsonConverter takes and returns
@@ -78,8 +81,8 @@ public class BpmService {
     /** The prefix of the platform's own process variables, which no completion may write. */
     private static final String SYSTEM_VARIABLE_PREFIX = "__";
 
-    /** The workspace service. */
-    private final WorkspaceService workspaceService;
+    /** The workspaces of the IDE, absent where the IDE is not deployed. */
+    private final ObjectProvider<UserWorkspaces> workspaces;
 
     /** The bpm provider flowable. */
     private final BpmProviderFlowable bpmProviderFlowable;
@@ -87,12 +90,11 @@ public class BpmService {
     /**
      * Instantiates a new bpm service.
      *
-     * @param workspaceService the workspace service
+     * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      * @param bpmProviderFlowable the bpm provider flowable
      */
-    @Autowired
-    public BpmService(WorkspaceService workspaceService, BpmProviderFlowable bpmProviderFlowable) {
-        this.workspaceService = workspaceService;
+    public BpmService(ObjectProvider<UserWorkspaces> workspaces, BpmProviderFlowable bpmProviderFlowable) {
+        this.workspaces = workspaces;
         this.bpmProviderFlowable = bpmProviderFlowable;
     }
 
@@ -126,9 +128,9 @@ public class BpmService {
      */
     public String getModel(String workspace, String project, String path) throws JsonProcessingException {
         BpmnXMLConverter bpmnXMLConverter = new BpmnXMLConverter();
-        File file = getWorkspaceService().getWorkspace(workspace)
-                                         .getProject(project)
-                                         .getFile(path);
+        File file = workspaces("getModel").getWorkspace(workspace)
+                                          .getProject(project)
+                                          .getFile(path);
         if (file.exists()) {
             BpmnModel bpmnModel =
                     bpmnXMLConverter.convertToBpmnModel(new InputStreamSource(new ByteArrayInputStream(file.getContent())), true, true);
@@ -160,13 +162,12 @@ public class BpmService {
         }
     }
 
-    /**
-     * Gets the workspace service.
-     *
-     * @return the workspace service
-     */
-    public WorkspaceService getWorkspaceService() {
-        return workspaceService;
+    private UserWorkspaces workspaces(String operation) {
+        UserWorkspaces available = workspaces.getIfAvailable();
+        if (available == null) {
+            throw new WorkspaceUnavailableException(operation);
+        }
+        return available;
     }
 
     /**
@@ -176,22 +177,26 @@ public class BpmService {
      * @param project the project
      * @param path the path
      * @param payload the payload
+     * @return the URI of the saved model
      * @throws IOException Signals that an I/O exception has occurred.
+     * @throws URISyntaxException when the names do not form a valid URI
      */
-    public void saveModel(String workspace, String project, String path, String payload) throws IOException {
+    public URI saveModel(String workspace, String project, String path, String payload) throws IOException, URISyntaxException {
+        UserWorkspaces userWorkspaces = workspaces("saveModel");
         ObjectMapper objectMapper = new ObjectMapper();
         JsonNode modelNode = objectMapper.readTree(payload);
         BpmnJsonConverter bpmnJsonConverter = new BpmnJsonConverter();
         BpmnModel bpmnModel = bpmnJsonConverter.convertToBpmnModel(modelNode);
         BpmnXMLConverter bpmnXMLConverter = new BpmnXMLConverter();
         byte[] bytes = bpmnXMLConverter.convertToXML(bpmnModel);
-        File file = getWorkspaceService().getWorkspace(workspace)
-                                         .getProject(project)
-                                         .getFile(path);
+        File file = userWorkspaces.getWorkspace(workspace)
+                                  .getProject(project)
+                                  .getFile(path);
         if (!file.exists()) {
             file.create();
         }
         file.setContent(bytes);
+        return userWorkspaces.getURI(workspace, project, path);
     }
 
     /**

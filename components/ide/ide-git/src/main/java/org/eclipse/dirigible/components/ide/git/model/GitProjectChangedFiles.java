@@ -11,7 +11,7 @@ package org.eclipse.dirigible.components.ide.git.model;
 
 import java.util.List;
 
-import org.eclipse.dirigible.components.ide.git.domain.GitChangedFile;
+import org.eclipse.dirigible.components.git.domain.GitChangedFile;
 
 /**
  * The Class GitProjectChangedFiles.

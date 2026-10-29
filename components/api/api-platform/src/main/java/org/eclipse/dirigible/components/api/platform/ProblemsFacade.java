@@ -13,8 +13,8 @@ import java.util.List;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.eclipse.dirigible.components.ide.problems.domain.Problem;
-import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
+import org.eclipse.dirigible.components.problems.domain.Problem;
+import org.eclipse.dirigible.components.problems.service.ProblemService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;

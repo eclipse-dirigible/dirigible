@@ -23,7 +23,6 @@ import java.util.stream.Collectors;
 
 import org.apache.commons.io.output.WriterOutputStream;
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.api.platform.WorkspaceFacade;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.data.csvim.domain.CsvFile;
 import org.eclipse.dirigible.components.data.management.load.DataSourceMetadataLoader;
@@ -35,15 +34,16 @@ import org.eclipse.dirigible.components.data.structures.domain.TableColumn;
 import org.eclipse.dirigible.components.data.transfer.service.DataTransferSchemaTopologyService;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
 import org.eclipse.dirigible.components.database.helpers.DatabaseMetadataHelper;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.service.UserWorkspaces;
+import org.eclipse.dirigible.components.workspace.service.WorkspaceUnavailableException;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import com.google.gson.JsonArray;
@@ -72,9 +72,9 @@ public class DataExportService {
     private final DataSourcesManager datasourceManager;
 
     /**
-     * The workspace service.
+     * The workspaces of the IDE, absent where the IDE is not deployed.
      */
-    private final WorkspaceService workspaceService;
+    private final ObjectProvider<UserWorkspaces> workspaces;
 
     /**
      * The database execution service.
@@ -100,22 +100,36 @@ public class DataExportService {
      * Instantiates a new data export service.
      *
      * @param datasourceManager the datasource manager
-     * @param workspaceService the workspace service
+     * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      * @param databaseExecutionService the database execution service
      * @param databaseDefinitionService the database definition service
      * @param dataTransferSchemaTopologyService the data transfer schema topology service
      * @param dataSourceMetadataLoader the data source metadata loader service
      */
-    @Autowired
-    public DataExportService(DataSourcesManager datasourceManager, WorkspaceService workspaceService,
+    public DataExportService(DataSourcesManager datasourceManager, ObjectProvider<UserWorkspaces> workspaces,
             DatabaseExecutionService databaseExecutionService, DatabaseDefinitionService databaseDefinitionService,
             DataTransferSchemaTopologyService dataTransferSchemaTopologyService, DataSourceMetadataLoader dataSourceMetadataLoader) {
         this.datasourceManager = datasourceManager;
-        this.workspaceService = workspaceService;
+        this.workspaces = workspaces;
         this.databaseExecutionService = databaseExecutionService;
         this.databaseDefinitionService = databaseDefinitionService;
         this.dataTransferSchemaTopologyService = dataTransferSchemaTopologyService;
         this.dataSourceMetadataLoader = dataSourceMetadataLoader;
+    }
+
+    /**
+     * The default workspace of the current user, created when it does not exist yet.
+     *
+     * @param operation the export that needs the workspace
+     * @return the workspace
+     */
+    private Workspace defaultWorkspace(String operation) {
+        UserWorkspaces userWorkspaces = workspaces.getIfAvailable();
+        if (userWorkspaces == null) {
+            throw new WorkspaceUnavailableException(operation);
+        }
+        return userWorkspaces.existsWorkspace(DEFAULT_WORKSPACE_NAME) ? userWorkspaces.getWorkspace(DEFAULT_WORKSPACE_NAME)
+                : userWorkspaces.createWorkspace(DEFAULT_WORKSPACE_NAME);
     }
 
     /**
@@ -137,8 +151,7 @@ public class DataExportService {
                                             .get("schemas")
                                             .getAsJsonArray();
 
-                workspace = workspaceService.existsWorkspace(DEFAULT_WORKSPACE_NAME) ? WorkspaceFacade.getWorkspace(DEFAULT_WORKSPACE_NAME)
-                        : WorkspaceFacade.createWorkspace(DEFAULT_WORKSPACE_NAME);
+                workspace = defaultWorkspace("exportSchemaInCsvs");
 
                 Project project = workspace.createProject(datasource);
 
@@ -222,8 +235,7 @@ public class DataExportService {
         Project project;
         File file;
 
-        workspace = workspaceService.existsWorkspace(DEFAULT_WORKSPACE_NAME) ? WorkspaceFacade.getWorkspace(DEFAULT_WORKSPACE_NAME)
-                : WorkspaceFacade.createWorkspace(DEFAULT_WORKSPACE_NAME);
+        workspace = defaultWorkspace("exportMetadataAsProject");
 
         project = workspace.createProject(datasource);
         file = project.createFile(datasource.toLowerCase() + "_" + schema.toLowerCase() + ".schema", schemaMetadata.getBytes());
@@ -290,8 +302,7 @@ public class DataExportService {
 
             Workspace workspace;
 
-            workspace = workspaceService.existsWorkspace(DEFAULT_WORKSPACE_NAME) ? WorkspaceFacade.getWorkspace(DEFAULT_WORKSPACE_NAME)
-                    : WorkspaceFacade.createWorkspace(DEFAULT_WORKSPACE_NAME);
+            workspace = defaultWorkspace("exportSchemaAsModel");
 
             Project project = workspace.createProject(datasource);
 

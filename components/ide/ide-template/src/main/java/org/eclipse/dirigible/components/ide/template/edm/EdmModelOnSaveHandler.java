@@ -11,7 +11,7 @@ package org.eclipse.dirigible.components.ide.template.edm;
 
 import java.nio.charset.StandardCharsets;
 
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceOnSaveHandler;
 import org.springframework.stereotype.Component;
 

@@ -21,8 +21,8 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.ide.template.service.model.GeneratedFile;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.Test;

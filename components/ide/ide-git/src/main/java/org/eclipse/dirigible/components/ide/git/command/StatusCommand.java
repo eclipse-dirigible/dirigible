@@ -12,11 +12,11 @@ package org.eclipse.dirigible.components.ide.git.command;
 import java.io.File;
 import java.io.IOException;
 
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.GitConnectorFactory;
+import org.eclipse.dirigible.components.git.domain.IGitConnector;
 import org.eclipse.dirigible.components.ide.git.project.ProjectPropertiesVerifier;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatus;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;

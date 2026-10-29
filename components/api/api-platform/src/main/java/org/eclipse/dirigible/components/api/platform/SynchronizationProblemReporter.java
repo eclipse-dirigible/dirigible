@@ -16,8 +16,8 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.artefact.ArtefactProblemReporter;
-import org.eclipse.dirigible.components.ide.problems.domain.Problem;
-import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
+import org.eclipse.dirigible.components.problems.domain.Problem;
+import org.eclipse.dirigible.components.problems.service.ProblemService;
 import org.springframework.stereotype.Component;
 
 /**

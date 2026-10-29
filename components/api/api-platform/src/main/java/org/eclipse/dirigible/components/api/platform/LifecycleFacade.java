@@ -9,9 +9,12 @@
  */
 package org.eclipse.dirigible.components.api.platform;
 
-import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
+import org.eclipse.dirigible.components.workspace.service.ProjectPublisher;
+import org.eclipse.dirigible.components.workspace.service.WorkspaceUnavailableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,20 +23,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class LifecycleFacade implements InitializingBean {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(LifecycleFacade.class);
+
     /** The instance. */
     private static LifecycleFacade INSTANCE;
 
-    /** The publisherService. */
-    private PublisherService publisherService;
+    /** The publisher of the IDE, absent where the IDE is not deployed. */
+    private final ObjectProvider<ProjectPublisher> publisher;
 
     /**
      * Instantiates a new lifecycle facade.
      *
-     * @param publisherService the publisher service
+     * @param publisher the publisher of the IDE, absent where the IDE is not deployed
      */
-    @Autowired
-    private LifecycleFacade(PublisherService publisherService) {
-        this.publisherService = publisherService;
+    private LifecycleFacade(ObjectProvider<ProjectPublisher> publisher) {
+        this.publisher = publisher;
     }
 
     /**
@@ -55,13 +59,12 @@ public class LifecycleFacade implements InitializingBean {
         return INSTANCE;
     }
 
-    /**
-     * Gets the publisher service.
-     *
-     * @return the publisher service
-     */
-    public PublisherService getPublisherService() {
-        return publisherService;
+    private ProjectPublisher publisher(String operation) {
+        ProjectPublisher available = publisher.getIfAvailable();
+        if (available == null) {
+            throw new WorkspaceUnavailableException(operation);
+        }
+        return available;
     }
 
     /**
@@ -76,11 +79,11 @@ public class LifecycleFacade implements InitializingBean {
         boolean isSuccessfulPublishRequest = false;
         try {
             LifecycleFacade.get()
-                           .getPublisherService()
+                           .publisher("publish")
                            .publish(user, workspace, project, "");
             isSuccessfulPublishRequest = true;
         } catch (Exception e) {
-            // Do nothing
+            LOGGER.warn("Publishing project [{}] of workspace [{}] failed", project, workspace, e);
         }
         return isSuccessfulPublishRequest;
     }
@@ -95,11 +98,11 @@ public class LifecycleFacade implements InitializingBean {
         boolean isSuccessfulUnpublishRequest = false;
         try {
             LifecycleFacade.get()
-                           .getPublisherService()
+                           .publisher("unpublish")
                            .unpublish(project);
             isSuccessfulUnpublishRequest = true;
         } catch (Exception e) {
-            // Do nothing
+            LOGGER.warn("Unpublishing [{}] failed", project, e);
         }
         return isSuccessfulUnpublishRequest;
     }
