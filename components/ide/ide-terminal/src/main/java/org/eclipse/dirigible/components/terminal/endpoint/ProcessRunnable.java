@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 
 import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TERMINAL_PREFIX;
@@ -26,7 +27,7 @@ class ProcessRunnable implements Runnable {
     private final String command;
 
     /** The process. */
-    private Process process;
+    private volatile Process process;
 
     /**
      * Instantiates a new process runnable.
@@ -55,40 +56,45 @@ class ProcessRunnable implements Runnable {
             this.process = Runtime.getRuntime()
                                   .exec(this.command);
 
-            Thread reader = new Thread(() -> {
-                try {
-                    try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                        String line;
-
-                        while ((line = input.readLine()) != null) {
-                            logger.info(TERMINAL_PREFIX, line);
-                        }
-                    }
-                } catch (IOException e) {
-                    logger.error(TERMINAL_PREFIX, e.getMessage(), e);
-                }
-            });
-            reader.start();
-
-            Thread error = new Thread(() -> {
-                try {
-                    try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                        String line;
-
-                        while ((line = input.readLine()) != null) {
-                            logger.info(TERMINAL_PREFIX, line);
-                        }
-                    }
-                } catch (IOException e) {
-                    logger.error(TERMINAL_PREFIX, e.getMessage(), e);
-                }
-            });
-            error.start();
-
+            pipeToLog("dirigible-ttyd-stdout-reader", process.getInputStream());
+            pipeToLog("dirigible-ttyd-stderr-reader", process.getErrorStream());
         } catch (IOException e) {
             logger.error(TERMINAL_PREFIX, e.getMessage(), e);
         }
+    }
 
+    /**
+     * Drains a process stream to the log on a dedicated daemon thread, so that a running ttyd never
+     * keeps the JVM alive after the application context is gone (e.g. on a failed startup).
+     *
+     * @param threadName the reader thread name
+     * @param stream the process stream to drain
+     */
+    private static void pipeToLog(String threadName, InputStream stream) {
+        Thread reader = new Thread(() -> {
+            try (BufferedReader input = new BufferedReader(new InputStreamReader(stream))) {
+                String line;
+                while ((line = input.readLine()) != null) {
+                    logger.info(TERMINAL_PREFIX, line);
+                }
+            } catch (IOException e) {
+                logger.error(TERMINAL_PREFIX, e.getMessage(), e);
+            }
+        }, threadName);
+        reader.setDaemon(true);
+        reader.start();
+    }
+
+    /**
+     * Destroys the ttyd process if it is still running. Closing its streams lets the reader threads
+     * finish.
+     */
+    void destroy() {
+        Process current = this.process;
+        if (current != null && current.isAlive()) {
+            logger.info("Destroying ttyd process [{}]", current.pid());
+            current.destroy();
+        }
     }
 
 }
