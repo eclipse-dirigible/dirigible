@@ -201,6 +201,50 @@ class CallActionDescriptorTest {
         assertEquals(Map.of("id", Map.of("property", "Id")), descriptor.get("recordFields"));
     }
 
+    /** A team member listing its skills (#8323): the call dialog reads them off the clicked row. */
+    private static final String SKILLS = """
+            name: team
+            entities:
+              - name: Skill
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: TeamMember
+                list: [name, skills.skill, skills]
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: skills, kind: oneToMany, to: MemberSkill }
+              - name: MemberSkill
+                label: "{skill.name}"
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,  kind: manyToOne, to: Skill }
+            actions:
+              - name: ChangeSkills
+                forEntity: TeamMember
+                description: "{name} has {skills}."
+                prompt:
+                  - { name: skills, type: multiselect, default: "{skills.skill}", options: [Java, SQL, Go] }
+                call:
+                  path: /services/java/team/custom/api/members/{id}/skills
+                  body: { skills: "{skills}" }
+            """;
+
+    @Test
+    void aListedCollectionPathIsReadAsItsColumnWithoutALookup() {
+        Map<?, ?> descriptor = new Gson().fromJson(descriptor(SKILLS, "ChangeSkills"), Map.class);
+
+        assertEquals(
+                Map.of("name", Map.of("property", "Name"), "skills", Map.of("property", "Skills"), "skills.skill",
+                        Map.of("property", "SkillsSkill")),
+                descriptor.get("recordFields"), "the column already holds the child rows' texts, so it needs no lookup");
+    }
+
     @Test
     void aCallWithoutPromptCarriesItsConfirmationAndNoBody() {
         String descriptor = compact(descriptor(YAML, "ReopenTicket"));

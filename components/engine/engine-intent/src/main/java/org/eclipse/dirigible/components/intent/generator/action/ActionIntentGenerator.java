@@ -191,7 +191,8 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
     /**
      * What the dialog's {@code {property}} placeholders read off the clicked record (#8296), keyed by
      * placeholder: the record's property and, for a to-one relation, the lookup its display text is
-     * read through. Empty when the dialog names none.
+     * read through. A listed collection path's column (#8323) needs no lookup: it already holds the
+     * child rows' display texts. Empty when the dialog names none.
      */
     private static Map<String, Object> recordFields(ActionIntent action, IntentGenerationContext context) {
         IntentModel model = context.getModel();

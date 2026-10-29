@@ -9976,7 +9976,8 @@ public final class IntentParser {
 
     /**
      * A prompt input's {@code default:} (#8296) is a literal of its type - a list of option values for
-     * a multiselect - or a whole {@code "{property}"} of the clicked record.
+     * a multiselect - or a whole {@code "{property}"} of the clicked record. A listed collection path
+     * (#8323) holds a list of texts, so only a multiselect takes it as its default.
      */
     private static void validatePromptDefault(ActionPromptIntent input, ActionIntent action, EntityIntent entity, String subject,
             List<String> issues) {
@@ -9988,6 +9989,10 @@ public final class IntentParser {
         String property = ActionPlaceholders.ofDefault(value);
         if (property != null) {
             validateRecordPlaceholder(key, property, action, entity, subject, issues);
+            if (!input.isMultiselect() && ActionPlaceholders.namesCollection(entity, property)) {
+                issues.add(subject + " " + key + " names [{" + property + "}] - a collection path default fits a multiselect only - input ["
+                        + input.getName() + "] has type [" + input.getType() + "]");
+            }
             return;
         }
         String expected = promptDefaultMismatch(input, value);
@@ -10036,13 +10041,18 @@ public final class IntentParser {
     /**
      * A {@code {property}} a call action's dialog reads off the clicked record (#8296): only a
      * per-record action has one, and the property must be a field or to-one relation of the
-     * {@code forEntity} - or the {@code Name} its {@code label:} generates.
+     * {@code forEntity}, the {@code Name} its {@code label:} generates, or a collection path its
+     * {@code list:} shows (#8323) - an unlisted one is a column the record never carries.
      */
     private static void validateRecordPlaceholder(String key, String name, ActionIntent action, EntityIntent entity, String subject,
             List<String> issues) {
         if (!"entity".equals(action.getScope())) {
             issues.add(subject + " " + key + " names [{" + name + "}] but the action has scope [" + action.getScope()
                     + "] - only a per-record (scope: entity) action has a record to read it from");
+        } else if (entity != null && ActionPlaceholders.namesCollection(entity, name)
+                && ActionPlaceholders.listedCollection(entity, name) == null) {
+            issues.add(subject + " " + key + " names [{" + name + "}], a collection path [" + entity.getName()
+                    + "] does not list - add it to `list:`");
         } else if (entity != null && ActionPlaceholders.property(entity, name) == null) {
             issues.add(
                     subject + " " + key + " names [{" + name + "}], which is not a field or to-one relation of [" + entity.getName() + "]");

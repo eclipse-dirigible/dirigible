@@ -27,7 +27,8 @@ import org.junit.jupiter.api.Test;
  * <p>
  * And the dialog that says what it acts on (issue #8296): a MULTISELECT sent as an array in options
  * order, a required one refused empty, the literal and record defaults it opens with, and the
- * description and confirm text filled from the clicked record - a to-one by its display text.
+ * description and confirm text filled from the clicked record - a to-one by its display text. A
+ * listed collection path (issue #8323) ticks the record's child rows and joins them in a text.
  */
 class CustomActionsCallIT {
 
@@ -127,6 +128,35 @@ class CustomActionsCallIT {
 
             assertEquals("Archive Platform?|Led by Ann.", context.eval("js", "store.confirmText + '|' + store.dialogDescription")
                                                                  .asString());
+        }
+    }
+
+    private static final String CHANGE_SKILLS =
+            """
+                    { label: 'Change skills', view: 'TeamMember', type: 'entity', description: 'Change the skills of {name}: {skills.skill}.',
+                      call: { method: 'POST', path: '/services/java/team/custom/api/members/{id}/skills', body: { skills: '{skills}' } },
+                      prompt: [ { name: 'skills', required: true } ],
+                      promptColumns: [ { name: 'skills', label: 'Skills', widget: 'MULTISELECT', default: '{skills.skill}',
+                                         options: [ { value: 'Java', label: 'Java' }, { value: 'SQL', label: 'SQL' }, { value: 'Go', label: 'Go' } ] } ],
+                      recordFields: { name: { property: 'Name' }, 'skills.skill': { property: 'SkillsSkill' } } }""";
+
+    @Test
+    void aCollectionPathDefaultTicksTheRecordsChildRowsInOptionsOrder() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + CHANGE_SKILLS + ", 3, { Id: 3, Name: 'Ann', SkillsSkill: ['SQL', 'Java'] });");
+
+            assertEquals("[\"Java\",\"SQL\"]", context.eval("js", "JSON.stringify(store.promptValues.skills)")
+                                                      .asString());
+            assertEquals("Change the skills of Ann: SQL, Java.", context.eval("js", "store.dialogDescription")
+                                                                        .asString(),
+                    "the texts joined, in the record's order");
+
+            context.eval("js", "store.trigger(" + CHANGE_SKILLS + ", 4, { Id: 4, Name: 'Bob', SkillsSkill: [] });");
+
+            assertEquals("[]|Change the skills of Bob: .",
+                    context.eval("js", "JSON.stringify(store.promptValues.skills) + '|' + store.dialogDescription")
+                           .asString(),
+                    "a member without skills opens with nothing ticked");
         }
     }
 

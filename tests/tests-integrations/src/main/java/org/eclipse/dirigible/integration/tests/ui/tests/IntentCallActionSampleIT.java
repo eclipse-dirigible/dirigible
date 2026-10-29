@@ -50,7 +50,8 @@ import com.codeborne.selenide.SelenideElement;
  * the button for a caller without the token, so a SupportLead receives it and an Agent does not.
  * The rest runs in the browser, as the administrator, who is offered every button - including the
  * dialog that says what it acts on (issue #8296): a description naming the record, a help line, a
- * multiselect with its default ticked and captions that toggle their boxes, and a named run button.
+ * multiselect with its default ticked and captions that toggle their boxes, and a named run button
+ * - and a multiselect that opens with the clicked row's child rows ticked (issue #8323).
  */
 class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
 
@@ -99,6 +100,27 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: Skill
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: TeamMember
+                list: [name, skills.skill]
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: MemberSkill }
+              - name: MemberSkill
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,  kind: manyToOne, to: Skill }
               - name: Watcher
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -159,11 +181,29 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                   path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/invitations
                   body: { email: "{email}", roles: "{roles}" }
                 success: Invitation sent
+              - name: ChangeSkills
+                forEntity: TeamMember
+                label: Change skills
+                can: TeamMember:changeSkills
+                description: "Change the skills of {name} - now {skills.skill}."
+                submit: Change
+                prompt:
+                  - name: skills
+                    type: multiselect
+                    label: Skills
+                    required: true
+                    default: "{skills.skill}"
+                    options: [Java, SQL, Go]
+                call:
+                  path: /services/java/helpdesk/custom/api/TicketApi/members/{id}/skills
+                  body: { skills: "{skills}" }
+                success: Skills changed
             permissions:
               - role: SupportLead
-                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite]
+                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
+                      TeamMember:read, TeamMember:changeSkills]
               - role: Agent
-                can: [Ticket:read, Escalation:read, Watcher:read, Team:read]
+                can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
             seeds:
               - name: ticket-statuses
                 entity: TicketStatus
@@ -190,6 +230,21 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 entity: Team
                 rows:
                   - { id: 1, name: Platform }
+              - name: skills
+                entity: Skill
+                rows:
+                  - { id: 1, name: Java }
+                  - { id: 2, name: SQL }
+                  - { id: 3, name: Go }
+              - name: team-members
+                entity: TeamMember
+                rows:
+                  - { id: 1, name: Ann, team: 1 }
+              - name: member-skills
+                entity: MemberSkill
+                rows:
+                  - { id: 1, member: 1, skill: 1 }
+                  - { id: 2, member: 1, skill: 2 }
               - name: watcher-statuses
                 entity: WatcherStatus
                 rows:
@@ -269,6 +324,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/members/{id}/skills")
+                public void changeSkills(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "skills " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Get("/received")
                 public List<Map<String, Object>> received() {
                     return received;
@@ -300,8 +361,8 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-Ticket-EscalateTicket",
-                "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
+                "helpdesk-Ticket-EscalateTicket", "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -464,6 +525,41 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         assertEquals("invite 1", invitation.get("call"));
         assertEquals(Map.of("email", "new@example.com", "roles", List.of("Member", "Lead")), invitation.get("body"),
                 "the controller receives the ticked roles as a list, in the options' order");
+
+        // A dialog may open with the record's child rows ticked (#8323): Change skills, opened from Ann's
+        // row in the team's members panel, ticks her Java and SQL and leaves Go, and its description
+        // lists them. Changed to Java and Go, the controller receives exactly those.
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        openPanelRowMenu("/Team/1/preview", "Ann");
+        Selenide.$$("li[x-h-menu-item]")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Change skills"))
+                .click();
+        SelenideElement skills = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        skills.$("[data-slot='dialog-description']")
+              .shouldHave(Condition.exactText("Change the skills of Ann - now Java, SQL."));
+        skills.$("#prompt-skills-0")
+              .shouldBe(Condition.checked);
+        skills.$("#prompt-skills-1")
+              .shouldBe(Condition.checked);
+        skills.$("#prompt-skills-2")
+              .shouldNotBe(Condition.checked);
+        skills.$("label[for='prompt-skills-1']")
+              .click();
+        skills.$("label[for='prompt-skills-2']")
+              .click();
+        skills.$$("button")
+              .findBy(Condition.exactText("Change"))
+              .shouldBe(Condition.visible)
+              .click();
+        awaitAnnouncement("Skills changed");
+        List<Map<String, Object>> changes = received();
+        Map<String, Object> change = changes.get(changes.size() - 1);
+        assertEquals("skills 1", change.get("call"));
+        assertEquals(Map.of("skills", List.of("Java", "Go")), change.get("body"), "the ticked skills, in the options' order");
     }
 
     /**
