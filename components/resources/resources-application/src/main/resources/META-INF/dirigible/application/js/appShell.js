@@ -58,6 +58,8 @@ document.addEventListener('alpine:init', () => {
     // developers know where translations are still needed (data falls back to the default language).
     language: 'en',
     appLanguages: [],
+    // The perspectives the coverage scan reads, kept until Settings first opens; null once scanned.
+    coveragePerspectives: null,
     // Tenant Configuration: a built-in settings entry showing the predefined, per-tenant-overridable
     // properties (the branding properties for now). Backed by the platform endpoint
     // /services/core/configurations/tenant; requires the tenant's Owner or ADMINISTRATOR/OPERATOR (a
@@ -330,6 +332,14 @@ document.addEventListener('alpine:init', () => {
     //   before the flag existed is taken to have some.
     // Checking only the declaration reported every fully translated module without translatable data as
     // "missing translations". One entry per project.
+    // Scan the embedded apps' language coverage once, the first time Settings is shown.
+    scanLanguageCoverage() {
+      const perspectives = this.coveragePerspectives;
+      if (!perspectives) return;
+      this.coveragePerspectives = null;
+      this.loadLanguageCoverage(perspectives);
+    },
+
     async loadLanguageCoverage(perspectives) {
       const bases = new Map();
       const collect = (item) => {
@@ -540,9 +550,9 @@ document.addEventListener('alpine:init', () => {
           // generate / create-from buttons exist in each app's standalone shell but not here.
           const customActions = Alpine.store('customActions');
           if (customActions && customActions.addProjects) customActions.addProjects(hostedProjects);
-          // Fire-and-forget: scan which languages each embedded app provides translations for
-          // (drives the missing-translations warnings in Settings).
-          this.loadLanguageCoverage(all);
+          // Which languages each embedded app provides translations for drives only the
+          // missing-translations warnings in Settings, so the scan waits for Settings to open (#8346).
+          this.coveragePerspectives = all;
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -590,6 +600,7 @@ document.addEventListener('alpine:init', () => {
         if (p === '/settings' || p.indexOf('/settings/') === 0) {
           // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
           this.settingsMode = true;
+          this.scanLanguageCoverage();
           this.hostedId = '';
           this.hostedUrl = '';
           const rest = p.indexOf('/settings/') === 0 ? p.slice('/settings/'.length) : '';

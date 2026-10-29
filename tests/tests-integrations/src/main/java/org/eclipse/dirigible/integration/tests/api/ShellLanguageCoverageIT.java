@@ -67,6 +67,25 @@ class ShellLanguageCoverageIT {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"application", "admin", "partner", "personal"})
+    void the_scan_waits_for_settings_and_runs_once(String shell) {
+        try (Context context = load(shell)) {
+            // The perspectives arrive at boot; the scan is the Settings page's, so boot asks nothing (#8346).
+            context.eval("js", "var shell = __factory(); shell.coveragePerspectives = " + PERSPECTIVES + ";");
+            assertEquals(0, context.eval("js", "__requests.length")
+                                   .asInt(),
+                    "the coverage scan must not run before Settings is shown");
+
+            context.eval("js", "shell.scanLanguageCoverage(); shell.scanLanguageCoverage();");
+            assertEquals(1,
+                    context.eval("js",
+                            "__requests.filter(function (u) { return u.indexOf('/services/platform/extensions/locales?') === 0; }).length")
+                           .asInt(),
+                    "showing Settings again must not repeat the scan");
+        }
+    }
+
     private static Context load(String shell) {
         Context context = Context.newBuilder("js")
                                  .allowAllAccess(true)
@@ -105,7 +124,9 @@ class ShellLanguageCoverageIT {
                     'bg-BG': { full: __catalog, datamissing: __catalog, legacy: __catalog, complete: __catalog }
                   }
                 };
+                var __requests = [];
                 var fetch = function (url) {
+                  __requests.push(url);
                   var config = /^\\/services\\/web\\/([^\\/]+)\\/.*js\\/config\\.js$/.exec(url);
                   if (config) {
                     var text = __configs[config[1]];
