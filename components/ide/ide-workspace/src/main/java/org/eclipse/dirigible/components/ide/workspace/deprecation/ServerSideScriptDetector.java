@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.ide.workspace.deprecation.ServerSideScripts.Kind;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -187,7 +188,7 @@ final class ServerSideScriptDetector {
         try {
             parsed = JsonParser.parseString(content(extension));
         } catch (JsonParseException e) {
-            LOGGER.debug("Extension [{}] is not JSON, so it registers no module to count", extension.getPath(), e);
+            LOGGER.debug("Extension [{}] is not JSON, so it registers no module to count", LogSanitizer.sanitize(extension.getPath()), e);
             return false;
         }
         if (!parsed.isJsonObject()) {

@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.ide.workspace.deprecation.ServerSideScripts.Kind;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -183,7 +184,7 @@ final class ServerSideScriptInventory {
             JsonElement parsed = JsonParser.parseString(ServerSideScriptDetector.content(resource));
             return parsed.isJsonObject() ? parsed.getAsJsonObject() : new JsonObject();
         } catch (JsonParseException e) {
-            LOGGER.debug("[{}] is not JSON, so it names nothing to list", resource.getPath(), e);
+            LOGGER.debug("[{}] is not JSON, so it names nothing to list", LogSanitizer.sanitize(resource.getPath()), e);
             return new JsonObject();
         }
     }

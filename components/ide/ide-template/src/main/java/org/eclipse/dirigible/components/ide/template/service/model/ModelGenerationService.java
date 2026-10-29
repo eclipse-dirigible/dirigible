@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.ide.template.service.model;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadata;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadataSource;
 import org.eclipse.dirigible.components.ide.template.service.TemplateDescriptors;
@@ -305,7 +306,7 @@ public class ModelGenerationService {
             String templateId = str(ModelJson.parseObject(new String(descriptor.getContent(), StandardCharsets.UTF_8)), "templateId");
             return RetiredTemplates.isRetired(templateId);
         } catch (RuntimeException e) {
-            logger.debug("Keeping the descriptor [{}]: it does not parse", descriptor.getPath(), e);
+            logger.debug("Keeping the descriptor [{}]: it does not parse", sanitizeForLog(descriptor.getPath()), e);
             return false;
         }
     }
@@ -554,10 +555,7 @@ public class ModelGenerationService {
      * @return the value, with anything that could break a log line replaced
      */
     private static String sanitizeForLog(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return value.replaceAll("[\\r\\n\\t]", "_");
+        return LogSanitizer.sanitize(value);
     }
 
 }
