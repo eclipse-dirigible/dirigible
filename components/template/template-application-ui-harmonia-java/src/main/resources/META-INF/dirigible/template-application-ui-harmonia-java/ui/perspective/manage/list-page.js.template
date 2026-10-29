@@ -13,8 +13,8 @@
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
-## What the drawer's title (#8320) and the delete confirmation (#8134) call the record: its Name, else
-## its document Number, else none - the page then names it by id.
+## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
+## the page then names it by id.
 #set($recordLabelProperty = "")
 #foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Name")#set($recordLabelProperty = "Name")#end#end
 #if($recordLabelProperty == "")#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Number")#set($recordLabelProperty = "Number")#end#end#end
@@ -422,8 +422,8 @@ document.addEventListener('alpine:init', () => {
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears, and take the record id back out of the URL (issue #7463).
     closeDetails()   { this.selected = null; this.detailsOpen = false; this.refreshIcons(); this.syncSelectionUrl(null); },
-    // What the drawer's title (#8320) and the delete confirmation (#8134) call the record: its Name,
-    // else its Number (a draft's placeholder read as the draft marker, #7722), else its id.
+    // What the delete confirmation calls the record (#8134): its Name, else its Number (a draft's
+    // placeholder read as the draft marker, #7722), else its id.
     recordLabel(row) {
       if (!row) return '';
 #if($recordLabelProperty != "")
