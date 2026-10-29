@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const assistantApp = angular.module('assistant', ['blimpKit', 'platformView']);
-assistantApp.controller('AssistantController', ($scope, $http) => {
+assistantApp.controller('AssistantController', ($scope, $http, $q) => {
     const ASSIST_URL = '/services/ide/intent/assist';
     const CONVERSATIONS_URL = '/services/ide/intent/conversations';
     const WORKSPACE_API = '/services/ide/workspaces';
@@ -377,10 +377,16 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
         const source = proposedSource;
         // A port writes the Java file beside the script; anything else replaces the file itself.
         const written = at.port ? { filePath: at.port.javaFilePath, path: at.port.javaPath } : { filePath: at.filePath, path: at.path };
-        $http.put(WORKSPACE_API + written.filePath, source, {
-            headers: { 'Content-Type': 'text/plain', 'Dirigible-Editor': 'Assistant' },
-            transformRequest: [(data) => data],
-        })
+        const options = { headers: { 'Content-Type': 'text/plain', 'Dirigible-Editor': 'Assistant' }, transformRequest: [(data) => data] };
+        // The workspace updates a file with PUT and creates one with POST: a port's Java file does not
+        // exist until its first Accept, so the PUT's 404 creates it and refreshes the Projects tree.
+        $http.put(WORKSPACE_API + written.filePath, source, options)
+             .catch((response) => at.port && response.status === 404
+                 ? $http.post(WORKSPACE_API + written.filePath, source, options).then(() => messageHub.postMessage({
+                     topic: 'projects.tree.refresh',
+                     data: { partial: true, project: at.project, workspace: at.workspace },
+                 }))
+                 : $q.reject(response))
              .then(() => {
                  messageHub.postMessage({ topic: 'monaco.file.reload', data: { path: written.filePath } });
                  diffOriginal = source;

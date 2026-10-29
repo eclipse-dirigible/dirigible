@@ -32,8 +32,9 @@ angular.module('javascriptDeprecation', ['blimpKit'])
             scope.dismissed = isDismissed();
             scope.projects = [];
             scope.guide = '';
-            // Each project links to what is left to port of it, file by file (#8051).
-            scope.inventory = (project) => `/services/ide/javascript-deprecation/projects/${encodeURIComponent(project)}`;
+            // Each project opens what is left to port of it, file by file (#8051).
+            const dialogHub = new DialogHub();
+            scope.showInventory = (project) => dialogHub.showWindow({ id: 'javascript-inventory', params: { project: project, guide: scope.guide } });
 
             const refresh = () => {
                 if (scope.dismissed) return;
@@ -65,7 +66,7 @@ angular.module('javascriptDeprecation', ['blimpKit'])
         template: `<div class="fd-margin--tiny" ng-if="!dismissed && projects.length">
     <bk-message-strip state="warning" glyph="sap-icon--message-warning" on-dismiss="dismiss()">
         Server-side JavaScript and TypeScript are deprecated and will be removed in 16.0. Used by:
-        <span ng-repeat="project in projects"><a class="fd-link" ng-href="{{ inventory(project) }}" target="_blank" rel="noopener noreferrer" title="What is left to port of {{ project }}">{{ project }}</a>{{ $last ? '.' : ', ' }}</span>
+        <span ng-repeat="project in projects"><a class="fd-link" href="" ng-click="showInventory(project)" title="What is left to port of {{ project }}">{{ project }}</a>{{ $last ? '.' : ', ' }}</span>
         See the Problems view and the <a class="fd-link" href="{{ guide }}" target="_blank" rel="noopener noreferrer">migration guide</a>.
     </bk-message-strip>
 </div>`
