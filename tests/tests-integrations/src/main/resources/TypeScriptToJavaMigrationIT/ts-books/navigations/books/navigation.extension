@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "dashboard-navigations",
+    "module": "ts-books/navigations/books/service.js",
+    "description": "Books Navigation"
+}

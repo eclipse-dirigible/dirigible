@@ -147,6 +147,41 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.TRUE, property.get("dataNotNull"));
     }
 
+    /**
+     * A details layout on an entity that composes into no master - an AngularJS-era model gave one to
+     * settings registers - is generated as the plain layout, not as a list filtering by a master key
+     * that does not exist (#8051).
+     */
+    @Test
+    void aDetailsLayoutWithoutAMasterBecomesThePlainLayout() {
+        Map<String, Object> status = entity("SalaryStatus", "Settings", property("Id", "INTEGER"));
+        status.put("layoutType", "MANAGE_DETAILS");
+        Map<String, Object> type = entity("SalaryItemType", "Settings", property("Id", "INTEGER"));
+        type.put("layoutType", "LIST_DETAILS");
+
+        ModelParameterProcessor.process(model(status, type), parameters());
+
+        assertEquals("MANAGE", status.get("layoutType"));
+        assertEquals("LIST", type.get("layoutType"));
+    }
+
+    /** A details layout with its master keeps it, and filters by the master's key. */
+    @Test
+    void aDetailsLayoutWithAMasterIsKept() {
+        Map<String, Object> salary = property("Salary", "INTEGER");
+        salary.put("relationshipType", "COMPOSITION");
+        salary.put("relationshipCardinality", "1_n");
+        salary.put("relationshipEntityName", "Salary");
+        Map<String, Object> item = entity("SalaryItem", "Salaries", property("Id", "INTEGER"), salary);
+        item.put("type", "DEPENDENT");
+        item.put("layoutType", "MANAGE_DETAILS");
+
+        ModelParameterProcessor.process(model(entity("Salary", "Salaries", property("Id", "INTEGER")), item), parameters());
+
+        assertEquals("MANAGE_DETAILS", item.get("layoutType"));
+        assertEquals("Salary", item.get("masterEntityId"));
+    }
+
     @Test
     void aFlagTheModelOmitsBecomesFalse() {
         Map<String, Object> property = property("Name", "VARCHAR");

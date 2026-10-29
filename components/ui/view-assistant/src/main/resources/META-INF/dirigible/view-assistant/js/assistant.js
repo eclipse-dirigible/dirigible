@@ -20,6 +20,8 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
     const CONTENT_REPLY_TOPIC = 'assistant.editor.content';
     /** How long to wait for an editor to answer before falling back to the file on disk. */
     const CONTENT_TIMEOUT_MS = 700;
+    /** The server-side scripts the assistant ports to Java. */
+    const PORTABLE = /\.(?:ts|mjs)$/;
 
     const messageHub = new MessageHubApi();
     const layoutHub = new LayoutHub();
@@ -36,6 +38,8 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
 
     let proposedSource = null;
     let currentSource = '';
+    /** What the proposal is diffed against: the file itself, or for a port the Java file it writes. */
+    let diffOriginal = '';
     let editorWasDirty = false;
     let diffEditor = null;
     let monacoApi = null;
@@ -105,7 +109,7 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
             scrollBeyondLastLine: false,
         });
         diffEditor.setModel({
-            original: monacoApi.editor.createModel(currentSource || '', 'java'),
+            original: monacoApi.editor.createModel(diffOriginal || '', 'java'),
             modified: monacoApi.editor.createModel(proposedSource || '', 'java'),
         });
     };
@@ -113,8 +117,10 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
     // ----- Which file are we helping with? ---------------------------------------
     // An editor path is `/<workspace>/<project>/<path within the project>`; the assistant needs all
     // three, so it parses rather than guesses. Two files are refused for the same reason the endpoint
-    // refuses them: gen/ is regenerated (a proposal there could only be lost) and a non-Java file is
-    // not this assistant's business. Saying so beats an input box that silently does nothing.
+    // refuses them: gen/ is regenerated (a proposal there could only be lost) and a file that is neither
+    // Java nor a script to port is not this assistant's business. Saying so beats an input box that
+    // silently does nothing. A TypeScript source or a JavaScript module is ported (#8051): the proposal
+    // is the Java file of the same folder and name, which Accept writes beside it.
 
     const scrollToBottom = () => {
         setTimeout(() => {
@@ -129,8 +135,18 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
         if (tokens.length < 4) return null;
         const path = tokens.slice(3)
                            .join('/');
+        if (PORTABLE.test(path) && !path.endsWith('.d.ts')) {
+            if (path.startsWith('gen/')) {
+                return { reason: path + ' is generated. Regenerate the project with the Java templates instead of porting it.' };
+            }
+            const javaPath = path.replace(PORTABLE, '.java');
+            return {
+                workspace: tokens[1], project: tokens[2], path: path, filePath: filePath, label: tokens[2] + '/' + path + ' → ' + javaPath,
+                port: { javaPath: javaPath, javaFilePath: '/' + tokens[1] + '/' + tokens[2] + '/' + javaPath },
+            };
+        }
         if (!path.endsWith('.java')) {
-            return { reason: 'The assistant helps with Java files; ' + path + ' is not one.' };
+            return { reason: 'The assistant helps with Java files, and ports TypeScript to Java; ' + path + ' is neither.' };
         }
         if (path.startsWith('gen/')) {
             return {
@@ -279,6 +295,10 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
         }, CONTENT_TIMEOUT_MS);
     });
 
+    /** A file's content on disk, or nothing when it does not exist. */
+    const loadFile = (filePath) => $http.get(WORKSPACE_API + filePath, { transformResponse: [(data) => data] })
+                                        .then((response) => response.data || '', () => '');
+
     $scope.send = () => {
         const message = ($scope.chat.input || '').trim();
         if (!message || $scope.chat.busy || !$scope.target) return;
@@ -294,6 +314,10 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
         loadSource().then((loaded) => {
             currentSource = loaded.source;
             editorWasDirty = loaded.dirty;
+            // A port is diffed against the Java file it writes - usually not there yet.
+            return at.port ? loadFile(at.port.javaFilePath) : currentSource;
+        }).then((original) => {
+            diffOriginal = original;
             return $http.post(ASSIST_URL, {
                 workspace: at.workspace,
                 project: at.project,
@@ -301,6 +325,7 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
                 source: currentSource,
                 message: message,
                 history: history,
+                target: at.port ? at.port.javaPath : undefined,
             });
         })
                     .then((response) => {
@@ -350,28 +375,33 @@ assistantApp.controller('AssistantController', ($scope, $http) => {
         if (!$scope.chat.proposalPending || proposedSource === null || !$scope.target) return;
         const at = $scope.target;
         const source = proposedSource;
-        $http.put(WORKSPACE_API + at.filePath, source, {
+        // A port writes the Java file beside the script; anything else replaces the file itself.
+        const written = at.port ? { filePath: at.port.javaFilePath, path: at.port.javaPath } : { filePath: at.filePath, path: at.path };
+        $http.put(WORKSPACE_API + written.filePath, source, {
             headers: { 'Content-Type': 'text/plain', 'Dirigible-Editor': 'Assistant' },
             transformRequest: [(data) => data],
         })
              .then(() => {
-                 messageHub.postMessage({ topic: 'monaco.file.reload', data: { path: at.filePath } });
-                 currentSource = source;
+                 messageHub.postMessage({ topic: 'monaco.file.reload', data: { path: written.filePath } });
+                 diffOriginal = source;
+                 if (!at.port) currentSource = source;
                  // A UI note, NOT an assistant turn: it is displayed and recorded, but the model never
                  // sees it - which is exactly what the `note` role means to the restored transcript.
-                 $scope.chat.messages.push({
-                     role: 'note',
-                     text: editorWasDirty
-                         ? 'Written to ' + at.path + '. The open editor had unsaved changes, so it kept them and did not reload - '
-                         + 'close and reopen it to see the new content.'
-                         : 'Written to ' + at.path + ' and the open editor reloaded.',
-                 });
+                 let note = 'Written to ' + at.path + ' and the open editor reloaded.';
+                 if (at.port) {
+                     note = 'Written to ' + written.path + '. ' + at.path + ' is untouched: delete it once the Java class works, '
+                         + 'together with whatever named it - an .extension, a .job, a .listener, a page calling its URL.';
+                 } else if (editorWasDirty) {
+                     note = 'Written to ' + at.path + '. The open editor had unsaved changes, so it kept them and did not reload - '
+                         + 'close and reopen it to see the new content.';
+                 }
+                 $scope.chat.messages.push({ role: 'note', text: note });
                  $scope.rejectProposal();
                  scrollToBottom();
                  flushConversation();
              }, (response) => {
                  console.error(response);
-                 $scope.chat.messages.push({ role: 'error', text: 'Could not write ' + at.path + '. Nothing was changed.' });
+                 $scope.chat.messages.push({ role: 'error', text: 'Could not write ' + written.path + '. Nothing was changed.' });
                  scrollToBottom();
                  flushConversation();
              });

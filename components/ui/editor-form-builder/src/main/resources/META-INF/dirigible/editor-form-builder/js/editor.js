@@ -2739,6 +2739,12 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
             statusBarHub.showMessage(`Generated from model '${filePath}'`);
             dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: project, workspace: workspace } });
         }, (error) => {
+            const retired = GenerateService.retiredTemplate(error);
+            if (retired) {
+                dialogHub.closeBusyDialog();
+                regenerateWithSuccessor(project, filePath, retired, params);
+                return;
+            }
             console.error(error);
             dialogHub.showAlert({
                 title: 'Failed to generate',
@@ -2746,6 +2752,24 @@ editorView.controller('DesignerController', ($scope, $window, $document, $timeou
                 type: AlertTypes.Error,
                 preformatted: false,
             });
+        });
+    };
+
+    // The form was generated with a template the platform no longer ships (#8051): regenerating it
+    // means its Java successor, which the developer confirms first - the generated form changes.
+    const regenerateWithSuccessor = (project, filePath, retired, params) => {
+        dialogHub.showDialog({
+            title: 'Regenerate with the Harmonia template?',
+            message: retired.message,
+            buttons: [
+                { id: 'regenerate', label: 'Regenerate', state: ButtonStates.Emphasized },
+                { id: 'cancel', label: 'Cancel', state: ButtonStates.Transparent },
+            ],
+        }).then((buttonId) => {
+            if (buttonId === 'regenerate') {
+                dialogHub.showBusyDialog('Regenerating');
+                generateFromModel(project, filePath, retired.successor, params);
+            }
         });
     };
 

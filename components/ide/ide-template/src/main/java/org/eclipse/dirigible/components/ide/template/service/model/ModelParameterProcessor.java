@@ -152,8 +152,33 @@ final class ModelParameterProcessor {
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
         }
+        resolveDetailLayoutWithoutMaster(entity);
         resolveVisibleWhen(entity);
         resolveListProperties(entity);
+    }
+
+    /**
+     * Gives a details layout without a master the plain layout it stands for.
+     *
+     * <p>
+     * A details layout lists an entity's rows under the master its composition names, so the generated
+     * list filters by that master's key. A model authored for the removed AngularJS templates gave the
+     * layout to entities of their own too - a setting, a status register - which compose into nothing,
+     * and the list was generated filtering by a key that does not exist (#8051). Such an entity is
+     * managed, or listed, on its own.
+     *
+     * @param entity the entity, its properties processed
+     */
+    private static void resolveDetailLayoutWithoutMaster(Map<String, Object> entity) {
+        if (entity.get("masterEntityId") != null) {
+            return;
+        }
+        String layoutType = str(entity, "layoutType");
+        if ("MANAGE_DETAILS".equals(layoutType)) {
+            entity.put("layoutType", "MANAGE");
+        } else if ("LIST_DETAILS".equals(layoutType)) {
+            entity.put("layoutType", "LIST");
+        }
     }
 
     /**

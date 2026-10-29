@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -149,6 +150,18 @@ class ServerSideScriptDeprecation implements PublisherHandler, ScriptModuleSkipL
                              .distinct()
                              .sorted()
                              .toList();
+    }
+
+    /**
+     * Lists what is left to port of a published project, file by file.
+     *
+     * @param project the project name
+     * @return the inventory, or empty when no such project is published
+     */
+    Optional<ServerSideScriptInventory.Inventory> inventory(String project) {
+        ICollection published =
+                repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepositoryStructure.SEPARATOR + project);
+        return published.exists() ? Optional.of(ServerSideScriptInventory.of(project, published)) : Optional.empty();
     }
 
     /**
