@@ -483,14 +483,15 @@
       <div class="vbox size-full min-h-0">
 
         <!-- The header does not scroll with the record: one primary action, everything else behind
-             the overflow, and the key as a link into the record's own preview page. Which action is
+             the overflow, and the record's label (its Name or Number, the id only when it has
+             neither - #8320) as a link into the record's own preview page. Which action is
              primary is decided in the component (primaryAction): the record's own process task
              outranks everything, then a contributed action, then Edit - or Preview when the record's
              status makes it read-only and there is nothing to edit. -->
         <div x-h-toolbar data-variant="transparent" class="shrink-0">
           <button x-h-button data-variant="link" class="shrink-0" @click="previewEntity(selected)"
-                  :aria-label="T('$projectName:${tprefix}.defaults.preview', 'Preview') + ' #' + selectedId"
-                  x-text="'#' + selectedId"></button>
+                  :aria-label="T('$projectName:${tprefix}.defaults.preview', 'Preview') + ' ' + recordLabel(selected)"
+                  x-text="recordLabel(selected)"></button>
           <div x-h-toolbar-spacer></div>
 
           <template x-if="primaryAction === 'task'">
