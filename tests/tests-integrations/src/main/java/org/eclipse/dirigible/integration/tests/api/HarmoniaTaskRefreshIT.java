@@ -53,6 +53,10 @@ class HarmoniaTaskRefreshIT {
 
     private static final String ISSUE_TASK = "{ id: 't1', processInstanceId: 'p1', name: 'Issue', formKey: '/form', mine: true }";
 
+    /** Two tasks whose subject is an invoice's number and its customer's name. */
+    private static final String SUBJECT_TASKS = "{ id: 't1', processInstanceId: 'p1', name: 'Approve', subject: __invoiceSubject(5) },"
+            + " { id: 't2', processInstanceId: 'p1', name: 'Approve', subject: __invoiceSubject(6) }";
+
     @Test
     void aReReadAnnouncesTheProcessesWhoseTaskSetChanged() {
         try (Context context = load()) {
@@ -82,6 +86,79 @@ class HarmoniaTaskRefreshIT {
             assertEquals(2941, context.eval("js", "store.total")
                                       .asInt(),
                     "the count is the size of the whole inbox");
+        }
+    }
+
+    /**
+     * A failed reading empties the store, so the next successful one is a baseline again: compared
+     * against the empty map it announced every process and every open page re-read itself (#8313).
+     */
+    @Test
+    void theReadingAfterAFailedOneIsABaselineNotAChange() {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + ISSUE_TASK + "]; store.init();");
+            context.eval("js", "__inbox.fail = true; store.load(); __inbox.fail = false; store.load();");
+            assertEquals("", announced(context), "the inbox did not change, so nothing is announced");
+            context.eval("js", "__inbox.assignee = []; store.load();");
+            assertEquals("p1", announced(context), "a later reading is compared again");
+        }
+    }
+
+    /**
+     * A reading of the inbox - the shell's init, every route change, the 30 s poll - fetches the task
+     * list and nothing else: resolving every task's subject there cost one record GET per task plus one
+     * per relation label, hundreds at ~200 visible tasks, for lines only the Inbox shows (#8313).
+     */
+    @Test
+    void aReadingOfTheInboxFetchesNoRecord() {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init();"
+                    + " __documentListeners['pinecone:end'].forEach(function (fn) { fn(); }); store.load();");
+            assertEquals("", recordGets(context), "no record is read to count or bucket the tasks");
+            assertEquals(2, context.eval("js", "store.getTasks({ ProcessId: 'p1' }).length")
+                                   .asInt(),
+                    "the per-record task match reads the task list alone");
+            assertEquals("", context.eval("js", "store.subject(store.tasks[0])")
+                                    .asString());
+        }
+    }
+
+    @Test
+    void subjectsAreResolvedOnlyForTheTasksAViewAsksFor() {
+        try (Context context = load()) {
+            // Each step is its own evaluation: the reading lands once the evaluation that started it returns.
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init();");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "the asked-for task's record and its relation label");
+            assertEquals("INV-5 · ACME", context.eval("js", "store.subject(store.tasks[0])")
+                                                .asString());
+            assertEquals("", context.eval("js", "store.subject(store.tasks[1])")
+                                    .asString(),
+                    "a task nobody asked for stays unresolved");
+            context.eval("js", "store.load();");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "a resolved subject is kept across readings");
+        }
+    }
+
+    /** The Inbox asks for the rows on screen, as they scroll in and after every re-read of the list. */
+    @Test
+    void theInboxResolvesTheRowsOnScreenOnly() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init(); var inbox = __data.inboxPage(); inbox.init();");
+            context.eval("js", "store.tasks.forEach(function (t) { inbox.observeRow({ dataset: { taskId: t.id } }); });");
+            assertEquals("", recordGets(context), "entering the Inbox resolves nothing that is not on screen");
+            context.eval("js", "__intersect('t2', true);");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9", recordGets(context), "the row scrolled in is resolved");
+            context.eval("js", "inbox.refresh();");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9|/svc/Invoice/6|/svc/Customer/9", recordGets(context),
+                    "a Refresh re-reads the records of the rows still on screen");
+            context.eval("js", "inbox.destroy(); __intersect('t1', true);");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9|/svc/Invoice/6|/svc/Customer/9", recordGets(context),
+                    "a closed Inbox observes nothing");
+            assertTrue(
+                    read(SHELL.replace("js/", "") + "views/_inbox.html").contains(":data-task-id=\"task.id\" x-init=\"observeRow($el)\""),
+                    "the Inbox rows are not observed");
         }
     }
 
@@ -193,6 +270,11 @@ class HarmoniaTaskRefreshIT {
                       .asString();
     }
 
+    private static String recordGets(Context context) {
+        return context.eval("js", "__recordGets.join('|')")
+                      .asString();
+    }
+
     private static int reloads(Context context) {
         return context.eval("js", "__reloads")
                       .asInt();
@@ -242,10 +324,38 @@ class HarmoniaTaskRefreshIT {
                         function clearInterval() {}
                         var __runTimer = function () { var t = __timers.shift(); if (t) t.fn(); };
                         var console = { log: function () {}, warn: function () {}, error: function () {} };
-                        var __inbox = { assignee: [], groups: [], totals: {} };
+                        var __data = {};
+                        Alpine.data = function (name, factory) { __data[name] = factory; };
+                        var __observed = [];
+                        var __observer = null;
+                        function IntersectionObserver(callback) {
+                          __observer = this;
+                          this.observe = function (el) { __observed.push(el); };
+                          this.disconnect = function () { __observed = []; __observer = null; };
+                          this.callback = callback;
+                        }
+                        var __intersect = function (taskId, visible) {
+                          if (!__observer) return;
+                          var targets = __observed.filter(function (el) { return el.dataset.taskId === taskId; });
+                          __observer.callback(targets.map(function (el) { return { target: el, isIntersecting: visible }; }));
+                        };
+                        var __inbox = { assignee: [], groups: [], totals: {}, fail: false };
+                        var __records = { '/svc/Invoice/5': { Number: 'INV-5', Customer: 9 }, '/svc/Invoice/6': { Number: 'INV-6', Customer: 9 },
+                                          '/svc/Customer/9': { Name: 'ACME' } };
+                        var __recordGets = [];
+                        var __invoiceSubject = function (id) {
+                          return { url: '/svc/Invoice', id: id, fields: [{ property: 'Number' },
+                                   { property: 'Customer', kind: 'relation', url: '/svc/Customer', label: 'Name' }] };
+                        };
                         var App = { config: {}, services: { api: {
                           // the real api.get with { withTotal: true }: the page plus the X-Total-Count (#7977)
                           get: function (url, opts) {
+                            if (url === '/services/inbox/act-as') return Promise.resolve({});
+                            if (url.indexOf('/services/inbox/tasks') !== 0) {
+                              __recordGets.push(url);
+                              return Promise.resolve(__records[url] || null);
+                            }
+                            if (__inbox.fail) return Promise.reject(new Error('500'));
                             var key = /type=assignee/.test(url) ? 'assignee' : 'groups';
                             var items = __inbox[key];
                             if (opts && opts.withTotal) {
@@ -257,7 +367,7 @@ class HarmoniaTaskRefreshIT {
                           post: function () { return Promise.resolve({}); }
                         } } };
                         """);
-        for (String script : List.of("stores/processTasks.js", "components/pages/basePage.js")) {
+        for (String script : List.of("stores/processTasks.js", "components/pages/basePage.js", "components/pages/inboxPage.js")) {
             try {
                 context.eval("js", read(SHELL + script));
             } catch (Exception ex) {
