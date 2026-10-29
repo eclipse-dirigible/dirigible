@@ -407,7 +407,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     // A dialog text with its {property} placeholders filled from the record; one the record lacks
-    // renders empty.
+    // renders empty, and a collection path's texts (issue #8323) are joined with ", ".
     async fillText(action, record, text) {
       if (!text) return '';
       const names = [...new Set([...text.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]))];
@@ -415,6 +415,7 @@ document.addEventListener('alpine:init', () => {
       for (const name of names) values[name] = await this.recordValue(action, record, name);
       return text.replace(/\{([^{}]*)\}/g, (m, name) => {
         const v = values[name];
+        if (Array.isArray(v)) return v.join(', ');
         return (v === undefined || v === null || typeof v === 'object') ? '' : String(v);
       });
     },

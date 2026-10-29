@@ -2359,6 +2359,29 @@ input's type (a list of option values for a `multiselect`, a `yyyy-MM-dd` date),
 left empty. `description` and `submit` belong to a `call:` only. A boolean's caption sits beside its
 box and toggles it.
 
+A `multiselect` that edits the record's child rows opens with the current set ticked when its
+`default` names a collection path `forEntity` shows in its `list:`, spelled as the list writes it:
+
+```yaml
+- name: TeamMember
+  list: [name, skills.skill]           # the path must be listed - only then does the record carry it
+  ...
+actions:
+  - name: ChangeSkills
+    forEntity: TeamMember
+    description: "Change the skills of {name} - now {skills.skill}."
+    prompt:
+      - { name: skills, type: multiselect, required: true, default: "{skills.skill}", options: [Java, SQL, Go] }
+    call:
+      path: /services/java/team/custom/api/members/{id}/skills
+      body: { skills: "{skills}" }
+```
+
+The column holds the child rows' display texts, so the options' `value`s must be those texts: a text no
+option carries ticks nothing. Such a path is the `default` of a `multiselect` only, and it may appear in
+`description` and `confirm`, where the texts are joined with `", "`. An unlisted path is refused - add it
+to `list:` - and so is a path default on any other input type.
+
 **`primary: true` - the record's filled button.** The list's details sheet and the record page each
 have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,
 `generates:` entry or `transitions:` entry that IS the next step declares `primary: true`; when it applies

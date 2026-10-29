@@ -392,6 +392,92 @@ class CallActionIntentTest {
                 "an unquoted date is kept as its ISO text");
     }
 
+    /**
+     * The "Change skills" example of #8323: a dialog that opens with the record's child rows ticked.
+     */
+    static final String SKILLS = """
+            name: team
+            entities:
+              - name: Skill
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: TeamMember
+                list: [name, skills.skill]
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: MemberSkill }
+              - name: MemberSkill
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,  kind: manyToOne, to: Skill }
+            actions:
+              - name: ChangeSkills
+                forEntity: TeamMember
+                description: "Change the skills of {name}."
+                prompt:
+                  - name: skills
+                    type: multiselect
+                    required: true
+                    default: "{skills.skill}"
+                    options: [Java, SQL, Go]
+                call:
+                  method: POST
+                  path: /services/java/team/custom/api/members/{id}/skills
+                  body: { skills: "{skills}" }
+            """;
+
+    @Test
+    void aCollectionPathDefaultNeedsTheListedColumn() {
+        assertEquals("{skills.skill}", IntentParser.parse(SKILLS)
+                                                   .getActions()
+                                                   .get(0)
+                                                   .getPrompt()
+                                                   .get(0)
+                                                   .getDefaultValue());
+        assertIssue(SKILLS.replace("list: [name, skills.skill]", "list: [name]"),
+                "action [ChangeSkills] prompt input [skills] default names [{skills.skill}], a collection path [TeamMember] does not list"
+                        + " - add it to `list:`");
+        String string = SKILLS.replace("type: multiselect", "type: string")
+                              .replace("        options: [Java, SQL, Go]\n", "");
+        assertIssue(string, "action [ChangeSkills] prompt input [skills] default names [{skills.skill}] - a collection path default fits"
+                + " a multiselect only - input [skills] has type [string]");
+    }
+
+    @Test
+    void aDescriptionMayNameACollectionPath() {
+        String described = SKILLS.replace("Change the skills of {name}.", "{name} has {skills.skill}.");
+        assertEquals("{name} has {skills.skill}.", IntentParser.parse(described)
+                                                               .getActions()
+                                                               .get(0)
+                                                               .getDescription());
+        assertIssue(described.replace("list: [name, skills.skill]", "list: [name]"),
+                "action [ChangeSkills] description names [{skills.skill}], a collection path [TeamMember] does not list");
+        // A bare collection is the path list: writes for the child's label.
+        String bare = SKILLS.replace("  - name: MemberSkill\n", "  - name: MemberSkill\n    label: \"{skill.name}\"\n")
+                            .replace("list: [name, skills.skill]", "list: [name, skills]")
+                            .replace("Change the skills of {name}.", "{name} has {skills}.")
+                            .replace("default: \"{skills.skill}\"", "default: \"{skills}\"");
+        assertEquals("{skills}", IntentParser.parse(bare)
+                                             .getActions()
+                                             .get(0)
+                                             .getPrompt()
+                                             .get(0)
+                                             .getDefaultValue());
+    }
+
     @Test
     void descriptionAndSubmitAreACallsOnly() {
         String page = """

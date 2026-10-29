@@ -26,7 +26,8 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * The clicked record's properties a {@code call:} action's dialog names as {@code {property}}
  * (issue #8296): in its {@code description}, its {@code confirm} text and a prompt input's
  * {@code default}. A placeholder names a field of the {@code forEntity}, a to-one relation (shown
- * by its display text) or the {@code Name} a {@code label:} expression generates.
+ * by its display text), the {@code Name} a {@code label:} expression generates, or a collection
+ * path its {@code list:} shows (issue #8323) - a column holding the child rows' texts.
  */
 public final class ActionPlaceholders {
 
@@ -104,7 +105,53 @@ public final class ActionPlaceholders {
                                                                                                    .isBlank()) {
             return "Name"; // the stored label property the expression generates
         }
+        String path = listedCollection(entity, name);
+        return path == null ? null : IntentNaming.collectionColumnName(path);
+    }
+
+    /**
+     * The {@code list:} entry a placeholder names when it is a collection path (issue #8323) -
+     * {@code <collection>.<property>} or a bare {@code <collection>} - spelled as the list writes it,
+     * since that spelling names the column the record carries. Only a listed path is: the controller
+     * fills the column for exactly the paths the list shows.
+     *
+     * @param entity the action's {@code forEntity}
+     * @param name the placeholder name
+     * @return the list entry, or {@code null} when the placeholder names a field, a to-one relation or
+     *         no listed collection path
+     */
+    public static String listedCollection(EntityIntent entity, String name) {
+        if (!namesCollection(entity, name) || entity.getList() == null) {
+            return null;
+        }
+        for (String entry : entity.getList()) {
+            if (entry != null && entry.trim()
+                                      .equalsIgnoreCase(name.trim())) {
+                return entry.trim();
+            }
+        }
         return null;
+    }
+
+    /**
+     * Whether a placeholder has the shape of a collection path: its first segment names a
+     * {@code oneToMany} relation of the entity, and it is not a field or to-one relation itself.
+     *
+     * @param entity the action's {@code forEntity}
+     * @param name the placeholder name
+     * @return true for a collection path, listed or not
+     */
+    public static boolean namesCollection(EntityIntent entity, String name) {
+        if (entity == null || name == null || CheckSupport.field(entity, name) != null || CheckSupport.toOne(entity, name) != null) {
+            return false;
+        }
+        String collection = name.split("\\.", -1)[0].trim();
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && collection.equalsIgnoreCase(relation.getName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
