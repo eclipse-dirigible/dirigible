@@ -12,7 +12,7 @@ package org.eclipse.dirigible.components.ide.git.project;
 import java.io.File;
 
 import org.eclipse.dirigible.commons.config.StaticObjects;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.fs.FileSystemRepository;
 import org.springframework.stereotype.Component;

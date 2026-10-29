@@ -20,7 +20,6 @@ import java.util.Map;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.impl.cfg.StandaloneInMemProcessEngineConfiguration;
@@ -28,6 +27,7 @@ import org.flowable.engine.runtime.ProcessInstance;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.ObjectProvider;
 
 /**
  * What a task completion may write into its process, against a REAL Flowable engine (in-memory)
@@ -101,7 +101,7 @@ class BpmServiceCompleteTaskTest {
 
         BpmProviderFlowable bpmProvider =
                 new BpmProviderFlowable(mock(IRepository.class), tenantContext(), mock(FlowableArtefactsValidator.class), engine);
-        bpmService = new BpmService(mock(WorkspaceService.class), bpmProvider);
+        bpmService = new BpmService(mock(ObjectProvider.class), bpmProvider);
     }
 
     @AfterAll

@@ -12,12 +12,12 @@ package org.eclipse.dirigible.sdk.git;
 import java.io.IOException;
 import java.util.List;
 import org.eclipse.dirigible.components.api.git.GitFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitBranch;
-import org.eclipse.dirigible.components.ide.git.domain.GitChangedFile;
-import org.eclipse.dirigible.components.ide.git.domain.GitCommitInfo;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
-import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
+import org.eclipse.dirigible.components.git.domain.GitBranch;
+import org.eclipse.dirigible.components.git.domain.GitChangedFile;
+import org.eclipse.dirigible.components.git.domain.GitCommitInfo;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
 

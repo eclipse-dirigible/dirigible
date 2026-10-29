@@ -13,6 +13,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
+import org.eclipse.dirigible.components.workspace.service.ProjectPublisher;
 import org.eclipse.dirigible.repository.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,7 @@ import java.util.TreeSet;
  * The Class PublisherService.
  */
 @Service
-public class PublisherService {
+public class PublisherService implements ProjectPublisher {
 
     /** The Constant DIRIGIBLE_PUBLISH_DISABLED. */
     public static final String DIRIGIBLE_PUBLISH_DISABLED = "DIRIGIBLE_PUBLISH_DISABLED";
@@ -92,6 +93,7 @@ public class PublisherService {
      * @param project the project
      * @param path the path
      */
+    @Override
     public void publish(String user, String workspace, String project, String path) {
         if (Boolean.parseBoolean(Configuration.get(DIRIGIBLE_PUBLISH_DISABLED, Boolean.FALSE.toString()))) {
             return;
@@ -291,6 +293,7 @@ public class PublisherService {
      *
      * @param path the path
      */
+    @Override
     public void unpublish(String path) {
         if (Boolean.parseBoolean(Configuration.get(DIRIGIBLE_PUBLISH_DISABLED, Boolean.FALSE.toString()))) {
             return;

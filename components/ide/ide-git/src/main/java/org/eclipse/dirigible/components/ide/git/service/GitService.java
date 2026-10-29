@@ -27,10 +27,10 @@ import org.eclipse.dirigible.components.ide.git.command.PushCommand;
 import org.eclipse.dirigible.components.ide.git.command.ResetCommand;
 import org.eclipse.dirigible.components.ide.git.command.ShareCommand;
 import org.eclipse.dirigible.components.ide.git.command.UpdateDependenciesCommand;
-import org.eclipse.dirigible.components.ide.git.domain.GitCommitInfo;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.git.domain.GitCommitInfo;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.GitConnectorFactory;
+import org.eclipse.dirigible.components.git.domain.IGitConnector;
 import org.eclipse.dirigible.components.ide.git.model.BaseGitModel;
 import org.eclipse.dirigible.components.ide.git.model.GitCheckoutModel;
 import org.eclipse.dirigible.components.ide.git.model.GitCloneModel;
@@ -43,13 +43,13 @@ import org.eclipse.dirigible.components.ide.git.model.GitPushModel;
 import org.eclipse.dirigible.components.ide.git.model.GitResetModel;
 import org.eclipse.dirigible.components.ide.git.model.GitShareModel;
 import org.eclipse.dirigible.components.ide.git.model.GitUpdateDependenciesModel;
-import org.eclipse.dirigible.components.ide.git.project.ProjectOriginUrls;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
+import org.eclipse.dirigible.components.git.project.ProjectOriginUrls;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
 import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceGitHelper;
+import org.eclipse.dirigible.components.workspace.json.WorkspaceGitHelper;
 import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceJsonHelper;
 import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
@@ -608,8 +608,7 @@ public class GitService {
                         filePath = path;
                     }
                 }
-                org.eclipse.dirigible.components.ide.workspace.domain.File file =
-                        getProject(workspace, project.getName()).getFile(filePath);
+                org.eclipse.dirigible.components.workspace.domain.File file = getProject(workspace, project.getName()).getFile(filePath);
                 String original = getOriginalFileContent(project, filePath, gitConnector);
                 String modified = getModifiedFileContent(file);
                 GitDiffModel diffModel = new GitDiffModel(original, modified);
@@ -702,7 +701,7 @@ public class GitService {
      * @param file the file
      * @return the modified file content
      */
-    private String getModifiedFileContent(org.eclipse.dirigible.components.ide.workspace.domain.File file) {
+    private String getModifiedFileContent(org.eclipse.dirigible.components.workspace.domain.File file) {
         String modified = null;
         if (file.exists()) {
             modified = new String(file.getContent());

@@ -770,6 +770,8 @@
                                  over it (#8067). It is distributed as the -java Docker image. -->
                             <excludeArtifacts>
                                 <excludeArtifact>dirigible-application-java</excludeArtifact>
+                                <!-- A test assembly: it has test sources only and nothing to publish (#8046). -->
+                                <excludeArtifact>dirigible-tests-runtime-assembly</excludeArtifact>
                             </excludeArtifacts>
                         </configuration>
                     </plugin>

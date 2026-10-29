@@ -15,8 +15,8 @@ import jakarta.annotation.security.RolesAllowed;
 
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.components.intent.ai.AssistantNotConfiguredException;
 import org.eclipse.dirigible.components.intent.ai.AssistantUpstreamException;

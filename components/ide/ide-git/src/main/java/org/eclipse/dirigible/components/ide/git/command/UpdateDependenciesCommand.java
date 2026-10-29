@@ -14,11 +14,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
 import org.eclipse.dirigible.components.ide.git.model.GitUpdateDependenciesModel;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.project.ProjectMetadataManager;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.project.ProjectMetadataManager;
 import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

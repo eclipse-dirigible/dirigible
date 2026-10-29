@@ -15,8 +15,8 @@ import java.net.URISyntaxException;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.service.ActionsService;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;

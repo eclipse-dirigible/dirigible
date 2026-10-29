@@ -10,13 +10,13 @@
 package org.eclipse.dirigible.sdk.platform;
 
 import org.eclipse.dirigible.components.api.platform.WorkspaceFacade;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.File;
 
 /**
  * IDE workspace operations — list, create, and delete the per-user workspaces that the IDE Projects
  * perspective shows, and read or replace the content of files inside them. The returned
- * {@link org.eclipse.dirigible.components.ide.workspace.domain.Workspace} and {@link File} domain
- * types are the same objects the IDE renders, so the workspace tree stays consistent across UI and
+ * {@link org.eclipse.dirigible.components.workspace.domain.Workspace} and {@link File} domain types
+ * are the same objects the IDE renders, so the workspace tree stays consistent across UI and
  * programmatic edits.
  * <p>
  * Use this from build / migration scripts and from IDE extensions that need to prepare or fix up a
@@ -28,11 +28,11 @@ public final class Workspace {
 
     private Workspace() {}
 
-    public static org.eclipse.dirigible.components.ide.workspace.domain.Workspace createWorkspace(String name) {
+    public static org.eclipse.dirigible.components.workspace.domain.Workspace createWorkspace(String name) {
         return WorkspaceFacade.createWorkspace(name);
     }
 
-    public static org.eclipse.dirigible.components.ide.workspace.domain.Workspace getWorkspace(String name) {
+    public static org.eclipse.dirigible.components.workspace.domain.Workspace getWorkspace(String name) {
         return WorkspaceFacade.getWorkspace(name);
     }
 

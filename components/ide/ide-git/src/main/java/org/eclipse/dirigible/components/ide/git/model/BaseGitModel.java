@@ -12,7 +12,7 @@ package org.eclipse.dirigible.components.ide.git.model;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
-import org.eclipse.dirigible.components.ide.workspace.project.ProjectMetadataManager;
+import org.eclipse.dirigible.components.workspace.project.ProjectMetadataManager;
 
 
 /**
