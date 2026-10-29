@@ -1,0 +1,5 @@
+{
+    "module": "shell-ide/configs/javascript-inventory-window.json",
+    "extensionPoint": "platform-windows",
+    "description": "What is left to port of a project's server-side JavaScript and TypeScript"
+}

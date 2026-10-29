@@ -206,6 +206,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			).then(() => {
 				statusBarHub.showMessage(`Generated from model '${filePath}'`);
 			}, (error) => {
+				const retired = GenerateService.retiredTemplate(error);
+				if (retired) {
+					$scope.regenerateWithSuccessor(project, filePath, retired, params);
+					return;
+				}
 				console.error(error);
 				dialogHub.showAlert({
 					title: 'Failed to generate from model',
@@ -219,6 +224,24 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					data: { partial: true, project: project, workspace: fileWorkspace }
 				});
 				dialogHub.closeBusyDialog();
+			});
+		};
+
+		// The model was generated with a template the platform no longer ships (#8051): regenerating it
+		// means its Java successor, which the developer confirms first - the generated code and its UI change.
+		$scope.regenerateWithSuccessor = (project, filePath, retired, params) => {
+			dialogHub.showDialog({
+				title: 'Regenerate with the Java templates?',
+				message: retired.message,
+				buttons: [
+					{ id: 'regenerate', label: 'Regenerate with Java', state: ButtonStates.Emphasized },
+					{ id: 'cancel', label: 'Cancel', state: ButtonStates.Transparent },
+				],
+			}).then((buttonId) => {
+				if (buttonId === 'regenerate') {
+					dialogHub.showBusyDialog('Regenerating from model');
+					$scope.generateFromModel(project, filePath, retired.successor, params);
+				}
 			});
 		};
 

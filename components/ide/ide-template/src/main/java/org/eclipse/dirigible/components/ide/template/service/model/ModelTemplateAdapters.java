@@ -62,8 +62,8 @@ final class ModelTemplateAdapters {
     /** The preparation of each supported template, keyed by its module path. */
     private static final Map<String, Adapter> ADAPTERS = Map.of(//
             "template-application-schema/template/template.js", ModelTemplateAdapters::entityModel, //
-            "template-application-dao-java/template/template.js", ModelTemplateAdapters::entityModel, //
-            "template-application-rest-java/template/template.js", ModelTemplateAdapters::entityModel, //
+            "template-application-dao-java/template/template.js", ModelTemplateAdapters::javaEntityModel, //
+            "template-application-rest-java/template/template.js", ModelTemplateAdapters::javaEntityModel, //
             "template-application-ui-harmonia-java/template/template.js", ModelTemplateAdapters::harmoniaApplication, //
             "template-application-events-java/template/template.js", ModelTemplateAdapters::glue, //
             REPORT_FILE_TEMPLATE, ModelTemplateAdapters::report, //
@@ -150,6 +150,20 @@ final class ModelTemplateAdapters {
     }
 
     /**
+     * Prepares an entity model for the Java layers, which evaluate its calculated-field formulas.
+     *
+     * @param modelText the raw model file
+     * @param parameters the generation parameters
+     * @return the prepared model
+     */
+    private static PreparedModel javaEntityModel(String modelText, Map<String, Object> parameters) {
+        PreparedModel prepared = entityModel(modelText, parameters);
+        CalculatedFormulas.resolve(asMaps(prepared.model()
+                                                  .get("entities")));
+        return prepared;
+    }
+
+    /**
      * Prepares the full application stack, whose UI needs the application's own caption, icon,
      * languages and dashboard widgets.
      *
@@ -161,6 +175,7 @@ final class ModelTemplateAdapters {
         Map<String, Object> model = entityRoot(modelText);
         parameters.put("javaRuntime", Boolean.TRUE);
         ModelParameterProcessor.process(model, parameters);
+        CalculatedFormulas.resolve(asMaps(model.get("entities")));
         // The shell's title and sidebar header prefer the model's own title and description over the
         // bare project name.
         parameters.put("appTitle", blankToNull(str(model, "title")) != null ? model.get("title") : parameters.get("projectName"));

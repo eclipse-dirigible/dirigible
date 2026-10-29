@@ -12,16 +12,19 @@ package org.eclipse.dirigible.components.ide.workspace.deprecation;
 import java.util.List;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.annotation.security.RolesAllowed;
 
 /**
  * Tells the IDE which published projects use server-side JavaScript or TypeScript, so its shell can
- * show the deprecation banner while there are any.
+ * show the deprecation banner while there are any, and what is left to port of each.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "javascript-deprecation")
@@ -42,6 +45,24 @@ class ServerSideScriptDeprecationEndpoint {
     @GetMapping
     ResponseEntity<Notice> getNotice() {
         return ResponseEntity.ok(new Notice(deprecation.flaggedProjects(), ServerSideScriptDeprecation.MIGRATION_GUIDE));
+    }
+
+    /**
+     * What is left to port of a published project: its server-side scripts file by file, with the
+     * constructs each one uses, and the browser code that calls them.
+     *
+     * @param project the project name
+     * @return the inventory
+     */
+    @GetMapping("/projects/{project}")
+    ResponseEntity<ServerSideScriptInventory.Inventory> getInventory(@PathVariable("project") String project) {
+        if (project.contains("..") || project.contains("/")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "[" + project + "] is not a project name");
+        }
+        return deprecation.inventory(project)
+                          .map(ResponseEntity::ok)
+                          .orElseThrow(
+                                  () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project [" + project + "] is not published"));
     }
 
     /**

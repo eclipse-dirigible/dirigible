@@ -1,0 +1,114 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="javascriptInventory" ng-controller="JavascriptInventoryController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/platform/extensions/modules/shell-ide/configs/javascript-inventory-window.json?global=viewData"></script>
+        <meta name="platform-links" category="ng-view">
+        <script type="text/javascript" src="js/javascript-inventory.js"></script>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar has-title="true">
+            <bk-toolbar-title>{{ project }}: what is left to port</bk-toolbar-title>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-busy-indicator ng-if="loading"></bk-busy-indicator>
+            <bk-button compact="true" label="Migration guide" state="transparent" ng-click="openGuide()"></bk-button>
+        </bk-toolbar>
+        <bk-scrollbar class="bk-stretch">
+            <p class="bk-padding" ng-if="error">{{ error }}</p>
+            <p class="bk-padding" ng-if="inventory && isEmpty()">Nothing is left to port: {{ project }} has no server-side JavaScript or TypeScript.</p>
+
+            <bk-panel expanded="true" ng-if="generated.length">
+                <bk-panel-header>
+                    <bk-panel-expand></bk-panel-expand>
+                    <h4 bk-panel-title>Generated - regenerate the model with the Java templates ({{ generated.length }})</h4>
+                </bk-panel-header>
+                <bk-panel-content>
+                    <p class="bk-padding--sm">Choose Regenerate on the project's .gen file in the Projects view: the Java template that replaces the recorded one is offered.</p>
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <thead bk-table-header>
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>File</th>
+                                <th bk-table-header-cell>Generated with</th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr bk-table-row hoverable="true" ng-repeat="script in generated track by script.path">
+                                <td bk-table-cell>{{ script.path }}</td>
+                                <td bk-table-cell>{{ script.template }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-panel-content>
+            </bk-panel>
+
+            <bk-panel expanded="true" ng-if="handWritten.length">
+                <bk-panel-header>
+                    <bk-panel-expand></bk-panel-expand>
+                    <h4 bk-panel-title>Hand-written - port with the Workbench assistant ({{ handWritten.length }})</h4>
+                </bk-panel-header>
+                <bk-panel-content>
+                    <p class="bk-padding--sm">Open a TypeScript file and ask the Assistant view to port it: it proposes the Java class and compiles it against the project first.</p>
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <thead bk-table-header>
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>File</th>
+                                <th bk-table-header-cell>Kind</th>
+                                <th bk-table-header-cell>Uses</th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr bk-table-row hoverable="true" ng-repeat="script in handWritten track by script.path">
+                                <td bk-table-cell><a class="fd-link" href="" ng-click="open(script.path)" title="Open in the editor">{{ script.path }}</a></td>
+                                <td bk-table-cell>{{ kindLabel(script.kind) }}</td>
+                                <td bk-table-cell>{{ uses(script) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-panel-content>
+            </bk-panel>
+
+            <bk-panel expanded="true" ng-if="pages.length">
+                <bk-panel-header>
+                    <bk-panel-expand></bk-panel-expand>
+                    <h4 bk-panel-title>Pages calling them - point them at the Java URLs ({{ pages.length }})</h4>
+                </bk-panel-header>
+                <bk-panel-content>
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <thead bk-table-header>
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>File</th>
+                                <th bk-table-header-cell>Calls</th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr bk-table-row hoverable="true" ng-repeat="reference in pages track by reference.path">
+                                <td bk-table-cell><a class="fd-link" href="" ng-click="open(reference.path)" title="Open in the editor">{{ reference.path }}</a></td>
+                                <td bk-table-cell>{{ reference.urls.join(', ') }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-panel-content>
+            </bk-panel>
+        </bk-scrollbar>
+        <theme></theme>
+    </body>
+
+</html>

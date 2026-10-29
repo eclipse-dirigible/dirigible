@@ -12,11 +12,15 @@ package org.eclipse.dirigible.components.ide.workspace.deprecation;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.ide.workspace.deprecation.ServerSideScripts.Kind;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -93,21 +97,62 @@ final class ServerSideScriptDetector {
      */
     static ServerSideScripts detect(ICollection project) {
         Map<Kind, Integer> counts = new EnumMap<>(Kind.class);
-        collect(project, counts);
+        walk(project, (resource, kind) -> counts.merge(kind, 1, Integer::sum));
         return new ServerSideScripts(counts);
     }
 
-    private static void collect(ICollection folder, Map<Kind, Integer> counts) {
-        Set<String> names = new HashSet<>(folder.getResourcesNames());
-        for (IResource resource : folder.getResources()) {
-            kindOf(resource, names).ifPresent(kind -> counts.merge(kind, 1, Integer::sum));
+    /**
+     * Visits every file of a project, telling the server-side scripts apart by this rule.
+     *
+     * @param project the project's folder
+     * @param visitor told about every file read
+     */
+    static void walk(ICollection project, Visitor visitor) {
+        Set<String> names = new HashSet<>(project.getResourcesNames());
+        for (IResource resource : project.getResources()) {
+            kindOf(resource, names).ifPresentOrElse(kind -> visitor.script(resource, kind), () -> visitor.other(resource));
         }
-        for (ICollection child : folder.getCollections()) {
+        for (ICollection child : project.getCollections()) {
             String name = child.getName();
             if (!NODE_MODULES.equals(name) && !name.startsWith(HIDDEN_PREFIX)) {
-                collect(child, counts);
+                walk(child, visitor);
             }
         }
+    }
+
+    /**
+     * What a walk tells about the files of a project.
+     */
+    @FunctionalInterface
+    interface Visitor {
+
+        /**
+         * A server-side script.
+         *
+         * @param resource the file
+         * @param kind what kind of script it is
+         */
+        void script(IResource resource, Kind kind);
+
+        /**
+         * Any other file.
+         *
+         * @param resource the file
+         */
+        default void other(IResource resource) {
+            // a count of the scripts has no use for the other files
+        }
+    }
+
+    /**
+     * Tests whether a file is browser code - a {@code .js} or {@code .html} the rule does not count.
+     *
+     * @param resource a file the rule does not count as a server-side script
+     * @return true for a page or a script a browser loads
+     */
+    static boolean isBrowserCode(IResource resource) {
+        String name = resource.getName();
+        return name.endsWith(JAVASCRIPT) || name.endsWith(".html");
     }
 
     private static Optional<Kind> kindOf(IResource resource, Set<String> siblings) {
@@ -143,7 +188,7 @@ final class ServerSideScriptDetector {
         try {
             parsed = JsonParser.parseString(content(extension));
         } catch (JsonParseException e) {
-            LOGGER.debug("Extension [{}] is not JSON, so it registers no module to count", extension.getPath(), e);
+            LOGGER.debug("Extension [{}] is not JSON, so it registers no module to count", LogSanitizer.sanitize(extension.getPath()), e);
             return false;
         }
         if (!parsed.isJsonObject()) {
@@ -163,7 +208,22 @@ final class ServerSideScriptDetector {
                                 .findFirst();
     }
 
-    private static String content(IResource resource) {
+    /**
+     * The script files a job, listener, websocket, process or route names as what it runs.
+     *
+     * @param artefact the artefact
+     * @return the named scripts, in order of appearance, each once
+     */
+    static List<String> scriptsNamedIn(IResource artefact) {
+        Set<String> scripts = new LinkedHashSet<>();
+        Matcher matcher = SCRIPT_FILE.matcher(content(artefact));
+        while (matcher.find()) {
+            scripts.add(matcher.group());
+        }
+        return List.copyOf(scripts);
+    }
+
+    static String content(IResource resource) {
         return new String(resource.getContent(), StandardCharsets.UTF_8);
     }
 }
