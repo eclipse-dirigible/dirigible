@@ -122,7 +122,8 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
     /**
      * Creates the shell script. The backend listens on the loopback interface only, where the terminal
      * websocket connects to it, and takes its credential from the environment the script is started
-     * with, so it is written neither to the file nor to the log.
+     * with, so it is written neither to the file nor to the log. The script execs ttyd, so destroying
+     * the started process stops ttyd itself.
      *
      * @param file the file
      * @throws FileNotFoundException the file not found exception
@@ -131,7 +132,7 @@ public class TerminalWebsocketConfig implements WebSocketConfigurer {
     private static void createShellScriptFile(File file) throws FileNotFoundException, IOException {
         String command = """
                 #!/bin/sh
-                ttyd -i %s -p %d -c "$%s" --writable sh
+                exec ttyd -i %s -p %d -c "$%s" --writable sh
                 """.formatted(TTYD_HOST, TTYD_PORT, CREDENTIAL_VARIABLE);
         logger.info("Creating file [{}] with content [{}]", file, command);
         try (FileOutputStream fos = new FileOutputStream(file)) {
