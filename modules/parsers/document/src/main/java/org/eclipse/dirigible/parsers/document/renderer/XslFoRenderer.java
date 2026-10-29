@@ -12,6 +12,7 @@ package org.eclipse.dirigible.parsers.document.renderer;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.dirigible.parsers.document.Attributes;
 import org.eclipse.dirigible.parsers.document.ColumnNode;
 import org.eclipse.dirigible.parsers.document.CustomNode;
 import org.eclipse.dirigible.parsers.document.DocumentNode;
@@ -33,6 +34,7 @@ import org.eclipse.dirigible.parsers.document.TextNode;
 import org.eclipse.dirigible.parsers.document.TotalNode;
 import org.eclipse.dirigible.parsers.document.layout.Alignment;
 import org.eclipse.dirigible.parsers.document.layout.LayoutEngine;
+import org.eclipse.dirigible.parsers.document.layout.LayoutException;
 import org.eclipse.dirigible.parsers.document.layout.LayoutNode;
 import org.eclipse.dirigible.parsers.document.layout.Measurement;
 
@@ -53,6 +55,8 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
     private static final double DEFAULT_PAGE_WIDTH = 595;
     private static final double DEFAULT_PAGE_HEIGHT = 842;
     private static final double DEFAULT_PAGE_PADDING = 40;
+    private static final double MIN_AUTOMATIC_TABLE_FONT_SIZE = 8;
+    private static final String FONT_SIZE = "fontSize";
 
     /** Resolves an {@code <image>} source into something FOP can read. */
     private final ImageResolver imageResolver;
@@ -265,13 +269,8 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         if (rows.isEmpty()) {
             return; // FOP rejects an empty fo:table-body
         }
-        // Narrow columns can't fit long labels/values at the 10pt body size, and FOP bleeds an
-        // overflowing (right-aligned) line over its neighbour instead of clipping it. Scale the
-        // table font down as columns accumulate so the content fits; tables up to three columns
-        // keep the body size.
-        double fontSize = Math.max(6, 10 - Math.max(0, columns.size() - 3));
         fo.append("<fo:table table-layout=\"fixed\" width=\"100%\" space-after=\"8pt\" font-size=\"")
-          .append(points(fontSize))
+          .append(points(tableFontSize(node, columns.size())))
           .append("\">\n");
         List<Measurement> widths = new ArrayList<>();
         for (LayoutNode column : columns) {
@@ -310,6 +309,40 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
             fo.append("</fo:table-row>\n");
         }
         fo.append("</fo:table-body></fo:table>\n");
+    }
+
+    /**
+     * The table's {@code fontSize} in points when the template sets one, else the automatic size.
+     * Narrow columns can't fit long labels/values at the 10pt body size, and FOP bleeds an overflowing
+     * (right-aligned) line over its neighbour instead of clipping it, so the automatic size drops a
+     * point for every column beyond three - down to a readable floor of 8pt (#8321).
+     */
+    private static double tableFontSize(LayoutNode table, int columnCount) {
+        Attributes attributes = table.source()
+                                     .attributes();
+        if (!attributes.has(FONT_SIZE)) {
+            return Math.max(MIN_AUTOMATIC_TABLE_FONT_SIZE, 10 - Math.max(0, columnCount - 3));
+        }
+        String raw = attributes.get(FONT_SIZE);
+        String amount = raw.trim();
+        if (amount.endsWith("pt")) {
+            amount = amount.substring(0, amount.length() - 2);
+        }
+        Measurement size;
+        try {
+            size = Measurement.parse(amount);
+        } catch (IllegalArgumentException e) {
+            throw invalidFontSize(raw, attributes);
+        }
+        if (size.type() != Measurement.Type.ABSOLUTE_PX || size.value() <= 0) {
+            throw invalidFontSize(raw, attributes);
+        }
+        return size.value();
+    }
+
+    private static LayoutException invalidFontSize(String raw, Attributes attributes) {
+        return new LayoutException("Invalid fontSize: '" + raw + "' (expected a positive number of points)",
+                attributes.positionOf(FONT_SIZE));
     }
 
     private void appendColumnDefinitions(StringBuilder fo, List<Measurement> widths) {

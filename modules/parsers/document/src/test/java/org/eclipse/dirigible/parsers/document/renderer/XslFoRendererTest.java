@@ -12,12 +12,14 @@ package org.eclipse.dirigible.parsers.document.renderer;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.parsers.document.Node;
 import org.eclipse.dirigible.parsers.document.binding.DataBinder;
+import org.eclipse.dirigible.parsers.document.layout.LayoutException;
 import org.eclipse.dirigible.parsers.document.parser.DocumentParser;
 import org.junit.Test;
 
@@ -139,8 +141,8 @@ public class XslFoRendererTest {
 
     @Test
     public void wideTableScalesTheFontDownSoContentFits() {
-        // Three columns keep the body font size; every column beyond that drops it a point (floor 6),
-        // so a nine-column financial table renders at 6pt instead of overflowing its narrow columns.
+        // Three columns keep the body font size; every column beyond that drops it a point down to a
+        // readable 8pt floor, so a nine-column financial table renders at 8pt, not 6pt (#8321).
         String threeColumns = renderTemplate("""
                 <document>
                     <table source="items">
@@ -167,7 +169,45 @@ public class XslFoRendererTest {
                     </table>
                 </document>
                 """, Map.of("items", List.of(Map.of("c1", "1"))));
-        assertTrue(nineColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"6pt\""));
+        assertTrue(nineColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"8pt\""));
+    }
+
+    @Test
+    public void fontSizeOnATableReplacesTheAutomaticSize() {
+        String seven = """
+                <document>
+                    <table source="items"%s>
+                        <column label="Name">{{c1}}</column>
+                        <column label="Qty">{{c2}}</column>
+                        <column label="Unit Price">{{c3}}</column>
+                        <column label="VAT %%">{{c4}}</column>
+                        <column label="Net">{{c5}}</column>
+                        <column label="VAT">{{c6}}</column>
+                        <column label="Total">{{c7}}</column>
+                    </table>
+                </document>
+                """;
+        Map<String, Object> data = Map.of("items", List.of(Map.of("c1", "Bolt")));
+        assertTrue(renderTemplate(seven.formatted(""), data).contains("space-after=\"8pt\" font-size=\"8pt\""));
+        assertTrue(renderTemplate(seven.formatted(" fontSize=\"9\""), data).contains("space-after=\"8pt\" font-size=\"9pt\""));
+        assertTrue(renderTemplate(seven.formatted(" fontSize=\"7.5pt\""), data).contains("space-after=\"8pt\" font-size=\"7.5pt\""));
+    }
+
+    @Test
+    public void invalidTableFontSizeFailsWithTheAttributePosition() {
+        for (String invalid : List.of("big", "0", "-9", "50%")) {
+            try {
+                renderTemplate(
+                        "<document>\n  <table source=\"items\" fontSize=\"" + invalid + "\"><column>{{a}}</column></table>\n</document>",
+                        Map.of("items", List.of(Map.of("a", "1"))));
+                fail("Expected LayoutException for fontSize '" + invalid + "'");
+            } catch (LayoutException e) {
+                assertEquals(2, e.getPosition()
+                                 .line());
+                assertEquals(25, e.getPosition()
+                                  .column());
+            }
+        }
     }
 
     @Test
