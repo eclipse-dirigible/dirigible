@@ -275,6 +275,77 @@ class I18nKeyCoverageIT {
         }
     }
 
+    /**
+     * A generated form's client-side validation speaks the user's language (#8350): the rule messages
+     * and the summary of a failed save resolve through the platform's copy of the template catalog, and
+     * the summary names the fields by the labels it is handed - evaluated over the real i18next, which
+     * interpolates them.
+     */
+    @Test
+    void aFormsValidationInBulgarianUsesThePlatformCatalog() {
+        ObjectNode moduleCatalog = JSON.createObjectNode();
+        try (Context context = loadI18n("bg", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Полето е задължително.", t(context, "orders:orders-model.messages.error.required", "This field is required."));
+            assertEquals("Въведете валиден имейл адрес.",
+                    t(context, "orders:orders-model.messages.error.email", "Enter a valid email address."));
+            assertEquals("Полета, които изискват внимание: Дата, Клиент", context.eval("js",
+                    "T('orders:orders-model.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}', { fields: 'Дата, Клиент' })")
+                                                                                 .asString());
+        }
+        try (Context context = loadI18n("en", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Fields that need attention: Date, Customer", context.eval("js",
+                    "T('orders:orders-model.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}', { fields: 'Date, Customer' })")
+                                                                              .asString());
+        }
+    }
+
+    /**
+     * The generated form templates hand every validation message to T() and name the failing fields by
+     * their labels (validationLabels), never by the bare English literal and the property names.
+     */
+    @Test
+    void theFormTemplatesTranslateTheirValidation() {
+        for (String page : List.of("manage/form-page.js.template", "document/document-page.js.template")) {
+            String content = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/" + page);
+            assertTrue(
+                    !content.contains("message: 'This field is required.'") && !content.contains("message: 'Enter a valid email address.'"),
+                    page + ": a validation message is still an English literal");
+            assertTrue(content.contains("_failed.map(k => _labels[k] || k)"),
+                    page + ": the summary does not name the fields by their labels");
+            assertTrue(content.contains("validationLabels() {"), page + ": no validationLabels()");
+        }
+    }
+
+    /**
+     * The API error catalog renders in the user's language: apiError.js hands each line's shell key to
+     * T(), so a fault or a mapped 422 cause is no longer English in a translated UI (#8350).
+     */
+    @Test
+    void theApiErrorCatalogInBulgarianUsesTheShellCatalog() {
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/apiError.js"));
+            assertEquals("Заявката не можа да бъде изпълнена. Моля, проверете въведените данни.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'BadRequest' })")
+                           .asString());
+            assertEquals("Полето е задължително.", context.eval("js", "App.services.apiErrors.fieldMessageFor({ errorType: 'NotNull' })")
+                                                          .asString());
+            assertEquals("Нещо се обърка. Моля, опитайте отново.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'Unknown' })")
+                           .asString(),
+                    "an unknown error type falls back to the translated default");
+            assertEquals("Could not save.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'Unknown' }, 'Could not save.')")
+                           .asString(),
+                    "a caller's own fallback still wins over the default");
+        }
+        try (Context context = loadI18n("en", JSON.createObjectNode(), STUB_I18NEXT)) {
+            context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/apiError.js"));
+            assertEquals("The request could not be completed. Please review your input.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'BadRequest' })")
+                           .asString());
+        }
+    }
+
     private static String t(Context context, String key, String fallback) {
         context.getBindings("js")
                .putMember("__key", key);

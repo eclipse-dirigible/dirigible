@@ -28,7 +28,10 @@
         "lengthMinMax": "Стойността трябва да е между {{min}} и {{max}} знака",
         "lengthMin": "Стойността трябва да е поне {{min}} знака",
         "lengthMax": "Стойността не трябва да надвишава {{max}} знака",
-        "saving": "Записът не беше запазен"
+        "saving": "Записът не беше запазен",
+        "required": "Полето е задължително.",
+        "email": "Въведете валиден имейл адрес.",
+        "fieldsNeedAttention": "Полета, които изискват внимание: {{fields}}"
       },
       "propertySuccessfullyCreated": "{{name}} е създаден успешно",
       "propertySuccessfullyUpdated": "{{name}} е обновен успешно",

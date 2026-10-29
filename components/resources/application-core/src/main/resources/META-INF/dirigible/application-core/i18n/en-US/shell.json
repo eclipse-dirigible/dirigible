@@ -483,6 +483,31 @@
         "REJECTED": "Rejected",
         "CANCELLED": "Withdrawn"
       }
+    },
+    "apiErrors": {
+      "BadRequest": "The request could not be completed. Please review your input.",
+      "ValidationError": "Please correct the highlighted fields.",
+      "Unauthorized": "Your session has ended. Please sign in again.",
+      "InsufficientPermission": "You do not have permission to perform this action.",
+      "TokenExpired": "Your session has expired. Please sign in again.",
+      "NotFound": "The requested item could not be found.",
+      "Conflict": "This is not allowed in the record’s current state.",
+      "UpstreamError": "A dependent service is unavailable. Please try again shortly.",
+      "InternalServerError": "Something went wrong on our end. Please try again.",
+      "NetworkError": "Unable to reach the server. Check your connection and try again.",
+      "ConfirmationDeclined": "Not saved - the warnings were not confirmed.",
+      "default": "Something went wrong. Please try again.",
+      "field": {
+        "required": "This field is required.",
+        "Future": "Date must be in the future.",
+        "Past": "Date must be in the past.",
+        "Pattern": "This value has an invalid format.",
+        "Email": "Enter a valid email address.",
+        "Size": "This value has an invalid length.",
+        "Min": "This value is too small.",
+        "Max": "This value is too large.",
+        "Duplicate": "This value already exists."
+      }
     }
   }
 }

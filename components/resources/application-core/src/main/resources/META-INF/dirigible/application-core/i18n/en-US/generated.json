@@ -28,7 +28,10 @@
         "lengthMinMax": "Value must be between {{min}} and {{max}} characters long",
         "lengthMin": "Value must not be less than {{min}} characters",
         "lengthMax": "Value must not be more than {{max}} characters",
-        "saving": "Could not save"
+        "saving": "Could not save",
+        "required": "This field is required.",
+        "email": "Enter a valid email address.",
+        "fieldsNeedAttention": "Fields that need attention: {{fields}}"
       },
       "propertySuccessfullyCreated": "{{name}} successfully created",
       "propertySuccessfullyUpdated": "{{name}} successfully updated",
