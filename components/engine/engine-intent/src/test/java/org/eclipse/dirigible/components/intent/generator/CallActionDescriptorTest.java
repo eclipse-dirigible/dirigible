@@ -20,6 +20,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.generator.action.ActionIntentGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -28,6 +30,8 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+
+import com.google.gson.Gson;
 
 /**
  * The client descriptor of an action that calls the application's own endpoint (issue #8090): the
@@ -106,6 +110,95 @@ class CallActionDescriptorTest {
         assertTrue(descriptor.contains("\"roles\":[\"SupportLead\",\"Manager\"]"), descriptor);
         assertTrue(descriptor.contains("\"success\":\"Escalationrequested\""), descriptor);
         assertFalse(descriptor.contains("\"path\":\"/services/web"), "a call action opens no page: " + descriptor);
+        for (String key : List.of("description", "submit", "recordFields", "help", "default", "options")) {
+            assertFalse(descriptor.contains("\"" + key + "\""), "an action without the #8296 keys emits none: " + descriptor);
+        }
+    }
+
+    /** The "Invite member" example of #8296. */
+    private static final String INVITE = """
+            name: teams
+            entities:
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: Lead, kind: manyToOne, to: Person }
+              - name: Person
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+            actions:
+              - name: InviteMember
+                forEntity: Team
+                label: Invite member
+                description: "Invite a person to {name}, led by {Lead}. They get an email with a link to the team's workspace."
+                submit: Invite
+                prompt:
+                  - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+                  - name: roles
+                    type: multiselect
+                    label: Roles
+                    required: true
+                    default: [Member]
+                    options:
+                      - { value: Member, help: Uses the team's workspace }
+                      - { value: Lead, label: Team lead, help: Manages the team's members }
+                  - { name: seats, type: integer, default: 2 }
+                call:
+                  path: /services/java/teams/custom/api/TeamApi/teams/{id}/invitations
+                  body: { email: "{email}", roles: "{roles}" }
+                success: Invitation sent
+            """;
+
+    @Test
+    void theDescriptorCarriesTheDialogsDescriptionSubmitAndInputs() {
+        Map<?, ?> descriptor = new Gson().fromJson(descriptor(INVITE, "InviteMember"), Map.class);
+
+        assertEquals("Invite a person to {name}, led by {Lead}. They get an email with a link to the team's workspace.",
+                descriptor.get("description"));
+        assertEquals("Invite", descriptor.get("submit"));
+        List<?> columns = (List<?>) descriptor.get("promptColumns");
+        assertEquals(Map.of("name", "email", "label", "Email", "widget", "TEXT", "help", "name@company.com"), columns.get(0));
+        assertEquals(Map.of("name", "roles", "label", "Roles", "widget", "MULTISELECT", "options",
+                List.of(Map.of("value", "Member", "label", "Member", "help", "Uses the team's workspace"),
+                        Map.of("value", "Lead", "label", "Team lead", "help", "Manages the team's members")),
+                "default", List.of("Member")), columns.get(1));
+        assertEquals(Map.of("name", "seats", "label", "Seats", "widget", "NUMBER", "default", 2.0), columns.get(2));
+        assertEquals(List.of(Map.of("name", "email", "required", true), Map.of("name", "roles", "required", true),
+                Map.of("name", "seats", "required", false)), descriptor.get("prompt"));
+    }
+
+    @Test
+    void theRecordFieldsSayWhereEachPlaceholderIsRead() {
+        Map<?, ?> descriptor = new Gson().fromJson(descriptor(INVITE, "InviteMember"), Map.class);
+        Map<?, ?> fields = (Map<?, ?>) descriptor.get("recordFields");
+
+        assertEquals(List.of("name", "Lead"), List.copyOf(fields.keySet()));
+        assertEquals(Map.of("property", "Name"), fields.get("name"));
+        Map<?, ?> lead = (Map<?, ?>) fields.get("Lead");
+        assertEquals("Lead", lead.get("property"));
+        Map<?, ?> lookup = (Map<?, ?>) lead.get("lookup");
+        assertTrue(String.valueOf(lookup.get("url"))
+                         .startsWith("/services/java/proj/gen/")
+                && String.valueOf(lookup.get("url"))
+                         .endsWith("/PersonController"),
+                "the lead's display text is read from its controller: " + lookup);
+        assertEquals("Id", lookup.get("key"));
+        assertEquals("Name", lookup.get("text"));
+    }
+
+    @Test
+    void aDefaultFromTheRecordIsARecordField() {
+        Map<?, ?> descriptor = new Gson()
+                                         .fromJson(
+                                                 descriptor(INVITE.replace("Invite a person to {name}, led by {Lead}.", "Invite a person.")
+                                                                  .replace("default: 2 }", "default: \"{id}\" }"),
+                                                         "InviteMember"),
+                                                 Map.class);
+
+        assertEquals(Map.of("id", Map.of("property", "Id")), descriptor.get("recordFields"));
     }
 
     @Test

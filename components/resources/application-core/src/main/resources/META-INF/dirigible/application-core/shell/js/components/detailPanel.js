@@ -134,6 +134,7 @@ function detailPanel(def, masterId, master) {
     // - a relationship column shows its referenced label
     // - a `via` column shows a field of that same referenced row (relation `show`)
     // - a `multi` column resolves EACH key of its list
+    // - a `list` column joins the texts its rows carry
     // - a date column is formatted.
     cellValue(col, row) {
       // A `via` column reads a field off another (lookup) column's referenced row.
@@ -146,6 +147,9 @@ function detailPanel(def, masterId, master) {
         return this.displayValue(shown, col.date);
       }
       const v = row[col.name];
+      // A collection column (intent `list:` collection path, #8295) arrives as the texts of the row's
+      // child rows; the panel renders them as chips, and as one text wherever a single value is read.
+      if (col.list) return Array.isArray(v) ? v.join(", ") : "";
       // A subset column holds a key LIST ("1,3"): resolve each key through the lookup map and
       // join the labels. Routed by the explicit `multi` flag, never by sniffing the value for commas.
       if (col.multi && col.lookup) {

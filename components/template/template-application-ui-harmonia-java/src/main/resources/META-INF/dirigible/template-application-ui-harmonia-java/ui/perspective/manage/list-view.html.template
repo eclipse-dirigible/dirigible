@@ -324,6 +324,10 @@
 ## The header reads the label, as the drawer, the forms and the Filter menu do (#8132) - the name
 ## showed raw wherever the catalog had no entry for the column, which is English.
 #if($property.widgetLabel)#set($hlabel = $property.widgetLabelJs)#else#set($hlabel = $property.name)#end
+#if($property.collectionColumn)
+## A collection column (intent `list:` collection path, #8295) is not sortable: a plain header.
+                <th x-h-table-head scope="col"#visibleGate($property)><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span></th>
+#else
                 <th x-h-table-head scope="col"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end#visibleGate($property) :aria-sort="ariaSort('${property.name}')">
                   <button class="hbox #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")w-full justify-end #{end}cursor-pointer items-center gap-1" @click="cycleSort('${property.name}')">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${hlabel}')"></span>
@@ -331,6 +335,7 @@
                          :data-lucide="isSortedAsc('${property.name}') ? 'arrow-up' : (isSortedDesc('${property.name}') ? 'arrow-down' : 'chevrons-up-down')"></svg>
                   </button>
                 </th>
+#end
 #end
 #end
                 <th x-h-table-head scope="col" class="w-12" data-col-actions><span class="sr-only" x-text="T('$projectName:${tprefix}.aria.tableRowMenu', 'Table Row Menu')"></span></th>
@@ -360,7 +365,9 @@
                       </button>
                       <span class="size-8 shrink-0" aria-hidden="true" x-show="treeVisible &amp;&amp; !hasChildren"></span>
                       <svg x-h-lucide role="presentation" data-lucide="${iconName}" class="size-4 shrink-0 text-muted-foreground" x-show="treeVisible"></svg>
-#if($property.widgetType == "DOCUMENT_STATUS")
+#if($property.collectionColumn)
+                      <span class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row.${property.name} || [])" :key="i"><span x-h-chip x-text="text"></span></template></span>
+#elseif($property.widgetType == "DOCUMENT_STATUS")
                       <span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span>
 #elseif($property.widgetType == "DROPDOWN")
                       <span class="truncate" x-text="lookupText('${property.name}', row.${property.name})"></span>
@@ -377,6 +384,10 @@
 #end
                     </div>
                   </td>
+#elseif($property.collectionColumn)
+                  <!-- A collection column (intent `list:` collection path, #8295): the texts of the record's
+                       child rows, one chip each, as the controller answers them. -->
+                  <td x-h-table-cell#visibleGate($property)><div class="hbox flex-wrap gap-1"><template x-for="(text, i) in (row.${property.name} || [])" :key="i"><span x-h-chip x-text="text"></span></template></div></td>
 #elseif($property.widgetType == "DOCUMENT_STATUS")
                   <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
                   <td x-h-table-cell#visibleGate($property)><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>

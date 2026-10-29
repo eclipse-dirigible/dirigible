@@ -50,7 +50,7 @@ document.addEventListener('alpine:init', () => {
     filterColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT" || $property.collectionColumn)none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end },
 #end
 #end
     ],
@@ -770,13 +770,17 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.collectionColumn), list: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
 #end
 #end
     ],
     exportCell(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '';
+#if($collectionColumns)
+      // A collection column (intent `list:` collection path, #8295) exports its texts as one.
+      if (col.list) return v.join(', ');
+#end
       // A MULTISELECT exports its resolved labels, not the raw key list - fk resolution would treat
       // the whole csv as one key and fall back to the raw ids.
       if (col.multi) return this.multiLookupText(col.name, v);

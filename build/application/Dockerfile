@@ -41,11 +41,19 @@ COPY target/dirigible-application-*-executable.jar dirigible.jar
 # repository (and so an offline boot, see DIRIGIBLE_DEPENDENCIES_FROZEN) across runs.
 RUN mkdir -p /modules /root/.dirigible/resolved-modules
 
+# Heap sizing for the container: the JVM's default max heap is 25% of the container limit, which
+# leaves most of a 1 GiB container unused and exhausts the heap on the first publish. MaxRAMPercentage
+# raises the ceiling to half the limit (a ceiling, not a reservation - RSS still only grows with
+# actual heap use), leaving room for the GraalVM-heavy edition's off-heap footprint. Override it from
+# the launch for a differently sized container. ExitOnOutOfMemoryError makes the JVM exit on heap
+# exhaustion instead of staying Up with a poisoned H2 store answering 401, so an orchestrator restarts
+# it.
+#
 # A -jar launch: the executable jar's ZIP layout makes PropertiesLauncher the Main-Class (so
 # -Dloader.path keeps working), and -jar is what makes the JVM honor the Launcher-Agent-Class
 # manifest entry - the launcher agent that lets scope-platform dependency jars (JDBC drivers,
 # JNI-bearing libraries) be appended to the system classloader without a restart.
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=50.0", "-XX:+ExitOnOutOfMemoryError", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
 
 # 8080 for the spring boot application,
 # 8081 for graalium debug port

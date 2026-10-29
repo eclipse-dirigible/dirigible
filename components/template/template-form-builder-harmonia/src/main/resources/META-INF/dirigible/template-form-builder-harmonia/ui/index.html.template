@@ -43,7 +43,7 @@
 #elseif($el.controlId == "paragraph")
         <p x-h-text class="sm:col-span-2"#tlabel($el)>$!el.label</p>
 #elseif($el.controlId == "line")
-        <hr x-h-separator class="sm:col-span-2" />
+        <div x-h-separator data-orientation="horizontal" class="sm:col-span-2"></div>
 #elseif($el.controlId == "spacer")
         <div class="flex-1"></div>
 #elseif($el.controlId == "link")

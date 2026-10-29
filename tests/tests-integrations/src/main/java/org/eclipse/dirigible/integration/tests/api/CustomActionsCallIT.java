@@ -23,6 +23,11 @@ import org.junit.jupiter.api.Test;
  * path, a whole-string placeholder typed by its control, a placeholder inside a longer string
  * interpolated as text, constants sent as written, and no body at all when none is declared. The
  * browser journey is {@code IntentCallActionSampleIT}.
+ *
+ * <p>
+ * And the dialog that says what it acts on (issue #8296): a MULTISELECT sent as an array in options
+ * order, a required one refused empty, the literal and record defaults it opens with, and the
+ * description and confirm text filled from the clicked record - a to-one by its display text.
  */
 class CustomActionsCallIT {
 
@@ -35,6 +40,95 @@ class CustomActionsCallIT {
                               summary: 'level {level}: {note}', tags: ['{note}', 7] } },
               promptColumns: [ { name: 'level', widget: 'NUMBER' }, { name: 'note', widget: 'TEXT' },
                                { name: 'urgent', widget: 'CHECKBOX' }, { name: 'due', widget: 'DATE' } ] }""";
+
+    private static final String INVITE = """
+            { label: 'Invite member', view: 'Team', type: 'entity', submit: 'Invite',
+              description: 'Invite a person to {name}, led by {Lead}{missing}.',
+              call: { method: 'POST', path: '/services/java/teams/custom/api/TeamApi/teams/{id}/invitations',
+                      body: { email: '{email}', roles: '{roles}', summary: 'as {roles}' } },
+              prompt: [ { name: 'email', required: true }, { name: 'roles', required: true }, { name: 'note', required: false } ],
+              promptColumns: [ { name: 'email', label: 'Email', widget: 'TEXT', help: 'name@company.com' },
+                               { name: 'roles', label: 'Roles', widget: 'MULTISELECT', default: ['Member'],
+                                 options: [ { value: 'Member', label: 'Member' }, { value: 'Lead', label: 'Lead' } ] },
+                               { name: 'note', label: 'Note', widget: 'TEXT', default: '{name}' } ],
+              recordFields: { name: { property: 'Name' }, missing: { property: 'Motto' },
+                              Lead: { property: 'Lead', lookup: { url: '/services/java/teams/gen/teams/api/Person/PersonController',
+                                                                  key: 'Id', text: 'Name' } } } }""";
+
+    private static final String TEAM = "{ Id: 4, Name: 'Platform', Lead: 7 }";
+
+    @Test
+    void aMultiselectIsSentAsAnArrayInOptionsOrder() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.runCall(" + INVITE + ", 4, { email: 'ann@example.com', roles: ['Lead', 'Member'] });");
+
+            assertEquals(
+                    "POST /services/java/teams/custom/api/TeamApi/teams/4/invitations "
+                            + "{\"email\":\"ann@example.com\",\"roles\":[\"Member\",\"Lead\"],\"summary\":\"as Lead,Member\"}",
+                    sent(context));
+
+            context.eval("js", "store.runCall(" + INVITE + ", 4, { email: 'ann@example.com', roles: [] });");
+
+            assertEquals("POST /services/java/teams/custom/api/TeamApi/teams/4/invitations "
+                    + "{\"email\":\"ann@example.com\",\"roles\":[],\"summary\":\"as \"}", sent(context));
+        }
+    }
+
+    @Test
+    void aRequiredMultiselectWithNothingTickedIsRefusedBeforeAnyRequest() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + INVITE + ", 4, " + TEAM + ");");
+            context.eval("js", "store.promptValues.email = 'ann@example.com'; store.promptValues.roles = []; store.promptRun();");
+
+            assertEquals("Roles", context.eval("js", "store.promptError")
+                                         .asString());
+            assertEquals("", sent(context), "nothing was sent");
+        }
+    }
+
+    @Test
+    void theDialogOpensWithItsLiteralAndRecordDefaults() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + INVITE + ", 4, " + TEAM + ");");
+
+            assertEquals("[\"Member\"]|Platform",
+                    context.eval("js", "JSON.stringify(store.promptValues.roles) + '|' + store.promptValues.note")
+                           .asString());
+
+            context.eval("js", "store.promptValues.email = 'ann@example.com'; store.promptValues.roles.push('Lead'); store.promptRun();");
+
+            assertEquals(
+                    "POST /services/java/teams/custom/api/TeamApi/teams/4/invitations "
+                            + "{\"email\":\"ann@example.com\",\"roles\":[\"Member\",\"Lead\"],\"summary\":\"as Member,Lead\"}",
+                    sent(context));
+        }
+    }
+
+    @Test
+    void theDescriptionIsFilledFromTheRecord() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + INVITE + ", 4, " + TEAM + ");");
+
+            assertEquals("Invite a person to Platform, led by Ann.", context.eval("js", "store.dialogDescription")
+                                                                            .asString(),
+                    "a field as the record holds it, a to-one by its display text, a property the record lacks as nothing");
+            assertEquals("/services/java/teams/gen/teams/api/Person/PersonController/7", context.eval("js", "__got")
+                                                                                                .asString());
+        }
+    }
+
+    @Test
+    void theConfirmTextIsFilledFromTheRecord() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger({ label: 'Archive', confirm: 'Archive {name}?', description: 'Led by {Lead}.',"
+                    + " call: { method: 'POST', path: '/services/x/{id}/archive' },"
+                    + " recordFields: { name: { property: 'Name' }, Lead: { property: 'Lead', lookup: { url: '/services/p', key: 'Id', text: 'Name' } } } }, 4, "
+                    + TEAM + ");");
+
+            assertEquals("Archive Platform?|Led by Ann.", context.eval("js", "store.confirmText + '|' + store.dialogDescription")
+                                                                 .asString());
+        }
+    }
 
     @Test
     void theBodyIsTypedByThePromptControls() throws Exception {
@@ -107,10 +201,13 @@ class CustomActionsCallIT {
                         var __stores = {};
                         var Alpine = { store: function (name, value) { if (value !== undefined) { __stores[name] = value; } return __stores[name]; }, data: function () {} };
                         var console = { log: function () {}, warn: function () {}, error: function () {} };
-                        var __sent = '', __announced = '', __answer = null;
+                        var __sent = '', __announced = '', __answer = null, __got = '';
                         Alpine.store('notifications', { announce: function (n) { __announced = n.title + ': ' + n.description; } });
                         var App = { config: {}, services: {
-                          api: { request: function (method, url, body, opts) {
+                          api: { get: function (url, opts) {
+                            __got = opts.baseUrl + url;
+                            return Promise.resolve({ Id: 7, Name: 'Ann' });
+                          }, request: function (method, url, body, opts) {
                             __sent = method + ' ' + opts.baseUrl + url + ' ' + (body === undefined ? 'undefined' : JSON.stringify(body));
                             return __answer || Promise.resolve('');
                           } },

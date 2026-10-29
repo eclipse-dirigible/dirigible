@@ -256,6 +256,9 @@ final class ModelTranslations {
                 texts.put(dataName + "_plural", strOr(entity, "menuLabel", NamingHelper.pluralizeLabel(singular)));
             }
             collectPropertyLabels(asMaps(entity.get("properties")), texts);
+            // A collection column's header (a `list:` collection path, dirigible #8295) translates
+            // like any other column's.
+            collectPropertyLabels(asMaps(entity.get("collectionColumns")), texts);
             collectMasterPropertyLabels(asMap(entity.get("masterProperties")), texts);
         }
         for (Map<String, Object> perspective : asMaps(model.get("perspectives"))) {

@@ -22,9 +22,11 @@ COPY target/dirigible-application-java-*-executable.jar dirigible.jar
 # default image (build/application/Dockerfile).
 RUN mkdir -p /modules /root/.dirigible/resolved-modules
 
-# The same -jar launch as the default image: PropertiesLauncher honors -Dloader.path, and -jar makes
-# the JVM honor the Launcher-Agent-Class manifest entry.
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
+# The same -jar launch and heap sizing as the default image (see build/application/Dockerfile):
+# MaxRAMPercentage sizes the heap to the container, ExitOnOutOfMemoryError exits on heap exhaustion
+# instead of staying Up with a poisoned store, and -jar makes the JVM honor the Launcher-Agent-Class
+# manifest entry while PropertiesLauncher honors -Dloader.path.
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=50.0", "-XX:+ExitOnOutOfMemoryError", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-Dloader.path=/modules", "-jar", "/dirigible.jar"]
 
 # 8080 for the spring boot application
 EXPOSE 8080

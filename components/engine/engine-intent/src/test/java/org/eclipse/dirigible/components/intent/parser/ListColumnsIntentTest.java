@@ -89,6 +89,82 @@ class ListColumnsIntentTest {
                 ex.getMessage());
     }
 
+    /** A team member whose list shows its skills (dirigible #8295) - the issue's own model. */
+    private static String team(String list, String skillLabel) {
+        return """
+                name: team
+                entities:
+                  - name: Skill
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Team
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: members, kind: oneToMany, to: TeamMember }
+                  - name: TeamMember
+                    list: %s
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: email,    type: string }
+                      - { name: joinedOn, type: date }
+                    relations:
+                      - { name: Team,   kind: manyToOne, to: Team, composition: true }
+                      - { name: skills, kind: oneToMany, to: TeamMemberSkill }
+                  - name: TeamMemberSkill
+                %s
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: grantedBy, type: string }
+                    relations:
+                      - { name: TeamMember, kind: manyToOne, to: TeamMember, composition: true }
+                      - { name: skill,      kind: manyToOne, to: Skill }
+                      - { name: tags,       kind: oneToMany, to: Skill }
+                """.formatted(list, skillLabel);
+    }
+
+    @Test
+    void aCollectionPathIsAListColumn() {
+        IntentModel model = IntentParser.parse(team("[email, skills.skill, joinedOn]", ""));
+
+        assertEquals(List.of("email", "skills.skill", "joinedOn"), model.getEntities()
+                                                                        .get(2)
+                                                                        .getList());
+        // a field of the child, matched case-insensitively, is a collection path too
+        IntentParser.parse(team("[email, Skills.GrantedBy]", ""));
+    }
+
+    @Test
+    void aBareCollectionNeedsTheChildsLabel() {
+        IntentParser.parse(team("[email, skills]", "    label: \"{grantedBy}\""));
+
+        assertRefused(team("[email, skills]", ""),
+                "entity [TeamMember] list references [skills], a collection whose entity [TeamMemberSkill] declares no label:");
+    }
+
+    @Test
+    void anUnknownOrDeeperPathIsRefused() {
+        assertRefused(team("[email, skills.level]", ""),
+                "entity [TeamMember] list references [skills.level] whose [level] is not a field or to-one relation of [TeamMemberSkill]");
+        assertRefused(team("[email, talents.skill]", ""),
+                "entity [TeamMember] list references [talents.skill] whose [talents] is not a oneToMany relation of the entity");
+        assertRefused(team("[email, skills.skill.name]", ""),
+                "entity [TeamMember] list references [skills.skill.name] - a collection path is one hop deep");
+        assertRefused(team("[email, skills.tags]", ""),
+                "entity [TeamMember] list references [skills.tags] whose [tags] is itself a collection of [TeamMemberSkill]");
+    }
+
+    private static void assertRefused(String yaml, String message) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+
+        assertTrue(ex.getMessage()
+                     .contains(message),
+                ex.getMessage());
+    }
+
     @Test
     void aBlankEntryIsRefused() {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(invoice("[Number, \"\"]")));
