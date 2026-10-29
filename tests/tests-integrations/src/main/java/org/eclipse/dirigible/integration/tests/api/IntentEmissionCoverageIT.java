@@ -4088,20 +4088,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // #7603: `defaultValue: now` - a NEW document opens dated today, in each field's own input shape,
         // before the query-param prefill (so a preset still wins)...
-        assertTrue(
-                reorderDoc.contains(
-                        "if ('OrderedOn' in this.form) this.form.OrderedOn = this.toDateInput(App.utils.todayAs('date'), 'DATE');")
-                        && reorderDoc.contains("this.form.Period = this.toDateInput(App.utils.todayAs('month'), 'MONTH');")
-                        && reorderDoc.contains(
-                                "this.form.RecordedAt = this.toDateInput(App.utils.todayAs('timestamp'), 'DATETIME-LOCAL');"),
+        assertTrue(reorderDoc.contains(
+                "if ('OrderedOn' in this.form && !touched.has('OrderedOn')) this.form.OrderedOn = this.toDateInput(App.utils.todayAs('date'), 'DATE');")
+                && reorderDoc.contains("this.form.Period = this.toDateInput(App.utils.todayAs('month'), 'MONTH');")
+                && reorderDoc.contains("this.form.RecordedAt = this.toDateInput(App.utils.todayAs('timestamp'), 'DATETIME-LOCAL');"),
                 "a defaultValue: now field must be prefilled when a new document opens, got: " + reorderDoc);
         assertTrue(
                 reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(") < reorderDoc.indexOf(
                         "const v = this.queryParam(key);", reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(")),
                 "a query-param prefill must still win over the default");
-        assertTrue(
-                contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
-                        "if ('Date' in this.form) this.form.Date = this.toDateInput(App.utils.todayAs('date'), 'DATE');"),
+        assertTrue(contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
+                "if ('Date' in this.form && !touched.has('Date')) this.form.Date = this.toDateInput(App.utils.todayAs('date'), 'DATE');"),
                 "...and so must the plain form");
         // ...a new LINE carries the shape, so its dialog computes today when it opens...
         String reorderItemDetail = contentOf("gen/emission/js/components/pages/Reorder/ReorderItem.detail.js");
@@ -4124,13 +4121,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // (assertNowDefaultRuntime proves those are the same values) - in the shape its input binds: a
         // real boolean, a real number, text, and a relation's `init:` as the option's string data-value...
         assertTrue(
-                reorderDoc.contains("if ('Channel' in this.form) this.form.Channel = 'web';")
-                        && reorderDoc.contains("if ('Rush' in this.form) this.form.Rush = true;")
-                        && reorderDoc.contains("if ('Copies' in this.form) this.form.Copies = 2;")
-                        && reorderDoc.contains("if ('Unit' in this.form) this.form.Unit = '1';"),
+                reorderDoc.contains("if ('Channel' in this.form && !touched.has('Channel')) this.form.Channel = 'web';")
+                        && reorderDoc.contains("if ('Rush' in this.form && !touched.has('Rush')) this.form.Rush = true;")
+                        && reorderDoc.contains("if ('Copies' in this.form && !touched.has('Copies')) this.form.Copies = 2;")
+                        && reorderDoc.contains("if ('Unit' in this.form && !touched.has('Unit')) this.form.Unit = '1';"),
                 "a declared default must be prefilled when a new document opens, got: " + reorderDoc);
         assertTrue(reorderDoc.indexOf("this.form.Unit = '1';") < reorderDoc.indexOf("const v = this.queryParam(key);",
                 reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
+        // #8315: the create form is editable while its options load, so a value typed or picked in that
+        // window is the user's - the defaults and the URL prefill fill only the fields still blank.
+        assertEquals("2026-10-28|1|web|true|2", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
+                "an untouched create form must still open holding its defaults");
+        assertEquals("2026-09-06|7|web|true|2",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06', Unit: '7' }", "{}"),
+                "a date typed and a relation picked while the options loaded must survive the defaults");
+        assertEquals("2026-09-06|9|mail|true|2",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06' }",
+                        "{ OrderedOn: '2026-01-01', Unit: '9', Channel: 'mail' }"),
+                "the URL prefill must fill the untouched fields and leave the typed one alone");
         // ...in the create branch only: the form literal stays blank, since loadRecord copies just the
         // keys a record carries and a literal default would surface on an edit of a row holding none...
         assertTrue(reorderDoc.contains("Rush: false,") && reorderDoc.contains("Unit: '',"),
@@ -4139,7 +4147,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String claimFormDefaults = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
         String claimMyFormDefaults = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
         String partnerFormDefaults = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
-        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form && !touched.has('Billable')) this.form.Billable = true;"),
                 "a true default must open checked on the create form, got: " + claimFormDefaults);
         assertTrue(claimMyFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
                 "...and on the personal create form, got: " + claimMyFormDefaults);
@@ -8780,6 +8788,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "var __before = page.draft.Unit + '|' + page.dialogOptionsFor('Unit').map(o => o.value).join(','); page.saveDraft();");
             return context.eval("js",
                     "__before + '|' + page.savedAlongside(page.draftInlineCreated).split(' It ')[0] + '|' + page.draft.Unit")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated document page's create-mode {@code init()} (#8315) over the shipped shell runtime
+     * while the user types during the awaited option load: {@code typed} is assigned to the form from
+     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. Today is 2026-10-28.
+     * Answers the Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies} once init settled.
+     */
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
+                            + " window.location = { hash: '#/Reorder/create' }; window.PineconeRouter = { context: { params: {} } };"
+                            + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "components/printActions.js",
+                    "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js", "App.utils = { todayAs: () => '2026-10-28' }; App.detailsFor = () => []; App.relatedFor = () => [];");
+            context.eval("js", pageScript);
+            context.eval("js", "var page = pages['" + componentName + "'](); var __query = " + query + ";"
+                    + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
+                    + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
+                    + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
+                    + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + "); };" + " page.init();");
+            return context.eval("js",
+                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies].join('|')")
                           .asString();
         }
     }

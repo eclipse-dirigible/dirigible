@@ -258,6 +258,9 @@ document.addEventListener('alpine:init', () => {
     get relatedDefs() { return this.itemsEnabled ? App.relatedFor('${name}') : []; },
 
     async init() {
+      // The form is editable while the loads below are awaited, so whatever it holds by the time the
+      // create defaults are seeded may already be the user's (#8315). This is what it held before.
+      const blankForm = JSON.parse(JSON.stringify(this.form));
 #if($hasRestrictedFields)
       // Role-scoped fields: ask the controller which ones it withholds from this caller, so the header
       // form and the totals footer leave them out rather than showing an input or a total that is
@@ -325,11 +328,15 @@ document.addEventListener('alpine:init', () => {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
         }
       } else {
+        // A field the user typed or picked during the awaited loads keeps that value: a default or a URL
+        // prefill only fills a field still holding its blank value, never overwrites an entry (#8315).
+        const touched = new Set(Object.keys(this.form)
+            .filter(key => JSON.stringify(this.form[key]) !== JSON.stringify(blankForm[key])));
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
         // `defaultValue: now`: a new document is dated today, in the field's own shape; a query-param
         // prefill below still wins, and the server fills the same value on a create that omits it.
-        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
 #elseif($property.dataDefaultValueJsLiteral && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS")
 ## Every other authored default (`defaultValue:`, a relation's `init:`) is the value the server fills on
 ## a create that omits it - shown up front, so the user sees it and can change it before saving rather
@@ -341,17 +348,17 @@ document.addEventListener('alpine:init', () => {
 ## below still wins. The document status is left to the server: its `init:` may name a status rather
 ## than key one, and the lifecycle stamps the initial status itself.
 #if($property.widgetType == "MULTISELECT")
-        if ('${property.name}' in this.form) this.form.${property.name} = String(${property.dataDefaultValueJsLiteral}).split(',').map(v => v.trim()).filter(v => v !== '');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = String(${property.dataDefaultValueJsLiteral}).split(',').map(v => v.trim()).filter(v => v !== '');
 #elseif($property.isDateType)
-        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(${property.dataDefaultValueJsLiteral}, '${property.widgetType}');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = this.toDateInput(${property.dataDefaultValueJsLiteral}, '${property.widgetType}');
 #else
-        if ('${property.name}' in this.form) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
 #end
 #end
 #end
         for (const key of Object.keys(this.form)) {
           const v = this.queryParam(key);
-          if (v !== null) this.form[key] = v;
+          if (v !== null && !touched.has(key)) this.form[key] = v;
         }
         this.state = 'empty-form';
       }
