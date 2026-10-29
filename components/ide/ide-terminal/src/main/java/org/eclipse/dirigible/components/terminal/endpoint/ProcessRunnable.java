@@ -16,6 +16,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Map;
 
 import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TERMINAL_PREFIX;
 
@@ -23,8 +24,11 @@ class ProcessRunnable implements Runnable {
 
     private static final Logger logger = LoggerFactory.getLogger(ProcessRunnable.class);
 
-    /** The command. */
+    /** The command line, split on whitespace into the program and its arguments. */
     private final String command;
+
+    /** The variables added to the environment the command is started with. */
+    private final Map<String, String> environment;
 
     /** The process. */
     private volatile Process process;
@@ -33,9 +37,11 @@ class ProcessRunnable implements Runnable {
      * Instantiates a new process runnable.
      *
      * @param command the command
+     * @param environment the variables added to the environment the command is started with
      */
-    ProcessRunnable(String command) {
+    ProcessRunnable(String command, Map<String, String> environment) {
         this.command = command;
+        this.environment = Map.copyOf(environment);
     }
 
     /**
@@ -53,8 +59,10 @@ class ProcessRunnable implements Runnable {
     @Override
     public void run() {
         try {
-            this.process = Runtime.getRuntime()
-                                  .exec(this.command);
+            ProcessBuilder processBuilder = new ProcessBuilder(this.command.split("\\s+"));
+            processBuilder.environment()
+                          .putAll(this.environment);
+            this.process = processBuilder.start();
 
             pipeToLog("dirigible-ttyd-stdout-reader", process.getInputStream());
             pipeToLog("dirigible-ttyd-stderr-reader", process.getErrorStream());

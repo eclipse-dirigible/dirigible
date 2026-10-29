@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -33,7 +34,7 @@ class ProcessRunnableTest {
 
     @Test
     void destroy_is_safe_before_the_process_has_started() {
-        ProcessRunnable runnable = new ProcessRunnable("noop");
+        ProcessRunnable runnable = new ProcessRunnable("noop", Map.of());
 
         assertDoesNotThrow(runnable::destroy);
         assertNull(runnable.getProcess(), "no process should have been started");
@@ -42,7 +43,7 @@ class ProcessRunnableTest {
     @Test
     @EnabledOnOs({OS.LINUX, OS.MAC})
     void reader_threads_are_daemon_and_the_process_is_destroyed() throws Exception {
-        ProcessRunnable runnable = new ProcessRunnable("sleep 30");
+        ProcessRunnable runnable = new ProcessRunnable("sleep 30", Map.of());
         try {
             runnable.run();
 
