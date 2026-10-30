@@ -161,6 +161,11 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             // descriptor without it is byte-identical to before.
             view.put("primary", true);
         }
+        if (t.isDestructive()) {
+            // A red run button and a place in the destructive group of the record's menus (#8364) -
+            // emitted only when declared, so a descriptor without it is byte-identical to before.
+            view.put("destructive", true);
+        }
         // A JSON extension module: the view object itself, read by the views aggregation without a script
         // engine.
         return JsonHelper.toJson(view);

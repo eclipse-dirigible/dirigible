@@ -146,9 +146,13 @@
 #end
 #end
           <!-- Destructive, alone in the last group - which needs no rule above it when it is the
-               only group there is. -->
-          <template x-if="menuHasAboveDelete &amp;&amp; menuHasDelete">
+               only group there is: the record's destructive actions (#8364), then Delete. -->
+          <template x-if="menuHasAboveDelete &amp;&amp; (menuDestructiveActions.length || menuHasDelete)">
             <li x-h-menu-separator></li>
+          </template>
+          <template x-for="action in menuDestructiveActions" :key="action.id">
+            <li x-h-menu-item data-variant="negative" @click="$store.customActions.trigger(action, id, loadedRecord)"
+                x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
           </template>
           <template x-if="menuHasDelete">
             <li x-h-menu-item data-variant="negative" @click="askDelete()">
@@ -607,7 +611,7 @@
                           </template>
                         </td>
                       </template>
-                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length || rowActions(r).length)">
+                      <td x-h-table-cell data-row-actions x-show="!isPreview || def.locksWithMaster === false || rows.some(r => $store.processTasks.getTasks(r).length || rowActions(r).length || rowDestructiveActions(r).length)">
                         <div class="hbox items-center justify-end gap-2">
                           <!-- The child row's own actionable user tasks (a review its process waits on),
                                one button each - offered on Preview too, where the row menu is withheld:
@@ -620,7 +624,7 @@
                           <!-- The row menu. On the master's preview it is shown only for a row whose record has
                                actions (#8289), and then offers them and Preview: an action is the child's own
                                declared operation, not an edit, so Edit and Delete stay withheld there. -->
-                          <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false || rowActions(row).length">
+                          <div class="inline-flex" x-show="!isPreview || def.locksWithMaster === false || rowActions(row).length || rowDestructiveActions(row).length">
                             <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
                               <!-- The row's record's own actions (#8289), first, as in the record page's menu. -->
@@ -633,7 +637,13 @@
                               </template>
                               <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
                               <li x-h-menu-item x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('update')" @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                              <li x-h-menu-separator x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('update') && !isForbidden('delete')"></li>
+                              <!-- The destructive group (#8364): the row's destructive actions - on the master's
+                                   preview too - then Delete, in red behind one separator. -->
+                              <li x-h-menu-separator x-show="rowDestructiveActions(row).length || ((!isPreview || def.locksWithMaster === false) && !isForbidden('update') && !isForbidden('delete'))"></li>
+                              <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                                <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
+                                    x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                              </template>
                               <li x-h-menu-item x-show="(!isPreview || def.locksWithMaster === false) && !isForbidden('delete')" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                             </ul>
                           </div>
@@ -710,12 +720,20 @@
                       <td x-h-table-cell data-row-actions>
                         <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><svg role="presentation" x-h-lucide data-lucide="external-link"></svg></button>
                         <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
-                        <template x-if="rowActions(row).length">
+                        <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
                           <span class="inline-flex">
                             <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                             <ul x-h-menu data-align="bottom-end">
                               <template x-for="action in rowActions(row)" :key="action.id">
                                 <li x-h-menu-item @click="runRowAction(action, row)"
+                                    x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                              </template>
+                              <!-- The destructive ones (#8364) last, after a separator, in red. -->
+                              <template x-if="rowActions(row).length &amp;&amp; rowDestructiveActions(row).length">
+                                <li x-h-menu-separator></li>
+                              </template>
+                              <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                                <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
                                     x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
                               </template>
                             </ul>

@@ -277,9 +277,16 @@ function detailPanel(def, masterId, master) {
     // keeps its own rule (#8118: a cross-project register asks nothing). An action is the child's own
     // declared operation, guarded by its own endpoint - not an edit through the master - so the row menu
     // offers it on the master's preview too, and the panel re-reads after it (onActionDone in init).
+    // A row's own actions, the destructive ones left for rowDestructiveActions (#8364): the row menu
+    // lists those in its destructive group, beside Delete.
     rowActions(row) {
       const store = Alpine.store("customActions");
-      return row && store ? store.getActions(this.def.entity, "entity", row) : [];
+      return row && store ? store.getActions(this.def.entity, "entity", row).filter((a) => !store.isDestructive(a)) : [];
+    },
+
+    rowDestructiveActions(row) {
+      const store = Alpine.store("customActions");
+      return row && store ? store.getActions(this.def.entity, "entity", row).filter((a) => store.isDestructive(a)) : [];
     },
 
     runRowAction(action, row) {

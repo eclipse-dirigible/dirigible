@@ -152,6 +152,16 @@
               <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
             </li>
           </template>
+          <!-- The destructive ones (#8364): the last group, after a separator (Print is always above
+               it), in the negative variant. -->
+          <template x-if="destructiveRecordActions().length">
+            <li x-h-menu-separator></li>
+          </template>
+          <template x-for="action in destructiveRecordActions()" :key="action.id">
+            <li x-h-menu-item data-variant="negative" @click="$store.customActions.trigger(action, id, record)">
+              <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+            </li>
+          </template>
         </ul>
 
         <!-- Secondary: Edit steps down to outlined when a task holds the filled slot. -->
@@ -747,12 +757,20 @@
                     <td x-h-table-cell data-row-actions>
                       <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRow(row)" :aria-label="T('$projectName:${tprefix}.defaults.open', 'Open')"><svg role="presentation" x-h-lucide data-lucide="external-link"></svg></button>
                       <!-- The row's record's own actions (#8118), beside Open - only when it has any. -->
-                      <template x-if="rowActions(row).length">
+                      <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
                         <span class="inline-flex">
                           <button type="button" x-h-button data-variant="transparent" data-size="sm" x-h-menu-trigger.dropdown aria-label="Row actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                           <ul x-h-menu data-align="bottom-end">
                             <template x-for="action in rowActions(row)" :key="action.id">
                               <li x-h-menu-item @click="runRowAction(action, row)"
+                                  x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                            </template>
+                            <!-- The destructive ones (#8364) last, after a separator, in red. -->
+                            <template x-if="rowActions(row).length &amp;&amp; rowDestructiveActions(row).length">
+                              <li x-h-menu-separator></li>
+                            </template>
+                            <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                              <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
                                   x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
                             </template>
                           </ul>

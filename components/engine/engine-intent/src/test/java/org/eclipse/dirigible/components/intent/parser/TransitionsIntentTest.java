@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -64,6 +65,33 @@ class TransitionsIntentTest {
         assertEquals("Paid == 0", t.getWhen());
         assertEquals("Void", t.getLabel());
         assertEquals("ban", t.getIcon());
+    }
+
+    /** {@code destructive: true} (#8364): opt-in, and kept on the model for the generator. */
+    @Test
+    void aDestructiveTransitionParses() {
+        assertTrue(IntentParser.parse(VALID + "    destructive: true\n")
+                               .getTransitions()
+                               .get(0)
+                               .isDestructive());
+        assertFalse(IntentParser.parse(VALID)
+                                .getTransitions()
+                                .get(0)
+                                .isDestructive(),
+                "destructive is opt-in");
+    }
+
+    /** A destructive transition is never the record's filled button (#8364). */
+    @Test
+    void aDestructivePrimaryTransitionIsRefused() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(VALID + "    destructive: true\n    primary: true\n"));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(issue -> issue.contains(
+                             "transition [VoidInvoice] declares destructive and primary - a destructive action is never the record's filled button")),
+                ex.getIssues()
+                  .toString());
     }
 
     @Test

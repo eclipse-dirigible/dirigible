@@ -1104,10 +1104,18 @@ document.addEventListener('alpine:init', () => {
       return this.recordActions.find((a) => a.primary) || null;
     },
 
-    // The record's actions the overflow menu lists: all of them but the one in the filled slot.
+    // The record's actions the overflow menu lists: all of them but the one in the filled slot and the
+    // destructive ones, which menuDestructiveActions lists in the destructive group (#8364).
     get menuRecordActions() {
       const primary = this.primaryAction === 'action' ? this.primaryCustomAction : null;
-      return this.recordActions.filter((a) => a !== primary);
+      const store = Alpine.store('customActions');
+      return this.recordActions.filter((a) => a !== primary && !store.isDestructive(a));
+    },
+
+    // The record's destructive actions (#8364): last, beside Delete, in the negative variant.
+    get menuDestructiveActions() {
+      const store = Alpine.store('customActions');
+      return this.recordActions.filter((a) => store.isDestructive(a));
     },
 
     runPrimaryAction() {
@@ -1128,7 +1136,7 @@ document.addEventListener('alpine:init', () => {
 
     get hasOverflowMenu() {
       if (!this.id || !(this.isEdit || this.isPreview)) return false;
-      return this.menuHasAboveDelete || this.menuHasDelete;
+      return this.menuHasAboveDelete || this.menuDestructiveActions.length > 0 || this.menuHasDelete;
     },
 
     // Whether the side rail's Details block holds anything. Its properties are the ones the SERVER

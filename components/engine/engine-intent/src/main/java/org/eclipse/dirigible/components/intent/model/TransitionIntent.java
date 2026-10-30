@@ -66,6 +66,13 @@ public class TransitionIntent {
      * (#8119). A pending process task still comes first. Entity scope only.
      */
     private Boolean primary;
+
+    /**
+     * When {@code true} the action destroys data (#8364): its dialog runs from a red button, and it
+     * sits in the destructive group of every menu that lists the record's actions, beside Delete.
+     * Excludes {@link #primary}; entity scope only.
+     */
+    private Boolean destructive;
     /**
      * Optional outbound mail sent AFTER the status flip commits - "on Void, mail the counterparty". The
      * reusable notify block ({@code to} / {@code subject} / {@code body} / {@code attach: print}),
@@ -149,6 +156,19 @@ public class TransitionIntent {
     /** Whether this action is the record's filled button when it applies (see {@link #primary}). */
     public boolean isPrimary() {
         return Boolean.TRUE.equals(primary);
+    }
+
+    public Boolean getDestructive() {
+        return destructive;
+    }
+
+    public void setDestructive(Boolean destructive) {
+        this.destructive = destructive;
+    }
+
+    /** Whether this action destroys data (see {@link #destructive}). */
+    public boolean isDestructive() {
+        return Boolean.TRUE.equals(destructive);
     }
 
     public NotificationIntent getNotify() {

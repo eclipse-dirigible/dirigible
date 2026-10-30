@@ -331,10 +331,15 @@ document.addEventListener('alpine:init', () => {
     },
     // A row's own contributed actions, for its row menu (#8116): the sheet's rule, applied to the row -
     // the same store call, so the same status guards and roles. A method, not a getter: the row menu
-    // evaluates it per row, and the row already carries the status the guards read.
+    // evaluates it per row, and the row already carries the status the guards read. The destructive
+    // ones (#8364) are rowDestructiveActions', listed in the menu's destructive group beside Delete.
     rowActions(row) {
       const actions = Alpine.store('customActions');
-      return (row && actions) ? actions.getActions(this.caView, 'entity', row) : [];
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row).filter((a) => !actions.isDestructive(a)) : [];
+    },
+    rowDestructiveActions(row) {
+      const actions = Alpine.store('customActions');
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row).filter((a) => actions.isDestructive(a)) : [];
     },
     // Runs one of a row's actions on that row. Here rather than in the markup: there, a $store call
     // whose arguments carry the row's key expression is read by Velocity as one reference, and refused.
@@ -364,7 +369,13 @@ document.addEventListener('alpine:init', () => {
     get menuTasks() { return this.primaryAction === 'task' ? this.recordTasks.slice(1) : this.recordTasks; },
     get menuActions() {
       const primary = this.primaryCustomAction;
-      return this.recordActions.filter((a) => a !== primary);
+      const store = Alpine.store('customActions');
+      return this.recordActions.filter((a) => a !== primary && !store.isDestructive(a));
+    },
+    // The record's destructive actions (#8364), in the delete group: never the primary, never above.
+    get menuDestructiveActions() {
+      const store = Alpine.store('customActions');
+      return this.recordActions.filter((a) => store.isDestructive(a));
     },
     runPrimaryAction() {
       const action = this.primaryCustomAction;

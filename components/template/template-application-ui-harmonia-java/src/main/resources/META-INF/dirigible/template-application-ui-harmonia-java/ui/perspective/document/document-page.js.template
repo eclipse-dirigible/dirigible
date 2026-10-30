@@ -1711,7 +1711,15 @@ document.addEventListener('alpine:init', () => {
     // reads a status) are offered at once.
     recordActions() {
       const store = Alpine.store('customActions');
-      const actions = store.getActions(this.caView, 'entity', this.record);
+      const actions = store.getActions(this.caView, 'entity', this.record).filter((action) => !store.isDestructive(action));
+      return this.recordLoaded ? actions : actions.filter((action) => !store.isGuarded(action));
+    },
+
+    // The record's destructive actions (#8364): the menu's last group, after a separator, in the
+    // negative variant - by the same rule as recordActions().
+    destructiveRecordActions() {
+      const store = Alpine.store('customActions');
+      const actions = store.getActions(this.caView, 'entity', this.record).filter((action) => store.isDestructive(action));
       return this.recordLoaded ? actions : actions.filter((action) => !store.isGuarded(action));
     },
 

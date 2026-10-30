@@ -285,6 +285,17 @@ class CallActionDescriptorTest {
         assertTrue(!plain.contains("\"primary\""), plain);
     }
 
+    /** The descriptor carries {@code destructive} when it is declared, and only then (#8364). */
+    @Test
+    void aDestructiveActionCarriesTheFlagOnlyWhenDeclared() {
+        String destructive = compact(
+                descriptor(YAML.replace("    success: Escalation requested", "    success: Escalation requested\n    destructive: true"),
+                        "EscalateTicket"));
+        assertTrue(destructive.contains("\"destructive\":true"), destructive);
+        String plain = compact(descriptor(YAML, "EscalateTicket"));
+        assertFalse(plain.contains("\"destructive\""), plain);
+    }
+
     private static String compact(String descriptor) {
         return descriptor.replaceAll("\\s+", "");
     }

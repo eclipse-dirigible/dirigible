@@ -75,9 +75,16 @@ function relatedPanel(def, recordId) {
     // for a same-project register: a cross-project source's descriptors belong to its own application.
     // Read-only still: an action is the source's own declared operation, guarded by its own endpoint,
     // not an edit through the register - which re-reads its rows after one (detailPanel's onActionDone).
+    // A row's own actions, the destructive ones left for rowDestructiveActions (#8364): the row menu
+    // lists those last, after a separator, in the negative variant.
     rowActions(row) {
       const store = Alpine.store('customActions');
-      return (this.def.local && row && store) ? store.getActions(this.def.entity, 'entity', row) : [];
+      return (this.def.local && row && store) ? store.getActions(this.def.entity, 'entity', row).filter((a) => !store.isDestructive(a)) : [];
+    },
+
+    rowDestructiveActions(row) {
+      const store = Alpine.store('customActions');
+      return (this.def.local && row && store) ? store.getActions(this.def.entity, 'entity', row).filter((a) => store.isDestructive(a)) : [];
     },
 
     runRowAction(action, row) {
