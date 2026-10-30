@@ -45,10 +45,13 @@ class HarmoniaFieldDisplayIT {
             "partner/partner-form-view.html.template", "partner/partner-document-view.html.template");
 
     /**
-     * The record page formats its values through its own preview helpers ({@code fieldText} and friends
-     * in {@code form-page.js}, issue #7491), so only its role gate goes through the shared one.
+     * The record page prints its values through its own {@code fieldText} (issue #7491), which goes
+     * through the shared helper since #8367 and adds the em dash for an empty value.
      */
     private static final String RECORD_PAGE = "perspective/manage/form-view.html.template";
+
+    /** The record page's rail, from its heading to the history block (or the end of the rail). */
+    private static final String RAIL_START = "x-text=\"T('$projectName:${tprefix}.defaults.details', 'Details')\"";
 
     private static final String OPTIONS = "[{ value: 1, text: 'Draft' }, { value: 3, text: 'Sent' }]";
 
@@ -83,6 +86,20 @@ class HarmoniaFieldDisplayIT {
         }
     }
 
+    /**
+     * #8367: a value shown as stored keeps its seconds - the record page used to format the date
+     * input's buffer, which keeps hours and minutes only, so the instance pattern padded them with
+     * {@code :00}.
+     */
+    @Test
+    void aTimestampKeepsItsSecondsUnderASecondsPattern() {
+        try (Context context = load("dd.MM.yyyy HH:mm:ss")) {
+            assertEquals("30.10.2026 13:49:11", display(context, "'2026-10-30T13:49:11', 'DATETIME-LOCAL', '', null"));
+            assertEquals("30.10.2026 13:49:11", display(context, "[2026, 10, 30, 13, 49, 11, 0], 'DATETIME-LOCAL', '', null"));
+            assertEquals("21", display(context, "21, 'TEXTBOX', '', null"), "an integer prints as stored, without decimals");
+        }
+    }
+
     @Test
     void aFloatUsesItsPatternAndAnIntegerIsLeftAlone() {
         try (Context context = load()) {
@@ -107,18 +124,56 @@ class HarmoniaFieldDisplayIT {
     void everyReadOnlyCardPrintsThroughTheSharedHelper() throws Exception {
         for (String view : VIEWS) {
             String content = read(UI_BASE + view);
-            assertTrue(content.contains("#macro(valueDisplay $property)fieldDisplay(form.${property.name}, "),
+            assertTrue(
+                    content.contains(RECORD_PAGE.equals(view)
+                            ? "#macro(valueDisplay $property)fieldText(loadedRecord?.${property.name}, #displayArgs($property))"
+                            : "#macro(valueDisplay $property)fieldDisplay(record.${property.name}, #displayArgs($property))"),
                     view + " does not define its value display over the shared fieldDisplay()");
             assertTrue(content.contains("#valueGate($property)"), view + " gates a read-only card row outside the shared helper");
-            if (!RECORD_PAGE.equals(view)) {
-                assertTrue(content.contains("x-text=\"#valueDisplay($property)\""),
-                        view + " renders a read-only card that does not go through the shared helper");
-            }
+            assertTrue(content.contains("x-text=\"#valueDisplay($property)"),
+                    view + " renders a read-only card that does not go through the shared helper");
             assertTrue(content.contains("#macro(valueGate $property)x-show=\"#if($property.roleRead)canSee('${property.name}') && #end"),
                     view + " shows a role-scoped read-only field without asking canSee()");
             assertFalse(content.contains("x-text=\"form."), view + " prints a raw form value");
             assertFalse(content.contains("headerDisplay("), view + " still calls a per-page copy of the formatter");
         }
+    }
+
+    /**
+     * #8367: what a read-only card prints is the record as the server answered it, never the input
+     * buffer - whose dates are cut to the shape a date input takes. The gates may read the form: they
+     * only test for emptiness.
+     */
+    @Test
+    void everyReadOnlyCardReadsTheServedRecord() throws Exception {
+        for (String view : VIEWS) {
+            String content = read(UI_BASE + view);
+            String macro = lineStartingWith(content, "#macro(valueDisplay $property)");
+            assertFalse(macro.contains("form."), view + " prints its read-only values from the input buffer: " + macro);
+            assertTrue(macro.contains(RECORD_PAGE.equals(view) ? "loadedRecord?." : "record."),
+                    view + " does not print its read-only values from the served record: " + macro);
+        }
+        String record = read(UI_BASE + RECORD_PAGE);
+        int start = record.indexOf(RAIL_START);
+        assertTrue(start > 0, "the record page has no Details rail");
+        int end = record.indexOf("#if($history == \"true\")", start);
+        String rail = record.substring(start, end > 0 ? end : record.length());
+        for (String line : rail.split("\n")) {
+            if (line.contains("x-text=")) {
+                assertFalse(line.substring(line.indexOf("x-text="))
+                                .contains("form."),
+                        "a rail row of the record page prints the input buffer: " + line.trim());
+            }
+        }
+    }
+
+    private static String lineStartingWith(String content, String prefix) {
+        for (String line : content.split("\n")) {
+            if (line.startsWith(prefix)) {
+                return line;
+            }
+        }
+        throw new IllegalStateException("No line starts with " + prefix);
     }
 
     private static String display(Context context, String arguments) {
@@ -132,6 +187,10 @@ class HarmoniaFieldDisplayIT {
      * separators.
      */
     private static Context load() {
+        return load("dd.MM.yyyy HH:mm");
+    }
+
+    private static Context load(String dateTimePattern) {
         Context context = Context.newBuilder("js")
                                  .allowAllAccess(true)
                                  // The interpreter-only notice is written straight to the native stream,
@@ -139,8 +198,8 @@ class HarmoniaFieldDisplayIT {
                                  .option("engine.WarnInterpreterOnly", "false")
                                  .build();
         context.eval("js",
-                "var window = this; var __stored = { 'codbex.harmonia.format.date': 'dd.MM.yyyy',"
-                        + " 'codbex.harmonia.format.datetime': 'dd.MM.yyyy HH:mm', 'codbex.harmonia.format.number': '#,##0.00' };"
+                "var window = this; var __stored = { 'codbex.harmonia.format.date': 'dd.MM.yyyy'," + " 'codbex.harmonia.format.datetime': '"
+                        + dateTimePattern + "', 'codbex.harmonia.format.number': '#,##0.00' };"
                         + " var localStorage = { getItem: function (k) { return __stored[k] || null; } };");
         for (String script : List.of("services/format.js", "components/pages/basePage.js")) {
             try {

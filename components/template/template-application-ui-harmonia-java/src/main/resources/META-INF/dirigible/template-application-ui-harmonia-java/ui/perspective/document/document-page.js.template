@@ -1602,7 +1602,8 @@ document.addEventListener('alpine:init', () => {
 
     // One line of the document's own identity under the title, from the properties the model marks
     // as major - the flag that picks the list's columns. The number is the title and the status is
-    // the badge, so both are skipped; every value goes through the shared fieldDisplay.
+    // the badge, so both are skipped; every value is the stored one (`record`, #8367), through the
+    // shared fieldDisplay.
     summaryLine() {
       if (!(this.isEdit || this.isPreview)) return '';
       const parts = [];
@@ -1611,7 +1612,7 @@ document.addEventListener('alpine:init', () => {
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
-      parts.push(this.fieldDisplay(this.form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end));
+      parts.push(this.fieldDisplay(this.record.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end));
 #if($property.roleRead)
       }
 #end
