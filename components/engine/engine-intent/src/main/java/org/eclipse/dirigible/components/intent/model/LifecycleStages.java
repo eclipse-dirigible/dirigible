@@ -66,6 +66,23 @@ public final class LifecycleStages {
     /** The seed-row key carrying the stage classification. */
     public static final String STAGE_KEY = "stage";
 
+    /**
+     * The seed-row key carrying a status's explicit badge colour (#8373) - metadata like
+     * {@link #STAGE_KEY}, never a column.
+     */
+    public static final String VARIANT_KEY = "variant";
+
+    /**
+     * The closed {@code variant:} vocabulary a status seed row may declare, mapped to the Harmonia
+     * badge variant it renders with.
+     */
+    public static final Map<String, String> VARIANTS = Map.of("success", "positive", "info", "information", "warning", "warning",
+            "destructive", "negative", "neutral", "outline", "muted", "default");
+
+    /** The Harmonia badge variant each stage renders with when its row declares no {@code variant:}. */
+    private static final Map<String, String> STAGE_BADGES =
+            Map.of(DRAFT, "outline", LIVE, "positive", CANCELLED, "negative", VOID, "default");
+
     private LifecycleStages() {}
 
     /**
@@ -121,6 +138,69 @@ public final class LifecycleStages {
             }
         }
         return stages;
+    }
+
+    /**
+     * The badge colour of each status of a nomenclature (#8373): seed id to Harmonia badge variant, in
+     * seed order. A row's {@code variant:} wins over its {@code stage:}; a row declaring neither is
+     * absent, so the page falls back to guessing from the status name. Empty when the entity is not
+     * seeded in this model or nothing on its rows classifies a colour. A nomenclature that declares its
+     * own {@code stage} (or {@code variant}) property contributes no stage (or variant) - the row key
+     * is then data.
+     *
+     * @param model the model whose seeds carry the nomenclature
+     * @param statusEntity the status entity's name
+     * @return seed id to badge variant, never {@code null}
+     */
+    public static Map<Integer, String> badgeVariantsOf(IntentModel model, String statusEntity) {
+        Map<Integer, String> variants = new LinkedHashMap<>();
+        if (model == null || statusEntity == null) {
+            return variants;
+        }
+        EntityIntent entity = entityByName(model, statusEntity);
+        if (entity == null) {
+            return variants;
+        }
+        boolean stagesAreData = declaresStageProperty(entity);
+        boolean variantsAreData = declaresProperty(entity, VARIANT_KEY);
+        String idField = idFieldOf(entity);
+        for (SeedIntent seed : model.getSeeds()) {
+            if (!statusEntity.equals(seed.getEntity()) || seed.isLanguageSeed()) {
+                continue;
+            }
+            for (Map<String, Object> row : seed.getRows()) {
+                Integer id = integerOf(row.get(idField));
+                if (id == null) {
+                    continue;
+                }
+                String variant = variantsAreData ? null : variantOf(row);
+                if (variant == null && !stagesAreData) {
+                    String stage = stageOf(row);
+                    variant = stage == null ? null : STAGE_BADGES.get(stage);
+                }
+                if (variant != null) {
+                    variants.putIfAbsent(id, variant);
+                }
+            }
+        }
+        return variants;
+    }
+
+    /**
+     * The Harmonia badge variant a seed row's {@code variant:} names, or {@code null} when it declares
+     * none or one outside the vocabulary (the parser reports that separately).
+     *
+     * @param row the seed row
+     * @return the badge variant, or {@code null}
+     */
+    public static String variantOf(Map<String, Object> row) {
+        Object raw = row == null ? null : row.get(VARIANT_KEY);
+        if (raw == null) {
+            return null;
+        }
+        return VARIANTS.get(String.valueOf(raw)
+                                  .trim()
+                                  .toLowerCase(Locale.ROOT));
     }
 
     /**
@@ -187,17 +267,29 @@ public final class LifecycleStages {
      * @return whether {@code stage} is a property of the entity
      */
     public static boolean declaresStageProperty(EntityIntent entity) {
+        return declaresProperty(entity, STAGE_KEY);
+    }
+
+    /**
+     * Whether the entity declares a field or relation of the given name (case-insensitively) - in which
+     * case a seed row's key of that name is the column's DATA, not metadata.
+     *
+     * @param entity the entity to inspect
+     * @param name the property name
+     * @return whether {@code name} is a property of the entity
+     */
+    public static boolean declaresProperty(EntityIntent entity, String name) {
         if (entity == null) {
             return false;
         }
         for (FieldIntent field : entity.getFields()) {
-            if (STAGE_KEY.equalsIgnoreCase(field.getName())) {
+            if (name.equalsIgnoreCase(field.getName())) {
                 return true;
             }
         }
         if (entity.getRelations() != null) {
             for (RelationIntent relation : entity.getRelations()) {
-                if (STAGE_KEY.equalsIgnoreCase(relation.getName())) {
+                if (name.equalsIgnoreCase(relation.getName())) {
                     return true;
                 }
             }

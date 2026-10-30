@@ -13479,6 +13479,7 @@ public final class IntentParser {
                 validateLanguageSeed(seed, byName.get(seed.getEntity()), issues);
             } else {
                 validateSeedStages(seed, byName.get(seed.getEntity()), nomenclatures, issues);
+                validateSeedVariants(seed, byName.get(seed.getEntity()), nomenclatures, issues);
                 validateSeedRowKeys(seed, byName.get(seed.getEntity()), issues);
             }
         }
@@ -13539,6 +13540,58 @@ public final class IntentParser {
     }
 
     /**
+     * A seed row's optional {@code variant:} marker (#8373) names the badge colour its status renders
+     * with ({@code success} / {@code info} / {@code warning} / {@code destructive} / {@code neutral} /
+     * {@code muted}), winning over the row's {@code stage:}. Like {@code stage} it is metadata, never a
+     * column: it must carry the row's {@code id} (what it colours), stay inside the vocabulary, and sit
+     * on a status nomenclature of this model - a badge colour means nothing on a seed no status
+     * relation reads. An entity that declares its OWN {@code variant} property keeps the key as data: a
+     * status nomenclature doing so collides with the marker and is rejected, any other entity is left
+     * alone.
+     */
+    private static void validateSeedVariants(SeedIntent seed, EntityIntent entity, Set<String> statusNomenclatures, List<String> issues) {
+        String subject = "seed [" + seed.getName() + "]";
+        boolean anyVariant = seed.getRows()
+                                 .stream()
+                                 .anyMatch(row -> row.containsKey(LifecycleStages.VARIANT_KEY));
+        if (!anyVariant || entity == null) {
+            return; // the unknown entity is reported separately
+        }
+        boolean declared = LifecycleStages.declaresProperty(entity, LifecycleStages.VARIANT_KEY);
+        if (!statusNomenclatures.contains(entity.getName())) {
+            if (!declared) {
+                issues.add(subject + " declares variant, but [" + entity.getName()
+                        + "] is no entity's status - variant colours a status badge");
+            }
+            return;
+        }
+        if (declared) {
+            issues.add(subject + " uses the badge variant marker but entity [" + entity.getName()
+                    + "] declares its own `variant` property - rename that property, the seed key cannot be both data and"
+                    + " badge colour");
+            return;
+        }
+        String idField = seedIdField(entity);
+        for (Map<String, Object> row : seed.getRows()) {
+            if (!row.containsKey(LifecycleStages.VARIANT_KEY)) {
+                continue;
+            }
+            Object raw = row.get(LifecycleStages.VARIANT_KEY);
+            String variant = raw == null ? ""
+                    : String.valueOf(raw)
+                            .trim()
+                            .toLowerCase(Locale.ROOT);
+            if (!LifecycleStages.VARIANTS.containsKey(variant)) {
+                issues.add(subject + " row declares variant [" + raw + "] - expected one of "
+                        + new java.util.TreeSet<>(LifecycleStages.VARIANTS.keySet()));
+            }
+            if (row.get(idField) == null) {
+                issues.add(subject + " row declares a variant but no [" + idField + "] - the variant colours a status seed id");
+            }
+        }
+    }
+
+    /**
      * A seed row's keys are the entity's own declared names: a field, a to-one relation carrying the
      * FK, or a subset relation carrying its value column. The CSV generator emits a column per declared
      * field plus one per referenced relation and reads each cell by that exact name, so a key matching
@@ -13573,8 +13626,9 @@ public final class IntentParser {
         }
         for (Map<String, Object> row : seed.getRows()) {
             for (String key : row.keySet()) {
-                // `stage` is the lifecycle classification marker - metadata about the row, never a column.
-                if (LifecycleStages.STAGE_KEY.equals(key)) {
+                // `stage` is the lifecycle classification marker - metadata about the row, never a column;
+                // `variant` is the badge colour marker (#8373) - the same kind of metadata.
+                if (LifecycleStages.STAGE_KEY.equals(key) || LifecycleStages.VARIANT_KEY.equals(key)) {
                     continue;
                 }
                 if (!declared.contains(key)) {

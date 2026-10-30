@@ -685,6 +685,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putPickable(fkProperty, name, relation, null);
                 putInlineCreate(fkProperty, relation);
                 putStatusSteps(fkProperty, model, entity, relation);
+                putStatusVariants(fkProperty, model, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -2391,6 +2392,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("widgetStatusSteps", steps.stream()
                                             .map(String::valueOf)
                                             .collect(Collectors.joining(",")));
+        }
+    }
+
+    /**
+     * Emit the status badge's colours (#8373) as the {@code widgetStatusVariants} attribute of the
+     * {@code DOCUMENT_STATUS} property: a JSON object of seed id to Harmonia badge variant
+     * ({@link LifecycleStages#badgeVariantsOf} - a row's {@code variant:} over its {@code stage:}),
+     * which every page carrying the badge reads as its {@code statusVariants} map before guessing from
+     * the status name. Nothing is written when no row classifies a colour, or for a cross-model status
+     * whose seeds are not on this model, so such a model generates as before.
+     */
+    private static void putStatusVariants(Map<String, Object> p, IntentModel model, RelationIntent relation) {
+        if (!relation.isEntityStatus() || relation.isCrossModel()) {
+            return;
+        }
+        Map<Integer, String> variants = LifecycleStages.badgeVariantsOf(model, relation.getTo());
+        if (!variants.isEmpty()) {
+            p.put("widgetStatusVariants", variants.entrySet()
+                                                  .stream()
+                                                  .map(e -> "\"" + e.getKey() + "\":\"" + e.getValue() + "\"")
+                                                  .collect(Collectors.joining(",", "{", "}")));
         }
     }
 

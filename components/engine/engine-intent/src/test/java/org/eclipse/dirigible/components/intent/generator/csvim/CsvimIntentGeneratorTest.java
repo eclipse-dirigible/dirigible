@@ -175,6 +175,40 @@ class CsvimIntentGeneratorTest {
                      .get(0)));
     }
 
+    @Test
+    void theBadgeVariantMarkerIsNotACsvColumn() {
+        IntentModel model = IntentParser.parse("""
+                name: shipping
+                entities:
+                  - name: ShipmentStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Shipment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ShipmentStatus, function: EntityStatus, init: 1 }
+                seeds:
+                  - name: shipment-statuses
+                    entity: ShipmentStatus
+                    rows:
+                      - { id: 1, name: BOOKED, stage: draft }
+                      - { id: 2, name: IN_TRANSIT, variant: info }
+                      - { id: 3, name: DELIVERED, stage: live, variant: success }
+                """);
+        assertEquals("""
+                SHIPMENT_STATUS_ID,SHIPMENT_STATUS_NAME
+                1,BOOKED
+                2,IN_TRANSIT
+                3,DELIVERED
+                """, CsvimIntentGenerator.renderCsvForTest(model.getEntities()
+                                                                .get(0),
+                model.getSeeds()
+                     .get(0)));
+    }
+
     private static final String MULTILINGUAL_YAML = """
             name: uoms
             languages: [en, bg]

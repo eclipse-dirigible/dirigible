@@ -55,7 +55,7 @@
           <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="openEntity(row)">
             <template x-for="col in columns" :key="col.name">
               <td x-h-table-cell :class="col.number ? 'text-right' : ''">
-                <template x-if="col.status"><span x-h-badge :data-variant="statusVariant(statusText(row))" x-text="statusText(row)"></span></template>
+                <template x-if="col.status"><span x-h-badge :data-variant="statusVariant(statusText(row), row[col.name])" x-text="statusText(row)"></span></template>
                 <template x-if="!col.status"><span x-text="display(row, col)"></span></template>
               </td>
             </template>
