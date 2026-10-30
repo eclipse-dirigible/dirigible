@@ -323,6 +323,41 @@ class ModelParameterProcessorTest {
         assertNull(entity.get("orderByCriteria"));
     }
 
+    /**
+     * The record page prints the line under its title from {@code subtitleProperties} (dirigible
+     * #8370): the properties the {@code subtitleOrder} names, in that order, matched case-insensitively
+     * - the same maps the form iterates, and nothing else.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void subtitlePropertiesFollowTheSubtitleOrder() {
+        Map<String, Object> number = property("Number", "VARCHAR");
+        Map<String, Object> due = property("DueDate", "DATE");
+        Map<String, Object> customer = property("Customer", "INTEGER");
+        Map<String, Object> entity = entity("Order", "Orders", number, due, customer);
+        entity.put("subtitleOrder", "dueDate,Customer");
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        List<Map<String, Object>> subtitle = (List<Map<String, Object>>) entity.get("subtitleProperties");
+        assertEquals(2, subtitle.size());
+        assertSame(due, subtitle.get(0));
+        assertSame(customer, subtitle.get(1));
+    }
+
+    /**
+     * Without a {@code subtitleOrder} there is no subtitle line - the major columns no longer stand in.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void noSubtitleOrderMeansNoSubtitleProperties() {
+        Map<String, Object> entity = entity("Order", "Orders", property("Number", "VARCHAR"), property("DueDate", "DATE"));
+
+        ModelParameterProcessor.process(model(entity), parameters());
+
+        assertEquals(List.of(), entity.get("subtitleProperties"));
+    }
+
     /** Without a {@code listOrder} the list follows the control order, as before #7614. */
     @Test
     @SuppressWarnings("unchecked")

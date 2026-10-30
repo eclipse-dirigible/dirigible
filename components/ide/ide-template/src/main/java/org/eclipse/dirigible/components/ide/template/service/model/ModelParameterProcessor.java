@@ -155,6 +155,7 @@ final class ModelParameterProcessor {
         resolveDetailLayoutWithoutMaster(entity);
         resolveVisibleWhen(entity);
         resolveListProperties(entity);
+        resolveSubtitleProperties(entity);
     }
 
     /**
@@ -225,6 +226,33 @@ final class ModelParameterProcessor {
             }
         }
         entity.put("listProperties", ordered);
+    }
+
+    /**
+     * Derives {@code subtitleProperties}, the values the record page prints on the line under its title
+     * (intent {@code subtitle:}, dirigible #8370): the properties the entity's {@code subtitleOrder}
+     * names, in that order - the same property maps the form iterates, so each value is printed with
+     * its own widget, options and pattern. Without a {@code subtitleOrder} the list is empty and the
+     * page has no subtitle line.
+     *
+     * @param entity the entity
+     */
+    private static void resolveSubtitleProperties(Map<String, Object> entity) {
+        List<Map<String, Object>> subtitle = new ArrayList<>();
+        String subtitleOrder = str(entity, "subtitleOrder");
+        if (subtitleOrder != null && !subtitleOrder.isBlank()) {
+            List<Map<String, Object>> properties = asMaps(entity.get("properties"));
+            for (String wanted : subtitleOrder.split(",")) {
+                for (Map<String, Object> property : properties) {
+                    if (!subtitle.contains(property) && wanted.trim()
+                                                              .equalsIgnoreCase(str(property, "name"))) {
+                        subtitle.add(property);
+                        break;
+                    }
+                }
+            }
+        }
+        entity.put("subtitleProperties", subtitle);
     }
 
     /**

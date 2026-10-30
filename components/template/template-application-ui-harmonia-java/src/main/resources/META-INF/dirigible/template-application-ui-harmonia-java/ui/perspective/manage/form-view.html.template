@@ -58,6 +58,9 @@
     <div class="hbox items-start justify-between gap-4">
 
       <div class="vbox min-w-0 gap-1">
+        <!-- Titled with the record's own label once it has one (#8370); the caption above it then says
+             what the record is - the entity name in preview, "Update ..." in edit. -->
+        <span x-h-text.muted class="text-xs" data-record-caption x-show="headerCaption()" x-text="headerCaption()"></span>
         <div class="hbox flex-wrap items-center gap-2">
           <h1 x-h-text.h3 class="truncate" x-text="headerTitle()"></h1>
 #if($statusProp != "")
@@ -73,9 +76,14 @@
           <span x-h-badge class="shrink-0" data-variant="outline" x-show="!mutable" :title="#if($immutableAlways)T('$projectName:${tprefix}.messages.immutableAlways', 'This record cannot be changed once it is created.')#elseif($immutableStatusProperty)T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')#{else}T('$projectName:${tprefix}.messages.immutablePeriod', 'This record is read-only - its accounting period is closed; book the correction in an open period.')#end" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
         </div>
-        <!-- Preview says WHICH record this is, from the properties the model marks as major; the
+        <!-- Preview prints the line the model declares under the title (intent `subtitle:`, #8370) -
+             each value with its field's label as the tooltip; without one there is no line. The
              editable modes say what the asterisks mean instead. -->
-        <span x-h-text.muted class="truncate text-sm" x-show="isPreview &amp;&amp; summaryLine()" x-text="summaryLine()"></span>
+        <span x-h-text.muted class="truncate text-sm" data-record-subtitle x-show="isPreview &amp;&amp; subtitleParts().length">
+          <template x-for="(part, i) in subtitleParts()" :key="i">
+            <span><span x-text="i ? ' \u00b7 ' : ''"></span><span :title="part.title" x-text="part.text"></span></span>
+          </template>
+        </span>
         <span x-h-text.muted class="text-sm" x-show="!isPreview &amp;&amp; canWrite()" x-text="T('$projectName:${tprefix}.messages.requiredLegend', 'Fields marked * are required')"></span>
       </div>
 
