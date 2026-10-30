@@ -136,6 +136,11 @@ public class EntityIntent {
      */
     private List<String> subtitle = new ArrayList<>();
     /**
+     * Optional banners on the record page (dirigible #8371): sentences shown above the form while the
+     * record, or one of its related rows, needs attention - with the action that fixes it.
+     */
+    private List<BannerIntent> banners = new ArrayList<>();
+    /**
      * Optional default ROW order (issue #7727): the property names - fields and to-one relations,
      * case-insensitive - the entity's rows are sorted by, each optionally with a direction
      * ({@code orderBy: [number]}, {@code orderBy: [{ field: date, dir: desc }, number]}). Applied as
@@ -413,6 +418,14 @@ public class EntityIntent {
 
     public void setOrder(List<String> order) {
         this.order = order == null ? new ArrayList<>() : order;
+    }
+
+    public List<BannerIntent> getBanners() {
+        return banners;
+    }
+
+    public void setBanners(List<BannerIntent> banners) {
+        this.banners = banners == null ? new ArrayList<>() : banners;
     }
 
     public List<String> getSubtitle() {

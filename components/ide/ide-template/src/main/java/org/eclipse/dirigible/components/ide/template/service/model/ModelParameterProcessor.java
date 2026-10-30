@@ -24,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
@@ -96,6 +97,7 @@ final class ModelParameterProcessor {
             collectScopedChildren(entities);
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
+            resolveBanners(entities, parameters);
             resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
@@ -1901,6 +1903,66 @@ final class ModelParameterProcessor {
                 resolveRelatedRegister(register, entities, parameters);
             }
         }
+    }
+
+    /**
+     * Resolves the record-page banners (dirigible #8371) into what the record page evaluates: each
+     * condition as the term list {@code basePage.visibleWhenHolds} reads ({@code whenTermsJs}, as a
+     * composition child's {@code visibleWhen} renders), the text as a JS string, the register a
+     * {@code related} banner reads - the controller its panel searches and the key its rows are read
+     * under - the subject's date-typed placeholders, which the page formats as dates, and the id of the
+     * action descriptor its button looks up.
+     *
+     * @param entities every entity in the model, the registers already resolved
+     * @param parameters the generation parameters
+     */
+    private static void resolveBanners(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            for (Map<String, Object> banner : asMaps(entity.get("banners"))) {
+                banner.put("textJs", JsLiterals.escape(strOr(banner, "text", "")));
+                banner.put("whenTermsJs", termsOrEmpty(str(banner, "when")));
+                Map<String, Object> related = asMap(banner.get("related"));
+                if (related != null) {
+                    related.put("whenTermsJs", termsOrEmpty(str(related, "when")));
+                    for (Map<String, Object> register : asMaps(entity.get("relatedEntities"))) {
+                        if (str(register, "entity") != null && str(register, "entity").equals(str(related, "entity"))
+                                && Objects.equals(str(register, "fkProperty"), str(related, "fkProperty"))) {
+                            related.put("apiPath", str(register, "apiPath"));
+                        }
+                    }
+                    related.put("register", strOr(related, "apiPath", "") + "|" + strOr(related, "fkProperty", ""));
+                }
+                List<String> dates = new ArrayList<>();
+                Map<String, Object> subject = entityNamed(entities, str(banner, "subject"));
+                String text = strOr(banner, "text", "");
+                for (Map<String, Object> property : subject == null ? List.<Map<String, Object>>of() : asMaps(subject.get("properties"))) {
+                    String name = str(property, "name");
+                    if (name != null && isTrue(property, "isDateType") && text.contains("{" + name + "}")) {
+                        dates.add("'" + JsLiterals.escape(name) + "'");
+                    }
+                }
+                banner.put("datesJs", "[" + String.join(", ", dates) + "]");
+                if (str(banner, "action") != null) {
+                    banner.put("actionId", str(parameters, "projectName") + "-" + str(banner, "subject") + "-" + str(banner, "action"));
+                }
+            }
+        }
+    }
+
+    /** A condition's term list, or the empty list - which every row and record satisfies. */
+    private static String termsOrEmpty(String condition) {
+        String terms = VisibleWhenLiterals.termsLiteral(condition);
+        return terms == null ? "[]" : terms;
+    }
+
+    /** The entity of that name, or null. */
+    private static Map<String, Object> entityNamed(List<Map<String, Object>> entities, String name) {
+        for (Map<String, Object> entity : entities) {
+            if (name != null && name.equals(str(entity, "name"))) {
+                return entity;
+            }
+        }
+        return null;
     }
 
     /**

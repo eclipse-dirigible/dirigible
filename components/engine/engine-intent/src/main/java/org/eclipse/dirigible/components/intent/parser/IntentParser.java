@@ -57,6 +57,8 @@ import org.eclipse.dirigible.components.intent.generator.ToOneWalk;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionCallIntent;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
+import org.eclipse.dirigible.components.intent.model.BannerIntent;
+import org.eclipse.dirigible.components.intent.model.BannerRelatedIntent;
 import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
 import org.eclipse.dirigible.components.intent.model.ActionPromptOptionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
@@ -507,6 +509,7 @@ public final class IntentParser {
             validateLocksWithMaster(entity, model, compositionParent, issues);
             validateVisibleWhen(entity, model, compositionParent, issues);
             validatePlacement(entity, model, issues);
+            validateBanners(entity, model, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -4314,6 +4317,171 @@ public final class IntentParser {
             issues.add("entity [" + name + "] declares locksWithMaster: false but its master [" + master
                     + "] never locks (no immutableWhen / immutable on it or on its composition ancestors)"
                     + " - the declaration would have no effect");
+        }
+    }
+
+    /** The variants a record-page banner takes (dirigible #8371). */
+    private static final List<String> BANNER_VARIANTS = List.of("information", "warning", "negative");
+
+    /** A {@code {field}} placeholder in a banner's text. */
+    private static final java.util.regex.Pattern BANNER_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * An entity's {@code banners:} (dirigible #8371): each needs a {@code text}, a known variant and a
+     * {@code when}, a {@code related}, or both. {@code when} reads the record in the
+     * {@code visibleWhen} grammar; {@code related} names one of the entity's same-model
+     * {@code related:} registers (matched on {@code entity}, and {@code via} where the entity declares
+     * several), a {@code row} of {@code latest} or {@code any}, and a {@code when} over the source. The
+     * text's placeholders and the {@code action} speak about the subject row - the related row, or the
+     * record - so a placeholder must name one of its own fields, and the action must be one declared
+     * for its entity.
+     */
+    private static void validateBanners(EntityIntent entity, IntentModel model, List<String> issues) {
+        if (entity.getBanners() == null || entity.getBanners()
+                                                 .isEmpty()
+                || entity.getName() == null) {
+            return;
+        }
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        int index = 0;
+        for (BannerIntent banner : entity.getBanners()) {
+            index++;
+            String subject = "entity [" + entity.getName() + "] banners[" + index + "]";
+            if (banner == null) {
+                issues.add(subject + " is empty");
+                continue;
+            }
+            if (banner.getText() == null || banner.getText()
+                                                  .isBlank()) {
+                issues.add(subject + " needs a text");
+            }
+            if (!BANNER_VARIANTS.contains(banner.variantOrDefault())) {
+                issues.add(subject + " variant [" + banner.getVariant() + "] - variant must be information, warning or negative");
+            }
+            if (banner.getWhen() == null && banner.getRelated() == null) {
+                issues.add(subject + " needs a when, a related, or both - a banner with no condition would show on every record");
+            }
+            if (banner.getWhen() != null) {
+                validateVisibleWhenTerms(entity, byName, banner.getWhen(), subject + " when", issues);
+            }
+            EntityIntent subjectEntity = entity;
+            BannerRelatedIntent related = banner.getRelated();
+            if (related != null) {
+                subjectEntity = validateBannerRelated(entity, related, byName, subject + " related", issues);
+            }
+            if (subjectEntity == null) {
+                continue;
+            }
+            if (banner.getText() != null) {
+                java.util.regex.Matcher placeholder = BANNER_PLACEHOLDER.matcher(banner.getText());
+                while (placeholder.find()) {
+                    String name = placeholder.group(1)
+                                             .trim();
+                    if (fieldNamed(subjectEntity, name) != null) {
+                        continue;
+                    }
+                    issues.add(subject + " text names {" + name + "}, which is not a field of [" + subjectEntity.getName() + "]"
+                            + (relationNamed(subjectEntity, name) != null ? " - a relation has no text of its own; name a field" : "")
+                            + " - a placeholder names one of the subject row's own fields");
+                }
+            }
+            if (banner.getAction() != null && !banner.getAction()
+                                                     .isBlank()) {
+                validateBannerAction(model, banner.getAction()
+                                                  .trim(),
+                        subjectEntity.getName(), subject + " action", issues);
+            }
+        }
+    }
+
+    /**
+     * A banner's {@code related}: one of the entity's own registers, in this model, with a {@code row}
+     * and a {@code when} over the source.
+     *
+     * @return the source entity - the banner's subject - or null when it cannot be resolved
+     */
+    private static EntityIntent validateBannerRelated(EntityIntent entity, BannerRelatedIntent related, Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
+        if (related.getEntity() == null || related.getEntity()
+                                                  .isBlank()) {
+            issues.add(subject + " needs an entity - one of [" + entity.getName() + "]'s related: registers");
+            return null;
+        }
+        String source = related.getEntity()
+                               .trim();
+        List<RelatedIntent> registers = new ArrayList<>();
+        for (RelatedIntent register : entity.getRelated()) {
+            if (register != null && source.equals(register.getEntity()) && (related.getVia() == null || related.getVia()
+                                                                                                               .isBlank()
+                    || (register.getVia() != null && register.getVia()
+                                                             .trim()
+                                                             .equalsIgnoreCase(related.getVia()
+                                                                                      .trim())))) {
+                registers.add(register);
+            }
+        }
+        if (registers.isEmpty()) {
+            issues.add(subject + " entity [" + source + "] is not one of [" + entity.getName() + "]'s related: registers"
+                    + (related.getVia() != null ? " (via [" + related.getVia() + "])" : "") + " - declare it under related: first");
+            return null;
+        }
+        if (registers.size() > 1) {
+            issues.add(subject + " entity [" + source + "] matches " + registers.size() + " related: registers - name the one with via:");
+            return null;
+        }
+        if (registers.get(0)
+                     .isCrossModel()) {
+            issues.add(
+                    subject + " entity [" + source + "] is a register from another model - its statuses and actions are not in this model");
+            return null;
+        }
+        String row = related.getRow() == null ? null
+                : related.getRow()
+                         .trim();
+        if (!"latest".equals(row) && !"any".equals(row)) {
+            issues.add(subject + " row [" + related.getRow() + "] - row must be latest or any");
+        }
+        EntityIntent sourceEntity = byName.get(source);
+        if (sourceEntity == null) {
+            issues.add(subject + " entity [" + source + "] is not an entity of this model");
+            return null;
+        }
+        if (related.getWhen() == null) {
+            issues.add(subject + " needs a when - the condition a row of [" + source + "] must meet");
+        } else {
+            validateVisibleWhenTerms(sourceEntity, byName, related.getWhen(), subject + " when", issues);
+        }
+        return sourceEntity;
+    }
+
+    /**
+     * A banner's {@code action}: an action, transition or generates declared for the subject's entity.
+     */
+    private static void validateBannerAction(IntentModel model, String action, String subjectEntity, String subject, List<String> issues) {
+        List<String> owners = new ArrayList<>();
+        for (ActionIntent candidate : model.getActions()) {
+            if (action.equals(candidate.getName())) {
+                owners.add(candidate.getForEntity());
+            }
+        }
+        for (TransitionIntent candidate : model.getTransitions()) {
+            if (action.equals(candidate.getName())) {
+                owners.add(candidate.getForEntity());
+            }
+        }
+        for (GeneratesIntent candidate : model.getGenerates()) {
+            if (action.equals(candidate.getName())) {
+                owners.add(candidate.getForEntity());
+            }
+        }
+        if (owners.contains(subjectEntity)) {
+            return;
+        }
+        if (owners.isEmpty()) {
+            issues.add(subject + " [" + action + "] is no action, transition or generates of this model");
+        } else {
+            issues.add(subject + " [" + action + "] is declared for [" + String.join(", ", owners) + "], not for the banner's subject ["
+                    + subjectEntity + "] - the button acts on the row the banner speaks about");
         }
     }
 

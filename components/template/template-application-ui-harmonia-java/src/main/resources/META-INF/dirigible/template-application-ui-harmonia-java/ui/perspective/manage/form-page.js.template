@@ -223,6 +223,24 @@ document.addEventListener('alpine:init', () => {
     // input buffer - its dates are cut to the shape a date input takes, so a stored 13:49:11 reads
     // 13:49 there - and until the load it holds blanks.
     loadedRecord: null,
+#if($banners && $banners.size() > 0)
+
+    // Banners (intent `banners:`, #8371): what the page says about the record above the form while a
+    // condition holds - on the record, on a row of one of its related registers, or both - with the
+    // action that fixes it. The conditions are term lists basePage.bannerSubject evaluates; the text
+    // is the catalog key's, filled from the subject row. UI-only: the server decides what is allowed.
+    banners: [
+#foreach($banner in $banners)
+      { key: '${banner.key}', text: '${banner.textJs}', variant: '${banner.variant}', when: ${banner.whenTermsJs},
+        related: #if($banner.related){ register: '${banner.related.register}', apiPath: '${banner.related.apiPath}', fkProperty: '${banner.related.fkProperty}', primaryKey: '${banner.related.primaryKey}', row: '${banner.related.row}', when: ${banner.related.whenTermsJs} }#{else}null#end,
+        subject: '${banner.subject}', dates: ${banner.datesJs}, actionId: #if($banner.actionId)'${banner.actionId}'#{else}null#end },
+#end
+    ],
+#else
+    banners: [],
+#end
+    // The banners that hold for the record on screen, as { key, variant, text, subject, action }.
+    activeBanners: [],
 
     // Record action bar (issue #7491). Two viewport flags, because the page changes twice: below
     // 1024px the side rail stops being a column and becomes the last section of one, and below 768px
@@ -464,6 +482,8 @@ document.addEventListener('alpine:init', () => {
 #if($refreshWhile && $statusProp != "")
         this.pollCheck();
 #end
+        // Re-evaluated on every load, so a banner leaves once the action that fixes it has run.
+        this.evaluateBanners();
       } catch (e) {
 #if($refreshWhile && $statusProp != "")
         // A failed poll keeps the record on screen; pollWhile logs it and stops polling (#8375).
@@ -1046,6 +1066,65 @@ document.addEventListener('alpine:init', () => {
     get recordTasks() { return []; },
     get primaryTask() { return null; },
 #end
+
+    // Which banners hold (#8371). Each register a banner names is read once, with the search its panel
+    // makes; a failed read holds no banner and is logged. Then every banner is tested against the
+    // record and those rows in declared order.
+    async evaluateBanners() {
+      const record = this.loadedRecord;
+      if (!this.banners.length || !record || this.id == null) { this.activeBanners = []; return; }
+      const rowsByRegister = {};
+      const registers = new Map();
+      for (const b of this.banners) if (b.related) registers.set(b.related.register, b.related);
+      await Promise.all([...registers.values()].map(async (r) => {
+        try {
+          rowsByRegister[r.register] = await App.services.api.post(r.apiPath + '/search', { equals: { [r.fkProperty]: this.id } }, { baseUrl: '' }) || [];
+        } catch (e) {
+          rowsByRegister[r.register] = null;
+          console.error('[${name}FormPage] banner rows of ' + r.apiPath + ' could not be read', e);
+        }
+      }));
+      if (record !== this.loadedRecord) return;   // a newer load is evaluating its own
+      const active = [];
+      for (const b of this.banners) {
+        const subject = this.bannerSubject(b, record, rowsByRegister);
+        if (!subject) continue;
+        active.push({ key: b.key, variant: b.variant, text: this.bannerText(b, subject), subject: subject,
+          subjectEntity: b.subject, subjectId: b.related ? subject[b.related.primaryKey] : this.id, actionId: b.actionId });
+      }
+      this.activeBanners = active;
+      this.refreshIcons();
+    },
+
+    // A banner's action, while the subject's status guard and roles offer it - asked of the store at
+    // render time, so a descriptor list that arrives after the record still shows the button.
+    bannerAction(banner) {
+      const store = Alpine.store('customActions');
+      if (!banner.actionId || !store) return null;
+      return (store.getActions(banner.subjectEntity, 'entity', banner.subject) || []).find((a) => a.id === banner.actionId) || null;
+    },
+
+    // A banner's sentence: translated, then each {Field} filled from the subject row - a date through
+    // the instance pattern, anything else as stored, an empty value as nothing.
+    bannerText(banner, subject) {
+      const text = T('$projectName:${tprefix}.banners.' + banner.key, banner.text);
+      return String(text).replace(/\{([A-Za-z0-9_]+)\}/g, (match, field) => {
+        const value = subject ? subject[field] : null;
+        if (value === null || value === undefined || value === '') return '';
+        return (banner.dates || []).includes(field) && window.HarmoniaFormat ? HarmoniaFormat.value(value, true) : String(value);
+      });
+    },
+
+    bannerActionLabel(banner) {
+      const a = this.bannerAction(banner);
+      if (!a) return '';
+      return a.translation && a.translation.key ? T(a.translation.key, a.label, a.translation.options || {}) : a.label;
+    },
+
+    runBannerAction(banner) {
+      const action = this.bannerAction(banner);
+      if (action) Alpine.store('customActions').trigger(action, banner.subjectId, banner.subject);
+    },
 
     // Whether Edit is offerable at all. The server stays authoritative - a caller the roles deny
     // still gets a 403 - this only keeps the affordance honest where the page already knows: its

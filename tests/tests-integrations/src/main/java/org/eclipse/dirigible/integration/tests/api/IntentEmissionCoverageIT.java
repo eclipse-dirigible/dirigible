@@ -1715,6 +1715,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
                     # entry passes).
                     transitions:
+                      - { name: RetryDeliveryAttempt, forEntity: DeliveryAttempt, from: [3], setStatus: 1, label: Retry }
                       - name: CancelEntry
                         forEntity: Entry
                         from: [1]
@@ -2391,6 +2392,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: notes,   type: text }
                 relations:
                   - { name: team, kind: manyToOne, to: Team }
+              # Banners on the record page (#8371): one read off the latest row of a related register,
+              # with the transition that fixes it, and one on the record's own status.
+              - name: DeliveryStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 50 }
+              - name: Delivery
+                label: "{number}"
+                related:
+                  - { entity: DeliveryAttempt }
+                banners:
+                  - text: "The last attempt failed: {failure}"
+                    variant: negative
+                    related: { entity: DeliveryAttempt, row: latest, when: "status == 3" }
+                    action: RetryDeliveryAttempt
+                  - text: "This delivery is on hold."
+                    variant: warning
+                    when: "status == 2"
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 20 }
+                relations:
+                  - { name: status, kind: manyToOne, to: DeliveryStatus, function: EntityStatus }
+              - name: DeliveryAttempt
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: failure, type: string, length: 500, readOnly: true }
+                relations:
+                  - { name: delivery, kind: manyToOne, to: Delivery }
+                  - { name: status,   kind: manyToOne, to: DeliveryStatus, function: EntityStatus }
             """;
 
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
@@ -2595,6 +2627,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEmission();
         assertFieldPlacementEmission();
         assertRecordHeaderEmission();
+        assertBannerEmission();
 
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
@@ -2633,6 +2666,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String plain = contentOf("gen/emission/js/components/pages/Team/TeamFormPage.js");
         String plainSubtitle = plain.substring(plain.indexOf("subtitleParts() {"), plain.indexOf("summaryLine() {"));
         assertFalse(plainSubtitle.contains("this.loadedRecord."), "an entity without subtitle: has no subtitle line: " + plainSubtitle);
+    }
+
+    /**
+     * Banners on the record page (#8371): the page carries both banners - the related one pointed at
+     * the register's controller and the transition's descriptor, the own-field one at the record's
+     * status - evaluates them where the record loads, and renders each that holds as an alert; the
+     * catalog seeds their texts.
+     */
+    private void assertBannerEmission() {
+        String page = contentOf("gen/emission/js/components/pages/Delivery/DeliveryFormPage.js");
+        assertTrue(
+                page.contains("{ key: 'Delivery1', text: 'The last attempt failed: {Failure}', variant: 'negative', when: [],")
+                        && page.contains("row: 'latest', when: [{ property: 'Status', equal: true, value: '3' }] }")
+                        && page.contains("subject: 'DeliveryAttempt', dates: [], actionId: '" + PROJECT
+                                + "-DeliveryAttempt-RetryDeliveryAttempt' }"),
+                "the related banner must carry its register, its condition and its action: " + page);
+        assertTrue(page.contains(
+                "{ key: 'Delivery2', text: 'This delivery is on hold.', variant: 'warning', when: [{ property: 'Status', equal: true, value: '2' }],"),
+                "the own-field banner must carry the record's condition: " + page);
+        assertTrue(page.contains("/DeliveryAttemptController', fkProperty: 'Delivery', primaryKey: 'Id'"),
+                "the related banner reads the register's controller by its foreign key: " + page);
+        assertTrue(page.contains("this.evaluateBanners();"), "the banners must be evaluated where the record loads: " + page);
+        String view = contentOf("gen/emission/views/Delivery/Delivery-form.html");
+        assertTrue(
+                view.contains("x-for=\"banner in activeBanners\"") && view.contains("<div x-h-alert :data-variant=\"banner.variant\"")
+                        && view.contains("x-h-alert-actions"),
+                "the record page must render each banner as an alert with its action: " + view);
+        String plain = contentOf("gen/emission/js/components/pages/Team/TeamFormPage.js");
+        assertTrue(plain.contains("    banners: [],"), "an entity without banners carries none: " + plain);
+        ICollection catalogs = repository.getCollection(PROJECT_PATH + "/i18n/en-US");
+        assertTrue(catalogs.exists() && catalogs.getResources()
+                                                .stream()
+                                                .map(r -> new String(r.getContent(), StandardCharsets.UTF_8))
+                                                .anyMatch(c -> c.contains("\"banners\"") && c.contains("\"Delivery1\"")
+                                                        && c.contains("The last attempt failed: {Failure}")),
+                "the model catalog seeds the banner texts under banners.<Entity><n>");
     }
 
     /** The labelled record is served with the label its title shows. */

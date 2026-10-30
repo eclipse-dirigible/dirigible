@@ -266,6 +266,26 @@ final class StatusSymbolResolver {
                     rewriteRecordWhen(entity, "visibleWhen", master, "entity [" + entityName + "] visibleWhen");
                 }
             }
+            // A record-page banner (#8371): its own `when` reads the record, so it resolves like a field's
+            // visibleWhen; its `related.when` reads a row of the register's SOURCE, so its names resolve in
+            // the source's terms - a shipment's FAILED, not the order's.
+            int bannerIndex = 0;
+            for (Object bannerNode : asList(entity.get("banners"))) {
+                bannerIndex++;
+                Map<?, ?> banner = asMap(bannerNode);
+                if (banner == null) {
+                    continue;
+                }
+                String subject = "entity [" + entityName + "] banners[" + bannerIndex + "]";
+                if (banner.get("when") != null) {
+                    rewriteRecordWhen(banner, "when", entityName, subject + " when");
+                }
+                Map<?, ?> related = asMap(banner.get("related"));
+                String source = related == null ? null : text(related, "entity");
+                if (source != null && related.get("when") != null) {
+                    rewriteRecordWhen(related, "when", source, subject + " related when");
+                }
+            }
         }
     }
 
