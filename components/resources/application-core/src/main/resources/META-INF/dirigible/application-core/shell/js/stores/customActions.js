@@ -49,7 +49,9 @@
  * #7073). A refusal shows the reason the server sent (a transition outside its `from:` statuses says
  * so in its 409), a success says what happened, and a page action that finished reports through the
  * same path. Nothing an action DOES ends in silence - but an action the user ABANDONED did nothing,
- * so a page that closes itself as `cancelled` is dismissed silently (issue #7149).
+ * so a page that closes itself as `cancelled` is dismissed silently (issue #7149). The one exception
+ * is a prompted run that failed: its reason shows inside the dialog, which stays open with its
+ * inputs (issue #8365).
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('customActions', {
@@ -82,6 +84,9 @@ document.addEventListener('alpine:init', () => {
     promptOptions: {},    // col.name -> dropdown options (dependsOn-filtered when a cascade is active)
     promptBusy: false,
     promptError: '',
+    // Why the last run of the prompt failed (issue #8365) - the endpoint's refusal or the catalog
+    // line for a fault, shown in an alert INSIDE the dialog, which stays open with its inputs.
+    promptRefusal: '',
     serverUnavailable: false,   // set once the backend is unreachable; stops re-fetching until a reload
     extraPoints: [],            // extension points added via addProjects (the shared shell's hosted apps)
 
@@ -277,12 +282,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     // The confirm dialog's Run/Cancel pair. Run stays disabled while the POST is in flight so a
-    // double-click cannot fire the mutation twice.
+    // double-click cannot fire the mutation twice. The dialog has no inputs to lose, so it closes
+    // whatever the outcome, and a failure is announced (issue #8365).
     async confirmRun() {
       if (!this.confirmAction || this.confirmBusy) return;
+      const action = this.confirmAction;
       this.confirmBusy = true;
       try {
-        await this.run(this.confirmAction, this.confirmId);
+        const outcome = await this.run(action, this.confirmId);
+        if (!outcome.ok) this.notify(action.label || 'Action', outcome.message, 'negative');
       } finally {
         this.confirmBusy = false;
         this.cancelConfirm();
@@ -351,6 +359,7 @@ document.addEventListener('alpine:init', () => {
       }
       this.promptOptions = {};
       this.promptError = '';
+      this.promptRefusal = '';
       this.dialogDescription = '';
       this.promptAction = action;
       this.promptId = (id !== undefined && id !== null && id !== '') ? id : null;
@@ -445,6 +454,7 @@ document.addEventListener('alpine:init', () => {
       this.promptValues = {};
       this.promptOptions = {};
       this.promptError = '';
+      this.promptRefusal = '';
       this.dialogDescription = '';
     },
 
@@ -561,6 +571,13 @@ document.addEventListener('alpine:init', () => {
     // Validate + run: required inputs must be present (the generated controller enforces the same
     // with a 400 - the dialog check just keeps the failure local); the values are POSTed together
     // with the source id.
+    //
+    // The dialog closes only when the run worked (issue #8365). A refusal, a fault and a network
+    // failure all keep it open with every input as the user left it and the reason in an alert
+    // inside it - not in a toast, as the user is looking at the dialog - so Run sends the corrected
+    // values, or simply retries. A page generated before that alert existed (the shell runtime is
+    // shared across generated vintages, #7427) cannot show the reason, so there the dialog closes and
+    // the failure is announced, as before.
     async promptRun() {
       if (!this.promptAction || this.promptBusy) return;
       const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault && this.isEmptyInput(this.promptValues[c.name]));
@@ -568,26 +585,53 @@ document.addEventListener('alpine:init', () => {
         this.promptError = missing.map((c) => c.label || c.name).join(', ');
         return;
       }
+      const action = this.promptAction;
       this.promptError = '';
+      this.promptRefusal = '';
       this.promptBusy = true;
+      let outcome;
       try {
-        await this.run(this.promptAction, this.promptId, this.promptValues);
+        outcome = await this.run(action, this.promptId, this.promptValues);
+      } catch (e) {
+        console.error('customActions: the prompted run failed', e);
+        outcome = { ok: false, message: 'Action failed' };
       } finally {
         this.promptBusy = false;
+      }
+      if (outcome.ok) {
+        this.cancelPrompt();
+      } else if (this.showsPromptRefusal()) {
+        this.promptRefusal = outcome.message;
+      } else {
+        this.notify(action.label || 'Action', outcome.message, 'negative');
         this.cancelPrompt();
       }
     },
 
+    // Whether the page's prompt dialog has the alert a refusal is shown in (issue #8365).
+    showsPromptRefusal() {
+      return typeof document.querySelector === 'function' && Boolean(document.querySelector('[data-prompt-refusal]'));
+    },
+
     // Send a confirmed / prompted action: its declared call, or the POST to its generated endpoint.
+    // Resolves to { ok: true } or { ok: false, message }: a success is announced here, a failure is
+    // left to the caller, which shows it where the user is looking (issue #8365).
     run(action, id, values) {
       return action.call ? this.runCall(action, id, values) : this.runEndpoint(action, id, values);
+    },
+
+    // The user-facing reason a run failed: a 400/409's own message, else the catalog line.
+    failureMessage(e) {
+      return (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
+        ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
+        : 'Action failed';
     },
 
     // Send a `call` action's request to the application's own endpoint (issue #8090). `{id}` in the
     // path is the clicked record's key; the body is the declared one with its prompt placeholders
     // filled (callValue). The endpoint owns the rule, so its answer is reported and never read: a 2xx
-    // toasts the authored `success`, a 400/409 the endpoint's own message, anything else the generic
-    // failure.
+    // toasts the authored `success`; a failure resolves to the endpoint's own message for a 400/409,
+    // the catalog line for anything else.
     async runCall(action, id, values) {
       const label = action.label || 'Action';
       const call = action.call;
@@ -596,14 +640,12 @@ document.addEventListener('alpine:init', () => {
       const body = call.body ? this.callValue(call.body, action, values || {}) : undefined;
       try {
         await App.services.api.request(call.method || 'POST', url, body, { baseUrl: '' });
-        this.notify(label, action.success || (label + ' completed'), 'positive');
-        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
       } catch (e) {
-        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
-          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
-          : 'Action failed';
-        this.notify(label, msg, 'negative');
+        return { ok: false, message: this.failureMessage(e) };
       }
+      this.notify(label, action.success || (label + ' completed'), 'positive');
+      window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      return { ok: true };
     },
 
     // A body value with its prompt placeholders filled. A string that is exactly "{name}" becomes that
@@ -637,47 +679,47 @@ document.addEventListener('alpine:init', () => {
     },
 
     // POST { id } to the action's endpoint (a generated create-from controller). The server clones the
-    // source record into a new target record and returns it; we surface a success/error notification and
-    // raise `harmonia:action-done` so the originating view can refresh. The endpoint is an absolute
+    // source record into a new target record and returns it; we surface a success notification and
+    // raise `harmonia:action-done` so the originating view can refresh, and resolve a failure to its
+    // message for the caller (issue #8365). The endpoint is an absolute
     // same-origin path (it targets gen/events, not the entity api base), so we prepend no baseUrl.
     async runEndpoint(action, id, values) {
       const label = action.label || 'Action';
       const body = {};
       if (id !== undefined && id !== null && id !== '') body.id = id;
       if (values && Object.keys(values).length) body.values = values;
+      let created;
       try {
-        const created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
-        // A transition that mails answers { record, notify } - the descriptor's `notifies` says so, set
-        // when the endpoint was generated (issue #7023). Its notify block is fail-soft, so the flip
-        // succeeds even when nothing left the mail server: reporting that as a green toast is exactly
-        // the silence this branch removes - the user learns the customer never got the invoice weeks
-        // later, from the customer.
-        const notified = action.notifies && created ? created.notify : null;
-        const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
-        const ref = record && (record.Number || record.Name || record.Id || record.id);
-        if (notified && notified.status === 'failed') {
-          this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
-            + (notified.message || 'unknown error'), 'warning');
-        } else if (notified && notified.status === 'skipped') {
-          this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
-        } else {
-          // A transition moved a record that already existed; a generate/create-from made a new one.
-          // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
-          const done = action.kind === 'transition'
-            ? (ref ? 'Done - ' + ref : 'Done')
-            : (ref ? 'Created ' + ref : 'Completed');
-          this.notify(label, done, 'positive');
-        }
-        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+        created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
       } catch (e) {
         // A refusal (400/409) carries the authored reason the intent wrote for this exact moment -
         // "allowed only from status [3, 4] - current status is [6]". That is the message the user
         // needs; the generic catalog line is for faults (issue #7073).
-        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
-          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
-          : 'Action failed';
-        this.notify(label, msg, 'negative');
+        return { ok: false, message: this.failureMessage(e) };
       }
+      // A transition that mails answers { record, notify } - the descriptor's `notifies` says so, set
+      // when the endpoint was generated (issue #7023). Its notify block is fail-soft, so the flip
+      // succeeds even when nothing left the mail server: reporting that as a green toast is exactly
+      // the silence this branch removes - the user learns the customer never got the invoice weeks
+      // later, from the customer.
+      const notified = action.notifies && created ? created.notify : null;
+      const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
+      const ref = record && (record.Number || record.Name || record.Id || record.id);
+      if (notified && notified.status === 'failed') {
+        this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
+          + (notified.message || 'unknown error'), 'warning');
+      } else if (notified && notified.status === 'skipped') {
+        this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
+      } else {
+        // A transition moved a record that already existed; a generate/create-from made a new one.
+        // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
+        const done = action.kind === 'transition'
+          ? (ref ? 'Done - ' + ref : 'Done')
+          : (ref ? 'Created ' + ref : 'Completed');
+        this.notify(label, done, 'positive');
+      }
+      window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      return { ok: true };
     },
 
     // Surface the outcome of an action the user just triggered: a transient toast over the page PLUS
