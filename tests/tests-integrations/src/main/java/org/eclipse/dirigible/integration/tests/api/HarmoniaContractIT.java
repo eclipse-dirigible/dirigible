@@ -30,8 +30,8 @@ import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.ide.template.service.model.GeneratedFile;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.Test;
@@ -99,7 +99,8 @@ class HarmoniaContractIT extends IntegrationTest {
     /** The fixtures whose rendered pages are scanned: every view family the templates emit. */
     private static final List<Case> CASES =
             List.of(new Case("sales-order.model", TEMPLATE_APPLICATION), new Case("views.model", TEMPLATE_APPLICATION),
-                    new Case("leave-request.form", TEMPLATE_FORM), new Case("revenue.report", TEMPLATE_REPORT));
+                    new Case("reports.model", TEMPLATE_APPLICATION), new Case("leave-request.form", TEMPLATE_FORM),
+                    new Case("revenue.report", TEMPLATE_REPORT), new Case("revenue-chart.report", TEMPLATE_REPORT));
 
     /** A directive name as the bundle registers it, {@code "h-button"}. */
     private static final Pattern REGISTERED_DIRECTIVE = Pattern.compile("\"(h-[a-z][a-z0-9-]*)\"");

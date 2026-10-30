@@ -1,10 +1,10 @@
-# @aerokit/test (published as the `@aerokit/sdk/test` subpath)
+# @aerokit/test
 
-> **Publishing note:** this package is NOT published standalone - the release workflow bundles
-> `src/` into the `@aerokit/sdk` npm package as its `./test` subpath export (the npm token cannot
-> create new packages in the scope). Consumers depend on `@aerokit/sdk` and import
-> `@aerokit/sdk/test` / `@aerokit/sdk/test/fixtures`; this folder stays the source of truth and the
-> local-development identity (`file:` installs during development resolve `@aerokit/test` directly).
+> **Publishing note:** every release publishes this folder as `@aerokit/test`, versioned with the
+> platform. Consumers depend on `@aerokit/test` and import `@aerokit/test` /
+> `@aerokit/test/fixtures`. A harness written against the earlier `@aerokit/sdk/test` subpath keeps
+> resolving while `@aerokit/sdk` still ships it, but `@aerokit/sdk` is being deprecated: switch the
+> import and the dependency to `@aerokit/test`.
 
 Generic [Playwright](https://playwright.dev) runner that executes an intent module's generated
 `<name>.test` manifest against a running Eclipse Dirigible instance. The manifest (emitted by the
@@ -24,7 +24,7 @@ it never enters the registry or the npm package):
 ```js
 // test/app.spec.js
 import { fileURLToPath } from 'node:url';
-import { runTest } from '@aerokit/sdk/test';
+import { runTest } from '@aerokit/test';
 
 runTest(fileURLToPath(new URL('../<project>/<name>.test', import.meta.url)));
 ```
@@ -85,7 +85,8 @@ Test records carry an `APPTEST-` prefix and are removed in teardown; seed data i
 A field the app owns rather than the user — a `number:` series, a calculated or `readOnly:` value —
 is never written or flipped by a flow (the manifest marks it `readOnly`). A relation the form renders
 read-only — a `calculatedActionOnUpdate`, a platform-owned FK — carries the same flag and is never
-picked in the UI. A field declaring a
+picked in the UI. A relation fixed after create (`fixedAfterCreate: true`) carries `readOnlyOnEdit`: it is
+picked on create and never changed by an edit, which the generated app answers with a 409. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
 marker, so the controller's 400 names the field. Relations an `agree` check names are picked so

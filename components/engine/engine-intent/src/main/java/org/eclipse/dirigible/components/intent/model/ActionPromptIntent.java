@@ -9,16 +9,27 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+
+import com.google.gson.annotations.SerializedName;
 
 /**
  * One input of a {@code call:} action's dialog (issue #8090). The call has no target entity to type
  * the control from, so the control declares its own type.
+ *
+ * <p>
+ * An input may open with a value ({@link #defaultValue}) and explain itself ({@link #help}); a
+ * {@code multiselect} is a set of values chosen from its {@link #options} (issue #8296).
  */
 public class ActionPromptIntent {
 
+    /** The type whose value is a set of {@link #options}. */
+    public static final String MULTISELECT = "multiselect";
+
     /** The input types a prompt control may declare. */
-    public static final Set<String> TYPES = Set.of("string", "email", "text", "integer", "decimal", "boolean", "date");
+    public static final Set<String> TYPES = Set.of("string", "email", "text", "integer", "decimal", "boolean", "date", MULTISELECT);
 
     /** The input's name, referenced as {@code {name}} in the call's body. */
     private String name;
@@ -29,8 +40,21 @@ public class ActionPromptIntent {
     /** The control's caption; defaults to a humanized {@link #name}. */
     private String label;
 
-    /** Whether the dialog refuses to run with the input empty. */
+    /** Whether the dialog refuses to run with the input empty - for a multiselect, with none ticked. */
     private boolean required;
+
+    /**
+     * The value the dialog opens with: a literal of the input's type (a list of option values for a
+     * multiselect), or {@code "{property}"} - a property of the clicked record.
+     */
+    @SerializedName("default")
+    private Object defaultValue;
+
+    /** One line under the control. */
+    private String help;
+
+    /** The values a {@link #MULTISELECT} chooses from; refused on every other type. */
+    private List<ActionPromptOptionIntent> options = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -62,5 +86,34 @@ public class ActionPromptIntent {
 
     public void setRequired(boolean required) {
         this.required = required;
+    }
+
+    public Object getDefaultValue() {
+        return defaultValue;
+    }
+
+    public void setDefaultValue(Object defaultValue) {
+        this.defaultValue = defaultValue;
+    }
+
+    public String getHelp() {
+        return help;
+    }
+
+    public void setHelp(String help) {
+        this.help = help;
+    }
+
+    public List<ActionPromptOptionIntent> getOptions() {
+        return options;
+    }
+
+    public void setOptions(List<ActionPromptOptionIntent> options) {
+        this.options = options == null ? new ArrayList<>() : options;
+    }
+
+    /** Whether the input is a {@link #MULTISELECT}. */
+    public boolean isMultiselect() {
+        return MULTISELECT.equals(type);
     }
 }

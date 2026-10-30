@@ -124,6 +124,11 @@
             <artifactId>dirigible-components-engine-jobs</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- A declared cron is checked with the scheduler's own parser before the Job row is written (#8235) -->
+        <dependency>
+            <groupId>org.quartz-scheduler</groupId>
+            <artifactId>quartz</artifactId>
+        </dependency>
 
         <!--
           Extension metadata persistence used by ExtensionClassConsumer to register @Extension

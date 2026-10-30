@@ -25,6 +25,13 @@ angular.module('GenerateService', []).provider('GenerateService', function Gener
             return $http.post(url, { 'template': template, 'parameters': parameters });
         }.bind(this);
 
+        // A model whose descriptor names a template the platform no longer ships (the AngularJS and
+        // TypeScript stacks) is answered 409 with the Java template that replaces it (#8051): the
+        // caller confirms with the developer and regenerates with that one.
+        const retiredTemplate = function (response) {
+            return response && response.status === 409 && response.data && response.data.successor ? response.data : null;
+        };
+
         const isEnabled = function () {
             return true;
         }.bind(this);
@@ -32,6 +39,7 @@ angular.module('GenerateService', []).provider('GenerateService', function Gener
         return {
             generateFromTemplate: generateFromTemplate,
             generateFromModel: generateFromModel,
+            retiredTemplate: retiredTemplate,
             isEnabled: isEnabled
         };
     }];

@@ -258,6 +258,9 @@ document.addEventListener('alpine:init', () => {
     get relatedDefs() { return this.itemsEnabled ? App.relatedFor('${name}') : []; },
 
     async init() {
+      // The form is editable while the loads below are awaited, so whatever it holds by the time the
+      // create defaults are seeded may already be the user's (#8315). This is what it held before.
+      const blankForm = JSON.parse(JSON.stringify(this.form));
 #if($hasRestrictedFields)
       // Role-scoped fields: ask the controller which ones it withholds from this caller, so the header
       // form and the totals footer leave them out rather than showing an input or a total that is
@@ -269,6 +272,9 @@ document.addEventListener('alpine:init', () => {
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      // The option lists go out first and are awaited only where the page needs them: the header is
+      // requested while they arrive, not after the last of them (#8344).
+      const optionsLoaded = this.loadOptions(true);
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
@@ -307,12 +313,10 @@ document.addEventListener('alpine:init', () => {
         });
       }
 
-      await this.loadOptions(true);
-
       if (this.isEdit || this.isPreview) {
         this.state = 'loading';
         try {
-          await this.loadHeader();
+          await this.loadHeader(optionsLoaded);
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           await this.loadMutable();
 #end
@@ -325,11 +329,16 @@ document.addEventListener('alpine:init', () => {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
         }
       } else {
+        await optionsLoaded;
+        // A field the user typed or picked during the awaited loads keeps that value: a default or a URL
+        // prefill only fills a field still holding its blank value, never overwrites an entry (#8315).
+        const touched = new Set(Object.keys(this.form)
+            .filter(key => JSON.stringify(this.form[key]) !== JSON.stringify(blankForm[key])));
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
         // `defaultValue: now`: a new document is dated today, in the field's own shape; a query-param
         // prefill below still wins, and the server fills the same value on a create that omits it.
-        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = this.toDateInput(App.utils.todayAs('${property.dataDefaultNowShape}'), '${property.widgetType}');
 #elseif($property.dataDefaultValueJsLiteral && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS")
 ## Every other authored default (`defaultValue:`, a relation's `init:`) is the value the server fills on
 ## a create that omits it - shown up front, so the user sees it and can change it before saving rather
@@ -341,17 +350,17 @@ document.addEventListener('alpine:init', () => {
 ## below still wins. The document status is left to the server: its `init:` may name a status rather
 ## than key one, and the lifecycle stamps the initial status itself.
 #if($property.widgetType == "MULTISELECT")
-        if ('${property.name}' in this.form) this.form.${property.name} = String(${property.dataDefaultValueJsLiteral}).split(',').map(v => v.trim()).filter(v => v !== '');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = String(${property.dataDefaultValueJsLiteral}).split(',').map(v => v.trim()).filter(v => v !== '');
 #elseif($property.isDateType)
-        if ('${property.name}' in this.form) this.form.${property.name} = this.toDateInput(${property.dataDefaultValueJsLiteral}, '${property.widgetType}');
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = this.toDateInput(${property.dataDefaultValueJsLiteral}, '${property.widgetType}');
 #else
-        if ('${property.name}' in this.form) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
+        if ('${property.name}' in this.form && !touched.has('${property.name}')) this.form.${property.name} = ${property.dataDefaultValueJsLiteral};
 #end
 #end
 #end
         for (const key of Object.keys(this.form)) {
           const v = this.queryParam(key);
-          if (v !== null) this.form[key] = v;
+          if (v !== null && !touched.has(key)) this.form[key] = v;
         }
         this.state = 'empty-form';
       }
@@ -449,8 +458,11 @@ document.addEventListener('alpine:init', () => {
 
     // GET the master record into both the header form and `record` (the footer reads calculated totals
     // from `record`). Called on load and after every item change so server-side totals stay fresh.
-    async loadHeader() {
+    // `optionsLoaded` is init's option load, still in flight while the header is fetched (#8344): the
+    // filtered-label splice below and the pristine snapshot both wait for it.
+    async loadHeader(optionsLoaded) {
       const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+      await optionsLoaded;
       this.record = record || {};
       this.recordLoaded = true;
       for (const key of Object.keys(this.form)) {
@@ -495,19 +507,23 @@ document.addEventListener('alpine:init', () => {
       await this.loadHeader();
     },
 
+    // The lists do not depend on each other, so they are all requested at once (#8344); each one
+    // reports its own failure, so the whole never rejects.
     async loadOptions(deferDependsOn) {
+      await Promise.all([
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN" && $property.aggregate != "true")
-      // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
-      // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
-      // not in the form yet, so init() passes deferDependsOn and decides after the record load.
-      if (!deferDependsOn) await this.refreshOptions${property.name}();
+        // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
+        // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
+        // not in the form yet, so init() passes deferDependsOn and decides after the record load.
+        deferDependsOn ? null : this.refreshOptions${property.name}(),
 #else
-      await this.loadAllOptions${property.name}();
+        this.loadAllOptions${property.name}(),
 #end
 #end
 #end
+      ]);
     },
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
@@ -630,9 +646,22 @@ document.addEventListener('alpine:init', () => {
       return {
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.isRequiredProperty == "true" && !$property.dataDefaultValue)
-        ${property.name}: [{ rule: 'required', message: 'This field is required.' }],
+        ${property.name}: [{ rule: 'required', message: T('$projectName:${tprefix}.messages.error.required', 'This field is required.') }],
 #elseif(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.widgetType == "EMAIL")
-        ${property.name}: [{ rule: 'email', message: 'Enter a valid email address.' }],
+        ${property.name}: [{ rule: 'email', message: T('$projectName:${tprefix}.messages.error.email', 'Enter a valid email address.') }],
+#end
+#end
+      };
+    },
+
+    // The label of every field validationSchema() checks, in the user's language: the summary of a
+    // failed save names the fields as the form shows them, not by their property names (#8350).
+    validationLabels() {
+      return {
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && (($property.isRequiredProperty == "true" && !$property.dataDefaultValue) || $property.widgetType == "EMAIL"))
+#if($property.widgetLabel)#set($vlabel = $property.widgetLabelJs)#else#set($vlabel = $property.name)#end
+        ${property.name}: T('$projectName:${tprefix}.t.${property.dataName}', '${vlabel}'),
 #end
 #end
       };
@@ -651,7 +680,11 @@ document.addEventListener('alpine:init', () => {
         // Name the failing fields in the visible summary - an invalid field the layout does not
         // render (or one scrolled out of view) is otherwise indistinguishable from a dead button.
         const _failed = Object.keys(this.errors).filter(k => k !== '__summary' && this.errors[k]);
-        if (_failed.length) this.errors.__summary = 'Fields that need attention: ' + _failed.join(', ');
+        if (_failed.length) {
+          const _labels = this.validationLabels();
+          this.errors.__summary = T('$projectName:${tprefix}.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}',
+            { fields: _failed.map(k => _labels[k] || k).join(', ') });
+        }
         this.scrollToSummary();
         return;
       }
@@ -1316,7 +1349,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       this.draftFieldError = null;
-      this.draftError = App.services.apiErrors.messageFor(e, fallback);
+      this.draftError = App.services.apiErrors.refusalMessageFor(e, fallback);
     },
 
     closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; this.draftFieldError = null; this.draftInlineCreated = []; },
@@ -1456,7 +1489,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItems();
         await this.loadHeader();
       } catch (e) {
-        this.itemsError = App.services.apiErrors.messageFor(e, 'Could not delete the line.');
+        this.itemsError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the line.');
       }
     },
 
@@ -1574,7 +1607,7 @@ document.addEventListener('alpine:init', () => {
       if (!(this.isEdit || this.isPreview)) return '';
       const parts = [];
 #foreach($property in $listProperties)
-#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "CHECKBOX" && !$property.isHiddenProperty)
+#if(!$property.dataAutoIncrement && !$property.collectionColumn && $property.widgetIsMajor && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "CHECKBOX" && !$property.isHiddenProperty)
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end

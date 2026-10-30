@@ -62,8 +62,8 @@ final class ModelTemplateAdapters {
     /** The preparation of each supported template, keyed by its module path. */
     private static final Map<String, Adapter> ADAPTERS = Map.of(//
             "template-application-schema/template/template.js", ModelTemplateAdapters::entityModel, //
-            "template-application-dao-java/template/template.js", ModelTemplateAdapters::entityModel, //
-            "template-application-rest-java/template/template.js", ModelTemplateAdapters::entityModel, //
+            "template-application-dao-java/template/template.js", ModelTemplateAdapters::javaEntityModel, //
+            "template-application-rest-java/template/template.js", ModelTemplateAdapters::javaEntityModel, //
             "template-application-ui-harmonia-java/template/template.js", ModelTemplateAdapters::harmoniaApplication, //
             "template-application-events-java/template/template.js", ModelTemplateAdapters::glue, //
             REPORT_FILE_TEMPLATE, ModelTemplateAdapters::report, //
@@ -150,6 +150,20 @@ final class ModelTemplateAdapters {
     }
 
     /**
+     * Prepares an entity model for the Java layers, which evaluate its calculated-field formulas.
+     *
+     * @param modelText the raw model file
+     * @param parameters the generation parameters
+     * @return the prepared model
+     */
+    private static PreparedModel javaEntityModel(String modelText, Map<String, Object> parameters) {
+        PreparedModel prepared = entityModel(modelText, parameters);
+        CalculatedFormulas.resolve(asMaps(prepared.model()
+                                                  .get("entities")));
+        return prepared;
+    }
+
+    /**
      * Prepares the full application stack, whose UI needs the application's own caption, icon,
      * languages and dashboard widgets.
      *
@@ -161,6 +175,7 @@ final class ModelTemplateAdapters {
         Map<String, Object> model = entityRoot(modelText);
         parameters.put("javaRuntime", Boolean.TRUE);
         ModelParameterProcessor.process(model, parameters);
+        CalculatedFormulas.resolve(asMaps(model.get("entities")));
         // The shell's title and sidebar header prefer the model's own title and description over the
         // bare project name.
         parameters.put("appTitle", blankToNull(str(model, "title")) != null ? model.get("title") : parameters.get("projectName"));
@@ -178,10 +193,22 @@ final class ModelTemplateAdapters {
         List<Object> languages = ModelValues.asList(model.get("languages"));
         parameters.put("appLanguages",
                 JavaScriptJson.compact(languages.isEmpty() ? List.of(DEFAULT_APP_LANGUAGE) : new ArrayList<>(languages)));
+        // Whether the application has data to translate at all - a multilingual entity. The shell's
+        // translation check holds the declared data languages against the platform's only then, so a
+        // fully translated application without such data is not reported as untranslated (#8137).
+        parameters.put("appTranslatableData", ModelValues.asMaps(model.get("entities"))
+                                                         .stream()
+                                                         .anyMatch(entity -> ModelValues.isTrue(entity, "multilingual")));
         parameters.put("customWidgets", model.get("widgets") == null ? new ArrayList<>() : model.get("widgets"));
         // Country-scoped field labels, rendered into the application's configuration as a JSON object
         // the shared i18n runtime prefers over the language catalogs (see countryLabelOverlay).
         parameters.put("countryLabels", JavaScriptJson.compact(countryLabelOverlay(model, parameters)));
+        // The application's reports, as the intent generated them into the model (#8277): the shell's
+        // reports store lists these instead of discovering them through the core repository API,
+        // which a business user may not call. null - not an empty list - for a model that carries
+        // none, so the store keeps discovering the reports a developer generated outside the intent.
+        Object reports = model.get("reports");
+        parameters.put("appReports", reports instanceof List ? JavaScriptJson.compact(reports) : "null");
         return new PreparedModel(model, true);
     }
 

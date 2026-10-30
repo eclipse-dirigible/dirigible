@@ -15,8 +15,8 @@ import jakarta.annotation.security.RolesAllowed;
 
 import org.apache.commons.lang3.StringUtils;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.components.intent.ai.AssistantNotConfiguredException;
 import org.eclipse.dirigible.components.intent.ai.AssistantUpstreamException;
@@ -44,7 +44,8 @@ import org.springframework.web.server.ResponseStatusException;
  * <p>
  * Scope is deliberately the project's hand-written Java. A path under {@code gen/} is refused: that
  * folder is the template engine's output and is wiped on the next generation, so a proposal there
- * could only be lost.
+ * could only be lost. A TypeScript source or a JavaScript module is ported: the proposal is the
+ * Java file that replaces it, named by {@code target}.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "intent")
@@ -52,6 +53,8 @@ import org.springframework.web.server.ResponseStatusException;
 class JavaAssistEndpoint {
 
     private static final String GENERATED_FOLDER = "gen/";
+
+    private static final String JAVA_EXTENSION = ".java";
 
     private final JavaAssistService assistService;
     private final WorkspaceJavaSources sources;
@@ -66,8 +69,21 @@ class JavaAssistEndpoint {
     @PostMapping(value = "/assist", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     ResponseEntity<AssistReply> assist(@RequestBody AssistRequest request) {
         String path = StringUtils.defaultString(request.path());
-        if (!path.endsWith(".java")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The assistant works on Java files; [" + path + "] is not one");
+        AssistContext context = ScriptPorts.isPortable(path) ? portContext(request, path) : javaContext(request, path);
+        try {
+            return ResponseEntity.ok(assistService.chat(context, request.message(), history(request)));
+        } catch (AssistantNotConfiguredException ex) {
+            throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, ex.getMessage(), ex);
+        } catch (AssistantUpstreamException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, ex.getMessage(), ex);
+        }
+    }
+
+    /** A turn about a hand-written Java file. */
+    private AssistContext javaContext(AssistRequest request, String path) {
+        if (!path.endsWith(JAVA_EXTENSION)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "The assistant works on Java files, and ports TypeScript to Java; [" + path + "] is neither");
         }
         if (path.startsWith(GENERATED_FOLDER)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -80,16 +96,35 @@ class JavaAssistEndpoint {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     "File [" + path + "] does not exist in project [" + request.project() + "]");
         }
-        AssistContext context =
-                new AssistContext(request.project(), path, source, sources.intentYaml(project), sources.siblings(project, path));
+        return new AssistContext(request.project(), path, source, sources.intentYaml(project), sources.siblings(project, path, source));
+    }
 
-        try {
-            return ResponseEntity.ok(assistService.chat(context, request.message(), history(request)));
-        } catch (AssistantNotConfiguredException ex) {
-            throw new ResponseStatusException(HttpStatus.PRECONDITION_FAILED, ex.getMessage(), ex);
-        } catch (AssistantUpstreamException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, ex.getMessage(), ex);
+    /**
+     * A turn porting a server-side script to Java (#8051): the proposal is the Java file that replaces
+     * it, compiled like any other, and the script itself is left for the developer to delete once the
+     * port is in. Generated TypeScript is not ported - it is regenerated with the Java templates.
+     */
+    private AssistContext portContext(AssistRequest request, String path) {
+        if (path.startsWith(GENERATED_FOLDER)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "[" + path + "] is generated code - regenerate the project with the Java templates instead of porting it");
         }
+        String target = StringUtils.isNotBlank(request.target()) ? request.target() : ScriptPorts.javaPathOf(path);
+        if (!target.endsWith(JAVA_EXTENSION) || target.startsWith(GENERATED_FOLDER)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "A port writes a hand-written Java file outside gen/; [" + target + "] is not one");
+        }
+        Project project = resolveProject(request);
+
+        String script = request.source() != null ? request.source() : sources.read(project, path);
+        if (script == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "File [" + path + "] does not exist in project [" + request.project() + "]");
+        }
+        String existing = StringUtils.defaultString(sources.read(project, target));
+        return new AssistContext(request.project(), target, existing, sources.intentYaml(project),
+                sources.siblings(project, target, script + "\n" + existing),
+                new AssistContext.PortedScript(path, ScriptPorts.languageOf(path), script));
     }
 
     private Project resolveProject(AssistRequest request) {

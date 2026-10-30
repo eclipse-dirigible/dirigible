@@ -144,7 +144,7 @@ public class ${name}MyController {
 #if($personalParent)
     @Get
     @Documentation("List my ${name} of one ${personalParent.entity}")
-    public List<${name}Entity> getAll(@QueryParam("${personalParent.fkProperty}") String ${personalParent.fkProperty},
+    public List<${name}Entity> getAll(@QueryParam("${personalParent.fkProperty}") ${personalParent.fkJavaClass} ${personalParent.fkProperty},
                                       @QueryParam("$limit") Integer limit, @QueryParam("$offset") Integer offset) {
         if (${personalParent.fkProperty} == null || me() == null) {
             return List.of();
@@ -225,7 +225,7 @@ public class ${name}MyController {
         if (entity.${personalParent.fkProperty} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${personalParent.fkProperty} is required");
         }
-        requireMyParent(String.valueOf(entity.${personalParent.fkProperty}));
+        requireMyParent(entity.${personalParent.fkProperty});
 #else
         ${personalFkJavaClass} me = me();
         if (me == null) {
@@ -299,6 +299,9 @@ public class ${name}MyController {
 #end
 #if($workflowStatusProperty)
         applyWorkflowStatus(existing, entity);
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+        applyFixedAfterCreate(existing, entity);
 #end
 #if($periodLock)
         // The stored date is checked above; this refuses a move INTO a closed period.
@@ -437,10 +440,10 @@ public class ${name}MyController {
 #if($personalParent)
 
     /** Prove the ${personalParent.entity} the operation targets is mine - else the same 404. */
-    private void requireMyParent(String parentId) {
+    private void requireMyParent(${personalParent.fkJavaClass} parentId) {
         var me = me();
         var parent = me == null ? null
-                : parentRepository.findOne(${personalParent.fkJavaClass}.valueOf(parentId))
+                : parentRepository.findOne(parentId)
                                   .orElse(null);
         if (parent == null || !me.equals(parent.${personalParent.personalProperty})) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${personalParent.entity} not found");
@@ -693,6 +696,23 @@ public class ${name}MyController {
 
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
+#end
+#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+
+    // Relations fixed after create (intent `fixedAfterCreate: true`, dirigible #7903): picked on the
+    // New form and fixed from then on. An absent value is not a change - a caller PUTs the fields its
+    // form edits - so it is taken from the stored row; a value that DIFFERS is refused with a 409 in
+    // the reader's language. System writers (roll-ups, workflow steps, generates) reach the repository
+    // directly, never this controller, so they are unaffected.
+    private void applyFixedAfterCreate(${name}Entity stored, ${name}Entity entity) {
+#foreach($fixed in $fixedAfterCreateRelations)
+        if (entity.${fixed.name} == null) {
+            entity.${fixed.name} = stored.${fixed.name};
+        } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
 #end
 #if($processDeleteGuards)
 

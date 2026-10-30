@@ -53,6 +53,10 @@ class HarmoniaTaskRefreshIT {
 
     private static final String ISSUE_TASK = "{ id: 't1', processInstanceId: 'p1', name: 'Issue', formKey: '/form', mine: true }";
 
+    /** Two tasks whose subject is an invoice's number and its customer's name. */
+    private static final String SUBJECT_TASKS = "{ id: 't1', processInstanceId: 'p1', name: 'Approve', subject: __invoiceSubject(5) },"
+            + " { id: 't2', processInstanceId: 'p1', name: 'Approve', subject: __invoiceSubject(6) }";
+
     @Test
     void aReReadAnnouncesTheProcessesWhoseTaskSetChanged() {
         try (Context context = load()) {
@@ -82,6 +86,79 @@ class HarmoniaTaskRefreshIT {
             assertEquals(2941, context.eval("js", "store.total")
                                       .asInt(),
                     "the count is the size of the whole inbox");
+        }
+    }
+
+    /**
+     * A failed reading empties the store, so the next successful one is a baseline again: compared
+     * against the empty map it announced every process and every open page re-read itself (#8313).
+     */
+    @Test
+    void theReadingAfterAFailedOneIsABaselineNotAChange() {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + ISSUE_TASK + "]; store.init();");
+            context.eval("js", "__inbox.fail = true; store.load(); __inbox.fail = false; store.load();");
+            assertEquals("", announced(context), "the inbox did not change, so nothing is announced");
+            context.eval("js", "__inbox.assignee = []; store.load();");
+            assertEquals("p1", announced(context), "a later reading is compared again");
+        }
+    }
+
+    /**
+     * A reading of the inbox - the shell's init, every route change, the 30 s poll - fetches the task
+     * list and nothing else: resolving every task's subject there cost one record GET per task plus one
+     * per relation label, hundreds at ~200 visible tasks, for lines only the Inbox shows (#8313).
+     */
+    @Test
+    void aReadingOfTheInboxFetchesNoRecord() {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init();"
+                    + " __documentListeners['pinecone:end'].forEach(function (fn) { fn(); }); store.load();");
+            assertEquals("", recordGets(context), "no record is read to count or bucket the tasks");
+            assertEquals(2, context.eval("js", "store.getTasks({ ProcessId: 'p1' }).length")
+                                   .asInt(),
+                    "the per-record task match reads the task list alone");
+            assertEquals("", context.eval("js", "store.subject(store.tasks[0])")
+                                    .asString());
+        }
+    }
+
+    @Test
+    void subjectsAreResolvedOnlyForTheTasksAViewAsksFor() {
+        try (Context context = load()) {
+            // Each step is its own evaluation: the reading lands once the evaluation that started it returns.
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init();");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "the asked-for task's record and its relation label");
+            assertEquals("INV-5 · ACME", context.eval("js", "store.subject(store.tasks[0])")
+                                                .asString());
+            assertEquals("", context.eval("js", "store.subject(store.tasks[1])")
+                                    .asString(),
+                    "a task nobody asked for stays unresolved");
+            context.eval("js", "store.load();");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "a resolved subject is kept across readings");
+        }
+    }
+
+    /** The Inbox asks for the rows on screen, as they scroll in and after every re-read of the list. */
+    @Test
+    void theInboxResolvesTheRowsOnScreenOnly() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "__inbox.assignee = [" + SUBJECT_TASKS + "]; store.init(); var inbox = __data.inboxPage(); inbox.init();");
+            context.eval("js", "store.tasks.forEach(function (t) { inbox.observeRow({ dataset: { taskId: t.id } }); });");
+            assertEquals("", recordGets(context), "entering the Inbox resolves nothing that is not on screen");
+            context.eval("js", "__intersect('t2', true);");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9", recordGets(context), "the row scrolled in is resolved");
+            context.eval("js", "inbox.refresh();");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9|/svc/Invoice/6|/svc/Customer/9", recordGets(context),
+                    "a Refresh re-reads the records of the rows still on screen");
+            context.eval("js", "inbox.destroy(); __intersect('t1', true);");
+            assertEquals("/svc/Invoice/6|/svc/Customer/9|/svc/Invoice/6|/svc/Customer/9", recordGets(context),
+                    "a closed Inbox observes nothing");
+            assertTrue(
+                    read(SHELL.replace("js/", "") + "views/_inbox.html").contains(":data-task-id=\"task.id\" x-init=\"observeRow($el)\""),
+                    "the Inbox rows are not observed");
         }
     }
 
@@ -129,6 +206,86 @@ class HarmoniaTaskRefreshIT {
                     "__inbox.assignee = [" + ISSUE_TASK + "]; store.init(); store.openTask(" + ISSUE_TASK + "); store.closeForm();");
             assertEquals("", announced(context), "the task is still there: nothing changed");
             assertEquals("", pendingDelays(context), "only a completion has a chain to wait for");
+        }
+    }
+
+    /**
+     * A generated app hosted in a shell's iframe used to run its own copy of the store: two readings of
+     * the inbox on load and two polls every 30 s per tab (#8347). Embedded in a same-origin host with
+     * the store, it mirrors the host's reading instead and polls nothing.
+     */
+    @Test
+    void anEmbeddedPageMirrorsTheHostsReadingAndPollsNothing() {
+        try (Context context = loadEmbedded()) {
+            assertTrue(context.eval("js", "store.embedded")
+                              .asBoolean(),
+                    "the store must follow the host's");
+            assertEquals(2, inboxGets(context), "one reading: the host's assignee page and groups page");
+            assertEquals(1, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the host's tasks are mirrored");
+            assertEquals(1, context.eval("js", "store.getTasks({ ProcessId: 'p1' }).length")
+                                   .asInt(),
+                    "and bucketed by process for the in-record buttons");
+            assertEquals(1, context.eval("js", "__intervals.length")
+                                   .asInt(),
+                    "only the host polls");
+            // The hosted page's first route is its own load, which the host's reading already covers.
+            context.eval("js", "__lastDocumentListener('pinecone:end')();");
+            assertEquals(2, inboxGets(context), "the first route must not re-read");
+            // A later navigation re-reads - through the host, which is the one reader.
+            context.eval("js", "__lastDocumentListener('pinecone:end')();");
+            assertEquals(4, inboxGets(context), "a navigation re-reads once, through the host");
+            assertEquals(1, context.eval("js", "__intervals.length")
+                                   .asInt(),
+                    "still only the host polls");
+        }
+    }
+
+    @Test
+    void aChangeTheHostReadsIsAnnouncedOnTheEmbeddedWindowToo() {
+        try (Context context = loadEmbedded()) {
+            context.eval("js", "__inbox.assignee = []; hostStore.load();");
+            // The stub has one window for both stores: the host's announcement and the follower's
+            // re-announcement on the hosted page's window both land in it.
+            assertEquals("p1|p1", announced(context), "the host announces and the embedded store re-announces");
+            assertEquals(0, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the reading that changed is mirrored");
+        }
+    }
+
+    @Test
+    void anEmbeddedPageOpensATaskInTheHostsDialog() {
+        try (Context context = loadEmbedded()) {
+            context.eval("js", "store.openTask(store.tasks[0]);");
+            assertTrue(context.eval("js", "hostStore.formOpen")
+                              .asBoolean(),
+                    "the host's dialog opens");
+            assertTrue(!context.eval("js", "store.formOpen")
+                               .asBoolean(),
+                    "the embedded page's own dialog stays closed");
+            // The form completes, the host re-reads and schedules its follow-ups; the result is mirrored.
+            context.eval("js", "__inbox.assignee = []; hostStore.closeForm(true);");
+            assertEquals(0, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the completed task is gone from the embedded page too");
+            assertEquals("2000", pendingDelays(context), "the follow-up series is the host's");
+        }
+    }
+
+    @Test
+    void anEmbeddedPageResolvesSubjectsThroughTheHostsCache() {
+        try (Context context = loadEmbedded("__inbox.assignee = [" + SUBJECT_TASKS + "];")) {
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("INV-5 · ACME", context.eval("js", "store.subject(store.tasks[0])")
+                                                .asString(),
+                    "the line resolved by the host is mirrored");
+            assertEquals("", context.eval("js", "store.subject(store.tasks[1])")
+                                    .asString(),
+                    "and only the row asked for was resolved");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "asking again reads nothing: the host's cache answers");
         }
     }
 
@@ -193,6 +350,16 @@ class HarmoniaTaskRefreshIT {
                       .asString();
     }
 
+    private static int inboxGets(Context context) {
+        return context.eval("js", "__inboxGets")
+                      .asInt();
+    }
+
+    private static String recordGets(Context context) {
+        return context.eval("js", "__recordGets.join('|')")
+                      .asString();
+    }
+
     private static int reloads(Context context) {
         return context.eval("js", "__reloads")
                       .asInt();
@@ -232,20 +399,52 @@ class HarmoniaTaskRefreshIT {
                         };
                         var __documentListeners = {};
                         var document = { addEventListener: function (type, fn) { (__documentListeners[type] = __documentListeners[type] || []).push(fn); } };
+                        var __lastDocumentListener = function (type) { return __documentListeners[type].slice(-1)[0]; };
                         var __stores = {};
                         var Alpine = { store: function (name, value) { if (value !== undefined) { __stores[name] = value; } return __stores[name]; } };
                         var __timers = [];
                         var __timerIds = 0;
                         function setTimeout(fn, ms) { var t = { id: ++__timerIds, fn: fn, ms: ms }; __timers.push(t); return t.id; }
                         function clearTimeout(id) { __timers = __timers.filter(function (t) { return t.id !== id; }); }
-                        function setInterval() { return 0; }
+                        var __intervals = [];
+                        function setInterval(fn, ms) { __intervals.push(ms); return 0; }
                         function clearInterval() {}
                         var __runTimer = function () { var t = __timers.shift(); if (t) t.fn(); };
                         var console = { log: function () {}, warn: function () {}, error: function () {} };
-                        var __inbox = { assignee: [], groups: [], totals: {} };
+                        var __data = {};
+                        Alpine.data = function (name, factory) { __data[name] = factory; };
+                        var __observed = [];
+                        var __observer = null;
+                        function IntersectionObserver(callback) {
+                          __observer = this;
+                          this.observe = function (el) { __observed.push(el); };
+                          this.disconnect = function () { __observed = []; __observer = null; };
+                          this.callback = callback;
+                        }
+                        var __intersect = function (taskId, visible) {
+                          if (!__observer) return;
+                          var targets = __observed.filter(function (el) { return el.dataset.taskId === taskId; });
+                          __observer.callback(targets.map(function (el) { return { target: el, isIntersecting: visible }; }));
+                        };
+                        var __inbox = { assignee: [], groups: [], totals: {}, fail: false };
+                        var __records = { '/svc/Invoice/5': { Number: 'INV-5', Customer: 9 }, '/svc/Invoice/6': { Number: 'INV-6', Customer: 9 },
+                                          '/svc/Customer/9': { Name: 'ACME' } };
+                        var __recordGets = [];
+                        var __inboxGets = 0;
+                        var __invoiceSubject = function (id) {
+                          return { url: '/svc/Invoice', id: id, fields: [{ property: 'Number' },
+                                   { property: 'Customer', kind: 'relation', url: '/svc/Customer', label: 'Name' }] };
+                        };
                         var App = { config: {}, services: { api: {
                           // the real api.get with { withTotal: true }: the page plus the X-Total-Count (#7977)
                           get: function (url, opts) {
+                            if (url === '/services/inbox/act-as') return Promise.resolve({});
+                            if (url.indexOf('/services/inbox/tasks') !== 0) {
+                              __recordGets.push(url);
+                              return Promise.resolve(__records[url] || null);
+                            }
+                            __inboxGets++;
+                            if (__inbox.fail) return Promise.reject(new Error('500'));
                             var key = /type=assignee/.test(url) ? 'assignee' : 'groups';
                             var items = __inbox[key];
                             if (opts && opts.withTotal) {
@@ -257,7 +456,7 @@ class HarmoniaTaskRefreshIT {
                           post: function () { return Promise.resolve({}); }
                         } } };
                         """);
-        for (String script : List.of("stores/processTasks.js", "components/pages/basePage.js")) {
+        for (String script : List.of("stores/processTasks.js", "components/pages/basePage.js", "components/pages/inboxPage.js")) {
             try {
                 context.eval("js", read(SHELL + script));
             } catch (Exception ex) {
@@ -268,6 +467,32 @@ class HarmoniaTaskRefreshIT {
         // test.
         context.eval("js",
                 "__documentListeners['alpine:init'].forEach(function (fn) { fn(); }); var store = Alpine.store('processTasks');");
+        return context;
+    }
+
+    private static Context loadEmbedded() {
+        return loadEmbedded("__inbox.assignee = [" + ISSUE_TASK + "];");
+    }
+
+    /**
+     * The store of a page hosted in a same-origin iframe of a page with the store (#8347): the shipped
+     * file is evaluated a second time, in a store registry of its own, with the first store reachable
+     * as `window.parent.Alpine.store('processTasks')`. The stub has one window and one document, so
+     * both stores' events and listeners land in the same lists; a test that drives the embedded store's
+     * listener takes the last one registered.
+     */
+    private static Context loadEmbedded(String inbox) {
+        Context context = load();
+        context.eval("js",
+                inbox + " var hostStore = store; hostStore.init();"
+                        + " window.parent = { Alpine: { store: function (name) { return name === 'processTasks' ? hostStore : undefined; },"
+                        + " raw: function (value) { return value; } } };" + " __stores = {};");
+        try {
+            context.eval("js", read(SHELL + "stores/processTasks.js"));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to evaluate stores/processTasks.js", ex);
+        }
+        context.eval("js", "__lastDocumentListener('alpine:init')(); var store = Alpine.store('processTasks'); store.init();");
         return context;
     }
 

@@ -2154,14 +2154,38 @@ projectsView.controller('ProjectsViewController', (
             gmodel.project = '';
             gmodel.templateId = '';
         }, (response) => {
-            console.error(response);
             Dialogs.closeBusyDialog();
+            const retired = GenerateService.retiredTemplate(response);
+            if (retired) {
+                regenerateWithSuccessor(retired, isRegenerating);
+                return;
+            }
+            console.error(response);
             Dialogs.showAlert({
                 title: 'Failed to generate from model',
                 message: `An unexpected error has occurred while trying generate from model '${gmodel.model}'`,
                 type: AlertTypes.Error,
                 preformatted: false,
             });
+        });
+    }
+
+    // The model was generated with a template the platform no longer ships (#8051): regenerating it
+    // means its Java successor, which the developer confirms first - the generated code and its UI change.
+    function regenerateWithSuccessor(retired, isRegenerating) {
+        Dialogs.showDialog({
+            title: 'Regenerate with the Java templates?',
+            message: retired.message,
+            buttons: [
+                { id: 'regenerate', label: 'Regenerate with Java', state: ButtonStates.Emphasized },
+                { id: 'cancel', label: 'Cancel', state: ButtonStates.Transparent },
+            ],
+        }).then((buttonId) => {
+            if (buttonId === 'regenerate') {
+                gmodel.templateId = retired.successor;
+                Dialogs.showBusyDialog('Regenerating from model...');
+                generateModel(isRegenerating);
+            }
         });
     }
 

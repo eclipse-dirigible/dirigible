@@ -155,10 +155,15 @@
             <div class="as-messages" id="as-messages">
                 <div class="as-empty" ng-if="!target">
                     Open a hand-written Java file &mdash; the calculated-field actions and process delegates the model points at, under <code>custom/</code> &mdash; and the assistant will help you implement it.
+                    Open a TypeScript file, and it ports it to Java.
                     <div ng-if="unsupported">{{unsupported}}</div>
                 </div>
-                <div class="as-empty" ng-if="target && !chat.messages.length">
+                <div class="as-empty" ng-if="target && !target.port && !chat.messages.length">
                     Ask for a change to <strong>{{target.path}}</strong> in plain language. The assistant proposes the complete file, compiles it against the project first, and shows you a diff.
+                </div>
+                <div class="as-empty" ng-if="target.port && !chat.messages.length">
+                    Ask the assistant to port <strong>{{target.path}}</strong> to Java. It proposes <strong>{{target.port.javaPath}}</strong>, compiles it against the project first, and shows it to you; Accept writes it and leaves the TypeScript for you to delete once the Java class works.
+                    Regenerate the project with the Java templates first, so the port can use the generated Java repositories.
                 </div>
                 <div ng-repeat="m in chat.messages" class="as-msg {{m.role}}">{{m.text}}</div>
                 <div class="as-msg assistant" ng-if="chat.busy">Thinking&hellip;</div>
@@ -171,13 +176,13 @@
                 </ul>
                 <div class="as-proposal-bar">
                     <span class="as-proposal-label">Proposed change</span>
-                    <bk-button state="emphasized" glyph="sap-icon--accept" label="Accept" title="Write the proposal to the file" ng-click="acceptProposal()"></bk-button>
+                    <bk-button state="emphasized" glyph="sap-icon--accept" label="Accept" title="{{ target.port ? 'Write the proposal to ' + target.port.javaPath : 'Write the proposal to the file' }}" ng-click="acceptProposal()"></bk-button>
                     <bk-button state="transparent" glyph="sap-icon--decline" label="Reject" title="Discard the proposal" ng-click="rejectProposal()"></bk-button>
                 </div>
             </div>
 
             <div class="as-input">
-                <bk-textarea placeholder="Describe what this class should do..." ng-model="chat.input" ng-keydown="onChatKey($event)" ng-disabled="chat.busy || !target"></bk-textarea>
+                <bk-textarea placeholder="{{ target.port ? 'Port this file to Java...' : 'Describe what this class should do...' }}" ng-model="chat.input" ng-keydown="onChatKey($event)" ng-disabled="chat.busy || !target"></bk-textarea>
                 <bk-button state="emphasized" glyph="sap-icon--paper-plane" title="Send" aria-label="Send" ng-click="send()" ng-disabled="chat.busy || !chat.input || !target"></bk-button>
             </div>
         </div>

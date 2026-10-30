@@ -131,11 +131,15 @@
         </div>
         <template x-if="languageWarnings().length > 0">
           <div class="vbox gap-2">
-            <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Missing translations')"></span>
+            <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Incomplete translations')"></span>
             <template x-for="warn in languageWarnings()" :key="warn.app">
               <div x-h-alert data-variant="warning" role="alert">
-                <div x-h-alert-description
-                     x-text="T('application-core:shell.settings.missingWarning', warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.', { app: warn.app, missing: warn.missing.join(', ') })"></div>
+                <div x-h-alert-description class="vbox gap-1">
+                  <p x-show="warn.screens.length > 0"
+                     x-text="T('application-core:shell.settings.missingScreens', '{{app}} has no {{missing}} translation of its screens - its labels show in the default language.', { app: warn.app, missing: warn.screens.join(', ') })"></p>
+                  <p x-show="warn.data.length > 0"
+                     x-text="T('application-core:shell.settings.missingData', '{{app}} does not provide {{missing}} data - its lists and documents show the default-language values (for example statuses and types). Declare languages: in its intent once the data is translated.', { app: warn.app, missing: warn.data.join(', ') })"></p>
+                </div>
               </div>
             </template>
           </div>

@@ -134,6 +134,7 @@ function detailPanel(def, masterId, master) {
     // - a relationship column shows its referenced label
     // - a `via` column shows a field of that same referenced row (relation `show`)
     // - a `multi` column resolves EACH key of its list
+    // - a `list` column joins the texts its rows carry
     // - a date column is formatted.
     cellValue(col, row) {
       // A `via` column reads a field off another (lookup) column's referenced row.
@@ -146,6 +147,9 @@ function detailPanel(def, masterId, master) {
         return this.displayValue(shown, col.date);
       }
       const v = row[col.name];
+      // A collection column (intent `list:` collection path, #8295) arrives as the texts of the row's
+      // child rows; the panel renders them as chips, and as one text wherever a single value is read.
+      if (col.list) return Array.isArray(v) ? v.join(", ") : "";
       // A subset column holds a key LIST ("1,3"): resolve each key through the lookup map and
       // join the labels. Routed by the explicit `multi` flag, never by sniffing the value for commas.
       if (col.multi && col.lookup) {
@@ -264,6 +268,22 @@ function detailPanel(def, masterId, master) {
     // Read-only view of the detail record (the routed form page in preview mode).
     previewRow(row) {
       this.openForm("/" + this.def.entity + "/" + encodeURIComponent(row[this.def.primaryKey]) + "/preview?" + this.masterQuery() + "&embedded=1&dialog=1", window.T ? T(this.def.tkey, this.def.label) : this.def.label);
+    },
+
+    // A row's record's own contributed actions (#8289), for the row menu: the child entity's actions its
+    // status guards and roles allow - the rule of the list's row menu (#8116). A composition child has no
+    // list, and the record dialog Preview opens shows no actions, so the row menu is the one place they
+    // can be offered. A composition child belongs to this application, so every panel asks; relatedPanel
+    // keeps its own rule (#8118: a cross-project register asks nothing). An action is the child's own
+    // declared operation, guarded by its own endpoint - not an edit through the master - so the row menu
+    // offers it on the master's preview too, and the panel re-reads after it (onActionDone in init).
+    rowActions(row) {
+      const store = Alpine.store("customActions");
+      return row && store ? store.getActions(this.def.entity, "entity", row) : [];
+    },
+
+    runRowAction(action, row) {
+      Alpine.store("customActions").trigger(action, row[this.def.primaryKey], row);
     },
 
     // --- embedded calendar (calendar defs only) -------------------------------------------------
@@ -429,7 +449,7 @@ function detailPanel(def, masterId, master) {
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.error = App.services.apiErrors.messageFor(e, "Could not delete.");
+        this.error = App.services.apiErrors.refusalMessageFor(e, "Could not delete.");
       } finally {
         this.deleteBusy = false;
       }

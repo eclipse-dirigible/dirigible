@@ -32,10 +32,21 @@ App.config = {
   // content falls back to the default language.
   languages: ${appLanguages},
 
+  // Whether the app has data to translate at all (a multilingual entity). The shell weighs the
+  // `languages` declaration above only for such an app: one without translatable data is fully
+  // translated once its screens are (#8137).
+  translatableData: ${appTranslatableData},
+
   // Country-scoped label overrides (the intent's field `countryLabels:`), keyed by ISO 3166-1
   // alpha-2 country code and then by the label's own translation key. The shared i18n runtime
   // prefers an entry here over the language catalogs whenever the tenant declares a country
   // (DIRIGIBLE_APPLICATION_COUNTRY): which term a national identifier goes by is a property of the
   // company, not of the language its users read the UI in. Empty for an app that declares none.
-  countryLabels: ${countryLabels}
+  countryLabels: ${countryLabels},
+
+  // The application's reports (the intent's `reports:`), with their display metadata and the URLs
+  // of their pages and controllers. The shared reports store lists these in the sidebar's Reports
+  // section and on the dashboard, so no user needs access to the core repository API to see them.
+  // null for an app whose model lists none - the store then discovers its reports at runtime.
+  reports: ${appReports}
 };

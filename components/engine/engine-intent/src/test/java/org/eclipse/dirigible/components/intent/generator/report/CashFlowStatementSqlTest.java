@@ -168,7 +168,7 @@ class CashFlowStatementSqlTest {
         assertTrue(totals.contains("HAVING "), "only entries touching cash belong in the totals: " + totals);
         String query = query("CashFlow");
         assertTrue(query.contains("INNER JOIN \"LEDGER_CASH_FLOW_CASH_TOTALS\" as CashTotals"), query);
-        assertTrue(query.contains("AND NOT Account.\"ACCOUNT_CODE\" LIKE '50%'"), query);
+        assertTrue(query.contains("AND NOT Account_.\"ACCOUNT_CODE\" LIKE '50%'"), query);
     }
 
     @Test

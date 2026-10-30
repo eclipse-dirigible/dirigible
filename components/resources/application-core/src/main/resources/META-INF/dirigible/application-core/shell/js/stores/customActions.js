@@ -28,6 +28,10 @@
  * A `call` descriptor (issue #8090) sends its declared request - method, path, body filled from the
  * prompt - to the application's OWN endpoint after the same confirm (`confirm` is its text) or prompt;
  * a descriptor naming `roles` reaches only a caller holding one of them, filtered by the server.
+ * Its dialog says what it acts on (issue #8296): a `description` paragraph and the `confirm` text name
+ * the clicked record's properties as `{property}` (`recordFields` says where each is read), `submit`
+ * captions the run button, and a prompt input may open with a `default`, carry a `help` line, or be a
+ * MULTISELECT of declared `options`, sent as a JSON array in options order.
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
@@ -61,6 +65,8 @@ document.addEventListener('alpine:init', () => {
     confirmAction: null,
     confirmId: null,
     confirmBusy: false,
+    confirmText: '',      // a call's `confirm`, its {property} placeholders filled from the record
+    dialogDescription: '', // a call's `description`, filled the same way - shown in both dialogs
     // Prompt-before-run state (issue #6685): a generate action may declare a small input form
     // (`prompt` on the descriptor) - the values the target needs that cannot be derived from the
     // source (which payment, how much). The dialog's controls are resolved AT RUNTIME from the
@@ -243,7 +249,14 @@ document.addEventListener('alpine:init', () => {
         if (Array.isArray(action.prompt) && action.prompt.length && this.openPrompt(action, id, record)) return;
         this.confirmAction = action;
         this.confirmId = (id !== undefined && id !== null && id !== '') ? id : null;
+        this.confirmText = '';
+        this.dialogDescription = '';
         this.confirmOpen = true;
+        this.describe(action, record).then((texts) => {
+          if (this.confirmAction !== action) return;
+          this.confirmText = texts.confirm;
+          this.dialogDescription = texts.description;
+        });
         return;
       }
       if (!action.path) return;
@@ -265,9 +278,7 @@ document.addEventListener('alpine:init', () => {
         await this.run(this.confirmAction, this.confirmId);
       } finally {
         this.confirmBusy = false;
-        this.confirmOpen = false;
-        this.confirmAction = null;
-        this.confirmId = null;
+        this.cancelConfirm();
       }
     },
     cancelConfirm() {
@@ -275,6 +286,8 @@ document.addEventListener('alpine:init', () => {
       this.confirmOpen = false;
       this.confirmAction = null;
       this.confirmId = null;
+      this.confirmText = '';
+      this.dialogDescription = '';
     },
 
     // ----- the prompt dialog (issue #6685) -----
@@ -315,13 +328,104 @@ document.addEventListener('alpine:init', () => {
         if (v == null || v === '' || typeof v === 'object') continue;
         this.promptValues[col.name] = col.widget === 'DROPDOWN' ? String(v) : v;
       }
+      // A call's declared defaults (issue #8296): a literal opens the dialog with it, a "{property}" is
+      // read off the record - asynchronously, as a to-one's display text is fetched - and fills the
+      // input only while the user has not typed into it. A MULTISELECT always binds an array.
+      const fromRecord = [];
+      for (const col of this.promptCols) {
+        if (col.widget === 'MULTISELECT') this.promptValues[col.name] = [];
+        if (col.default === undefined || col.default === null) continue;
+        const property = this.placeholderOf(col.default);
+        if (property === null) {
+          this.setPromptDefault(col, col.default);
+        } else {
+          fromRecord.push({ col, property });
+        }
+      }
       this.promptOptions = {};
       this.promptError = '';
+      this.dialogDescription = '';
       this.promptAction = action;
       this.promptId = (id !== undefined && id !== null && id !== '') ? id : null;
       this.promptOpen = true;
       this.loadPromptOptions().then(() => this.seedPromptCascade());
+      for (const { col, property } of fromRecord) {
+        this.recordValue(action, record, property).then((v) => {
+          if (this.promptAction === action && this.isEmptyInput(this.promptValues[col.name])) this.setPromptDefault(col, v);
+        });
+      }
+      this.describe(action, record).then((texts) => {
+        if (this.promptAction === action) this.dialogDescription = texts.description;
+      });
       return true;
+    },
+
+    // An input's default as its control holds it: a MULTISELECT the ticked option values (in options
+    // order, an unknown or non-list value ticking nothing), a dropdown key as a string. A value the
+    // control cannot hold as it is - a date the backend serialised as an array - is left empty.
+    setPromptDefault(col, v) {
+      if (col.widget === 'MULTISELECT') {
+        this.promptValues[col.name] = Array.isArray(v) ? this.optionOrder(col, v) : [];
+        return;
+      }
+      if (v === undefined || v === null || v === '' || typeof v === 'object') return;
+      this.promptValues[col.name] = col.widget === 'DROPDOWN' ? String(v) : v;
+    },
+
+    // The ticked values of a MULTISELECT, in its options' order.
+    optionOrder(col, ticked) {
+      const values = ticked.map(String);
+      return (col.options || []).map((o) => o.value).filter((v) => values.includes(String(v)));
+    },
+
+    isEmptyInput(v) {
+      return v === undefined || v === null || v === '' || (Array.isArray(v) && !v.length);
+    },
+
+    // The property a whole "{property}" default names, or null for a literal.
+    placeholderOf(value) {
+      const whole = typeof value === 'string' ? /^\{([^{}]*)\}$/.exec(value) : null;
+      return whole ? whole[1] : null;
+    },
+
+    // The clicked record's value for a dialog placeholder (issue #8296): a field as the record holds
+    // it, a to-one relation by its target's display text. Null when the record lacks it - a page that
+    // handed over no record, a row projecting other columns, a lookup that failed.
+    async recordValue(action, record, name) {
+      const field = action && action.recordFields ? action.recordFields[name] : null;
+      if (!field || !record || typeof record !== 'object') return null;
+      const v = record[field.property];
+      if (v === undefined || v === null || v === '') return null;
+      if (!field.lookup) return v;
+      try {
+        const target = await App.services.api.get(field.lookup.url + '/' + encodeURIComponent(v), { baseUrl: '' });
+        return target == null ? null : target[field.lookup.text];
+      } catch (e) {
+        console.error('customActions: failed to read the display text of ' + name, e);
+        return null;
+      }
+    },
+
+    // A dialog text with its {property} placeholders filled from the record; one the record lacks
+    // renders empty, and a collection path's texts (issue #8323) are joined with ", ".
+    async fillText(action, record, text) {
+      if (!text) return '';
+      const names = [...new Set([...text.matchAll(/\{([^{}]*)\}/g)].map((m) => m[1]))];
+      const values = {};
+      for (const name of names) values[name] = await this.recordValue(action, record, name);
+      return text.replace(/\{([^{}]*)\}/g, (m, name) => {
+        const v = values[name];
+        if (Array.isArray(v)) return v.join(', ');
+        return (v === undefined || v === null || typeof v === 'object') ? '' : String(v);
+      });
+    },
+
+    // A call dialog's two texts, filled from the record it was opened on.
+    async describe(action, record) {
+      return {
+        description: await this.fillText(action, record, action.description),
+        confirm: await this.fillText(action, record, action.confirm),
+      };
     },
 
     cancelPrompt() {
@@ -334,6 +438,7 @@ document.addEventListener('alpine:init', () => {
       this.promptValues = {};
       this.promptOptions = {};
       this.promptError = '';
+      this.dialogDescription = '';
     },
 
     promptOptionsFor(name) { return this.promptOptions[name] || []; },
@@ -451,8 +556,7 @@ document.addEventListener('alpine:init', () => {
     // with the source id.
     async promptRun() {
       if (!this.promptAction || this.promptBusy) return;
-      const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault
-        && (this.promptValues[c.name] == null || this.promptValues[c.name] === ''));
+      const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault && this.isEmptyInput(this.promptValues[c.name]));
       if (missing.length) {
         this.promptError = missing.map((c) => c.label || c.name).join(', ');
         return;
@@ -496,8 +600,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     // A body value with its prompt placeholders filled. A string that is exactly "{name}" becomes that
-    // input TYPED by its control - a number, a boolean, or null for an empty optional input - so the
-    // endpoint receives `level: 2`, not `"2"`. A placeholder inside a longer string interpolates as
+    // input TYPED by its control - a number, a boolean, the ticked values of a MULTISELECT as an array
+    // in options order (`[]` when none), or null for an empty optional input - so the endpoint receives
+    // `level: 2`, not `"2"`. A placeholder inside a longer string interpolates as
     // text; maps and lists are filled throughout; every other value is a constant, sent as written.
     callValue(value, action, values) {
       if (Array.isArray(value)) return value.map((v) => this.callValue(v, action, values));
@@ -519,6 +624,7 @@ document.addEventListener('alpine:init', () => {
       const col = (action.promptColumns || []).find((c) => c.name === name);
       const widget = col ? col.widget : 'TEXT';
       if (widget === 'CHECKBOX') return Boolean(v);
+      if (widget === 'MULTISELECT') return this.optionOrder(col, Array.isArray(v) ? v : []);
       if (v === undefined || v === null || v === '') return null;
       return widget === 'NUMBER' ? Number(v) : v;
     },

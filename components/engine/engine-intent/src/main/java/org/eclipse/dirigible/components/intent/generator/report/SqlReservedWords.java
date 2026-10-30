@@ -1,0 +1,87 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.components.intent.generator.report;
+
+import java.util.Arrays;
+import java.util.Locale;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+/**
+ * The words no supported database accepts as an unquoted table alias (dirigible #8234).
+ *
+ * <p>
+ * The report and view generators alias every table by its entity name, unquoted: {@code FROM
+ * "SHOP_ORDER" as Order}. An entity called {@code Order}, {@code User}, {@code Group}, {@code
+ * Value}, {@code Year} or {@code Key} then parses, generates and publishes clean, and every report
+ * over it fails at query time with a syntax error, because the alias is a keyword. This is the
+ * union of the reserved words of the dialects Dirigible ships a synchronizer for - H2, PostgreSQL,
+ * MySQL, MariaDB, SQL Server, SAP HANA and Snowflake - so an alias that is not in it runs on all of
+ * them. Non-reserved keywords ({@code DATE}, {@code POSITION}, {@code MEMBER}, {@code STATUS}...)
+ * are deliberately not here: every dialect accepts them as an alias, and listing them would rename
+ * the aliases of the most ordinary entities for nothing.
+ */
+public final class SqlReservedWords {
+
+    private static final Set<String> WORDS = Arrays.stream("""
+            ACCESSIBLE ACCOUNT ADD ALL ALTER ANALYSE ANALYZE AND ANY ARRAY AS ASC ASENSITIVE ASYMMETRIC
+            AUTHORIZATION BACKUP BEFORE BEGIN BETWEEN BIGINT BINARY BLOB BOTH BREAK BROWSE BULK BY CALL CASCADE
+            CASE CAST CHANGE CHAR CHARACTER CHECK CHECKPOINT CLOSE CLUSTERED COALESCE COLLATE COLLATION COLUMN
+            COMMIT COMPUTE CONCURRENTLY CONDITION CONNECT CONNECTION CONSTRAINT CONTAINS CONTAINSTABLE CONTINUE
+            CONVERT CREATE CROSS CUBE CUME_DIST CURRENT CURRENT_CATALOG CURRENT_CONNECTION CURRENT_DATE
+            CURRENT_PATH CURRENT_ROLE CURRENT_SCHEMA CURRENT_TIME CURRENT_TIMESTAMP
+            CURRENT_TRANSACTION_ISOLATION_LEVEL CURRENT_USER CURRENT_UTCDATE CURRENT_UTCTIME
+            CURRENT_UTCTIMESTAMP CURRVAL CURSOR DATABASE DATABASES DAY DAY_HOUR DAY_MICROSECOND DAY_MINUTE
+            DAY_SECOND DBCC DEALLOCATE DEC DECIMAL DECLARE DEFAULT DEFERRABLE DELAYED DELETE DENSE_RANK DENY DESC
+            DESCRIBE DETERMINISTIC DISK DISTINCT DISTINCTROW DISTRIBUTED DIV DO DOUBLE DROP DUAL DUMP EACH ELSE
+            ELSEIF EMPTY ENCLOSED END ERRLVL ESCAPE ESCAPED EXCEPT EXCEPTION EXEC EXECUTE EXISTS EXIT EXPLAIN
+            EXTERNAL FALSE FETCH FILE FILLFACTOR FIRST_VALUE FLOAT FLOAT4 FLOAT8 FOLLOWING FOR FORCE FOREIGN
+            FREETEXT FREETEXTTABLE FREEZE FROM FULL FULLTEXT FUNCTION GENERATED GET GOTO GRANT GROUP GROUPING
+            GROUPS GSCLUSTER HAVING HIGH_PRIORITY HOLDLOCK HOUR HOUR_MICROSECOND HOUR_MINUTE HOUR_SECOND IDENTITY
+            IDENTITYCOL IDENTITY_INSERT IF IGNORE ILIKE IN INCREMENT INDEX INFILE INITIALLY INNER INOUT
+            INSENSITIVE INSERT INT INT1 INT2 INT3 INT4 INT8 INTEGER INTERSECT INTERVAL INTO IO_AFTER_GTIDS
+            IO_BEFORE_GTIDS IS ISNULL ISSUE ITERATE JOIN JSON_TABLE KEY KEYS KILL LAG LAST_VALUE LATERAL LEAD
+            LEADING LEAVE LEFT LIKE LIMIT LINEAR LINENO LINES LOAD LOCALTIME LOCALTIMESTAMP LOCK LONG LONGBLOB
+            LONGTEXT LOOP LOW_PRIORITY MASTER_BIND MASTER_SSL_VERIFY_SERVER_CERT MATCH MAXVALUE MEDIUMBLOB
+            MEDIUMINT MEDIUMTEXT MERGE MIDDLEINT MINUS MINUTE MINUTE_MICROSECOND MINUTE_SECOND MOD MODIFIES
+            MONTH NATIONAL NATURAL NCHAR NEXTVAL NOCHECK NONCLUSTERED NOT NOTNULL NO_WRITE_TO_BINLOG NTH_VALUE
+            NTILE NULL NULLIF NUMERIC OF OFF OFFSET OFFSETS ON ONLY OPEN OPENDATASOURCE OPENQUERY OPENROWSET
+            OPENXML OPTIMIZE OPTIMIZER_COSTS OPTION OPTIONALLY OR ORDER ORGANIZATION OUT OUTER OUTFILE OVER
+            OVERLAPS PARTITION PERCENT PERCENT_RANK PIVOT PLACING PLAN PRECISION PRIMARY PRINT PRIOR PROC
+            PROCEDURE PUBLIC PURGE QUALIFY RAISERROR RANGE RANK READ READS READTEXT READ_WRITE REAL RECONFIGURE
+            RECURSIVE REFERENCES REGEXP RELEASE RENAME REPEAT REPLACE REPLICATION REQUIRE RESIGNAL RESTORE
+            RESTRICT RETURN RETURNING RETURNS REVERSE REVERT REVOKE RIGHT RLIKE ROLLBACK ROLLUP ROW ROWCOUNT
+            ROWGUIDCOL ROWID ROWNUM ROWS ROW_NUMBER RULE SAMPLE SAVE SCHEMA SCHEMAS SECOND SECOND_MICROSECOND
+            SECURITYAUDIT SELECT SEMANTICKEYPHRASETABLE SEMANTICSIMILARITYDETAILSTABLE SEMANTICSIMILARITYTABLE
+            SENSITIVE SEPARATOR SESSION_USER SET SETUSER SHOW SHUTDOWN SIGNAL SIMILAR SMALLINT SOME SPATIAL
+            SPECIFIC SQL SQLEXCEPTION SQLSTATE SQLWARNING SQL_BIG_RESULT SQL_CALC_FOUND_ROWS SQL_SMALL_RESULT
+            SSL START STARTING STATISTICS STORED STRAIGHT_JOIN SYMMETRIC SYSTEM SYSTEM_USER SYSUUID TABLE
+            TABLESAMPLE TERMINATED TEXTSIZE THEN TINYBLOB TINYINT TINYTEXT TO TOP TRAILING TRAN TRANSACTION
+            TRIGGER TRUE TRUNCATE TRY_CAST TRY_CONVERT TSEQUAL UESCAPE UNDO UNION UNIQUE UNKNOWN UNLOCK UNPIVOT
+            UNSIGNED UPDATE UPDATETEXT USAGE USE USER USING UTCTIMESTAMP UTC_DATE UTC_TIME UTC_TIMESTAMP VALUE
+            VALUES VARBINARY VARCHAR VARCHARACTER VARIADIC VARYING VERBOSE VIEW VIRTUAL WAITFOR WHEN WHENEVER
+            WHERE WHILE WINDOW WITH WITHIN WRITE WRITETEXT XOR YEAR YEAR_MONTH ZEROFILL _ROWID_
+            """.split("\\s+"))
+                                                   .filter(word -> !word.isBlank())
+                                                   .collect(Collectors.toUnmodifiableSet());
+
+    private SqlReservedWords() {}
+
+    /**
+     * Whether an identifier, compared case-insensitively, is a reserved word of a supported dialect.
+     *
+     * @param identifier the identifier, an entity name as a rule
+     * @return true when some supported database refuses it unquoted
+     */
+    public static boolean isReserved(String identifier) {
+        return identifier != null && WORDS.contains(identifier.trim()
+                                                              .toUpperCase(Locale.ROOT));
+    }
+}

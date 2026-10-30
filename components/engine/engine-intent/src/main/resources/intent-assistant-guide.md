@@ -203,6 +203,12 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
+- **`fixedAfterCreate: true` on a plain (non-composition, non-`EntityStatus`) `manyToOne`/`oneToOne` = picked
+  on create, fixed from then on** (#7903): the New form offers the picker, the Edit form renders it
+  read-only, and an update that carries a different value is answered 409 (translatable under
+  `checks.<Entity>_fixed_<Relation>`); an update that omits it keeps the stored value. Workflow steps,
+  roll-ups and generates write through the repository and are unaffected. Not with
+  `calculatedActionOnUpdate` (that recomputes the value on every update).
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
@@ -345,8 +351,10 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   other route), the reason a `required` field's **presence check is skipped** (the value is
   guaranteed), and the **seed for a new line in a document's item dialog** - the dialog opens on the
   standard value instead of a blank one, which is what makes a one-click affordance like **Fill Month**
-  actually one click. Only a create is defaulted: an existing row is never re-defaulted, so a value the
-  user deliberately cleared stays cleared. A `date`/`time`/`timestamp` or binary field is the exception
+  actually one click. Only a create is defaulted: an existing row is never re-defaulted. An update
+  that leaves the field empty keeps the stored value instead (#8105, the same for a relation's
+  `init:`), so a PUT carrying only what it changed never erases it - and a defaulted field cannot be
+  cleared to null by an update. A `date`/`time`/`timestamp` or binary field is the exception
   to the repository leg - its default reaches the DDL verbatim and is typically a SQL expression
   (`CURRENT_DATE`), which has no Java stand-in, so there it is the DB DEFAULT alone. **`defaultValue:
   now`** is the one default that reaches a moment field on every leg (#7603): the current moment in the
@@ -1263,6 +1271,25 @@ entities:
       - { name: approvedAt,  type: timestamp, stampOn: { status: APPROVED } }
     relations:
       - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: SUBMITTED }
+```
+
+**A flag at most one row holds (`single:`).** For "the base currency", "the default unit", "the
+default bank account of a company", declare `single:` on the `boolean` field instead of a `unique:`
+(which allows only two rows) or a check (which cannot count sibling rows). `single: true` keeps one
+holder in the whole table; `single: { per: <relation> }` keeps one per value of one of the entity's own
+`manyToOne`/`oneToOne` relations. A write that sets the flag hands it over: the row that held it in
+the same scope is set to `false` in the same transaction. Add `onConflict: refuse` when taking the flag
+must be a deliberate act - the write is then answered 409 while another row holds it. The form keeps
+the ordinary checkbox:
+
+```yaml
+entities:
+  - name: CompanyBankAccount
+    fields:
+      - { name: iban, type: string, length: 34 }
+      - { name: base, type: boolean, single: { per: Company } }
+    relations:
+      - { name: Company, kind: manyToOne, to: Company }
 ```
 
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
@@ -2265,7 +2292,7 @@ actions:
     label: Escalate
     fromStatus: [OPEN, ON_HOLD]   # hides the button elsewhere - ADVISORY: the endpoint's 409 decides
     can: Ticket:escalate          # offered only to the roles whose permissions list this token
-    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date
+    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date | multiselect
       - { name: level, type: integer, label: Level, required: true }
       - { name: note,  type: text,    label: Note }
     call:
@@ -2291,6 +2318,69 @@ declared prompt input, and without `body` none is sent. `fromStatus` names seede
 check, so the endpoint must enforce its own rule. A `can:` token no role lists is refused (the button
 would be shown to nobody), and a token an action binds is not reported as an advisory. The answer's
 body is not read: a 2xx toasts `success`, a 400/409 shows the endpoint's `message`.
+
+**Make the dialog say what it acts on.** A dialog that only says "Run" leaves the user unsure which
+record they are acting on. Use `description:` for one paragraph under the title, in the prompt and the
+confirm dialog alike, and `submit:` for the run button's caption. A prompt input may also open with a
+`default:` and explain itself with a `help:` line. A choice of several values is ONE `multiselect`
+input, never one boolean per value:
+
+```yaml
+actions:
+  - name: InviteMember
+    forEntity: Team
+    label: Invite member
+    description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+    submit: Invite                         # the run button; default "Run"
+    prompt:
+      - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+      - name: roles
+        type: multiselect
+        label: Roles
+        required: true                     # at least one ticked
+        default: [Member]
+        options:                           # { value, label?, help? } or a bare string
+          - { value: Member, help: Uses the team's workspace }
+          - { value: Lead,   help: Manages the team's members }
+    call:
+      path: /services/java/teams/custom/api/TeamApi/teams/{id}/invitations
+      body: { email: "{email}", roles: "{roles}" }   # "{roles}" is a JSON array, in options order
+    success: Invitation sent
+```
+
+Rules: `description` and `confirm` may name the clicked record's properties as `{property}`: a field, a
+to-one relation (shown by its target's display text) or the `Name` a `label:` generates, of
+`forEntity`. An unknown property is refused, and so is any placeholder on `scope: page`, which has no
+record. A property the record lacks renders empty. `options` is required for `multiselect` and refused
+on every other type, and its values are unique strings. `"{roles}"` sends the ticked values as an
+array (`[]` when none), and `required: true` means at least one. A `default` is a literal of the
+input's type (a list of option values for a `multiselect`, a `yyyy-MM-dd` date), or a whole
+`"{property}"` of the record, read when the dialog opens. A record value the control cannot hold is
+left empty. `description` and `submit` belong to a `call:` only. A boolean's caption sits beside its
+box and toggles it.
+
+A `multiselect` that edits the record's child rows opens with the current set ticked when its
+`default` names a collection path `forEntity` shows in its `list:`, spelled as the list writes it:
+
+```yaml
+- name: TeamMember
+  list: [name, skills.skill]           # the path must be listed - only then does the record carry it
+  ...
+actions:
+  - name: ChangeSkills
+    forEntity: TeamMember
+    description: "Change the skills of {name} - now {skills.skill}."
+    prompt:
+      - { name: skills, type: multiselect, required: true, default: "{skills.skill}", options: [Java, SQL, Go] }
+    call:
+      path: /services/java/team/custom/api/members/{id}/skills
+      body: { skills: "{skills}" }
+```
+
+The column holds the child rows' display texts, so the options' `value`s must be those texts: a text no
+option carries ticks nothing. Such a path is the `default` of a `multiselect` only, and it may appear in
+`description` and `confirm`, where the texts are joined with `", "`. An unlisted path is refused - add it
+to `list:` - and so is a path default on any other input type.
 
 **`primary: true` - the record's filled button.** The list's details sheet and the record page each
 have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,
@@ -4065,7 +4155,9 @@ schedules:
   install/publish its prebuilt module). A missing owner or a mistyped field drops that schedule with a
   warning in the generate response - it never emits a job that cannot compile.
 
-**Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
+**Rules:** unique name, a `cron` the Quartz scheduler can run (seconds first, six fields; a `*` in the
+day field that carries no schedule - `"0 0 1 1 * *"`, `"0 0 8 * * MON"` - is accepted and emitted as `?`,
+but both day fields constrained or a five-field Unix cron is a parse error), a declared `entity` (local, or a cross-model source via `model:`),
 `where` operators from the allowed list, and **exactly one** of `notify` (valid recipient) /
 `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
 a `unique:` natural key - target properties and/or the run's period, optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
@@ -4503,7 +4595,9 @@ Each import generates `gen/events/<module>/<Name>Import.java`: an **upload** end
 write role, and a bean method `importFile(fileName, bytes)` a job can call. A file is imported **whole
 or not at all**: an unreadable value answers 400, and a record repeating the `duplicateKey` of a row
 already imported (or of another record of the file) answers 409 - so re-uploading a statement saves
-nothing. Every attempt is recorded in the entity's `<TABLE>_IMPORTS` ledger (file name, checksum,
+nothing. The `duplicateKey` also becomes a database unique constraint on the target, so two
+simultaneous uploads of one file cannot both store its lines: one imports, the rest answer 409. Every
+attempt is recorded in the entity's `<TABLE>_IMPORTS` ledger (file name, checksum,
 records, status, who, when). After the rows are committed, every `@Component` implementing
 `<Name>Import.Hook` in `custom/` is called with them - that is where matching rules go (a hook is
 code, not intent; mention it as a boundary when the requirement asks for matching).
@@ -5053,9 +5147,11 @@ or a seeded name.
 | serviceTask `setField` value | a literal on a `string`/`text` field; exactly `"{now}"` on a `timestamp`/`date` field (the moment the step runs) - `{now}` nowhere else |
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
+| field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
+| relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not a composition, not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409 |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
@@ -5104,6 +5200,7 @@ or a seeded name.
 - "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
+- "the user picks it when creating the record and it must never move afterwards" (a timesheet's project-month, an order's customer) -> the relation's `fixedAfterCreate: true`
 - "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)

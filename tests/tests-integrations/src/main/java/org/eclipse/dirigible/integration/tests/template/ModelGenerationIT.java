@@ -12,8 +12,8 @@ package org.eclipse.dirigible.integration.tests.template;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.ide.template.service.model.GeneratedFile;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.graalvm.polyglot.Context;
@@ -181,6 +181,9 @@ class ModelGenerationIT extends IntegrationTest {
             // The LIST layout (an entity browsed read-only, no manage page), with a relation column -
             // the one layout no other fixture declares (#7721).
             new Case(CATALOG, TEMPLATE_APPLICATION, false), //
+            // The in-application report pages (#7390): a REPORT_TABLE and a REPORT_BAR entity, the
+            // layouts no other fixture declares.
+            new Case("reports.model", TEMPLATE_APPLICATION, false), //
             // The glue fixture's posting is deliberately written in the shape a .glue committed before
             // #7163 holds - a header assignment carrying its expression alone, none of the keys the
             // hoisted-local comparison reads. Velocity renders an undefined reference as its own
@@ -189,6 +192,8 @@ class ModelGenerationIT extends IntegrationTest {
             new Case("orders.glue", TEMPLATE_GLUE, false), //
             new Case("leave-request.form", TEMPLATE_FORM, false), //
             new Case("revenue.report", TEMPLATE_REPORT, false), //
+            // The same report drawn as a chart: the page's Chart / Table switch and chart surface.
+            new Case("revenue-chart.report", TEMPLATE_REPORT, false), //
             // The mapping compiler: the one template whose preparation derives Java expressions rather
             // than marshalling a model.
             new Case("prices.mapping", TEMPLATE_MAPPING, false), //
@@ -215,6 +220,7 @@ class ModelGenerationIT extends IntegrationTest {
             problems.addAll(check(testCase));
         }
         problems.addAll(listSortProblems());
+        problems.addAll(listHeaderProblems());
         assertTrue(problems.isEmpty(),
                 () -> "The generation pipeline has " + problems.size() + " problem(s):\n\n" + String.join("\n\n", problems));
     }
@@ -391,6 +397,43 @@ class ModelGenerationIT extends IntegrationTest {
         if (!"10,11,12".equals(descending)) {
             problems.add(
                     "[" + CATALOG + "] sorting the Category column descending must reverse the label order (10,11,12), got " + descending);
+        }
+        return problems;
+    }
+
+    /**
+     * Collects the list headers that print a property's name where its label belongs (dirigible #8132).
+     *
+     * <p>
+     * A header's text is {@code T(key, default)}, and the default is what shows wherever the catalog
+     * has no entry for the column - English, in a generated application. Both Name properties of the
+     * fixture carry a label, so both the LIST page (Item) and the manage list (Category) must default
+     * their Name header to it, as the record sheet and the forms do.
+     *
+     * @return the problems found, empty when both headers default to the label
+     * @throws IOException when the fixture or a template is missing, or rendering fails
+     */
+    private List<String> listHeaderProblems() throws IOException {
+        Map<String, String> rendered = render(workspaceName(CATALOG, TEMPLATE_APPLICATION), CATALOG, TEMPLATE_APPLICATION);
+        List<String> problems = new ArrayList<>();
+        for (Map.Entry<String, String> expected : Map.of("/Item-list.html", "Item Name", "/Category-manage-list.html", "Category Name")
+                                                     .entrySet()) {
+            String view = rendered.entrySet()
+                                  .stream()
+                                  .filter(file -> file.getKey()
+                                                      .endsWith(expected.getKey()))
+                                  .map(Map.Entry::getValue)
+                                  .findFirst()
+                                  .orElse(null);
+            if (view == null || view.indexOf("<thead") < 0) {
+                problems.add("[" + CATALOG + "] rendered no table header in " + expected.getKey() + ": " + rendered.keySet());
+                continue;
+            }
+            String header = view.substring(view.indexOf("<thead"), view.indexOf("</thead>"));
+            if (!header.contains("', '" + expected.getValue() + "')") || header.contains("', 'Name')")) {
+                problems.add("[" + CATALOG + "] the Name header of " + expected.getKey() + " must default to its label ["
+                        + expected.getValue() + "], not the property name: " + header);
+            }
         }
         return problems;
     }

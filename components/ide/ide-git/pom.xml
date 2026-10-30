@@ -29,6 +29,10 @@
             <artifactId>dirigible-components-ide-workspace</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-git</artifactId>
+        </dependency>
+        <dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-registry</artifactId>
     	</dependency>

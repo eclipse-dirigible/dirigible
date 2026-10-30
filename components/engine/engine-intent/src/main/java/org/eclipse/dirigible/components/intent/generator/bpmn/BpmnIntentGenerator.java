@@ -170,8 +170,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
         Map<String, String> writerByProcessTask = new HashMap<>();
+        // What a completion of each user task may write besides its action: the writer's editable
+        // fields, never the key the delegates find the record by (#8094).
+        Map<String, List<String>> writesByProcessTask = new HashMap<>();
         for (Writer writer : WriterSupport.writers(model)) {
-            writerByProcessTask.put(writer.process() + "/" + writer.userTask(), writer.className());
+            String processTask = writer.process() + "/" + writer.userTask();
+            writerByProcessTask.put(processTask, writer.className());
+            writesByProcessTask.put(processTask, writer.fields()
+                                                       .stream()
+                                                       .map(WriterSupport.WriteField::property)
+                                                       .filter(property -> !property.equals(writer.keyProperty()))
+                                                       .toList());
         }
         // Relation setters declared on a user task get a JavaDelegate (gen.events.<Process><Task>)
         // inserted right after the task (like the writer) to set the relation FK once the task completes;
@@ -270,7 +279,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                             candidateGroupsExtra, writerByTask, setterByTask,
                             IntentNaming.processTaskCatalog(context.getProjectName(), context),
                             synchronousByProcess.getOrDefault(process.getName(), Set.of()),
-                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of()), completingActionsByForm));
+                            gatedStepsByProcess.getOrDefault(process.getName(), Set.of()), completingActionsByForm,
+                            stripProcessPrefix(writesByProcessTask, taskPrefix)));
         }
     }
 
@@ -426,9 +436,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     /** The {@code <process>/<task>}-keyed entries for one process, re-keyed by the bare task name. */
-    private static Map<String, String> stripProcessPrefix(Map<String, String> byProcessTask, String processPrefix) {
-        Map<String, String> byTask = new HashMap<>();
-        for (Map.Entry<String, String> entry : byProcessTask.entrySet()) {
+    private static <V> Map<String, V> stripProcessPrefix(Map<String, V> byProcessTask, String processPrefix) {
+        Map<String, V> byTask = new HashMap<>();
+        for (Map.Entry<String, V> entry : byProcessTask.entrySet()) {
             if (entry.getKey()
                      .startsWith(processPrefix)) {
                 byTask.put(entry.getKey()
@@ -735,7 +745,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
             Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
             Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps,
-            Map<String, List<String>> completingActionsByForm) {
+            Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -882,7 +892,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep,
-                    synchronousNodes, completingActionsByForm);
+                    synchronousNodes, completingActionsByForm, writesByTask);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -1344,12 +1354,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
             String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep,
-            Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm) {
+            Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
+        List<String> writes = writesByTask.getOrDefault(step.getName(), List.of());
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm, writes);
                 break;
             case "serviceTask":
             case "script":
@@ -1370,7 +1381,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
                         LoggedValue.of(step.getName()));
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm, writes);
                 break;
         }
     }
@@ -1395,7 +1406,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra, List<String> clears, Map<String, List<String>> completingActionsByForm) {
+            String candidateGroupsExtra, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -1439,21 +1450,24 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append("\"");
         }
         List<String> actions = form == null ? List.of() : completingActionsByForm.getOrDefault(form, List.of());
-        if (clears.isEmpty() && actions.isEmpty()) {
-            sb.append("></userTask>\n");
-        } else {
-            sb.append(">\n      <extensionElements>\n");
-            if (!actions.isEmpty()) {
-                // The actions the form completes this task with. The inbox refuses a completion whose
-                // `action` is not one of them before the task completes - a decision after it branches
-                // on that value, and one the form does not offer took whatever branch was left (#7551).
-                sb.append("        <flowable:property name=\"taskActions\" value=\"")
-                  .append(escapeXmlAttribute(String.join(",", actions)))
-                  .append("\"></flowable:property>\n");
-            }
-            appendClearVariableListeners(sb, clears);
-            sb.append("      </extensionElements>\n    </userTask>\n");
+        sb.append(">\n      <extensionElements>\n");
+        if (!actions.isEmpty()) {
+            // The actions the form completes this task with. The inbox refuses a completion whose
+            // `action` is not one of them before the task completes - a decision after it branches
+            // on that value, and one the form does not offer took whatever branch was left (#7551).
+            sb.append("        <flowable:property name=\"taskActions\" value=\"")
+              .append(escapeXmlAttribute(String.join(",", actions)))
+              .append("\"></flowable:property>\n");
         }
+        // The variables a completion may write besides its action - its form's editable fields, so
+        // possibly none. Every delegate finds the record by the key variable and the Inbox presents it
+        // through the __ locators, so a completion that wrote them moved the process onto another
+        // record; one that wrote a field its form does not offer planted it for a later step (#8094).
+        sb.append("        <flowable:property name=\"taskWrites\" value=\"")
+          .append(escapeXmlAttribute(String.join(",", writes)))
+          .append("\"></flowable:property>\n");
+        appendClearVariableListeners(sb, clears);
+        sb.append("      </extensionElements>\n    </userTask>\n");
     }
 
     /**

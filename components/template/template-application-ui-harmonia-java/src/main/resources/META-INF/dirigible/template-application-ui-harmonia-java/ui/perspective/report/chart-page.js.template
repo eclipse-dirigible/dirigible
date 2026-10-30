@@ -15,18 +15,33 @@ document.addEventListener('alpine:init', () => {
     // Reactive config consumed by the chart directive in the view; the directive re-renders on change.
     chartConfig: { labels: [], series: [] },
 
-    async init() { await this.load(); },
+    // A quiet re-read (Refresh) is in flight; the chart on screen stays until it answers.
+    reloading: false,
 
-    async load() {
-      this.state = 'loading';
+    async init() {
+      // The sidebar entry of the report on screen re-renders nothing, so it re-reads instead (#8130).
+      this.onReentered(() => this.refresh());
+      await this.load();
+    },
+
+    // Re-read the report, keeping the chart on screen meanwhile.
+    refresh() { return this.load(true); },
+
+    async load(quiet) {
+      const keepChart = quiet && (this.state === 'default' || this.state === 'empty');
+      if (keepChart) this.reloading = true;
+      else this.state = 'loading';
       this.error = null;
       try {
         const rows = await App.services.api.get(this.apiPath);
         this.state = rows.length === 0 ? 'empty' : 'default';
         if (rows.length) this.chartConfig = this.buildConfig(rows);
+        this.lastUpdated = new Date();
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not run the ${name} report.');
         this.state = 'error';
+      } finally {
+        this.reloading = false;
       }
     },
 

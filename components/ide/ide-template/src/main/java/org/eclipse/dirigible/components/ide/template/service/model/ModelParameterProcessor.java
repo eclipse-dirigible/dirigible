@@ -96,10 +96,12 @@ final class ModelParameterProcessor {
             collectScopedChildren(entities);
             resolveLabelParts(entities);
             resolveRelatedRegisters(entities, parameters);
+            resolveCollectionColumns(entities, parameters);
             resolveRollupGuards(entities);
             resolveAgreeGuards(entities, parameters);
             resolveTargetAgreementRules(entities);
         }
+        markCollectionColumnRendering(entities);
         resolveDependentWidgets(entities);
         collectPerspectives(entities, parameters);
         collectRoles(entities, parameters);
@@ -138,6 +140,11 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
+        resolveFixedAfterCreate(entity, parameters);
+        for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
+            // A refusing single flag's conflict message (#8101), resolved for the reader's language.
+            resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
+        }
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
@@ -145,8 +152,33 @@ final class ModelParameterProcessor {
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
             processProperty(property, entity, entities, parameters);
         }
+        resolveDetailLayoutWithoutMaster(entity);
         resolveVisibleWhen(entity);
         resolveListProperties(entity);
+    }
+
+    /**
+     * Gives a details layout without a master the plain layout it stands for.
+     *
+     * <p>
+     * A details layout lists an entity's rows under the master its composition names, so the generated
+     * list filters by that master's key. A model authored for the removed AngularJS templates gave the
+     * layout to entities of their own too - a setting, a status register - which compose into nothing,
+     * and the list was generated filtering by a key that does not exist (#8051). Such an entity is
+     * managed, or listed, on its own.
+     *
+     * @param entity the entity, its properties processed
+     */
+    private static void resolveDetailLayoutWithoutMaster(Map<String, Object> entity) {
+        if (entity.get("masterEntityId") != null) {
+            return;
+        }
+        String layoutType = str(entity, "layoutType");
+        if ("MANAGE_DETAILS".equals(layoutType)) {
+            entity.put("layoutType", "MANAGE");
+        } else if ("LIST_DETAILS".equals(layoutType)) {
+            entity.put("layoutType", "LIST");
+        }
     }
 
     /**
@@ -154,7 +186,11 @@ final class ModelParameterProcessor {
      * entity with a {@code listOrder} (intent {@code list:}, dirigible #7614) lists the named
      * properties first, in that order, then the rest in control order - the rest are not major, so no
      * list shows them. Without one it is the properties themselves, so the list follows the control
-     * order as before. Either way the elements are the same property maps the form iterates.
+     * order as before. Either way the elements are the same property maps the form iterates. A
+     * collection column (a {@code list:} collection path, dirigible #8295) is placed where its name
+     * stands in the {@code listOrder}; it is not a property, so it carries {@code collectionColumn} and
+     * only the list surfaces that render it - the power list, its export, a detail panel, a register -
+     * give it a cell.
      *
      * @param entity the entity
      */
@@ -165,10 +201,16 @@ final class ModelParameterProcessor {
             entity.put("listProperties", properties);
             return;
         }
-        List<Map<String, Object>> ordered = new ArrayList<>(properties.size());
+        List<Map<String, Object>> columns = new ArrayList<>(properties);
+        for (Map<String, Object> column : asMaps(entity.get("collectionColumns"))) {
+            // The header is printed into JS strings, like a property's label.
+            column.put("widgetLabelJs", JsLiterals.escape(str(column, "widgetLabel")));
+            columns.add(column);
+        }
+        List<Map<String, Object>> ordered = new ArrayList<>(columns.size());
         Set<Map<String, Object>> placed = Collections.newSetFromMap(new IdentityHashMap<>());
         for (String wanted : listOrder.split(",")) {
-            for (Map<String, Object> property : properties) {
+            for (Map<String, Object> property : columns) {
                 if (!placed.contains(property) && wanted.trim()
                                                         .equalsIgnoreCase(str(property, "name"))) {
                     ordered.add(property);
@@ -509,6 +551,33 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Collects the relations fixed after create (intent {@code fixedAfterCreate: true}, #7903) into
+     * {@code fixedAfterCreateRelations}: each FK property's name and the arguments its refusal hands
+     * {@code CheckMessages} - the fully qualified catalog key the en-US catalog writes the message
+     * under and the default-language text - so every REST controller answers a changed value in the
+     * reader's language. Always present, empty when the entity fixes nothing.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveFixedAfterCreate(Map<String, Object> entity, Map<String, Object> parameters) {
+        List<Map<String, Object>> fixed = new ArrayList<>();
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String messageKey = ModelTranslations.fixedMessageKey(entity, property);
+            if (messageKey == null) {
+                continue;
+            }
+            String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+            Map<String, Object> relation = new LinkedHashMap<>();
+            relation.put("name", property.get("name"));
+            relation.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+                    + JavaLiterals.escape(str(property, "fixedAfterCreateMessage")) + "\"");
+            fixed.add(relation);
+        }
+        entity.put("fixedAfterCreateRelations", fixed);
+    }
+
+    /**
      * Normalizes the seeded status names a lifecycle refusal quotes into the escaped entries the
      * generated repository builds its lookup map from.
      *
@@ -749,6 +818,9 @@ final class ModelParameterProcessor {
         if ("COMPOSITION".equals(str(property, "relationshipType")) && "1_n".equals(str(property, "relationshipCardinality"))) {
             entity.put("masterEntity", property.get("relationshipEntityName"));
             entity.put("masterEntityId", name);
+            // The master filter of the generated list is declared with the FK's own Java class, so
+            // the controller invoker refuses a non-numeric value with a 400 (dirigible #8237).
+            entity.put("masterEntityIdJavaClass", property.get("dataTypeJavaClass"));
             property.put("widgetIsMajor", Boolean.FALSE);
         }
 
@@ -1025,14 +1097,19 @@ final class ModelParameterProcessor {
             entity.put("hasReferenceValidations", Boolean.TRUE);
         }
         property.put("targetRepositoryClass", dataPackage + relationshipEntityName + "Repository");
-        // whenTargetDeleted (#7547): the target's repository cannot know which entities reference it -
-        // another model may - so this entity's repository contributes the rule the target's delete
-        // applies, keyed by the target's generated entity class, which is what that delete names itself
-        // by. Same-model and cross-model alike: this is the package the target is generated into.
-        // `keep` (#7634) contributes nothing: the reference outlives its target.
-        if (truthy(property, "whenTargetDeleted") && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
+        // The target's generated entity class - the package its repository is resolved into, the owner
+        // model's for a cross-model target - is the identity both directions of a reference agree on.
+        // A write names it to check the referenced record exists (#8100), and a delete rule (#7547) is
+        // keyed by it: the target's repository cannot know which entities reference it - another model
+        // may - so this entity's repository contributes the rule the target's delete applies. `keep`
+        // (#7634) is held to neither: the reference outlives its target by declaration, and the
+        // reversal that posts a deleted source's storno creates a row naming a record already gone.
+        if (relationshipEntityName != null && !"keep".equals(String.valueOf(property.get("whenTargetDeleted")))) {
             property.put("targetEntityClass", dataPackage + relationshipEntityName + "Entity");
-            entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            entity.put("hasReferenceChecks", Boolean.TRUE);
+            if (truthy(property, "whenTargetDeleted")) {
+                entity.put("hasTargetDeleteRules", Boolean.TRUE);
+            }
         }
         if (truthy(property, "relationshipPersonal") && truthy(property, "relationshipIdentityProperty")) {
             entity.put("personalProperty", property.get("name"));
@@ -1814,6 +1891,129 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Resolves what the generated controller needs to answer an entity's collection columns (a
+     * {@code list:} collection path, dirigible #8295): the child's generated entity and repository, the
+     * order its rows are read in - its {@code orderBy:}, else its primary key - and, for a column
+     * showing a to-one, the target's entity, repository, key and display property: the target the
+     * to-one's own dropdown reads, a cross-model one included. Each repository the controller injects
+     * is collected once on the entity as {@code collectionRepositories}.
+     *
+     * @param entities every entity in the model
+     * @param parameters the generation parameters
+     */
+    private static void resolveCollectionColumns(List<Map<String, Object>> entities, Map<String, Object> parameters) {
+        for (Map<String, Object> entity : entities) {
+            List<Map<String, Object>> columns = asMaps(entity.get("collectionColumns"));
+            if (columns.isEmpty()) {
+                continue;
+            }
+            Map<String, Map<String, Object>> repositories = new LinkedHashMap<>();
+            for (Map<String, Object> column : columns) {
+                String owner = str(entity, "name") + "." + str(column, "name");
+                Map<String, Object> child = findEntity(entities, str(column, "collectionEntity"));
+                if (child == null) {
+                    throw new IllegalArgumentException("Collection column [" + owner + "] lists the rows of ["
+                            + str(column, "collectionEntity") + "], which is not an entity of this model.");
+                }
+                String childPackage = "gen." + str(parameters, "javaGenFolderName") + ".data."
+                        + NamingHelper.sanitizeJavaIdentifier(str(column, "collectionEntityPerspectiveName")) + ".";
+                String name = str(column, "name");
+                column.put("variable", Character.toLowerCase(name.charAt(0)) + name.substring(1));
+                column.put("childEntityClass", childPackage + str(child, "name") + "Entity");
+                column.put("childRepository", repositoryField(repositories, childPackage + str(child, "name") + "Repository"));
+                column.put("childOrderCriteria", strOr(child, "orderByCriteria", ".orderByAsc(\"" + primaryKeyName(child) + "\")"));
+                if (isTrue(column, "collectionToOne")) {
+                    Map<String, Object> shown = findProperty(child, str(column, "collectionProperty"));
+                    String targetRepositoryClass = shown == null ? null : str(shown, "targetRepositoryClass");
+                    if (targetRepositoryClass == null || !targetRepositoryClass.endsWith("Repository")) {
+                        throw new IllegalArgumentException(
+                                "Collection column [" + owner + "] shows the to-one [" + str(column, "collectionEntity") + "."
+                                        + str(column, "collectionProperty") + "], whose target repository this model cannot resolve.");
+                    }
+                    column.put("targetEntityClass",
+                            targetRepositoryClass.substring(0, targetRepositoryClass.length() - "Repository".length()) + "Entity");
+                    column.put("targetRepository", repositoryField(repositories, targetRepositoryClass));
+                    column.put("targetKey", strOr(shown, "widgetDropDownKey", "Id"));
+                    column.put("targetText", strOr(column, "collectionDisplayProperty", strOr(shown, "widgetDropDownValue", "Name")));
+                }
+            }
+            entity.put("collectionRepositories", new ArrayList<>(repositories.values()));
+        }
+    }
+
+    /**
+     * Marks every entity {@code rendersCollectionColumns} when the model renders a collection column
+     * anywhere - an entity's own, or one a related register reproduces from its source. The record
+     * pages render the panels of OTHER entities (a composition child's, a register's), so whether a
+     * panel cell may be a chip list is a property of the model, not of the page's entity; and a model
+     * without one generates its pages exactly as before.
+     *
+     * @param entities every entity in the model
+     */
+    private static void markCollectionColumnRendering(List<Map<String, Object>> entities) {
+        boolean renders = false;
+        for (Map<String, Object> entity : entities) {
+            renders |= !asMaps(entity.get("collectionColumns")).isEmpty();
+            for (Map<String, Object> register : asMaps(entity.get("relatedEntities"))) {
+                for (Map<String, Object> column : asMaps(register.get("columns"))) {
+                    renders |= isTrue(column, "list");
+                }
+            }
+        }
+        if (renders) {
+            for (Map<String, Object> entity : entities) {
+                entity.put("rendersCollectionColumns", Boolean.TRUE);
+            }
+        }
+    }
+
+    /**
+     * The controller field a collection column reads a repository through - one per repository class,
+     * named after the class and kept clear of the controller's own {@code repository} and
+     * {@code masterRepository}.
+     *
+     * @param repositories the entity's injected repositories so far, by class
+     * @param repositoryClass the repository's fully qualified class name
+     * @return the field name
+     */
+    private static String repositoryField(Map<String, Map<String, Object>> repositories, String repositoryClass) {
+        Map<String, Object> known = repositories.get(repositoryClass);
+        if (known != null) {
+            return str(known, "field");
+        }
+        String simpleName = repositoryClass.substring(repositoryClass.lastIndexOf('.') + 1);
+        String base = Character.toLowerCase(simpleName.charAt(0)) + simpleName.substring(1);
+        Set<String> taken = new HashSet<>(List.of("repository", "masterRepository"));
+        for (Map<String, Object> repository : repositories.values()) {
+            taken.add(str(repository, "field"));
+        }
+        String field = base;
+        for (int i = 2; taken.contains(field); i++) {
+            field = base + i;
+        }
+        Map<String, Object> repository = new LinkedHashMap<>();
+        repository.put("className", repositoryClass);
+        repository.put("field", field);
+        repositories.put(repositoryClass, repository);
+        return field;
+    }
+
+    /**
+     * The entity's primary key property name, {@code Id} when it declares none.
+     *
+     * @param entity the entity
+     * @return the property name
+     */
+    private static String primaryKeyName(Map<String, Object> entity) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            if (isTrue(property, "dataPrimaryKey")) {
+                return str(property, "name");
+            }
+        }
+        return "Id";
+    }
+
+    /**
      * Describes one register column: its heading, how the cell renders (number / float pattern / date)
      * and, for a foreign key or a multi-select, where to fetch the referenced rows its label comes
      * from.
@@ -1832,6 +2032,12 @@ final class ModelParameterProcessor {
         column.put("label", strOr(property, "widgetLabel", NamingHelper.humanizeIdentifier(name)));
         if (property.get("dataName") != null) {
             column.put("dataName", property.get("dataName"));
+        }
+        if (isTrue(property, "collectionColumn")) {
+            // A collection column (dirigible #8295): the source's controller answers the texts of the
+            // record's child rows, so the cell renders them as chips - nothing to look up.
+            column.put("list", Boolean.TRUE);
+            return column;
         }
         ModelDataTypes.DataType dataType = ModelDataTypes.parse(str(property, "dataType"));
         String widgetType = str(property, "widgetType");

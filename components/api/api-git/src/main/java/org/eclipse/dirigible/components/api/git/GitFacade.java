@@ -11,20 +11,21 @@ package org.eclipse.dirigible.components.api.git;
 
 import org.apache.commons.io.FileUtils;
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.*;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
-import org.eclipse.dirigible.components.ide.workspace.json.WorkspaceGitHelper;
-import org.eclipse.dirigible.components.ide.workspace.project.ProjectMetadataManager;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.components.git.domain.*;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
+import org.eclipse.dirigible.components.workspace.json.WorkspaceGitHelper;
+import org.eclipse.dirigible.components.workspace.project.ProjectMetadataManager;
+import org.eclipse.dirigible.components.workspace.service.UserWorkspaces;
+import org.eclipse.dirigible.components.workspace.service.WorkspaceUnavailableException;
 import org.eclipse.jgit.api.Status;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.api.errors.RefAlreadyExistsException;
 import org.eclipse.jgit.api.errors.RefNotFoundException;
 import org.springframework.beans.factory.InitializingBean;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 import java.io.File;
@@ -41,17 +42,16 @@ public class GitFacade implements InitializingBean {
     /** The git facade. */
     private static GitFacade INSTANCE;
 
-    /** The workspace service. */
-    private final WorkspaceService workspaceService;
+    /** The workspaces of the IDE, absent where the IDE is not deployed. */
+    private final ObjectProvider<UserWorkspaces> workspaces;
 
     /**
      * Instantiates a new git facade.
      *
-     * @param workspaceService the workspace service
+     * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      */
-    @Autowired
-    private GitFacade(WorkspaceService workspaceService) {
-        this.workspaceService = workspaceService;
+    private GitFacade(ObjectProvider<UserWorkspaces> workspaces) {
+        this.workspaces = workspaces;
     }
 
     /**
@@ -73,13 +73,12 @@ public class GitFacade implements InitializingBean {
         return INSTANCE;
     }
 
-    /**
-     * Gets the workspace service.
-     *
-     * @return the workspace service
-     */
-    public WorkspaceService getWorkspaceService() {
-        return workspaceService;
+    private UserWorkspaces workspaces(String operation) {
+        UserWorkspaces available = workspaces.getIfAvailable();
+        if (available == null) {
+            throw new WorkspaceUnavailableException(operation);
+        }
+        return available;
     }
 
     /**
@@ -98,7 +97,7 @@ public class GitFacade implements InitializingBean {
     public static void initRepository(String username, String email, String workspaceName, String projectName, String repositoryName,
             String commitMessage) throws IOException, GitAPIException, GitConnectorException {
         Workspace workspaceObject = GitFacade.get()
-                                             .getWorkspaceService()
+                                             .workspaces("initRepository")
                                              .getWorkspace(workspaceName);
         Project projectObject = workspaceObject.getProject(projectName);
         ensureProjectJsonIsCreatedForProject(workspaceObject, projectName);
@@ -174,7 +173,7 @@ public class GitFacade implements InitializingBean {
     public static List<ProjectDescriptor> getGitRepositories(String workspaceName) {
         String user = UserFacade.getName();
         Workspace workspaceObject = GitFacade.get()
-                                             .getWorkspaceService()
+                                             .workspaces("getGitRepositories")
                                              .getWorkspace(workspaceName);
         if (!workspaceObject.exists()) {
             return null;
@@ -226,7 +225,7 @@ public class GitFacade implements InitializingBean {
             }
 
             Workspace workspaceApi = GitFacade.get()
-                                              .getWorkspaceService()
+                                              .workspaces("deleteRepository")
                                               .getWorkspace(workspaceName);
             Project[] workspaceProjects = workspaceApi.getProjects()
                                                       .toArray(new Project[0]);

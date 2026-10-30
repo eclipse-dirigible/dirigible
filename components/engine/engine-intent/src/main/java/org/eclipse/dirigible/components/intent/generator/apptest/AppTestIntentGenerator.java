@@ -494,6 +494,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (notBlank(relation.getCalculatedActionOnUpdate()) || rendersReadOnly(properties.get(String.valueOf(out.get("name"))))) {
                 out.put("readOnly", true);
             }
+            // fixedAfterCreate (#7903): the New form offers the picker, the Edit form renders it
+            // read-only and the controller refuses a changed value - so a flow picks it on create and
+            // never on edit.
+            if (relation.isFixedAfterCreate()) {
+                out.put("readOnlyOnEdit", true);
+            }
             // dependsOn cascade: the option list narrows to target rows whose filterBy equals the
             // trigger sibling's value - the runner must pick MATCHING samples (the dependent row
             // first, then its FK as the trigger's sample), not independent first rows.

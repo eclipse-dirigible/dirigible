@@ -21,12 +21,12 @@ import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.dirigible.components.api.platform.WorkspaceFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
-import org.eclipse.dirigible.components.ide.git.domain.GitCommitInfo;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
-import org.eclipse.dirigible.components.ide.workspace.json.ProjectDescriptor;
+import org.eclipse.dirigible.components.git.domain.GitCommitInfo;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -116,7 +116,7 @@ public class GitFacadeTest {
      * @param project the project
      */
     private void assertProjectJsonExists(Project project) {
-        org.eclipse.dirigible.components.ide.workspace.domain.File maybeProjectJson = project.getFile("project.json");
+        org.eclipse.dirigible.components.workspace.domain.File maybeProjectJson = project.getFile("project.json");
         assertTrue(maybeProjectJson.exists());
 
         String projectJsonContent = new String(maybeProjectJson.getContent(), StandardCharsets.UTF_8);

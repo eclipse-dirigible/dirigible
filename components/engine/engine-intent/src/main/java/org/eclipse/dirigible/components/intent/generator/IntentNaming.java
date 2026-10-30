@@ -21,6 +21,9 @@ import java.util.Locale;
  */
 public final class IntentNaming {
 
+    /** The perspective every standalone report's controller is generated under. */
+    private static final String REPORTS_PERSPECTIVE = "Reports";
+
     private IntentNaming() {}
 
     /**
@@ -160,6 +163,34 @@ public final class IntentNaming {
     }
 
     /**
+     * The folder a standalone report's page is served from:
+     * {@code /services/web/<project>/gen/<report folder>/reports/<Report>}. A report is generated from
+     * its own {@code <Report>.report}, so its generation folder is the report's name - not the intent's
+     * base name - sanitized for its Java and its page alike (#7889).
+     *
+     * @param project the project name
+     * @param report the report's name
+     * @return the page folder URL, without a trailing slash
+     */
+    public static String reportPageFolderUrl(String project, String report) {
+        return "/services/web/" + project + "/gen/" + javaIdentifier(report) + "/reports/" + report;
+    }
+
+    /**
+     * The URL of a standalone report's generated controller:
+     * {@code /services/java/<project>/gen/<report folder>/api/reports/<Report>Controller}, beside the
+     * page {@link #reportPageFolderUrl} names.
+     *
+     * @param project the project name
+     * @param report the report's name
+     * @return the controller URL
+     */
+    public static String reportControllerUrl(String project, String report) {
+        return "/services/java/" + project + "/gen/" + javaIdentifier(report) + "/api/" + javaIdentifier(REPORTS_PERSPECTIVE) + "/" + report
+                + "Controller";
+    }
+
+    /**
      * Capitalize the first letter to make an UpperCamelCase (PascalCase) name, preserving the rest -
      * the Dirigible EDM convention for property names ({@code id} -> {@code Id}, {@code loanedOn} ->
      * {@code LoanedOn}). Authoring stays lower camelCase; only the generated model property names are
@@ -173,6 +204,23 @@ public final class IntentNaming {
             return "";
         }
         return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /**
+     * The read-only property a {@code list:} collection path is answered in (dirigible #8295): the path
+     * in PascalCase with the dot dropped - {@code skills.skill} -> {@code SkillsSkill}, a bare
+     * {@code skills} -> {@code Skills}.
+     *
+     * @param path the authored {@code <collection>} or {@code <collection>.<property>}
+     * @return the property name
+     */
+    public static String collectionColumnName(String path) {
+        StringBuilder name = new StringBuilder();
+        for (String segment : path.trim()
+                                  .split("\\.")) {
+            name.append(pascalCase(segment.trim()));
+        }
+        return name.toString();
     }
 
     /**

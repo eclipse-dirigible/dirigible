@@ -112,6 +112,27 @@ App.services.toast = function (message, variant) {
 };
 
 /**
+ * Tell the page on screen that the user navigated to it again (issue #8130).
+ *
+ * A sidebar entry for the route already shown is no navigation to the router, and a shell re-clicking
+ * (or re-revealing, on a projection switch) the app it already hosts leaves that app's frame alone on
+ * purpose - so the page never re-read, and a list kept showing the rows of its first visit. The shell
+ * raises `harmonia:page-reentered` on the window that shows the page - its own, or the hosted app's
+ * frame - instead, and a page answers it through basePage.onReentered.
+ *
+ * @param target the window showing the page; the shell's own when absent
+ */
+App.pageReentered = function (target) {
+  const win = target || window;
+  try {
+    win.dispatchEvent(new win.CustomEvent('harmonia:page-reentered'));
+  } catch (e) {
+    // A hosted app on another origin cannot be reached, and re-reads only on its own Refresh.
+    console.debug('[pageReentered] the hosted page cannot be signalled', e);
+  }
+};
+
+/**
  * Unsaved-changes guard (issue #7359).
  *
  * A generated form knows when its buffer differs from what the server holds; nothing else does. So

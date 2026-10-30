@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.parser;
 
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -20,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import javax.lang.model.SourceVersion;
 
@@ -29,6 +33,7 @@ import org.eclipse.dirigible.components.intent.generator.ImportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntegrationSupport;
 import org.eclipse.dirigible.components.intent.generator.ExportSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentEntities;
+import org.eclipse.dirigible.components.intent.generator.action.ActionPlaceholders;
 import org.eclipse.dirigible.components.intent.generator.FileNameSupport;
 import org.eclipse.dirigible.components.intent.generator.NotificationSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
@@ -41,6 +46,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
+import org.eclipse.dirigible.components.intent.generator.CronSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -52,6 +58,7 @@ import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.ActionCallIntent;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptOptionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
@@ -103,6 +110,7 @@ import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.StatusStampIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.TransitionIntent;
@@ -357,7 +365,9 @@ public final class IntentParser {
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
         wrapScalarNormalize(tree);
+        expandSingleShorthand(tree);
         normalizeOrderBy(tree);
+        normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
         // is collected here - on the raw tree, while the author's spelling still exists - and reported
         // together with the structural issues below.
@@ -432,6 +442,7 @@ public final class IntentParser {
         validateTransitions(model, entityNames, issues);
         validateLifecycles(model, issues);
         validateStatusStamps(model, issues);
+        validateSingleFlags(model, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -989,8 +1000,9 @@ public final class IntentParser {
      * Each entity's optional {@code list} is the exact column set and order of its generated list
      * tables (issue #7614). Validated like {@code order}: no blank entry, no name twice, and every name
      * a property the list can show - a field, a to-one ({@code manyToOne} / {@code oneToOne}) or
-     * {@code subset} relation, or the {@code Name} a {@code label:} synthesizes. A {@code oneToMany} /
-     * {@code manyToMany} relation has no column on the entity, so it cannot be one of the list's.
+     * {@code subset} relation, or the {@code Name} a {@code label:} synthesizes. A {@code oneToMany}
+     * relation has no column on the entity, so it is listed as a collection path instead (issue #8295)
+     * - see {@link #validateCollectionColumn}.
      */
     private static void validateLists(IntentModel model, List<String> issues) {
         for (EntityIntent entity : model.getEntities()) {
@@ -1027,12 +1039,130 @@ public final class IntentParser {
                 if (!seen.add(key)) {
                     issues.add("entity [" + entity.getName() + "] list names [" + token + "] more than once");
                 }
-                if (!known.contains(key)) {
+                if (known.contains(key)) {
+                    continue;
+                }
+                if (key.contains(".") || isCollection(entity, key)) {
+                    validateCollectionColumn(model, entity, token.trim(), known, issues);
+                } else {
                     issues.add("entity [" + entity.getName() + "] list references [" + token
                             + "] which is not a field or to-one relation of the entity");
                 }
             }
         }
+    }
+
+    /** Whether the entity's {@code list:} shows that collection - as a path, or bare. */
+    private static boolean listsCollection(EntityIntent entity, RelationIntent collection) {
+        if (entity.getList() == null) {
+            return false;
+        }
+        for (String entry : entity.getList()) {
+            if (entry != null && entry.trim()
+                                      .split("\\.", -1)[0].trim()
+                                                          .equalsIgnoreCase(collection.getName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Whether the entity declares a {@code oneToMany} relation of that (lower-cased) name. */
+    private static boolean isCollection(EntityIntent entity, String key) {
+        return collectionNamed(entity, key) != null;
+    }
+
+    /** The entity's {@code oneToMany} relation of that name, matched case-insensitively, or null. */
+    private static RelationIntent collectionNamed(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && relation.getName() != null && relation.getName()
+                                                                                                .equalsIgnoreCase(name)) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A {@code list:} entry naming the entity's child rows (issue #8295):
+     * {@code <collection>.<property>} shows each child's field, or the display text of its to-one, and
+     * a bare {@code <collection>} means {@code <collection>.Name} - which needs the child to declare a
+     * {@code label:}. A {@code manyToMany} reaches here as the {@code oneToMany} to its link entity the
+     * expander turned it into. The collection must be a same-model {@code oneToMany} whose child
+     * references this entity through exactly one to-one (the foreign key the rows are read by), the
+     * path one hop deep, and the property a field or to-one of the child - never a collection itself.
+     * The column is answered as a read-only property named after the path, which must not collide with
+     * one the entity declares.
+     */
+    private static void validateCollectionColumn(IntentModel model, EntityIntent entity, String token, Set<String> known,
+            List<String> issues) {
+        String prefix = "entity [" + entity.getName() + "] list references [" + token + "]";
+        String[] path = token.split("\\.", -1);
+        if (path.length > 2) {
+            issues.add(prefix + " - a collection path is one hop deep: <collection>.<property>");
+            return;
+        }
+        RelationIntent collection = collectionNamed(entity, path[0].trim());
+        if (collection == null) {
+            issues.add(prefix + " whose [" + path[0] + "] is not a oneToMany relation of the entity");
+            return;
+        }
+        EntityIntent child = collection.isCrossModel() || collection.getTo() == null ? null : entityByName(model, collection.getTo());
+        if (child == null) {
+            issues.add(prefix + " whose collection [" + collection.getName() + "] is not of an entity of this model");
+            return;
+        }
+        int backReferences = backReferencesTo(child, entity.getName());
+        if (backReferences != 1) {
+            issues.add(prefix + " whose rows [" + child.getName() + "] reference [" + entity.getName() + "] through " + backReferences
+                    + " to-one relations - exactly one is the foreign key the rows are read by");
+            return;
+        }
+        boolean childLabelled = child.getLabel() != null && !child.getLabel()
+                                                                  .isBlank();
+        if (path.length == 1) {
+            if (!childLabelled) {
+                issues.add(prefix + ", a collection whose entity [" + child.getName()
+                        + "] declares no label: - name the property to show, as " + collection.getName() + ".<property>");
+                return;
+            }
+        } else if (!isListableChildProperty(child, path[1].trim(), childLabelled, prefix, issues)) {
+            return;
+        }
+        if (known.contains(IntentNaming.collectionColumnName(token)
+                                       .toLowerCase(Locale.ROOT))) {
+            issues.add(prefix + " whose column [" + IntentNaming.collectionColumnName(token)
+                    + "] has the name of a property the entity declares");
+        }
+    }
+
+    /**
+     * Whether the property a collection path names is one its child row can show: a field, a to-one
+     * relation, or the {@code Name} a {@code label:} synthesizes. A refusal is recorded otherwise,
+     * naming the token.
+     */
+    private static boolean isListableChildProperty(EntityIntent child, String property, boolean childLabelled, String prefix,
+            List<String> issues) {
+        for (FieldIntent field : child.getFields()) {
+            if (property.equalsIgnoreCase(field.getName())) {
+                return true;
+            }
+        }
+        for (RelationIntent relation : child.getRelations()) {
+            if (property.equalsIgnoreCase(relation.getName())) {
+                if ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind())) {
+                    return true;
+                }
+                issues.add(prefix + " whose [" + relation.getName() + "] is itself a collection of [" + child.getName()
+                        + "] - a collection path ends at a field or a to-one relation");
+                return false;
+            }
+        }
+        if (childLabelled && "name".equalsIgnoreCase(property)) {
+            return true;
+        }
+        issues.add(prefix + " whose [" + property + "] is not a field or to-one relation of [" + child.getName() + "]");
+        return false;
     }
 
     /**
@@ -1250,6 +1380,13 @@ public final class IntentParser {
             if (schedule.getCron() == null || schedule.getCron()
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
+            } else {
+                // Checked with the scheduler's own parser (#8235): a cron Quartz cannot run used to
+                // generate and publish clean and be listed as an enabled job that never fired.
+                String cronProblem = CronSupport.problem(schedule.getCron());
+                if (cronProblem != null) {
+                    issues.add("schedule [" + name + "] cron [" + schedule.getCron() + "] cannot be scheduled: " + cronProblem);
+                }
             }
             // A cross-model source (model: <uses alias>) lives in another model; its existence and its
             // where/map/match field references are validated at GENERATION time against the owner's
@@ -2542,6 +2679,12 @@ public final class IntentParser {
                                                           .isBlank();
         if (folder && !cron) {
             issues.add(subject + " source folder [" + source.getFolder() + "] has no cron to poll it on");
+        }
+        if (folder && cron) {
+            String cronProblem = CronSupport.problem(source.getCron());
+            if (cronProblem != null) {
+                issues.add(subject + " source cron [" + source.getCron() + "] cannot be scheduled: " + cronProblem);
+            }
         }
         if (!folder && cron) {
             issues.add(subject + " source declares a cron, which only a folder source polls on");
@@ -4697,13 +4840,21 @@ public final class IntentParser {
                 }
                 // The picker's caption (#7650) - a to-one FK property or a subset's multiselect column.
                 // A collection relation emits no property at all (the FK lives on the child), so a label
-                // authored there would be carried nowhere: refused rather than silently dropped.
+                // authored there would be carried nowhere: refused rather than silently dropped - unless
+                // the entity's list: shows the collection (#8295), whose column the label then heads.
                 if (relation.getLabel() != null || !relation.getCountryLabels()
                                                             .isEmpty()) {
                     String labelSubject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
                     if ("oneToMany".equals(relation.getKind())) {
-                        issues.add(labelSubject + " declares a `label`, but a collection relation renders no control of its own -"
-                                + " label the field or relation the generated page actually shows");
+                        if (relation.getCountryLabels()
+                                    .isEmpty()
+                                && listsCollection(entity, relation)) {
+                            validateLabels(labelSubject, relation.getLabel(), relation.getCountryLabels(), issues);
+                        } else {
+                            issues.add(labelSubject + " declares a `label`, but a collection relation renders no control of its own -"
+                                    + " label the field or relation the generated page actually shows (a plain label heads the"
+                                    + " column of a collection the entity's list: shows)");
+                        }
                     } else {
                         validateLabels(labelSubject, relation.getLabel(), relation.getCountryLabels(), issues);
                     }
@@ -4724,6 +4875,9 @@ public final class IntentParser {
                 }
                 if (relation.isCalculated()) {
                     validateRelationCalculatedAction(entity, relation, issues);
+                }
+                if (relation.isFixedAfterCreate()) {
+                    validateFixedAfterCreate(entity, relation, issues);
                 }
                 if (relation.isPersonal()) {
                     personalCount++;
@@ -4909,6 +5063,9 @@ public final class IntentParser {
         }
         if (relation.isCalculated()) {
             unsupported.add("calculatedAction");
+        }
+        if (relation.isFixedAfterCreate()) {
+            unsupported.add("fixedAfterCreate");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -5590,6 +5747,35 @@ public final class IntentParser {
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (owned by the workflow transitions) so it cannot declare a calculated action"
                     + " - use init: for its starting value");
+        }
+    }
+
+    /**
+     * {@code fixedAfterCreate: true} (dirigible #7903) fixes a user-picked FK once the record exists,
+     * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
+     * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
+     * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     *
+     * @param entity the entity declaring the relation
+     * @param relation the relation
+     * @param issues the issue list to add to
+     */
+    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+        }
+        if (!isBlank(relation.getCalculatedActionOnUpdate())) {
+            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+                    + " value on every update, so it cannot also be fixed; keep one");
         }
     }
 
@@ -6977,6 +7163,47 @@ public final class IntentParser {
     }
 
     /**
+     * A {@code call:} action's prompt input (#8296) may list a {@code multiselect}'s options as bare
+     * strings - a bare option is its value and its label - and may write a {@code date} default
+     * unquoted, which SnakeYAML reads as a {@link java.util.Date}. Both are brought to the typed shape
+     * on the raw tree here, before the typed mapping, where Gson would refuse a bare option and mangle
+     * a date.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void normalizeActionPrompts(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("actions") instanceof List<?> actions)) {
+            return;
+        }
+        for (Object actionNode : actions) {
+            if (!(actionNode instanceof Map<?, ?> action) || !(action.get("prompt") instanceof List<?> prompt)) {
+                continue;
+            }
+            for (Object inputNode : prompt) {
+                if (!(inputNode instanceof Map<?, ?> input)) {
+                    continue;
+                }
+                Map<Object, Object> writable = (Map<Object, Object>) input;
+                if (input.get("default") instanceof java.util.Date date) {
+                    writable.put("default", date.toInstant()
+                                                .atZone(ZoneOffset.UTC)
+                                                .toLocalDate()
+                                                .toString());
+                }
+                if (input.get("options") instanceof List<?> options) {
+                    List<Object> expanded = new ArrayList<>();
+                    for (Object option : options) {
+                        expanded.add(option == null || option instanceof Map ? option
+                                : new LinkedHashMap<>(Map.of("value", String.valueOf(option))));
+                    }
+                    writable.put("options", expanded);
+                }
+            }
+        }
+    }
+
+    /**
      * A field's {@code normalize:} is a list of transforms, and one transform may be written without
      * the list ({@code normalize: upper}, {@code normalize: {strip: " "}}, issue #7726). The scalar
      * form is wrapped on the raw tree here, before the typed mapping, where Gson would refuse anything
@@ -7005,6 +7232,44 @@ public final class IntentParser {
                     writable.put("normalize", new ArrayList<>(List.of(declared)));
                 }
             }
+        }
+    }
+
+    /**
+     * A field's {@code single: true} (#8101) is the empty mapping - fleet-wide, demoting - and
+     * {@code single: false} is removed, so the typed mapping and the unknown-key walk only ever see the
+     * object form, as {@link #normalizeDuplicable} does for an entity's {@code duplicable}.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    @SuppressWarnings("unchecked")
+    private static void expandSingleShorthand(Object tree) {
+        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        for (Object entityNode : entities) {
+            if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                continue;
+            }
+            for (Object fieldNode : fields) {
+                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("single")) {
+                    continue;
+                }
+                Object declared = field.get("single");
+                Map<Object, Object> writable = (Map<Object, Object>) field;
+                if (declared == null || Boolean.FALSE.equals(declared)) {
+                    writable.remove("single");
+                } else if (Boolean.TRUE.equals(declared)) {
+                    writable.put("single", new LinkedHashMap<>());
+                } else if (!(declared instanceof Map)) {
+                    issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] single [" + declared
+                            + "] is neither true/false nor a mapping - the object form takes per: and onConflict:");
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
         }
     }
 
@@ -9591,6 +9856,12 @@ public final class IntentParser {
         if (action.getSuccess() != null) {
             keys.add("success");
         }
+        if (action.getDescription() != null) {
+            keys.add("description");
+        }
+        if (action.getSubmit() != null) {
+            keys.add("submit");
+        }
         if (!keys.isEmpty()) {
             issues.add("action [" + action.getName() + "] declares " + keys
                     + ", which only a call: action uses - a page action opens its page");
@@ -9638,7 +9909,16 @@ public final class IntentParser {
             if (!ActionPromptIntent.TYPES.contains(input.getType())) {
                 issues.add(subject + " prompt input [" + input.getName() + "] has type [" + input.getType() + "] - expected one of "
                         + new TreeSet<>(ActionPromptIntent.TYPES));
+                continue;
             }
+            validatePromptOptions(input, subject, issues);
+            validatePromptDefault(input, action, entity, subject, issues);
+        }
+        for (String name : ActionPlaceholders.in(action.getDescription())) {
+            validateRecordPlaceholder("description", name, action, entity, subject, issues);
+        }
+        for (String name : ActionPlaceholders.in(action.getConfirm())) {
+            validateRecordPlaceholder("confirm", name, action, entity, subject, issues);
         }
         if (call.getBody() != null) {
             validateCallBody(call.getBody(), inputs, subject, issues);
@@ -9662,6 +9942,120 @@ public final class IntentParser {
                                                         .isEmpty()) {
             issues.add(subject + " can [" + action.getCan()
                     + "] is listed by no role under permissions - the button would be shown to nobody");
+        }
+    }
+
+    /**
+     * A {@code multiselect} input chooses from its {@code options:} - required, each a unique,
+     * non-blank value - and no other input type has any (#8296).
+     */
+    private static void validatePromptOptions(ActionPromptIntent input, String subject, List<String> issues) {
+        String prefix = subject + " prompt input [" + input.getName() + "]";
+        if (!input.isMultiselect()) {
+            if (!input.getOptions()
+                      .isEmpty()) {
+                issues.add(prefix + " declares options but has type [" + input.getType() + "] - only a multiselect chooses from options");
+            }
+            return;
+        }
+        if (input.getOptions()
+                 .isEmpty()) {
+            issues.add(prefix + " is a multiselect without options - list the values it chooses from under options:");
+            return;
+        }
+        Set<String> values = new HashSet<>();
+        for (ActionPromptOptionIntent option : input.getOptions()) {
+            if (option == null || option.getValue() == null || option.getValue()
+                                                                     .isBlank()) {
+                issues.add(prefix + " has an option without a value");
+            } else if (!values.add(option.getValue())) {
+                issues.add(prefix + " lists the option [" + option.getValue() + "] twice");
+            }
+        }
+    }
+
+    /**
+     * A prompt input's {@code default:} (#8296) is a literal of its type - a list of option values for
+     * a multiselect - or a whole {@code "{property}"} of the clicked record. A listed collection path
+     * (#8323) holds a list of texts, so only a multiselect takes it as its default.
+     */
+    private static void validatePromptDefault(ActionPromptIntent input, ActionIntent action, EntityIntent entity, String subject,
+            List<String> issues) {
+        Object value = input.getDefaultValue();
+        if (value == null) {
+            return;
+        }
+        String key = "prompt input [" + input.getName() + "] default";
+        String property = ActionPlaceholders.ofDefault(value);
+        if (property != null) {
+            validateRecordPlaceholder(key, property, action, entity, subject, issues);
+            if (!input.isMultiselect() && ActionPlaceholders.namesCollection(entity, property)) {
+                issues.add(subject + " " + key + " names [{" + property + "}] - a collection path default fits a multiselect only - input ["
+                        + input.getName() + "] has type [" + input.getType() + "]");
+            }
+            return;
+        }
+        String expected = promptDefaultMismatch(input, value);
+        if (expected != null) {
+            issues.add(subject + " " + key + " [" + value + "] does not fit its type [" + input.getType() + "] - expected " + expected
+                    + " or \"{property}\" of the clicked record");
+            return;
+        }
+        if (input.isMultiselect()) {
+            Set<String> options = input.getOptions()
+                                       .stream()
+                                       .filter(option -> option != null && option.getValue() != null)
+                                       .map(ActionPromptOptionIntent::getValue)
+                                       .collect(Collectors.toCollection(LinkedHashSet::new));
+            for (Object ticked : (List<?>) value) {
+                if (!options.contains(ticked)) {
+                    issues.add(subject + " " + key + " names [" + ticked + "], which is not one of its options " + options);
+                }
+            }
+        }
+    }
+
+    /** What a literal default of the input's type looks like, or {@code null} when the value is one. */
+    private static String promptDefaultMismatch(ActionPromptIntent input, Object value) {
+        return switch (input.getType()) {
+            case "integer" -> value instanceof Long ? null : "a whole number";
+            case "decimal" -> value instanceof Number ? null : "a number";
+            case "boolean" -> value instanceof Boolean ? null : "true or false";
+            case "date" -> value instanceof String text && isIsoDate(text) ? null : "a date (yyyy-MM-dd)";
+            case ActionPromptIntent.MULTISELECT -> value instanceof List<?> list && list.stream()
+                                                                                        .allMatch(String.class::isInstance) ? null
+                                                                                                : "a list of its option values";
+            default -> value instanceof String ? null : "a string";
+        };
+    }
+
+    private static boolean isIsoDate(String text) {
+        try {
+            LocalDate.parse(text);
+            return true;
+        } catch (DateTimeParseException ex) {
+            return false;
+        }
+    }
+
+    /**
+     * A {@code {property}} a call action's dialog reads off the clicked record (#8296): only a
+     * per-record action has one, and the property must be a field or to-one relation of the
+     * {@code forEntity}, the {@code Name} its {@code label:} generates, or a collection path its
+     * {@code list:} shows (#8323) - an unlisted one is a column the record never carries.
+     */
+    private static void validateRecordPlaceholder(String key, String name, ActionIntent action, EntityIntent entity, String subject,
+            List<String> issues) {
+        if (!"entity".equals(action.getScope())) {
+            issues.add(subject + " " + key + " names [{" + name + "}] but the action has scope [" + action.getScope()
+                    + "] - only a per-record (scope: entity) action has a record to read it from");
+        } else if (entity != null && ActionPlaceholders.namesCollection(entity, name)
+                && ActionPlaceholders.listedCollection(entity, name) == null) {
+            issues.add(subject + " " + key + " names [{" + name + "}], a collection path [" + entity.getName()
+                    + "] does not list - add it to `list:`");
+        } else if (entity != null && ActionPlaceholders.property(entity, name) == null) {
+            issues.add(
+                    subject + " " + key + " names [{" + name + "}], which is not a field or to-one relation of [" + entity.getName() + "]");
         }
     }
 
@@ -11118,6 +11512,35 @@ public final class IntentParser {
                 String other = status == null ? null : stampedBy.putIfAbsent(status, field.getName());
                 if (other != null) {
                     issues.add(subject + " stamps the same status as field [" + other + "] - one field records one arrival");
+                }
+            }
+        }
+    }
+
+    /**
+     * Single flags ({@code single:}, #8101): a boolean at most one row holds, fleet-wide or per the
+     * value of one of the entity's own to-one relations. The flag is a boolean, the scope is a to-one
+     * (a collection has no column on this row to scope by), and a conflict either demotes the holder or
+     * is refused.
+     */
+    private static void validateSingleFlags(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            for (FieldIntent field : entity.getFields()) {
+                SingleIntent single = field.getSingle();
+                if (single == null) {
+                    continue;
+                }
+                String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] single";
+                if (!"boolean".equals(field.getType())) {
+                    issues.add(subject + " needs a boolean field, not [" + (field.getType() == null ? "string" : field.getType())
+                            + "] - it is the flag at most one row holds");
+                }
+                if (single.getPer() != null && CheckSupport.toOne(entity, single.getPer()) == null) {
+                    issues.add(subject + " per [" + single.getPer() + "] is not a manyToOne/oneToOne relation of [" + entity.getName()
+                            + "] - the scope is the record a holder belongs to");
+                }
+                if (single.getOnConflict() != null && !"demote".equals(single.getOnConflict()) && !single.isRefuse()) {
+                    issues.add(subject + " onConflict [" + single.getOnConflict() + "] is not one of: demote, refuse");
                 }
             }
         }

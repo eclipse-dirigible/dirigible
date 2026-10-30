@@ -26,6 +26,21 @@
  * `harmonia:tasks-changed` naming the processes that differ (basePage.onTasksChanged is the consumer),
  * and a completed task form is followed by a bounded series of re-fetches, because the chain behind the
  * task keeps writing the record after the completion returned (#7612).
+ *
+ * A reading of the inbox fetches the task LIST only. The subject lines (which record a task is about) are
+ * resolved on demand - resolveSubjects(tasks) - for the rows the Inbox actually shows: resolving every
+ * task on each load, route change and poll cost one record GET per task plus one per relation label,
+ * hundreds of requests at ~200 visible tasks, for lines nothing on the page displayed (#8313).
+ *
+ * ONE reading of the inbox per browser tab (#8347). A generated app hosted in a shell's iframe (the
+ * application, personal, partner and admin shells; a related-record dialog inside a generated app) runs
+ * this same store a second time, and each copy read and polled the inbox on its own: four requests on
+ * load and four every 30 s for an idle page, ~230 KB a cycle for a user with a large queue. So a store
+ * that finds a same-origin host with this store FOLLOWS it instead: it mirrors the host's reading, asks
+ * the host to re-read when its own router navigates, opens a task in the host's dialog, and polls
+ * nothing. The host publishes every reading to its followers, and re-announces `harmonia:tasks-changed`
+ * on the follower's window so the hosted page's record re-reads as it does standalone. A host on another
+ * origin, or one without this store (the Workbench preview), is no host: the store runs standalone.
  */
 document.addEventListener('alpine:init', () => {
   // Records already fetched while building subject lines, keyed by '<controller url>/<id>'. Deliberately
@@ -83,10 +98,49 @@ document.addEventListener('alpine:init', () => {
     return changed;
   };
 
+  // The stores of the same-origin pages embedded in this one that follow this store's readings (#8347),
+  // each a function taking the changed process instances; and the host store THIS one follows, when it
+  // is the embedded page. Closure state, not store state: a store is view state, a frame is not.
+  const followers = new Set();
+  let host = null;
+  let hostAlpine = null;
+
+  // The same-origin host's processTasks store, when this page is embedded in one; null standalone, in a
+  // host without the store, or in a host on another origin (whose window throws on every read).
+  const findHost = () => {
+    try {
+      const parent = window.parent;
+      if (!parent || parent === window) return null;
+      const store = parent.Alpine && parent.Alpine.store('processTasks');
+      if (!store || typeof store.follow !== 'function') return null;
+      hostAlpine = parent.Alpine;
+      return store;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // The plain object behind a host-side reactive proxy, so the follower's Alpine wraps the host's data in
+  // its own reactivity rather than in a proxy over the host's.
+  const hostRaw = (value) => (hostAlpine && typeof hostAlpine.raw === 'function' ? hostAlpine.raw(value) : value);
+
   // Tell the open page that these processes' records may have changed (basePage.onTasksChanged listens,
-  // filtered by the record's own ProcessId, so a change in someone else's documents re-reads nothing).
-  const announceTasksChanged = (processInstanceIds) => {
-    window.dispatchEvent(new CustomEvent('harmonia:tasks-changed', { detail: { processInstanceIds } }));
+  // filtered by the record's own ProcessId, so a change in someone else's documents re-reads nothing) -
+  // and hand every reading, changed or not, to the stores following this one, so an embedded page mirrors
+  // it and announces the change on its own window.
+  const publish = (processInstanceIds) => {
+    if (processInstanceIds.length) {
+      window.dispatchEvent(new CustomEvent('harmonia:tasks-changed', { detail: { processInstanceIds } }));
+    }
+    followers.forEach((follower) => {
+      try {
+        follower(processInstanceIds);
+      } catch (e) {
+        // the follower's frame is gone (navigated away without unloading cleanly): drop it
+        console.warn('processTasks: dropping a follower that no longer answers', e);
+        followers.delete(follower);
+      }
+    });
   };
 
   // How long after a completed task form closed the inbox is re-read and the record's page told to look
@@ -109,10 +163,16 @@ document.addEventListener('alpine:init', () => {
     formProcessInstanceId: '',   // the open task's process, so the record's page is told to re-read once the form closed
     subjects: {},       // taskId -> the resolved business-identity line; '' while unresolved or when there is none
     serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
+    _baseline: false,   // byProcessId holds a successful reading a later one may be compared against
     _poll: null,
     _settle: null,      // the pending follow-up re-read after a completed task form closed (see settle)
 
     init() {
+      host = findHost();
+      if (host) {
+        this.followHost();
+        return;
+      }
       this.load();
       // A task form (opened in the app-wide dialog) asks its host to close when it completes.
       window.addEventListener('message', (e) => {
@@ -126,7 +186,52 @@ document.addEventListener('alpine:init', () => {
       this._poll = setInterval(() => this.load(), 30000);
     },
 
+    // Whether this store follows the store of a same-origin host page instead of reading the inbox itself.
+    get embedded() {
+      return !!host;
+    },
+
+    // Register the store of an embedded same-origin page to be handed every reading; answers the
+    // function that unregisters it.
+    follow(follower) {
+      followers.add(follower);
+      return () => followers.delete(follower);
+    },
+
+    // The embedded side of #8347: mirror the host's reading now and on every one it publishes, drop out
+    // when this page unloads, and ask the host to re-read when this page's router navigates - except
+    // for the first route, the page's own load, which the host's reading already covers. No poll: the
+    // host's is the one reading of the inbox this tab makes.
+    followHost() {
+      const unfollow = host.follow((changed) => this.mirror(changed));
+      window.addEventListener('pagehide', unfollow);
+      this.mirror([]);
+      let routed = false;
+      document.addEventListener('pinecone:end', () => {
+        if (routed) this.load();
+        routed = true;
+      });
+    },
+
+    // Take over the host's reading: the task lists and their bucketing, the subjects it resolved, and
+    // whether it is still polling; then re-announce the changed processes on THIS window, where the
+    // hosted page's components listen, and hand the reading on to any page embedded in this one in turn.
+    mirror(changed) {
+      this.byProcessId = hostRaw(host.byProcessId);
+      this.tasks = hostRaw(host.tasks);
+      this.total = host.total;
+      this.loaded = host.loaded;
+      this.serverUnavailable = host.serverUnavailable;
+      this.subjects = Object.assign({}, hostRaw(host.subjects));
+      // The names are rendered by this window's translator, so it needs the catalogs the tasks reference.
+      this.loadTaskLabelCatalogs(this.tasks);
+      const notifications = Alpine.store('notifications');
+      if (notifications && notifications.syncTasks) notifications.syncTasks(this.tasks);
+      publish(changed || []);
+    },
+
     async load() {
+      if (host) return host.load();
       // Once the server has gone away we stop polling entirely; a browser refresh recreates this
       // store (serverUnavailable back to false) and resumes.
       if (this.serverUnavailable) return [];
@@ -164,17 +269,20 @@ document.addEventListener('alpine:init', () => {
         });
         collect(mine, true);
         collect(groups, false);
-        // The first reading is a baseline, not a change: the page that is open loaded its own record.
-        const changed = this.loaded ? changedProcesses(this.byProcessId, map) : [];
+        // The first reading is a baseline, not a change: the page that is open loaded its own record. So is
+        // the first one after a failed reading, which emptied byProcessId - compared against that, every
+        // process would be announced and every open page re-read itself (#8313).
+        const changed = this._baseline ? changedProcesses(this.byProcessId, map) : [];
         this.byProcessId = map;
         this.tasks = flat;
         this.loaded = true;
+        this._baseline = true;
         this.loadTaskLabelCatalogs(flat);
-        this.resolveSubjects(flat);
+        this.forgetGoneSubjects(flat);
         // Surface the user's actionable tasks in the shell's notification bell.
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
-        if (changed.length) announceTasksChanged(changed);
+        publish(changed);
         return changed;
       } catch (e) {
         // Stop the loop when retrying can't help: a transport failure (httpStatus 0 → dead server) or
@@ -187,21 +295,24 @@ document.addEventListener('alpine:init', () => {
           if (this._poll) { clearInterval(this._poll); this._poll = null; }
           console.warn('processTasks: ' + (e.httpStatus === 0 ? 'server unavailable' : 'not authenticated (' + e.httpStatus + ')')
             + ' — stopped polling for tasks; refresh the page to resume');
+          publish([]);
           return [];
         }
         this.byProcessId = {};
         this.tasks = [];
+        this._baseline = false;
         console.error('processTasks: unable to load inbox tasks', e);
+        publish([]);
         return [];
       }
     },
 
-    // An explicit refresh — the Inbox's Refresh button — re-reads the records the subject lines are built
-    // from, which is what makes it authoritative. Everything automatic (the 30s poll, the Inbox's 15s
-    // auto-refresh) goes through load() instead and only resolves the tasks it has not seen yet, so a
-    // shell sitting open does not re-fetch every document, and the subject lines do not blank out and
-    // repopulate on every cycle (#7157).
+    // An explicit refresh — the Inbox's Refresh button — drops the records the subject lines are built
+    // from, so the rows it resolves next read them afresh, which is what makes it authoritative. Everything
+    // automatic (the 30s poll, the Inbox's 15s auto-refresh) goes through load() instead and keeps the
+    // resolved subjects, so the subject lines do not blank out and repopulate on every cycle (#7157).
     refresh() {
+      if (host) return host.refresh();
       recordCache.clear();
       subjectKeys.clear();
       this.subjects = {};
@@ -212,6 +323,11 @@ document.addEventListener('alpine:init', () => {
     // that task alone re-resolves and every other subject stays warm.
     invalidate(task) {
       if (!task) return;
+      if (host) {
+        host.invalidate(task);
+        this.mirror([]);
+        return;
+      }
       forgetTask(task.id);
       delete this.subjects[task.id];
     },
@@ -231,19 +347,28 @@ document.addEventListener('alpine:init', () => {
       return (task && this.subjects[task.id]) || '';
     },
 
-    async resolveSubjects(tasks) {
+    // A task no longer in the inbox takes its subject with it.
+    forgetGoneSubjects(tasks) {
       const current = new Set(tasks.map((t) => t.id));
       Object.keys(this.subjects).forEach((id) => {
         if (current.has(id)) return;
         delete this.subjects[id];
         subjectKeys.delete(id);   // the records stay cached (another task may share them); they age out on TTL
       });
-      const pending = tasks.filter((t) => t.subject && this.subjects[t.id] === undefined);
+    },
+
+    // Resolve the subject lines of these tasks - the rows a view shows, never the whole inbox (#8313). A
+    // task already resolved (or being resolved) is skipped, so a view may ask again after every re-read.
+    async resolveSubjects(tasks) {
+      // The host holds the cache and resolves; its publication brings the lines here.
+      if (host) return host.resolveSubjects(tasks);
+      const pending = (tasks || []).filter((t) => t && t.subject && this.subjects[t.id] === undefined);
       if (!pending.length) return;
       await Promise.all(pending.map((t) => this.resolveSubject(t)));
       // The bell bakes an item's text in when it arrives, so it is re-titled once the subjects are in.
       const notifications = Alpine.store('notifications');
       if (notifications && notifications.syncTasks) notifications.syncTasks(this.tasks);
+      publish([]);
     },
 
     async resolveSubject(task) {
@@ -328,6 +453,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     async openTask(task) {
+      // Embedded, the task opens in the host's dialog: it claims, opens and re-reads, and its reading
+      // comes back here through mirror(). The host is handed the plain task, not this store's proxy.
+      if (host) return host.openTask(typeof Alpine.raw === 'function' ? Alpine.raw(task) : task);
       // A candidate (group) task must be claimed for the user before its form opens.
       if (!task.mine) {
         try {
@@ -360,6 +488,7 @@ document.addEventListener('alpine:init', () => {
     // the form itself asked to close (its `harmonia.form.close`, posted once the task is completed) and
     // absent when the user dismissed the dialog - only a completion has a chain to wait for.
     closeForm(completed) {
+      if (host) return host.closeForm(completed);
       const processInstanceId = this.formProcessInstanceId;
       // The form just wrote the record this task is about, so that one subject is re-read; the rest of
       // the inbox is untouched and keeps its cache.
@@ -381,6 +510,7 @@ document.addEventListener('alpine:init', () => {
     // re-read announces itself - because the chain up to that state has then run. A second completion
     // restarts the schedule for its own process.
     settle(processInstanceId) {
+      if (host) return host.settle(processInstanceId);
       this.cancelSettle();
       if (!processInstanceId) return;
       const tick = (index) => {
@@ -390,7 +520,7 @@ document.addEventListener('alpine:init', () => {
           if (this.serverUnavailable) return;
           const changed = await this.load();
           if (changed.indexOf(processInstanceId) >= 0) return;
-          announceTasksChanged([processInstanceId]);
+          publish([processInstanceId]);
           tick(index + 1);
         }, SETTLE_DELAYS_MS[index]);
       };

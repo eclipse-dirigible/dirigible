@@ -25,8 +25,8 @@ import java.util.List;
 
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler.AfterPublishMetadata;
 import org.eclipse.dirigible.components.base.script.ScriptEngineAvailability;
-import org.eclipse.dirigible.components.ide.problems.domain.Problem;
-import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
+import org.eclipse.dirigible.components.problems.domain.Problem;
+import org.eclipse.dirigible.components.problems.service.ProblemService;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.local.LocalRepository;
 import org.junit.jupiter.api.AfterEach;

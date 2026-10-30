@@ -2316,9 +2316,63 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Status, kind: manyToOne, to: PermitStatus, function: EntityStatus, init: SUBMITTED }
             """;
 
+    // Still the entities list. single: (#8101): a Tender's base flag is fleet-wide and changes hands
+    // on a create or an update; a Purse's base flag changes hands within its tender only, and its
+    // preferred flag refuses a second holder in the tender with 409.
+    private static final String INTENT_YAML_SINGLE_FLAGS = """
+              - name: Tender
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string, length: 10 }
+                  - { name: base, type: boolean, single: true }
+              - name: Purse
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: label,     type: string, length: 30 }
+                  - { name: base,      type: boolean, single: { per: Tender } }
+                  - { name: preferred, type: boolean, single: { per: Tender, onConflict: refuse } }
+                relations:
+                  - { name: Tender, kind: manyToOne, to: Tender }
+            """;
+
+    // Still the entities list. A list column may show a record's child rows (#8295): a team member's
+    // list shows the skills it was granted - a to-one's display text and a field's value - as the
+    // texts of its TeamMemberSkill rows.
+    private static final String INTENT_YAML_COLLECTION_COLUMNS = """
+              - name: Skill
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Team
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: TeamMember
+                list: [email, skills.skill, skills.grantedBy, joinedOn]
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: email,    type: string }
+                  - { name: joinedOn, type: date }
+                relations:
+                  - { name: Team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: TeamMemberSkill }
+              - name: TeamMemberSkill
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: grantedBy, type: string }
+                relations:
+                  - { name: TeamMember, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,      kind: manyToOne, to: Skill }
+            """;
+
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
                                                                   .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
+                                                                  .concat(INTENT_YAML_SINGLE_FLAGS)
+                                                                  .concat(INTENT_YAML_COLLECTION_COLUMNS)
                                                                   .concat(INTENT_YAML_GLUE);
 
     @Autowired
@@ -2523,7 +2577,91 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
         assertStatusStampsRuntime();
+        assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
+        assertCollectionColumnsRuntime();
+    }
+
+    /**
+     * A list column may show a record's child rows (#8295), generated, published and running: the list,
+     * {@code POST /search} and {@code GET /{id}} answer each collection column as the texts of the
+     * record's child rows in the child's order - a to-one as its target's display text, a field as its
+     * value - and an empty array for a record without any; a write carrying the column changes nothing.
+     */
+    private void assertCollectionColumnsRuntime() {
+        String members = "/team/TeamMemberController";
+        int java = createRecord("/settings/SkillController", "{\"Name\":\"Java\"}");
+        int sql = createRecord("/settings/SkillController", "{\"Name\":\"SQL\"}");
+        int team = createRecord("/team/TeamController", "{\"Name\":\"Core\"}");
+        String annBody = "{\"Team\":" + team + ",\"Email\":\"ann@example.com\",\"JoinedOn\":\"2026-01-05\"";
+        int ann = createRecord(members, annBody + "}");
+        int bob = createRecord(members, "{\"Team\":" + team + ",\"Email\":\"bob@example.com\",\"JoinedOn\":\"2026-02-01\"}");
+        createRecord("/team/TeamMemberSkillController", "{\"TeamMember\":" + ann + ",\"Skill\":" + java + ",\"GrantedBy\":\"lead\"}");
+        createRecord("/team/TeamMemberSkillController", "{\"TeamMember\":" + ann + ",\"Skill\":" + sql + ",\"GrantedBy\":\"cto\"}");
+
+        String annRow = "find { it.Id == " + ann + " }.";
+        String bobRow = "find { it.Id == " + bob + " }.";
+        // a master's lines (the detail panel's read) and a plain page (the power list's)
+        for (String list : List.of(API + members + "?Team=" + team, API + members + "?$limit=100")) {
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get(list)
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body(annRow + "SkillsSkill", contains("Java", "SQL"))
+                                                     .body(annRow + "SkillsGrantedBy", contains("lead", "cto"))
+                                                     .body(bobRow + "SkillsSkill", hasSize(0)));
+        }
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"propertyName\":\"Email\",\"operator\":\"EQ\","
+                                                         + "\"value\":\"ann@example.com\"}]}")
+                                                 .when()
+                                                 .post(API + members + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].SkillsSkill", contains("Java", "SQL")));
+        assertEquals(List.of("Java", "SQL"), readRecord(members, ann).get("SkillsSkill"));
+        assertEquals(List.of(), readRecord(members, bob).get("SkillsSkill"));
+
+        updateRecord(members, ann, annBody + ",\"SkillsSkill\":[\"COBOL\"]}", 200);
+        assertEquals(List.of("Java", "SQL"), readRecord(members, ann).get("SkillsSkill"), "a write must ignore the collection column");
+    }
+
+    /**
+     * {@code single:} (#8101), generated, published and running: a write that takes a single flag
+     * demotes the row that held it - fleet-wide, or within its scope only - and a refusing flag answers
+     * 409 with its message while another row of the scope holds it, writing nothing.
+     */
+    private void assertSingleFlagsRuntime() {
+        String tenders = "/tender/TenderController";
+        int euro = createRecord(tenders, "{\"Code\":\"EUR\",\"Base\":true}");
+        int lev = createRecord(tenders, "{\"Code\":\"BGN\",\"Base\":true}");
+        assertEquals(Boolean.FALSE, readRecord(tenders, euro).get("Base"), "a create taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, lev).get("Base"));
+        updateRecord(tenders, euro, "{\"Id\":" + euro + ",\"Code\":\"EUR\",\"Base\":true}", 200);
+        assertEquals(Boolean.FALSE, readRecord(tenders, lev).get("Base"), "an update taking the flag must demote its holder");
+        assertEquals(Boolean.TRUE, readRecord(tenders, euro).get("Base"));
+
+        String purses = "/purse/PurseController";
+        int first = createRecord(purses, "{\"Label\":\"first\",\"Tender\":" + euro + ",\"Base\":true,\"Preferred\":true}");
+        int second = createRecord(purses, "{\"Label\":\"second\",\"Tender\":" + euro + ",\"Base\":true}");
+        int other = createRecord(purses, "{\"Label\":\"other\",\"Tender\":" + lev + ",\"Base\":true,\"Preferred\":true}");
+        assertEquals(Boolean.FALSE, readRecord(purses, first).get("Base"), "the holder in the same scope is demoted");
+        assertEquals(Boolean.TRUE, readRecord(purses, second).get("Base"));
+        Map<String, Object> otherScope = readRecord(purses, other);
+        assertEquals(Boolean.TRUE, otherScope.get("Base"), "a holder in another scope keeps its flag: " + otherScope);
+        assertEquals(Boolean.TRUE, otherScope.get("Preferred"), "a refusing flag is single per scope, not fleet-wide: " + otherScope);
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + second + ",\"Label\":\"second\",\"Tender\":" + euro
+                                                         + ",\"Base\":true,\"Preferred\":true}")
+                                                 .when()
+                                                 .put(API + purses + "/" + second)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message", containsString("Another Purse is already Preferred for this Tender")));
+        assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
+        assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
     }
 
     /**
@@ -3068,11 +3206,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a composition master must delete the children it owns through their own repository, got: " + entryRepository);
         // ...and the record and its children leave together or not at all: a repository call is
         // otherwise its own transaction, so a failure half-way through would commit some of the
-        // children and keep the record - the very orphan state the cascade exists to prevent.
-        assertTrue(
-                entryRepository.contains("UnitOfWork.run(() -> deleteWithOwnedChildren(entity))")
-                        && entryRepository.contains("UnitOfWork.run(() -> deleteByIdWithOwnedChildren(id))"),
-                "the cascade must run as one unit of work with the record's own delete, got: " + entryRepository);
+        // children and keep the record - the very orphan state the cascade exists to prevent. The
+        // refusal runs in that same unit, ahead of the children: the record is locked before its
+        // references are counted (#8252).
+        assertTrue(Pattern.compile(
+                "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(entity\\.Id\\);\\s*deleteWithOwnedChildren\\(entity\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find()
+                && Pattern.compile(
+                        "UnitOfWork\\.run\\(\\(\\) -> \\{[^{}]*requireDeletable\\(id\\);\\s*deleteByIdWithOwnedChildren\\(id\\);\\s*\\}\\);")
+                          .matcher(entryRepository)
+                          .find(),
+                "the cascade must run as one unit of work with the record's own delete, its refusal first, got: " + entryRepository);
         // ...and the author's alternative is the refusal, on the child that declared it - naming both
         // entities, in the repository, so it holds for a reaction and a cascade too, not only for REST.
         assertTrue(
@@ -3705,6 +3850,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 unitManageView.indexOf("cycleSort('UnitPrice')") >= 0
                         && unitManageView.indexOf("cycleSort('UnitPrice')") < unitManageView.indexOf("cycleSort('Name')"),
                 "list: must put UnitPrice before Name in the list header");
+        // #8132: the header's default text is the label derived from unitPrice, as the record sheet's
+        // is - it is what an English user reads, and it used to be the raw name.
+        String unitHeader = unitManageView.substring(unitManageView.indexOf("<thead"), unitManageView.indexOf("</thead>"));
+        assertTrue(unitHeader.contains("', 'Unit Price')") && !unitHeader.contains("', 'UnitPrice')"),
+                "the list header must default to the property's label, not its name: " + unitHeader);
         assertFalse(unitManageView.contains("cycleSort('PackPrice')"), "a property list: leaves out must not be a list column");
         assertTrue(
                 unitManageList.indexOf("{ name: 'UnitPrice'") >= 0
@@ -3881,7 +4031,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!payslipMyDoc.contains("saveItem()"), "personalReadOnly my document must not render the item dialog's Save");
         assertTrue(!payslipMyDoc.contains("save()") && !payslipMyDoc.contains("deleteOpen = true"),
                 "personalReadOnly my document must not render the Save or Delete footer buttons");
-        assertTrue(payslipMyDoc.contains("openItem(row)"), "personalReadOnly my document must still open an item for reading");
+        // The line opens through the page's itemRowClicked, which skips the row's own controls (#8259).
+        assertTrue(payslipMyDoc.contains("itemRowClicked($event, row)"),
+                "personalReadOnly my document must still open an item for reading");
         // Positive control on the document shape too - the writable personal chat keeps its composer.
         String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
         assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
@@ -3902,7 +4054,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 !timesheetMyDoc.contains("openItem(null)") && !timesheetMyDoc.contains("deleteItem(row)")
                         && !timesheetMyDoc.contains("saveItem()"),
                 "a see-only items child must strip the items Add, the per-row Delete and the item dialog's Save");
-        assertTrue(timesheetMyDoc.contains("openItem(row)"), "a see-only items child must still open a line for reading");
+        assertTrue(timesheetMyDoc.contains("itemRowClicked($event, row)"), "a see-only items child must still open a line for reading");
         // The non-item panel is built at runtime, so the refusal travels as the panel's own flag.
         String timesheetMyDocPage = contentOf("gen/emission/js/components/pages/my/TimesheetMyDocumentPage.js");
         assertTrue(timesheetMyDocPage.contains("readOnly: true"), "the panel of a see-only child must carry the refusal");
@@ -3936,20 +4088,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // #7603: `defaultValue: now` - a NEW document opens dated today, in each field's own input shape,
         // before the query-param prefill (so a preset still wins)...
-        assertTrue(
-                reorderDoc.contains(
-                        "if ('OrderedOn' in this.form) this.form.OrderedOn = this.toDateInput(App.utils.todayAs('date'), 'DATE');")
-                        && reorderDoc.contains("this.form.Period = this.toDateInput(App.utils.todayAs('month'), 'MONTH');")
-                        && reorderDoc.contains(
-                                "this.form.RecordedAt = this.toDateInput(App.utils.todayAs('timestamp'), 'DATETIME-LOCAL');"),
+        assertTrue(reorderDoc.contains(
+                "if ('OrderedOn' in this.form && !touched.has('OrderedOn')) this.form.OrderedOn = this.toDateInput(App.utils.todayAs('date'), 'DATE');")
+                && reorderDoc.contains("this.form.Period = this.toDateInput(App.utils.todayAs('month'), 'MONTH');")
+                && reorderDoc.contains("this.form.RecordedAt = this.toDateInput(App.utils.todayAs('timestamp'), 'DATETIME-LOCAL');"),
                 "a defaultValue: now field must be prefilled when a new document opens, got: " + reorderDoc);
         assertTrue(
                 reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(") < reorderDoc.indexOf(
                         "const v = this.queryParam(key);", reorderDoc.indexOf("this.form.OrderedOn = this.toDateInput(App.utils.todayAs(")),
                 "a query-param prefill must still win over the default");
-        assertTrue(
-                contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
-                        "if ('Date' in this.form) this.form.Date = this.toDateInput(App.utils.todayAs('date'), 'DATE');"),
+        assertTrue(contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
+                "if ('Date' in this.form && !touched.has('Date')) this.form.Date = this.toDateInput(App.utils.todayAs('date'), 'DATE');"),
                 "...and so must the plain form");
         // ...a new LINE carries the shape, so its dialog computes today when it opens...
         String reorderItemDetail = contentOf("gen/emission/js/components/pages/Reorder/ReorderItem.detail.js");
@@ -3972,13 +4121,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // (assertNowDefaultRuntime proves those are the same values) - in the shape its input binds: a
         // real boolean, a real number, text, and a relation's `init:` as the option's string data-value...
         assertTrue(
-                reorderDoc.contains("if ('Channel' in this.form) this.form.Channel = 'web';")
-                        && reorderDoc.contains("if ('Rush' in this.form) this.form.Rush = true;")
-                        && reorderDoc.contains("if ('Copies' in this.form) this.form.Copies = 2;")
-                        && reorderDoc.contains("if ('Unit' in this.form) this.form.Unit = '1';"),
+                reorderDoc.contains("if ('Channel' in this.form && !touched.has('Channel')) this.form.Channel = 'web';")
+                        && reorderDoc.contains("if ('Rush' in this.form && !touched.has('Rush')) this.form.Rush = true;")
+                        && reorderDoc.contains("if ('Copies' in this.form && !touched.has('Copies')) this.form.Copies = 2;")
+                        && reorderDoc.contains("if ('Unit' in this.form && !touched.has('Unit')) this.form.Unit = '1';"),
                 "a declared default must be prefilled when a new document opens, got: " + reorderDoc);
         assertTrue(reorderDoc.indexOf("this.form.Unit = '1';") < reorderDoc.indexOf("const v = this.queryParam(key);",
                 reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
+        // #8315: the create form is editable while its options load, so a value typed or picked in that
+        // window is the user's - the defaults and the URL prefill fill only the fields still blank.
+        assertEquals("2026-10-28|1|web|true|2", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
+                "an untouched create form must still open holding its defaults");
+        assertEquals("2026-09-06|7|web|true|2",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06', Unit: '7' }", "{}"),
+                "a date typed and a relation picked while the options loaded must survive the defaults");
+        assertEquals("2026-09-06|9|mail|true|2",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06' }",
+                        "{ OrderedOn: '2026-01-01', Unit: '9', Channel: 'mail' }"),
+                "the URL prefill must fill the untouched fields and leave the typed one alone");
+        // #8344: an opened record requests all of its independent option lists at once and the record
+        // itself alongside them - not one list per round trip with the record queued behind the last.
+        // Every list stays pending here, so a page still loading them in series has asked for one.
+        assertEquals("2 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js"), "BillDocumentPage", "Bill"),
+                "the document page must request its option lists and its header together");
+        assertEquals("2 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js"), "ClaimFormPage", "Claim"),
+                "the form page must request its option lists and its record together");
+        // The personal and partner forms have no picker for their owner FK, so one list each: still
+        // pending, and the record must be requested anyway.
+        assertEquals("1 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js"), "ClaimMyFormPage", "my/Claim"),
+                "the personal form must request its option lists and its record together");
+        assertEquals("1 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js"),
+                        "PartnerTicketPartnerFormPage", "partner/PartnerTicket"),
+                "the partner form must request its option lists and its record together");
         // ...in the create branch only: the form literal stays blank, since loadRecord copies just the
         // keys a record carries and a literal default would surface on an edit of a row holding none...
         assertTrue(reorderDoc.contains("Rush: false,") && reorderDoc.contains("Unit: '',"),
@@ -3987,7 +4165,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String claimFormDefaults = contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js");
         String claimMyFormDefaults = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
         String partnerFormDefaults = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js");
-        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
+        assertTrue(claimFormDefaults.contains("if ('Billable' in this.form && !touched.has('Billable')) this.form.Billable = true;"),
                 "a true default must open checked on the create form, got: " + claimFormDefaults);
         assertTrue(claimMyFormDefaults.contains("if ('Billable' in this.form) this.form.Billable = true;"),
                 "...and on the personal create form, got: " + claimMyFormDefaults);
@@ -4305,6 +4483,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
         String job = contentOf("gen/events/emission/MonthlyClaimsJob.java");
+        // #8235: the fixture declares the Spring-style "0 0 4 1 * *" (day-of-month AND day-of-week
+        // set), which Quartz refuses - the job used to generate and publish clean, be listed as enabled
+        // and never fire. The generated cron() must carry the Quartz form; whether the scheduler then
+        // really accepts it is assertScheduledJobsRegistered() below.
+        assertTrue(job.contains("return \"0 0 4 1 * ?\";"), "a schedule's cron must reach Quartz with the unused day field as ?: " + job);
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
@@ -4330,6 +4513,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // publish (the loads became locals of the try block); the ordering is pinned once more, on a
         // real document.
         String dunning = contentOf("gen/events/emission/OverdueBillsJob.java");
+        assertTrue(dunning.contains("return \"0 0 5 1 * ?\";"), "the Quartz form of the declared cron (#8235): " + dunning);
         assertTrue(
                 dunning.contains("htmlPart.put(\"contentType\", \"text/html\");")
                         && dunning.contains("org.eclipse.dirigible.sdk.mail.Html.escape((Person == null ? null : Person.Name))"),
@@ -4351,6 +4535,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // typed local read for a `long` comparison and for an Integer foreign key, and the publish +
         // client-Java javac below is the first thing that proves it.
         String escalating = contentOf("gen/events/emission/BillDunningJob.java");
+        assertTrue(escalating.contains("return \"0 0 7 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + escalating);
         assertTrue(
                 escalating.contains("ReminderLevelEntity escalationCandidate = null;")
                         && escalating.contains("ReminderLevelEntity escalation = escalationCandidate;"),
@@ -4388,6 +4573,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // send time, not the key quoted as an address: emitted as a literal, the mail went to
         // `@config:BILLING_OPS_EMAIL` and the only trace anywhere was the delivery failure.
         String stuck = contentOf("gen/events/emission/StuckBillsJob.java");
+        assertTrue(stuck.contains("return \"0 0 6 1 1 ?\";"), "the Quartz form of the declared cron (#8235): " + stuck);
         assertTrue(stuck.contains("to = org.eclipse.dirigible.sdk.core.Configurations.get(\"BILLING_OPS_EMAIL\")"),
                 "a @config: recipient must resolve through the configuration facade at send time: " + stuck);
         assertFalse(stuck.contains("\"@config:BILLING_OPS_EMAIL\""), "the key must never reach the job as the address: " + stuck);
@@ -7517,6 +7703,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertGeneratesStepAxisRuntime();
         assertGeneratesItemsRuleRuntime();
         assertStalenessSweepRuntime();
+        assertScheduledJobsRegistered();
         assertFileFamiliesRuntime();
     }
 
@@ -7540,6 +7727,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200),
                 30);
+    }
+
+    /**
+     * Every schedule of the fixture is a registered, enabled job on the shared scheduler (#8235).
+     *
+     * <p>
+     * The emitted text cannot show this. Four of the schedules are declared Spring-style, with
+     * day-of-month AND day-of-week set, which the Quartz parser refuses; before the fix the generated
+     * {@code cron()} was handed over unchanged, and the registration saved the {@code Job} row and then
+     * failed the trigger build - so {@code /services/jobs} listed the job as enabled while it never
+     * fired, and the only trace was a WARN per reconciliation pass. The consumer now writes no row for
+     * a cron the scheduler cannot run, so a listed, enabled row is one Quartz accepted. The
+     * registration lands asynchronously after the publish, hence the retry.
+     */
+    private void assertScheduledJobsRegistered() {
+        for (String job : List.of("MonthlyClaimsJob", "OverdueBillsJob", "BillDunningJob", "StuckBillsJob", "StaleClaimsJob")) {
+            String name = "gen.events.emission." + job;
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get("/services/jobs")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body("findAll { it.name == '" + name + "' && it.enabled == true }.size()",
+                                                             equalTo(1)),
+                    30);
+        }
     }
 
     /**
@@ -8594,6 +8806,78 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "var __before = page.draft.Unit + '|' + page.dialogOptionsFor('Unit').map(o => o.value).join(','); page.saveDraft();");
             return context.eval("js",
                     "__before + '|' + page.savedAlongside(page.draftInlineCreated).split(' It ')[0] + '|' + page.draft.Unit")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated document page's create-mode {@code init()} (#8315) over the shipped shell runtime
+     * while the user types during the awaited option load: {@code typed} is assigned to the form from
+     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. Today is 2026-10-28.
+     * Answers the Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies} once init settled.
+     */
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
+                            + " window.location = { hash: '#/Reorder/create' }; window.PineconeRouter = { context: { params: {} } };"
+                            + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "components/printActions.js",
+                    "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js", "App.utils = { todayAs: () => '2026-10-28' }; App.detailsFor = () => []; App.relatedFor = () => [];");
+            context.eval("js", pageScript);
+            context.eval("js", "var page = pages['" + componentName + "'](); var __query = " + query + ";"
+                    + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
+                    + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
+                    + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
+                    + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + "); };" + " page.init();");
+            return context.eval("js",
+                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies].join('|')")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated page's edit-mode {@code init()} (#8344) over the shipped shell runtime against a
+     * REST client on which no relation option list ever answers - a request with {@code baseUrl: ''} is
+     * an option list and stays pending; every other request (the record, its satellites) answers at
+     * once. Answers {@code <option lists requested> lists, record <requested|not requested>}: a page
+     * that loads its lists one after another has requested exactly one and not yet the record.
+     */
+    private static String pageEditRequests(String pageScript, String componentName, String route) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback(), getElementById: () => null };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
+                            + " window.location = { hash: '#/" + route + "/7/edit' };"
+                            + " window.PineconeRouter = { context: { params: { id: '7' } } };"
+                            + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "components/printActions.js",
+                    "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js",
+                    "App.detailsFor = () => []; App.relatedFor = () => []; var __lists = 0; var __record = false;"
+                            + " var __answer = (url, options) => {"
+                            + "   if (options && options.baseUrl === '') { __lists++; return new Promise(() => {}); }"
+                            + "   if (/\\/7$/.test(url)) __record = true;" + "   return Promise.resolve({ Id: 7 }); };"
+                            + " App.services.api = { get: __answer, getAll: __answer, post: __answer };");
+            context.eval("js", pageScript);
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); page.$watch = () => {}; page.$nextTick = (f) => f && f();"
+                            + " page.watchViewport = () => {}; page.refreshIcons = () => {}; page.onActionDone = () => {};"
+                            + " page.onTasksChanged = () => {}; page.loadRestrictedFields = () => {}; page.loadAccess = async () => {};"
+                            + " page.canWrite = () => true; page.init();");
+            return context.eval("js", "__lists + ' lists, record ' + (__record ? 'requested' : 'not requested')")
                           .asString();
         }
     }

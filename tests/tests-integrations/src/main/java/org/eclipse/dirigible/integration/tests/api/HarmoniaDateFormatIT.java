@@ -217,9 +217,11 @@ class HarmoniaDateFormatIT {
 
         // The filter moved out of the table into the Filter menu (#7491), so the picker now edits that
         // menu's draft - applyFilterDraft writes it into columnFilters. Same picker, same instance
-        // pattern; only the model it binds moved.
-        assertTrue(content.contains("x-h-date-picker-popup=\"HarmoniaFormat.pickerConfig()\" x-model=\"filterDraft\""),
-                "the date column filter must bind the picker to the filter draft");
+        // pattern; only the model it binds moved. The draft is a range since #8131: one picker per end.
+        assertTrue(
+                content.contains("x-h-date-picker-popup=\"HarmoniaFormat.pickerConfig()\" x-model=\"filterDraft.from\"")
+                        && content.contains("x-h-date-picker-popup=\"HarmoniaFormat.pickerConfig()\" x-model=\"filterDraft.to\""),
+                "the date column filter must bind a picker to each end of the filter draft's range");
         assertTrue(!content.contains("'date' : 'text'"), "the native date input must be gone: " + content);
     }
 

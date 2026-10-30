@@ -72,11 +72,14 @@ document.addEventListener('alpine:init', () => {
       return this.supported;
     },
 
-    // Human-readable name for a code ('bg' -> 'Bulgarian'), falling back to the code itself.
+    // A language's name in that language ('bg' -> 'Български', 'de' -> 'Deutsch'), falling back to
+    // the code itself: the picker is read by someone looking for their own language, whatever the
+    // UI currently speaks (#8133). Intl writes some names lower-case ('български'); a picker entry
+    // starts with a capital.
     displayName(code) {
       try {
-        const name = new Intl.DisplayNames(['en'], { type: 'language' }).of(code);
-        return name || code;
+        const name = new Intl.DisplayNames([code], { type: 'language' }).of(code);
+        return name ? name.charAt(0).toLocaleUpperCase(code) + name.slice(1) : code;
       } catch (e) { return code; }
     },
 

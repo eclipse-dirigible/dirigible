@@ -326,7 +326,7 @@ public class ParametersSetter {
 
         int sqlType;
         if (parameterElement.isJsonArray()) {
-            sqlType = Types.ARRAY;
+            sqlType = getJsonArrayParameterType(preparedStatement, sqlParamIndex);
         } else if (parameterElement.isJsonObject()) {
             JsonElement typeElement = parameterElement.getAsJsonObject()
                                                       .get("type");
@@ -341,6 +341,24 @@ public class ParametersSetter {
         }
 
         setIndexedParameter(preparedStatement, sqlParamIndex, parameterElement, sqlType);
+    }
+
+    /**
+     * A plain JSON array is bound as SQL ARRAY unless the statement declares the parameter as a binary
+     * column (BLOB, BINARY, VARBINARY, ...) - then the array is the byte values of that column.
+     */
+    private static int getJsonArrayParameterType(ParameterizedByIndex preparedStatement, int sqlParamIndex) {
+        try {
+            int declaredType = preparedStatement.getParameterType(sqlParamIndex);
+            if (DataTypeUtils.isDatabaseTypeSupported(declaredType)
+                    && DataTypeUtils.isBlob(DataTypeUtils.getDatabaseTypeName(declaredType))) {
+                return declaredType;
+            }
+        } catch (SQLException | RuntimeException ex) {
+            LOGGER.debug("Cannot determine the declared type of parameter [{}] of statement [{}], binding the JSON array as ARRAY",
+                    sqlParamIndex, preparedStatement, ex);
+        }
+        return Types.ARRAY;
     }
 
 }

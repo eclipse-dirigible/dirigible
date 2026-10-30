@@ -21,13 +21,13 @@ FLOWABLE.TOOLBAR_CONFIG = {
             "cssClass" : "editor-icon editor-icon-save",
             "action" : "FLOWABLE.TOOLBAR.ACTIONS.saveModel"
         }
-//        ,
-//        {
-//			"type" : "button",
-//			"title" : "TOOLBAR.ACTION.VALIDATE",
-//			"cssClass" : "glyphicon glyphicon-ok",
-//			"action": "FLOWABLE.TOOLBAR.ACTIONS.validate"
-//		}
+        ,
+        {
+			"type" : "button",
+			"title" : "TOOLBAR.ACTION.VALIDATE",
+			"cssClass" : "glyphicon glyphicon-ok",
+			"action": "FLOWABLE.TOOLBAR.ACTIONS.validate"
+		}
 		,
         {
             "type" : "separator",

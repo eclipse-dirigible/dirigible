@@ -93,6 +93,9 @@ document.addEventListener('alpine:init', () => {
       // document and ignores them on writes, so the header form and the totals hide them too.
       this.loadRestrictedFields();
 #end
+      // The option lists go out first and are awaited only where the page needs them: the record
+      // is requested while they arrive, not after the last of them (#8344).
+      const optionsLoaded = this.loadOptions();
       this.def();
       // Role-scoped columns of the line-items child: the child registered whether it has any,
       // and its own scoped controller says which of them this caller may not see.
@@ -105,13 +108,13 @@ document.addEventListener('alpine:init', () => {
         }
       }
       await this.loadOwnerName();
-      await this.loadOptions();
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
       this.mode = this.id ? 'edit' : 'create';
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
+          await optionsLoaded;
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
@@ -148,6 +151,7 @@ document.addEventListener('alpine:init', () => {
           this.state = 'error';
         }
       } else {
+        await optionsLoaded;
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
         // `defaultValue: now`: a new record is dated today, in the field's own shape; a query-param
@@ -206,19 +210,24 @@ document.addEventListener('alpine:init', () => {
 
     async loadOptions() {
       const loaded = {};
+      // The lists do not depend on each other, so they are all requested at once (#8344).
+      await Promise.all([
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty)
-      try {
-        const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        (async () => {
+          try {
+            const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
 #if($property.widgetPickable)
-        // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
-        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
+            // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
+            loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
 #else
-        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })), '$!{property.widgetOptionsOrdered}');
+            loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })), '$!{property.widgetOptionsOrdered}');
 #end
-      } catch (e) { loaded['${property.name}'] = []; }
+          } catch (e) { loaded['${property.name}'] = []; }
+        })(),
 #end
 #end
+      ]);
       this.options = loaded;
     },
 
@@ -413,6 +422,17 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
+    // A click on a line opens it - except one on the line's own Delete button, which acts on its own. The
+    // guard used to be @click.stop on the button, which also kept the click from the document, where
+    // Harmonia closes an open menu, so a menu open elsewhere stayed open (#8259).
+    itemRowClicked(event, row) {
+      if (event.target.closest('[data-row-control]')) return;
+#if($immutableStatusProperty || $immutableAlways || $periodLock)
+      if (!this.mutable) return;
+#end
+      this.openItem(row);
+    },
+
     // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
     // calendar).
     async openItem(row, preset) {
@@ -456,7 +476,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       this.itemFieldError = null;
-      this.itemError = App.services.apiErrors.messageFor(e, fallback);
+      this.itemError = App.services.apiErrors.refusalMessageFor(e, fallback);
     },
 
     async ensureItemOptions() {

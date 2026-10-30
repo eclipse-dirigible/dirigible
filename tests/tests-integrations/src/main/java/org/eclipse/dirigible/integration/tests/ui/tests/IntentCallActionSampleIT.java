@@ -48,7 +48,10 @@ import com.codeborne.selenide.SelenideElement;
  * <p>
  * The roles are checked over HTTP, as the users who hold them: the views aggregation is what drops
  * the button for a caller without the token, so a SupportLead receives it and an Agent does not.
- * The rest runs in the browser, as the administrator, who is offered every button.
+ * The rest runs in the browser, as the administrator, who is offered every button - including the
+ * dialog that says what it acts on (issue #8296): a description naming the record, a help line, a
+ * multiselect with its default ticked and captions that toggle their boxes, and a named run button
+ * - and a multiselect that opens with the clicked row's child rows ticked (issue #8323).
  */
 class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
 
@@ -72,12 +75,18 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
+              - name: WatcherStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
               - name: Ticket
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: subject, type: string, required: true }
                 relations:
                   - { name: Status, kind: manyToOne, to: TicketStatus, function: EntityStatus, init: 1 }
+                  - { name: watchers, kind: oneToMany, to: Watcher }
                 related:
                   - { entity: Escalation, show: [id, reason, Status] }
               - name: Escalation
@@ -87,6 +96,38 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket }
                   - { name: Status, kind: manyToOne, to: EscalationStatus, function: EntityStatus, init: 1 }
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: Skill
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: TeamMember
+                list: [name, skills.skill]
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: MemberSkill }
+              - name: MemberSkill
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,  kind: manyToOne, to: Skill }
+              - name: Watcher
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string }
+                relations:
+                  - { name: Ticket, kind: manyToOne, to: Ticket, composition: true }
+                  - { name: Status, kind: manyToOne, to: WatcherStatus, function: EntityStatus, init: 1 }
             actions:
               - name: EscalateTicket
                 forEntity: Ticket
@@ -112,11 +153,57 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 call:
                   method: POST
                   path: /services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry
+              - name: MuteWatcher
+                forEntity: Watcher
+                label: Mute
+                fromStatus: [ACTIVE]
+                can: Watcher:mute
+                call:
+                  method: POST
+                  path: /services/java/helpdesk/custom/api/TicketApi/watchers/{id}/mute
+              - name: InviteMember
+                forEntity: Team
+                label: Invite member
+                can: Team:invite
+                description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+                submit: Invite
+                prompt:
+                  - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+                  - name: roles
+                    type: multiselect
+                    label: Roles
+                    required: true
+                    default: [Member]
+                    options:
+                      - { value: Member, help: Uses the team's workspace }
+                      - { value: Lead,   help: Manages the team's members }
+                call:
+                  path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/invitations
+                  body: { email: "{email}", roles: "{roles}" }
+                success: Invitation sent
+              - name: ChangeSkills
+                forEntity: TeamMember
+                label: Change skills
+                can: TeamMember:changeSkills
+                description: "Change the skills of {name} - now {skills.skill}."
+                submit: Change
+                prompt:
+                  - name: skills
+                    type: multiselect
+                    label: Skills
+                    required: true
+                    default: "{skills.skill}"
+                    options: [Java, SQL, Go]
+                call:
+                  path: /services/java/helpdesk/custom/api/TicketApi/members/{id}/skills
+                  body: { skills: "{skills}" }
+                success: Skills changed
             permissions:
               - role: SupportLead
-                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry]
+                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
+                      TeamMember:read, TeamMember:changeSkills]
               - role: Agent
-                can: [Ticket:read, Escalation:read]
+                can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
             seeds:
               - name: ticket-statuses
                 entity: TicketStatus
@@ -139,6 +226,35 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 entity: Escalation
                 rows:
                   - { id: 1, reason: Pager down, Ticket: 1, Status: 3 }
+              - name: teams
+                entity: Team
+                rows:
+                  - { id: 1, name: Platform }
+              - name: skills
+                entity: Skill
+                rows:
+                  - { id: 1, name: Java }
+                  - { id: 2, name: SQL }
+                  - { id: 3, name: Go }
+              - name: team-members
+                entity: TeamMember
+                rows:
+                  - { id: 1, name: Ann, team: 1 }
+              - name: member-skills
+                entity: MemberSkill
+                rows:
+                  - { id: 1, member: 1, skill: 1 }
+                  - { id: 2, member: 1, skill: 2 }
+              - name: watcher-statuses
+                entity: WatcherStatus
+                rows:
+                  - { id: 1, name: ACTIVE }
+                  - { id: 2, name: MUTED }
+              - name: watchers
+                entity: Watcher
+                rows:
+                  - { id: 1, email: ann@example.com, Ticket: 1, Status: 1 }
+                  - { id: 2, email: bob@example.com, Ticket: 1, Status: 2 }
             """;
 
     /**
@@ -196,6 +312,24 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/watchers/{id}/mute")
+                public void mute(@PathParam("id") Integer id) {
+                    received.add(Map.of("call", "mute " + id));
+                    Response.getNative().setStatus(202);
+                }
+
+                @Post("/teams/{id}/invitations")
+                public void invite(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "invite " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
+                @Post("/members/{id}/skills")
+                public void changeSkills(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "skills " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Get("/received")
                 public List<Map<String, Object>> received() {
                     return received;
@@ -227,7 +361,8 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Ticket-EscalateTicket"), actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
+                "helpdesk-Ticket-EscalateTicket", "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -279,6 +414,33 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         List<String> register = registerRowMenu(1, "Pager down");
         assertTrue(register.contains("Retry"), "the register row of a FAILED escalation offers Retry: " + register);
 
+        // A composition child's detail panel offers its rows' actions (#8289). On the ticket's preview the
+        // ACTIVE watcher's menu offers Mute and Preview - not Edit or Delete, which stay withheld there -
+        // and
+        // the MUTED watcher, with no action allowed, has no menu at all. On the ticket's edit the actions
+        // come
+        // first, before the panel's own Preview, Edit and Delete.
+        assertEquals(List.of("Mute", "Preview"), panelRowMenu("/Ticket/1/preview", "ann@example.com"),
+                "the ACTIVE watcher's row on the ticket's preview");
+        assertEquals(List.of(), panelRowMenu("/Ticket/1/preview", "bob@example.com"), "the MUTED watcher's row on the ticket's preview");
+        assertEquals(List.of("Mute", "Preview", "Edit", "Delete"), panelRowMenu("/Ticket/1/edit", "ann@example.com"),
+                "the ACTIVE watcher's row on the ticket's edit");
+        // Running it from the panel asks for the confirmation a call action without a prompt always gets,
+        // then
+        // posts the call, as from any other menu.
+        openPanelRowMenu("/Ticket/1/preview", "ann@example.com");
+        Selenide.$$("li[x-h-menu-item]")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Mute"))
+                .click();
+        assertEquals("Mute", Selenide.executeJavaScript("var a = Alpine.store('customActions').confirmAction; return a ? a.label : null;"),
+                "the panel row's Mute asks for its confirmation");
+        Selenide.executeJavaScript("Alpine.store('customActions').confirmRun();");
+        awaitAnnouncement("Mute completed");
+        List<Map<String, Object>> muted = received();
+        assertEquals("mute 1", muted.get(muted.size() - 1)
+                                    .get("call"));
+
         // Retry is declared primary (#8119): on the FAILED escalation it is the filled button - in the
         // list's sheet and on its page - and Edit steps down.
         browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Escalation");
@@ -321,6 +483,83 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         assertTrue(((Number) received.get(received.size() - 1)
                                      .get("contentLength")).longValue() <= 0,
                 "a call without a body sends none: " + received);
+
+        // The dialog says what it acts on (#8296): the description names the team, the email's help line
+        // shows, Member is ticked by default, the caption Lead ticks its box, and the run button reads
+        // Invite. The controller receives the roles as a list, in the options' order.
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Team");
+        Selenide.refresh();
+        browser.clickOnElementContainingText("td", "Platform");
+        Selenide.$("[x-h-sheet] button[aria-label='More actions']")
+                .shouldBe(Condition.visible)
+                .click();
+        browser.clickOnElementContainingText(HtmlElementType.LI, "Invite member");
+        SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        dialog.$("[data-slot='dialog-description']")
+              .shouldHave(Condition.exactText("Invite a person to Platform. They get an email with a link to the team's workspace."));
+        dialog.$$("[data-slot='field-description']")
+              .findBy(Condition.exactText("name@company.com"))
+              .shouldBe(Condition.visible);
+        dialog.$$("[data-slot='field-description']")
+              .findBy(Condition.exactText("Manages the team's members"))
+              .shouldBe(Condition.visible);
+        dialog.$("#prompt-roles-0")
+              .shouldBe(Condition.checked);
+        dialog.$("#prompt-roles-1")
+              .shouldNotBe(Condition.checked);
+        dialog.$("label[for='prompt-roles-1']")
+              .shouldHave(Condition.exactText("Lead"))
+              .click();
+        dialog.$("#prompt-roles-1")
+              .shouldBe(Condition.checked);
+        dialog.$("input[data-prompt-field='email']")
+              .setValue("new@example.com");
+        dialog.$$("button")
+              .findBy(Condition.exactText("Invite"))
+              .shouldBe(Condition.visible)
+              .click();
+        awaitAnnouncement("Invitation sent");
+        List<Map<String, Object>> invitations = received();
+        Map<String, Object> invitation = invitations.get(invitations.size() - 1);
+        assertEquals("invite 1", invitation.get("call"));
+        assertEquals(Map.of("email", "new@example.com", "roles", List.of("Member", "Lead")), invitation.get("body"),
+                "the controller receives the ticked roles as a list, in the options' order");
+
+        // A dialog may open with the record's child rows ticked (#8323): Change skills, opened from Ann's
+        // row in the team's members panel, ticks her Java and SQL and leaves Go, and its description
+        // lists them. Changed to Java and Go, the controller receives exactly those.
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        openPanelRowMenu("/Team/1/preview", "Ann");
+        Selenide.$$("li[x-h-menu-item]")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText("Change skills"))
+                .click();
+        SelenideElement skills = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        skills.$("[data-slot='dialog-description']")
+              .shouldHave(Condition.exactText("Change the skills of Ann - now Java, SQL."));
+        skills.$("#prompt-skills-0")
+              .shouldBe(Condition.checked);
+        skills.$("#prompt-skills-1")
+              .shouldBe(Condition.checked);
+        skills.$("#prompt-skills-2")
+              .shouldNotBe(Condition.checked);
+        skills.$("label[for='prompt-skills-1']")
+              .click();
+        skills.$("label[for='prompt-skills-2']")
+              .click();
+        skills.$$("button")
+              .findBy(Condition.exactText("Change"))
+              .shouldBe(Condition.visible)
+              .click();
+        awaitAnnouncement("Skills changed");
+        List<Map<String, Object>> changes = received();
+        Map<String, Object> change = changes.get(changes.size() - 1);
+        assertEquals("skills 1", change.get("call"));
+        assertEquals(Map.of("skills", List.of("Java", "Go")), change.get("body"), "the ticked skills, in the options' order");
     }
 
     /**
@@ -398,6 +637,45 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 .sendKeys(Keys.ESCAPE)
                 .perform();
         return texts;
+    }
+
+    /**
+     * The items of a detail panel row's menu, on the given ticket route, opened on the row with the
+     * text - empty when the row offers no menu there.
+     */
+    private List<String> panelRowMenu(String route, String text) {
+        SelenideElement trigger = openPanelRowMenu(route, text);
+        if (trigger == null) {
+            return List.of();
+        }
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> texts = items.texts();
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return texts;
+    }
+
+    /**
+     * Opens a detail panel row's menu and answers its trigger, or answers null when the row shows none.
+     */
+    private SelenideElement openPanelRowMenu(String route, String text) {
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#" + route);
+        Selenide.refresh();
+        SelenideElement row = Selenide.$$("div[x-data^='detailPanel'] tbody tr")
+                                      .findBy(Condition.text(text))
+                                      .shouldBe(Condition.visible);
+        // The panel's rows render with the store's actions already loaded; give the guards a moment.
+        Selenide.sleep(500);
+        SelenideElement trigger = row.$("button[aria-label='Row actions']");
+        if (!trigger.isDisplayed()) {
+            return null;
+        }
+        trigger.click();
+        return trigger;
     }
 
     /** The custom-action descriptors the given user is offered, by id. */

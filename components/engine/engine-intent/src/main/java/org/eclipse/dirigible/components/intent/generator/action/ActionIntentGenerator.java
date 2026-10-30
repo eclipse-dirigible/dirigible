@@ -49,6 +49,9 @@ import org.springframework.stereotype.Component;
  * its dialog ({@code prompt} + {@code promptColumns}, or the {@code confirm} text), the advisory
  * from-status {@code guard}, the {@code roles} offered the button and the {@code success} toast.
  * The store sends the request to the application's own endpoint; nothing generated sits in between.
+ * The dialog's {@code description} and run-button caption ({@code submit}) are carried when
+ * declared, with the {@code recordFields} its {@code {property}} placeholders read off the clicked
+ * record (issue #8296).
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output. The {@code .extension} files
@@ -84,7 +87,7 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
             String fileBase = name + "-action";
             String modulePath = project + "/" + fileBase + ".json";
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, action));
-            context.writeModelFile(fileBase + ".json", buildDescriptorModule(project, action, model));
+            context.writeModelFile(fileBase + ".json", buildDescriptorModule(project, action, context));
         }
     }
 
@@ -96,7 +99,7 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, ActionIntent action, IntentModel model) {
+    private static String buildDescriptorModule(String project, ActionIntent action, IntentGenerationContext context) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + action.getForEntity() + "-" + action.getName());
         String label = action.getLabel() == null || action.getLabel()
@@ -120,14 +123,15 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
             view.put("primary", true);
         }
         if (action.getCall() != null) {
-            putCall(view, action, model);
+            putCall(view, action, context);
         }
         // A JSON extension module: the view object itself, read by the views aggregation without a script
         // engine.
         return JsonHelper.toJson(view);
     }
 
-    private static void putCall(Map<String, Object> view, ActionIntent action, IntentModel model) {
+    private static void putCall(Map<String, Object> view, ActionIntent action, IntentGenerationContext context) {
+        IntentModel model = context.getModel();
         ActionCallIntent call = action.getCall();
         Map<String, Object> request = new LinkedHashMap<>();
         request.put("method", call.getMethod());
@@ -145,7 +149,7 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
                 entry.put("name", input.getName());
                 entry.put("required", input.isRequired());
                 prompt.add(entry);
-                columns.add(PromptColumns.declared(input.getName(), input.getLabel(), input.getType()));
+                columns.add(PromptColumns.declared(input));
             }
             view.put("prompt", prompt);
             view.put("promptColumns", columns);
@@ -153,6 +157,18 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
         if (action.getConfirm() != null && !action.getConfirm()
                                                   .isBlank()) {
             view.put("confirm", action.getConfirm());
+        }
+        if (action.getDescription() != null && !action.getDescription()
+                                                      .isBlank()) {
+            view.put("description", action.getDescription());
+        }
+        if (action.getSubmit() != null && !action.getSubmit()
+                                                 .isBlank()) {
+            view.put("submit", action.getSubmit());
+        }
+        Map<String, Object> recordFields = recordFields(action, context);
+        if (!recordFields.isEmpty()) {
+            view.put("recordFields", recordFields);
         }
         if (!action.getFromStatus()
                    .isEmpty()) {
@@ -170,6 +186,29 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
                                                   .isBlank()) {
             view.put("success", action.getSuccess());
         }
+    }
+
+    /**
+     * What the dialog's {@code {property}} placeholders read off the clicked record (#8296), keyed by
+     * placeholder: the record's property and, for a to-one relation, the lookup its display text is
+     * read through. A listed collection path's column (#8323) needs no lookup: it already holds the
+     * child rows' display texts. Empty when the dialog names none.
+     */
+    private static Map<String, Object> recordFields(ActionIntent action, IntentGenerationContext context) {
+        IntentModel model = context.getModel();
+        EntityIntent entity = IntentEntities.byName(model)
+                                            .get(action.getForEntity());
+        Map<String, Object> fields = new LinkedHashMap<>();
+        for (String name : ActionPlaceholders.of(action)) {
+            Map<String, Object> field = new LinkedHashMap<>();
+            field.put("property", ActionPlaceholders.property(entity, name));
+            RelationIntent relation = ActionPlaceholders.relation(entity, name);
+            if (relation != null) {
+                field.put("lookup", PromptColumns.toOneLookup(relation, model, context));
+            }
+            fields.put(name, field);
+        }
+        return fields;
     }
 
     /**

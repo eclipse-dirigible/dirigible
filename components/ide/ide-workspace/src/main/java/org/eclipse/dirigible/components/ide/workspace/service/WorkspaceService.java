@@ -21,11 +21,15 @@ import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.api.utils.UrlFacade;
 import org.eclipse.dirigible.components.base.script.ScriptEngineUnavailableException;
 import org.eclipse.dirigible.components.base.script.ScriptExecutor;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Folder;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.json.*;
+import org.eclipse.dirigible.components.workspace.json.FileDescriptor;
+import org.eclipse.dirigible.components.workspace.json.FolderDescriptor;
+import org.eclipse.dirigible.components.workspace.json.ProjectDescriptor;
+import org.eclipse.dirigible.components.workspace.service.UserWorkspaces;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -49,7 +53,7 @@ import java.util.Map;
  * The Class WorkspaceService.
  */
 @Service
-public class WorkspaceService {
+public class WorkspaceService implements UserWorkspaces {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(WorkspaceService.class);
@@ -102,6 +106,7 @@ public class WorkspaceService {
      * @param name the name
      * @return the i workspace
      */
+    @Override
     public Workspace createWorkspace(String name) {
         ICollection collection = getWorkspace(name);
         collection.create();
@@ -119,6 +124,7 @@ public class WorkspaceService {
      * @param name the name
      * @return the workspace
      */
+    @Override
     public Workspace getWorkspace(String name) {
         StringBuilder workspacePath = generateWorkspacePath(name, null, null);
         ICollection collection = getRepository().getCollection(workspacePath.toString());
@@ -165,6 +171,7 @@ public class WorkspaceService {
      *
      * @param name the name
      */
+    @Override
     public void deleteWorkspace(String name) {
         ICollection collection = getWorkspace(name);
         collection.delete();
@@ -187,6 +194,7 @@ public class WorkspaceService {
      *
      * @return the workspaces
      */
+    @Override
     public List<Workspace> getWorkspaces() {
         StringBuilder workspacePath = generateWorkspacePath(null, null, null);
         ICollection root = getRepository().getCollection(workspacePath.toString());
@@ -211,6 +219,7 @@ public class WorkspaceService {
      * @param workspace the workspace
      * @return true, if successful
      */
+    @Override
     public boolean existsWorkspace(String workspace) {
         Workspace workspaceObject = getWorkspace(workspace);
         return workspaceObject.exists();
@@ -514,6 +523,7 @@ public class WorkspaceService {
      * @return the uri
      * @throws URISyntaxException the URI syntax exception
      */
+    @Override
     public URI getURI(String workspace, String project, String path) throws URISyntaxException {
         StringBuilder relativePath = new StringBuilder(WORKSPACES_SERVICE_PREFIX).append(IRepositoryStructure.SEPARATOR)
                                                                                  .append(workspace);

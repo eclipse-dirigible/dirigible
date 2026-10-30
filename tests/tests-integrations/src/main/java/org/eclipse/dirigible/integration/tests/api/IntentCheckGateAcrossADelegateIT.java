@@ -134,9 +134,10 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
      * The posting work: a client delegate bound with {@code delegate:} (so it is emitted on the
      * {@code flowable:class} path, the one that used to hard-code {@code flowable:async}). It normally
      * just succeeds - what is measured is where the refusal of the step AFTER it lands - and on the
-     * {@code refuse} variable it refuses itself, once as the SDK's {@code ValidationException} and once
+     * note the poster typed it refuses itself, once as the SDK's {@code ValidationException} and once
      * as a plain {@code IllegalStateException}, which is what the delegate's own status code is decided
-     * by (issue #7450).
+     * by (issue #7450). The note is the form's editable field, the one value a completion may carry
+     * besides {@code action} (issue #8094).
      */
     private static final String POST_DELEGATE_JAVA = """
             package custom;
@@ -149,7 +150,7 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
 
                 @Override
                 public void execute(DelegateExecution execution) {
-                    Object refuse = execution.getVariable("refuse");
+                    Object refuse = execution.getVariable("Note");
                     if ("validation".equals(refuse)) {
                         throw new ValidationException("%s");
                     }
@@ -247,7 +248,7 @@ class IntentCheckGateAcrossADelegateIT extends IntegrationTest {
     private void completeRefusing(String task, String refusal, int expectedStatus, boolean carriesTheMessage) {
         restAssuredExecutor.execute(() -> {
             var response = given().contentType("application/json")
-                                  .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"post\",\"refuse\":\"" + refusal + "\"}}")
+                                  .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"post\",\"Note\":\"" + refusal + "\"}}")
                                   .when()
                                   .post(TASKS + "/" + task)
                                   .then()

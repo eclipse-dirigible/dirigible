@@ -63,6 +63,9 @@ class JavaAssistService {
 
     private static final String SYSTEM_PROMPT = AssistantGuide.load("/java-assistant-guide.md");
 
+    /** The guide plus how a TypeScript file becomes Java, for a port (#8051). */
+    private static final String PORT_SYSTEM_PROMPT = SYSTEM_PROMPT + "\n\n" + AssistantGuide.load("/typescript-port-guide.md");
+
     private static final ModelClient.ToolSpec TOOL = new ModelClient.ToolSpec(TOOL_NAME,
             "Propose the complete, updated Java source of the file being worked on, for the developer to review as a diff.",
             ModelClient.stringSchema(properties()));
@@ -101,7 +104,8 @@ class JavaAssistService {
         }, JavaAssistService::repairTurn);
 
         List<Map<String, Object>> messages = ModelClient.messages(history, buildUserTurn(context, message));
-        ProposalRepairLoop.Outcome outcome = loop.run(messages, this::callModel);
+        String systemPrompt = context.port() == null ? SYSTEM_PROMPT : PORT_SYSTEM_PROMPT;
+        ProposalRepairLoop.Outcome outcome = loop.run(messages, turns -> callModel(systemPrompt, turns));
 
         String reply = replyText(outcome);
         List<AssistDiagnostic> diagnostics = outcome.proposal() == null ? List.of() : outstanding.get();
@@ -114,11 +118,12 @@ class JavaAssistService {
     /**
      * One upstream round-trip. Package-visible so tests can substitute a scripted upstream.
      *
+     * @param systemPrompt the guide the model works by
      * @param messages the conversation turns to send
      * @return the model's reply
      */
-    ModelClient.ModelReply callModel(List<Map<String, Object>> messages) {
-        return modelClient.call(SYSTEM_PROMPT, messages, TOOL);
+    ModelClient.ModelReply callModel(String systemPrompt, List<Map<String, Object>> messages) {
+        return modelClient.call(systemPrompt, messages, TOOL);
     }
 
     /**
@@ -198,19 +203,42 @@ class JavaAssistService {
     }
 
     /**
-     * The user turn: the file as the developer's buffer has it, the project's intent (the model this
-     * class plugs into), an index of the project's own types, and the sources this file actually
-     * references - assembled server-side, because a browser could only send the buffer.
+     * The user turn: the file as the developer's buffer has it - for a port, the script being replaced
+     * and whatever the Java file already holds - the project's intent (the model this class plugs
+     * into), an index of the project's own types, and the sources this file actually references -
+     * assembled server-side, because a browser could only send the buffer.
      */
     private static String buildUserTurn(AssistContext context, String message) {
         StringBuilder turn = new StringBuilder();
         turn.append("Project: ")
             .append(context.project())
             .append("\nFile: ")
-            .append(context.path())
-            .append("\n\nThe file being worked on:\n```java\n")
-            .append(StringUtils.defaultString(context.source()))
-            .append("\n```\n");
+            .append(context.path());
+        AssistContext.PortedScript port = context.port();
+        if (port == null) {
+            turn.append("\n\nThe file being worked on:\n```java\n")
+                .append(StringUtils.defaultString(context.source()))
+                .append("\n```\n");
+        } else {
+            turn.append("\n\nThis is a PORT. The ")
+                .append(port.language())
+                .append(" file ")
+                .append(port.path())
+                .append(" is being replaced by the Java file ")
+                .append(context.path())
+                .append(" - propose that Java file. The ")
+                .append(port.language())
+                .append(" file:\n```")
+                .append(port.language())
+                .append('\n')
+                .append(port.source())
+                .append("\n```\n");
+            if (StringUtils.isNotBlank(context.source())) {
+                turn.append("\nThe Java file already exists, with:\n```java\n")
+                    .append(context.source())
+                    .append("\n```\n");
+            }
+        }
 
         if (StringUtils.isNotBlank(context.intentYaml())) {
             turn.append("\nThe application model this class plugs into (app.intent):\n```yaml\n")
@@ -243,7 +271,10 @@ class JavaAssistService {
      * below still lists everything else.
      */
     private static List<ProjectSource> referencedSources(AssistContext context) {
-        String source = StringUtils.defaultString(context.source());
+        String source = context.port() == null ? StringUtils.defaultString(context.source())
+                : context.port()
+                         .source()
+                        + "\n" + StringUtils.defaultString(context.source());
         List<ProjectSource> referenced = new ArrayList<>();
         for (ProjectSource sibling : context.siblings()) {
             if (source.contains("import " + sibling.fqn() + ";") || containsWord(source, sibling.simpleName())) {

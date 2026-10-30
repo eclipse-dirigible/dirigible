@@ -9,13 +9,14 @@
  */
 package org.eclipse.dirigible.components.ide.template.service.model;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadata;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadataSource;
 import org.eclipse.dirigible.components.ide.template.service.TemplateDescriptors;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Folder;
+import org.eclipse.dirigible.components.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;
@@ -29,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
@@ -104,6 +106,27 @@ public class ModelGenerationService {
      */
     public boolean supports(String templateId) {
         return ModelTemplateAdapters.supports(templateId);
+    }
+
+    /**
+     * Tests whether a template id names a template the platform no longer ships - one of the AngularJS
+     * and TypeScript application stacks a project generated before 14.16.0 still records.
+     *
+     * @param templateId the template's module path
+     * @return true when it was retired
+     */
+    public boolean isRetired(String templateId) {
+        return RetiredTemplates.isRetired(templateId);
+    }
+
+    /**
+     * The Java template that replaces a retired one, for a project to be regenerated with.
+     *
+     * @param templateId the retired template's module path
+     * @return its successor, or empty when it has none
+     */
+    public Optional<String> successorOf(String templateId) {
+        return RetiredTemplates.successorOf(templateId);
     }
 
     /**
@@ -228,8 +251,64 @@ public class ModelGenerationService {
         for (GeneratedFile file : generated) {
             written.add(write(projectObject, file.path(), file.content()));
         }
+        removeRetiredDescriptor(projectObject, project, path);
         publisherService.publish(workspace, project, "");
         return written;
+    }
+
+    /**
+     * The base-name descriptor of a model file, the form a project generated before #7057 carries -
+     * {@code myapp.gen} beside {@code myapp.model}.
+     *
+     * @param path the project-relative path of the model file
+     * @return the legacy descriptor's path, or {@code null} when the model file has no extension
+     */
+    static String legacyDescriptorPath(String path) {
+        int dot = path.lastIndexOf('.');
+        return dot > path.lastIndexOf('/') + 1 ? path.substring(0, dot) + DESCRIPTOR_EXTENSION : null;
+    }
+
+    /**
+     * Removes the legacy descriptor of a model file when it records a retired template.
+     *
+     * <p>
+     * The generation that just ran wrote the model's own descriptor; a legacy one beside it that names
+     * a retired template describes a generation that can never run again, and the readers that fall
+     * back to it would keep offering that template on every Regenerate.
+     *
+     * @param projectObject the project
+     * @param project the project name
+     * @param path the project-relative path of the model file
+     */
+    private void removeRetiredDescriptor(Project projectObject, String project, String path) {
+        String legacyPath = legacyDescriptorPath(path);
+        if (legacyPath == null) {
+            return;
+        }
+        File legacy = projectObject.getFile(legacyPath);
+        if (legacy == null || !legacy.exists() || !recordsRetiredTemplate(legacy)) {
+            return;
+        }
+        legacy.delete();
+        publisherService.unpublish(project + "/" + legacyPath);
+        logger.info("Removed the descriptor [{}/{}]: it recorded a template the platform no longer ships", sanitizeForLog(project),
+                sanitizeForLog(legacyPath));
+    }
+
+    /**
+     * Tests whether a descriptor records a retired template.
+     *
+     * @param descriptor the descriptor file
+     * @return true when its template id names a retired template
+     */
+    static boolean recordsRetiredTemplate(File descriptor) {
+        try {
+            String templateId = str(ModelJson.parseObject(new String(descriptor.getContent(), StandardCharsets.UTF_8)), "templateId");
+            return RetiredTemplates.isRetired(templateId);
+        } catch (RuntimeException e) {
+            logger.debug("Keeping the descriptor [{}]: it does not parse", sanitizeForLog(descriptor.getPath()), e);
+            return false;
+        }
     }
 
     /**
@@ -476,10 +555,7 @@ public class ModelGenerationService {
      * @return the value, with anything that could break a log line replaced
      */
     private static String sanitizeForLog(String value) {
-        if (value == null) {
-            return "null";
-        }
-        return value.replaceAll("[\\r\\n\\t]", "_");
+        return LogSanitizer.sanitize(value);
     }
 
 }

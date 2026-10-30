@@ -20,10 +20,36 @@ import java.util.List;
  * the rest of the project's sources in hand.
  *
  * @param project the workspace project name
- * @param path the target file's project-relative path
- * @param source the target file's current content, as the developer's buffer has it
+ * @param path the target Java file's project-relative path
+ * @param source the target file's current content, as the developer's buffer has it - empty for a
+ *        port to a Java file that does not exist yet
  * @param intentYaml the project's {@code .intent} document, or {@code null} for a classic project
- * @param siblings every other Java source in the project
+ * @param siblings every other Java source the proposal is compiled with
+ * @param port the script being ported to the target, or {@code null} when the target is the file
+ *        being worked on
  */
-record AssistContext(String project, String path, String source, String intentYaml, List<ProjectSource> siblings) {
+record AssistContext(String project, String path, String source, String intentYaml, List<ProjectSource> siblings, PortedScript port) {
+
+    /**
+     * A turn about a Java file.
+     *
+     * @param project the workspace project name
+     * @param path the Java file's project-relative path
+     * @param source the file's current content
+     * @param intentYaml the project's {@code .intent} document, or {@code null}
+     * @param siblings every other Java source the proposal is compiled with
+     */
+    AssistContext(String project, String path, String source, String intentYaml, List<ProjectSource> siblings) {
+        this(project, path, source, intentYaml, siblings, null);
+    }
+
+    /**
+     * A server-side script being ported to Java (#8051).
+     *
+     * @param path the script's project-relative path
+     * @param language the script's language, as a Markdown fence names it
+     * @param source the script, as the developer's buffer has it
+     */
+    record PortedScript(String path, String language, String source) {
+    }
 }

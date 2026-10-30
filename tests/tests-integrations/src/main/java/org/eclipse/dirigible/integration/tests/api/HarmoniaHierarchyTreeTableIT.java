@@ -173,7 +173,9 @@ class HarmoniaHierarchyTreeTableIT extends IntegrationTest {
         assertTrue(view.contains("x-h-button-group x-model=\"viewChoice\"") && view.contains("x-h-button-group-radio=\"'tree'\"")
                 && view.contains("x-h-button-group-radio=\"'table'\""), "the Tree / Table toggle");
         assertTrue(view.contains("data-lucide=\"users\""), "the node icon is the entity's icon, not a generic file");
-        assertTrue(view.contains("@click.stop=\"toggleNode(row)\""), "the chevron expands and collapses");
+        // The chevron is the row's own control: the row ignores it rather than the chevron stopping the
+        // click, which kept an open menu from closing (#8259).
+        assertTrue(view.contains("data-row-control @click=\"toggleNode(row)\""), "the chevron expands and collapses");
         for (String line : view.split("\n")) {
             assertFalse(line.contains("${") || line.contains("$property") || line.contains("$hierarchy"),
                     "an unresolved template reference survived: " + line);

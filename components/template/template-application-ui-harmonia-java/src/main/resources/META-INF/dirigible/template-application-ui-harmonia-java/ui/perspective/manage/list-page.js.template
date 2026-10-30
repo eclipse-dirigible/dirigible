@@ -13,6 +13,11 @@
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
+## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
+## the page then names it by id.
+#set($recordLabelProperty = "")
+#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Name")#set($recordLabelProperty = "Name")#end#end
+#if($recordLabelProperty == "")#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Number")#set($recordLabelProperty = "Number")#end#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}ManageListPage', () => ({
     ...basePage(),
@@ -32,7 +37,8 @@ document.addEventListener('alpine:init', () => {
     pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
-    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ,
+    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> a
+    // { from, to } range of whole days, either end open (#8131; `instant` marks a timestamp column),
     // boolean -> EQ with a real true/false picked from Yes/No (a LIKE '%true%' reaches the controller as
     // Boolean.valueOf("%true%") = false and matches nothing, issue #7720).
     // FK columns render a dropdown from the same lookup maps the list loads. Order + `number` mirror
@@ -44,7 +50,7 @@ document.addEventListener('alpine:init', () => {
     filterColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT")none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end },
+      { name: '${property.name}', type: '#if($property.widgetType == "MULTISELECT" || $property.collectionColumn)none#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.dataTypeTypescript == "boolean")boolean#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType && $property.dataTypeJavaClass == "java.time.Instant"), instant: true#end },
 #end
 #end
     ],
@@ -113,6 +119,8 @@ document.addEventListener('alpine:init', () => {
       // the table, the selected record's pane and the status-filtered action buttons agree with the
       // server (issue #7073).
       this.onActionDone(async () => { await this.load(); this.loadLookups(); });
+      // Back on this list through the sidebar or the hosting shell, which re-renders nothing (#8130).
+      this.onReentered(() => this.refresh());
 #if($hasProcess)
       // A completed BPM task on the selected record changes it behind this view's back, and the chain
       // behind the task keeps writing after the completion returned, which is why the processTasks
@@ -183,6 +191,9 @@ document.addEventListener('alpine:init', () => {
           ? await App.services.api.post(this.apiPath + '/search', { conditions })
           : await App.services.api.getAll(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
+        // A quiet re-read keeps the page, unless the rows it stood on are gone.
+        this.currentPage = Math.min(this.currentPage, this.totalPages);
+        this.lastUpdated = new Date();
         // Keep the current selection if it still exists, else clear it.
         if (this.selected) {
           this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
@@ -192,6 +203,12 @@ document.addEventListener('alpine:init', () => {
         this.state = 'error';
       }
       this.refreshIcons();
+    },
+
+    // The header's Refresh (#8130): the rows again, under the search, filters, sort and page in force.
+    async refresh() {
+      await this.load(true);
+      this.loadLookups();
     },
 
 #if($hierarchyProperty)
@@ -394,9 +411,27 @@ document.addEventListener('alpine:init', () => {
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
     selectRow(row)   { this.selected = row; this.detailsOpen = true; this.refreshIcons(); this.syncSelectionUrl(row); },
+    // A click on a row acts on the row - except one that started in the row's own controls (the "..."
+    // menu, the tree toggle, a Delete button), which act on their own. The guard used to be @click.stop
+    // on those controls, which also kept the click from the document, where Harmonia closes an open
+    // menu - so every row menu opened stayed open and they stacked (#8259).
+    rowClicked(event, row) {
+      if (event.target.closest('[data-row-actions], [data-row-control]')) return;
+      this.selectRow(row);
+    },
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears, and take the record id back out of the URL (issue #7463).
     closeDetails()   { this.selected = null; this.detailsOpen = false; this.refreshIcons(); this.syncSelectionUrl(null); },
+    // What the delete confirmation calls the record (#8134): its Name, else its Number (a draft's
+    // placeholder read as the draft marker, #7722), else its id.
+    recordLabel(row) {
+      if (!row) return '';
+#if($recordLabelProperty != "")
+      const label = row.${recordLabelProperty};
+      if (label != null && String(label).trim() !== '') return String(window.HarmoniaFormat.documentNumber(label));
+#end
+      return row.${primaryKeysString} == null ? '' : '#' + row.${primaryKeysString};
+    },
     // Render a property value for the details pane. Jackson serializes java.time as arrays
     // (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
     // Render a date/datetime value through the instance Date/Timestamp patterns (shell format.js).
@@ -469,24 +504,74 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Per-column server-side filter row ------------------------------------------------------
-    // Build POST /search conditions from the non-empty column filters (string -> LIKE, else EQ).
+    // Build POST /search conditions from the non-empty column filters (string -> LIKE, a date range ->
+    // GTE / LT, else EQ).
     buildConditions() {
       const conds = [];
       for (const col of this.filterColumns) {
         const raw = this.columnFilters[col.name];
-        if (raw === undefined || raw === null || String(raw).trim() === '') continue;
+        if (!this.filterHasValue(col, raw)) continue;
         if (col.type === 'string') {
           conds.push({ propertyName: col.name, operator: 'LIKE', value: '%' + String(raw).trim() + '%' });
         } else if (col.type === 'number' || col.type === 'fk') {
           const n = Number(raw);
           conds.push({ propertyName: col.name, operator: 'EQ', value: isNaN(n) ? raw : n });
         } else if (col.type === 'date') {
-          conds.push({ propertyName: col.name, operator: 'EQ', value: raw });
+          // From and To are whole days, so the range is the half-open [From, the day after To) the
+          // controller's GTE / LT answer - To includes its whole day on a timestamp column too.
+          if (raw.from) conds.push({ propertyName: col.name, operator: 'GTE', value: this.dateBound(raw.from, col.instant) });
+          if (raw.to) conds.push({ propertyName: col.name, operator: 'LT', value: this.dateBound(this.addDays(raw.to, 1), col.instant) });
         } else if (col.type === 'boolean') {
           conds.push({ propertyName: col.name, operator: 'EQ', value: raw === true || String(raw) === 'true' });
         }
       }
       return conds;
+    },
+
+    // Whether a column's filter value narrows anything: a date range needs at least one of its ends.
+    filterHasValue(col, v) {
+      if (v === undefined || v === null) return false;
+      if (col.type === 'date') return !!(v.from || v.to);
+      return String(v).trim() !== '';
+    },
+
+    // ----- Date ranges (#8131): the picker's model and every bound are local YYYY-MM-DD days ----------
+    toDay(date) {
+      return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+    },
+    fromDay(day) {
+      const [y, m, d] = String(day).split('-').map(Number);
+      return new Date(y, m - 1, d);
+    },
+    addDays(day, n) {
+      const date = this.fromDay(day);
+      return this.toDay(new Date(date.getFullYear(), date.getMonth(), date.getDate() + n));
+    },
+    // A day as the controller binds it: a DATE column takes the day itself, a timestamp column the
+    // instant the day starts in the user's own time zone.
+    dateBound(day, instant) { return instant ? this.fromDay(day).toISOString() : day; },
+
+    // The quick periods; each fills From and To, and Apply runs the query as for a typed range. A week
+    // starts on Monday.
+    datePresets: [
+      { key: 'today',     label: 'Today' },
+      { key: 'thisWeek',  label: 'This week' },
+      { key: 'thisMonth', label: 'This month' },
+      { key: 'lastMonth', label: 'Last month' },
+      { key: 'thisYear',  label: 'This year' },
+    ],
+    applyDatePreset(key) {
+      const now = new Date();
+      const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+      const monday = d - ((now.getDay() + 6) % 7);
+      const range = {
+        today:     [new Date(y, m, d), new Date(y, m, d)],
+        thisWeek:  [new Date(y, m, monday), new Date(y, m, monday + 6)],
+        thisMonth: [new Date(y, m, 1), new Date(y, m + 1, 0)],
+        lastMonth: [new Date(y, m - 1, 1), new Date(y, m, 0)],
+        thisYear:  [new Date(y, 0, 1), new Date(y, 11, 31)],
+      }[key];
+      this.filterDraft = { from: this.toDay(range[0]), to: this.toDay(range[1]) };
     },
 
     // Reload the list from the backend: POST /search when any filter is set, else the full getAll.
@@ -518,10 +603,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     get hasActiveColumnFilters() {
-      return this.filterColumns.some(c => {
-        const v = this.columnFilters[c.name];
-        return v !== undefined && v !== null && String(v).trim() !== '';
-      });
+      return this.filterColumns.some(c => this.filterHasValue(c, this.columnFilters[c.name]));
     },
 
     clearColumnFilters() { this.columnFilters = {}; this.applyServerFilter(); },
@@ -536,16 +618,22 @@ document.addEventListener('alpine:init', () => {
 
     // The filters in force, as chips - each value printed the way the table prints that column.
     get activeFilterChips() {
-      return this.filterColumns.filter(c => {
-        const v = this.columnFilters[c.name];
-        return v !== undefined && v !== null && String(v).trim() !== '';
-      }).map(c => ({ name: c.name, label: this.filterLabel(c), text: this.filterValueText(c) }));
+      return this.filterColumns.filter(c => this.filterHasValue(c, this.columnFilters[c.name]))
+        .map(c => ({ name: c.name, label: this.filterLabel(c), text: this.filterValueText(c) }));
     },
 
     filterValueText(col) {
       const v = this.columnFilters[col.name];
       if (col.type === 'fk')   return this.lookupText(col.name, v);
-      if (col.type === 'date') return this.displayValue(v, true);
+      if (col.type === 'date') {
+        // "01.10.2026 - 31.10.2026", or the one end an open range has.
+        const from = v.from ? this.displayValue(v.from, true) : '';
+        const to = v.to ? this.displayValue(v.to, true) : '';
+        if (from && to) return from + ' - ' + to;
+        if (!window.T) return from ? 'From ' + from : 'To ' + to;
+        return from ? T('application-core:shell.list.dateFromValue', 'From {{date}}', { date: from })
+                    : T('application-core:shell.list.dateToValue', 'To {{date}}', { date: to });
+      }
       if (col.type === 'boolean') {
         const yes = v === true || String(v) === 'true';
         return window.T ? (yes ? T('$projectName:${tprefix}.defaults.yes', 'Yes') : T('$projectName:${tprefix}.defaults.no', 'No')) : (yes ? 'Yes' : 'No');
@@ -553,10 +641,15 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
-    // Open the editor for one column, starting from the value that column already filters by.
+    // Open the editor for one column, starting from the value that column already filters by. A date
+    // column edits a { from, to } copy, so Cancel leaves the range in force untouched.
     openFilterEditor(name) {
       this.filterEditing = name;
       const v = this.columnFilters[name];
+      if (this.editedFilterColumn && this.editedFilterColumn.type === 'date') {
+        this.filterDraft = { from: (v && v.from) || '', to: (v && v.to) || '' };
+        return;
+      }
       this.filterDraft = (v === undefined || v === null) ? '' : v;
     },
     backToFilterMenu() { this.filterEditing = null; this.filterDraft = ''; },
@@ -565,7 +658,10 @@ document.addEventListener('alpine:init', () => {
     // Apply writes the draft into the filter model and runs the ONE query it implies.
     applyFilterDraft() {
       if (!this.filterEditing) return;
-      this.columnFilters = { ...this.columnFilters, [this.filterEditing]: this.filterDraft };
+      let value = this.filterDraft;
+      // A range picked back to front is meant the right way round.
+      if (value && value.from && value.to && value.from > value.to) value = { from: value.to, to: value.from };
+      this.columnFilters = { ...this.columnFilters, [this.filterEditing]: value };
       this.closeFilterMenu();
       this.applyServerFilter();
     },
@@ -674,13 +770,17 @@ document.addEventListener('alpine:init', () => {
     exportColumns: [
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.collectionColumn), list: true#elseif($property.widgetType == "MULTISELECT"), multi: true#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end#if($property.numberStampOnIssue), documentNumber: true#end },
 #end
 #end
     ],
     exportCell(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '';
+#if($collectionColumns)
+      // A collection column (intent `list:` collection path, #8295) exports its texts as one.
+      if (col.list) return v.join(', ');
+#end
       // A MULTISELECT exports its resolved labels, not the raw key list - fk resolution would treat
       // the whole csv as one key and fall back to the raw ids.
       if (col.multi) return this.multiLookupText(col.name, v);
@@ -784,12 +884,15 @@ document.addEventListener('alpine:init', () => {
       this.deleteError = '';
       try {
         await App.services.api.delete(this.apiPath + '/' + encodeURIComponent(this.deleteTarget.${primaryKeysString}));
-        if (this.selected && this.selected.${primaryKeysString} === this.deleteTarget.${primaryKeysString}) this.selected = null;
+        // The deleted record was open in the drawer: close it the way the user would - selection,
+        // drawer and the record id in the URL together (#8134). Clearing the selection alone left the
+        // drawer open on a record that no longer exists ('#null', every field empty, Edit enabled).
+        if (this.selected && this.selected.${primaryKeysString} === this.deleteTarget.${primaryKeysString}) this.closeDetails();
         this.deleteOpen = false;
         this.deleteTarget = null;
         await this.load();
       } catch (e) {
-        this.deleteError = App.services.apiErrors.messageFor(e, 'Could not delete the ${name} record.');
+        this.deleteError = App.services.apiErrors.refusalMessageFor(e, 'Could not delete the ${name} record.');
       } finally {
         this.deleteBusy = false;
       }

@@ -131,7 +131,11 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
                     jsonGenerator.writeBoolean((Boolean) value);
                 } else if (value instanceof Blob blob) {
                     int[] intArray = readBlob(blob);
-                    jsonGenerator.writeArray(intArray, 0, intArray.length - 1);
+                    // Jackson's third argument is the length of the slice, not the index of its last element
+                    jsonGenerator.writeArray(intArray, 0, intArray.length);
+                } else if (value instanceof byte[] bytes) {
+                    int[] intArray = toIntArray(bytes);
+                    jsonGenerator.writeArray(intArray, 0, intArray.length);
                 } else if (value instanceof Clob clob) {
                     String clobValue = readClob(clob);
                     jsonGenerator.writeString(clobValue);
@@ -205,10 +209,23 @@ public class ResultSetJsonWriter extends AbstractResultSetWriter<String> {
      */
     private int[] readBlob(Blob blob) throws SQLException {
         int blobLength = (int) blob.length();
-        byte[] blobAsBytes = blob.getBytes(1, blobLength);
+        byte[] blobAsBytes = blobLength == 0 ? new byte[0] : blob.getBytes(1, blobLength);
         blob.free();
-        int[] intArray = new int[blobLength];
-        for (int j = 0; j < blobAsBytes.length; intArray[j] = blobAsBytes[j++]);
+        return toIntArray(blobAsBytes);
+    }
+
+    /**
+     * Widens every byte to an int, keeping the byte's signed value so that the array round-trips
+     * through {@code BytesHelper.jsonToBytes}.
+     *
+     * @param bytes the bytes
+     * @return the int[] with one element per byte
+     */
+    private static int[] toIntArray(byte[] bytes) {
+        int[] intArray = new int[bytes.length];
+        for (int j = 0; j < bytes.length; j++) {
+            intArray[j] = bytes[j];
+        }
         return intArray;
     }
 

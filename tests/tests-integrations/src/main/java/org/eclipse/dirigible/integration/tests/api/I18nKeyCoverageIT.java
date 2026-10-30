@@ -92,9 +92,36 @@ class I18nKeyCoverageIT {
      */
     private static final Pattern SHELL_HELPER_KEY = Pattern.compile("(?<![\\w$])t\\(\\s*'(shell\\.[A-Za-z0-9_.]+)'");
 
-    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*(\\w+)\\s*\\}\\}");
+    /**
+     * A placeholder's name, with or without the format a language applies to its value
+     * ({@code name, lowercase}) - the format is the translation's business, the name is the contract.
+     */
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*(\\w+)\\s*(?:,[^}]*)?\\}\\}");
+
+    /** The i18next build the shells load, from its webjar. */
+    private static final String I18NEXT = "classpath*:META-INF/resources/webjars/i18next/*/dist/umd/i18next.min.js";
 
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** An i18next that resolves {@code ns:path} keys in its active language, and formats nothing. */
+    private static final String STUB_I18NEXT = """
+            var i18next = {
+              services: { formatter: { add: function () {} } },
+              init: function (options) { this.resources = options.resources; this.language = options.lng; return Promise.resolve(); },
+              lookup: function (key) {
+                var colon = key.indexOf(':');
+                var node = (this.resources[this.language] || {})[key.substring(0, colon)];
+                var path = key.substring(colon + 1).split('.');
+                for (var i = 0; i < path.length; i++) {
+                  if (node === null || typeof node !== 'object') return undefined;
+                  node = node[path[i]];
+                }
+                return typeof node === 'string' ? node : undefined;
+              },
+              exists: function (key) { return this.lookup(key) !== undefined; },
+              t: function (key) { return this.lookup(key); }
+            };
+            """;
 
     /**
      * Fewer languages than this means the pattern stopped matching, not that a language was dropped.
@@ -204,7 +231,7 @@ class I18nKeyCoverageIT {
         moduleCatalog.putObject("orders-model")
                      .putObject("messages")
                      .put("saved", "Записано от модула");
-        try (Context context = loadI18n("bg", moduleCatalog)) {
+        try (Context context = loadI18n("bg", moduleCatalog, STUB_I18NEXT)) {
             assertEquals("вашата стъпка", t(context, "orders:orders-model.messages.workflowStep", "your step"));
             assertEquals("очаква вашето действие", t(context, "orders:orders-model.messages.workflowWaiting", "is waiting for you"));
             assertEquals("Запази", t(context, "orders:orders-model.defaults.save", "Save"));
@@ -215,9 +242,107 @@ class I18nKeyCoverageIT {
             assertEquals("Моля, потвърдете", t(context, "application-core:shell.warnings.title", "Please confirm"));
             assertEquals("Запази въпреки това", t(context, "application-core:shell.warnings.confirm", "Save anyway"));
         }
-        try (Context context = loadI18n("en", moduleCatalog)) {
+        try (Context context = loadI18n("en", moduleCatalog, STUB_I18NEXT)) {
             assertEquals("your step", t(context, "orders:orders-model.messages.workflowStep", "your step"),
                     "the default language renders the baked English");
+        }
+    }
+
+    /**
+     * A list phrase names the LIST, inside a sentence (#8133): the generated page hands it the plural
+     * label, and the Bulgarian catalog lower-cases it there through the {@code lowercase} formatter
+     * {@code i18n.js} registers - evaluated over the real i18next the shells load, since the format is
+     * i18next's to apply. An acronym keeps its capitals, and English keeps the label as written.
+     */
+    @Test
+    void aListPhraseInBulgarianNamesTheListMidSentence() {
+        ObjectNode moduleCatalog = JSON.createObjectNode();
+        try (Context context = loadI18n("bg", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Търсене в складови приходи...",
+                    t(context, "orders:orders-model.messages.inputSearch", "Search Goods Receipts...", "Складови приходи"));
+            assertEquals("Все още няма складови приходи",
+                    t(context, "orders:orders-model.messages.noDataYet", "No Goods Receipts yet", "Складови приходи"));
+            assertEquals("Няма съвпадения за складови приходи",
+                    t(context, "orders:orders-model.messages.noMatch", "No matching Goods Receipts", "Складови приходи"));
+            assertEquals("Търсене в ДДС ставки...",
+                    t(context, "orders:orders-model.messages.inputSearch", "Search VAT Rates...", "ДДС ставки"),
+                    "an acronym is not lower-cased");
+        }
+        try (Context context = loadI18n("en", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Search Goods Receipts...",
+                    t(context, "orders:orders-model.messages.inputSearch", "Search {{name}}...", "Goods Receipts"),
+                    "the default language keeps the label as written");
+        }
+    }
+
+    /**
+     * A generated form's client-side validation speaks the user's language (#8350): the rule messages
+     * and the summary of a failed save resolve through the platform's copy of the template catalog, and
+     * the summary names the fields by the labels it is handed - evaluated over the real i18next, which
+     * interpolates them.
+     */
+    @Test
+    void aFormsValidationInBulgarianUsesThePlatformCatalog() {
+        ObjectNode moduleCatalog = JSON.createObjectNode();
+        try (Context context = loadI18n("bg", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Полето е задължително.", t(context, "orders:orders-model.messages.error.required", "This field is required."));
+            assertEquals("Въведете валиден имейл адрес.",
+                    t(context, "orders:orders-model.messages.error.email", "Enter a valid email address."));
+            assertEquals("Полета, които изискват внимание: Дата, Клиент", context.eval("js",
+                    "T('orders:orders-model.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}', { fields: 'Дата, Клиент' })")
+                                                                                 .asString());
+        }
+        try (Context context = loadI18n("en", moduleCatalog, read(resources(I18NEXT).get(0)))) {
+            assertEquals("Fields that need attention: Date, Customer", context.eval("js",
+                    "T('orders:orders-model.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}', { fields: 'Date, Customer' })")
+                                                                              .asString());
+        }
+    }
+
+    /**
+     * The generated form templates hand every validation message to T() and name the failing fields by
+     * their labels (validationLabels), never by the bare English literal and the property names.
+     */
+    @Test
+    void theFormTemplatesTranslateTheirValidation() {
+        for (String page : List.of("manage/form-page.js.template", "document/document-page.js.template")) {
+            String content = read(DIRIGIBLE + "template-application-ui-harmonia-java/ui/perspective/" + page);
+            assertTrue(
+                    !content.contains("message: 'This field is required.'") && !content.contains("message: 'Enter a valid email address.'"),
+                    page + ": a validation message is still an English literal");
+            assertTrue(content.contains("_failed.map(k => _labels[k] || k)"),
+                    page + ": the summary does not name the fields by their labels");
+            assertTrue(content.contains("validationLabels() {"), page + ": no validationLabels()");
+        }
+    }
+
+    /**
+     * The API error catalog renders in the user's language: apiError.js hands each line's shell key to
+     * T(), so a fault or a mapped 422 cause is no longer English in a translated UI (#8350).
+     */
+    @Test
+    void theApiErrorCatalogInBulgarianUsesTheShellCatalog() {
+        try (Context context = loadI18n("bg", JSON.createObjectNode(), STUB_I18NEXT)) {
+            context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/apiError.js"));
+            assertEquals("Заявката не можа да бъде изпълнена. Моля, проверете въведените данни.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'BadRequest' })")
+                           .asString());
+            assertEquals("Полето е задължително.", context.eval("js", "App.services.apiErrors.fieldMessageFor({ errorType: 'NotNull' })")
+                                                          .asString());
+            assertEquals("Нещо се обърка. Моля, опитайте отново.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'Unknown' })")
+                           .asString(),
+                    "an unknown error type falls back to the translated default");
+            assertEquals("Could not save.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'Unknown' }, 'Could not save.')")
+                           .asString(),
+                    "a caller's own fallback still wins over the default");
+        }
+        try (Context context = loadI18n("en", JSON.createObjectNode(), STUB_I18NEXT)) {
+            context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/apiError.js"));
+            assertEquals("The request could not be completed. Please review your input.",
+                    context.eval("js", "App.services.apiErrors.messageFor({ errorType: 'BadRequest' })")
+                           .asString());
         }
     }
 
@@ -230,13 +355,24 @@ class I18nKeyCoverageIT {
                       .asString();
     }
 
+    private static String t(Context context, String key, String fallback, String name) {
+        context.getBindings("js")
+               .putMember("__key", key);
+        context.getBindings("js")
+               .putMember("__fallback", fallback);
+        context.getBindings("js")
+               .putMember("__name", name);
+        return context.eval("js", "T(__key, __fallback, { name: __name })")
+                      .asString();
+    }
+
     /**
      * Evaluate the shipped {@code i18n.js} over stubs of what it touches - the {@code alpine:init}
      * listener, an Alpine store registry, localStorage holding the saved language, the locales service
-     * answering with the SHIPPED application-core catalogs plus one module's, and an i18next that
-     * resolves {@code ns:path} keys in its active language.
+     * answering with the SHIPPED application-core catalogs plus one module's - and the given i18next:
+     * {@link #STUB_I18NEXT}, or the real build where i18next's own behaviour is under test.
      */
-    private static Context loadI18n(String savedLanguage, ObjectNode moduleCatalog) {
+    private static Context loadI18n(String savedLanguage, ObjectNode moduleCatalog, String i18next) {
         ObjectNode translations = JSON.createObjectNode();
         for (String locale : languages()) {
             ObjectNode namespaces = translations.putObject(locale);
@@ -276,22 +412,8 @@ class I18nKeyCoverageIT {
                     return Promise.resolve({ locales: [{ id: 'en-US' }, { id: 'bg-BG' }], translations: JSON.parse(__translations) });
                   } });
                 };
-                var i18next = {
-                  init: function (options) { this.resources = options.resources; this.language = options.lng; return Promise.resolve(); },
-                  lookup: function (key) {
-                    var colon = key.indexOf(':');
-                    var node = (this.resources[this.language] || {})[key.substring(0, colon)];
-                    var path = key.substring(colon + 1).split('.');
-                    for (var i = 0; i < path.length; i++) {
-                      if (node === null || typeof node !== 'object') return undefined;
-                      node = node[path[i]];
-                    }
-                    return typeof node === 'string' ? node : undefined;
-                  },
-                  exists: function (key) { return this.lookup(key) !== undefined; },
-                  t: function (key) { return this.lookup(key); }
-                };
                 """.formatted(savedLanguage));
+        context.eval("js", i18next);
         context.eval("js", read(DIRIGIBLE + "application-core/shell/js/services/i18n.js"));
         context.eval("js", "__listeners.forEach(function (listener) { listener(); });");
         return context;

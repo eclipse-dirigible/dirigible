@@ -18,6 +18,8 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
+import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptOptionIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -66,7 +68,7 @@ public final class PromptColumns {
         List<Map<String, Object>> columns = new ArrayList<>();
         if (target != null) {
             for (PromptFieldIntent p : g.getPrompt()) {
-                columns.add(localColumn(p, target, byName, model, context));
+                columns.add(localColumn(p, target, model, context));
             }
             return columns;
         }
@@ -79,15 +81,60 @@ public final class PromptColumns {
     }
 
     /**
-     * A control declared inline with its own type - a {@code call:} action's prompt input.
+     * A control declared inline with its own type - a {@code call:} action's prompt input. A
+     * {@code multiselect} is the {@code MULTISELECT} widget carrying its {@code options}; the
+     * {@code help} line and the {@code default} the dialog opens with are carried when declared (issue
+     * #8296), so an input without them is emitted as before.
      *
-     * @param name the input's name
-     * @param label the caption, or null for a humanized name
-     * @param type the declared type ({@code string}, {@code integer}, {@code boolean}, ...)
+     * @param input the declared input
      * @return the control, in the shape the shell's prompt dialog renders
      */
-    public static Map<String, Object> declared(String name, String label, String type) {
-        return column(name, caption(label, name), widgetOf(type), null);
+    public static Map<String, Object> declared(ActionPromptIntent input) {
+        String widget = input.isMultiselect() ? "MULTISELECT" : widgetOf(input.getType());
+        Map<String, Object> column = column(input.getName(), caption(input.getLabel(), input.getName()), widget, null);
+        if (input.isMultiselect()) {
+            List<Map<String, Object>> options = new ArrayList<>();
+            for (ActionPromptOptionIntent declared : input.getOptions()) {
+                Map<String, Object> option = new LinkedHashMap<>();
+                option.put("value", declared.getValue());
+                option.put("label", declared.caption());
+                if (declared.getHelp() != null && !declared.getHelp()
+                                                           .isBlank()) {
+                    option.put("help", declared.getHelp());
+                }
+                options.add(option);
+            }
+            column.put("options", options);
+        }
+        if (input.getHelp() != null && !input.getHelp()
+                                             .isBlank()) {
+            column.put("help", input.getHelp());
+        }
+        if (input.getDefaultValue() != null) {
+            column.put("default", input.getDefaultValue());
+        }
+        return column;
+    }
+
+    /**
+     * The lookup a to-one relation's display text is read through - the controller of its target, its
+     * key and its label property.
+     *
+     * @param relation the to-one relation of an entity of the model
+     * @param model the model the entity is declared in
+     * @param context the generation context, for the REST paths and a cross-model target's owner model
+     * @return the lookup, in the shape the shell's dialogs read
+     */
+    public static Map<String, Object> toOneLookup(RelationIntent relation, IntentModel model, IntentGenerationContext context) {
+        if (relation.isCrossModel()) {
+            UsesIntent uses = CrossModelSupport.owningModel(context, uses(model, relation.getModel()), relation.getTo());
+            return crossModelLookup(context, uses, relation.getTo());
+        }
+        EntityIntent related = IntentEntities.byName(model)
+                                             .get(relation.getTo());
+        String perspective = IntentEntities.resolvePerspective(relation.getTo(), IntentEntities.compositionParents(model), model);
+        return lookup(apiBase(context.getProjectName(), IntentNaming.javaModule(context)), perspective, relation.getTo(),
+                IntentEntities.keyFieldName(related), IntentEntities.labelFieldOf(related));
     }
 
     private static boolean isDetailOf(EntityIntent target, String forEntity) {
@@ -100,8 +147,8 @@ public final class PromptColumns {
         return false;
     }
 
-    private static Map<String, Object> localColumn(PromptFieldIntent p, EntityIntent target, Map<String, EntityIntent> byName,
-            IntentModel model, IntentGenerationContext context) {
+    private static Map<String, Object> localColumn(PromptFieldIntent p, EntityIntent target, IntentModel model,
+            IntentGenerationContext context) {
         String name = IntentNaming.pascalCase(p.getField());
         for (FieldIntent field : target.getFields()) {
             if (p.getField()
@@ -110,16 +157,7 @@ public final class PromptColumns {
             }
         }
         RelationIntent relation = relation(target, p.getField());
-        if (relation.isCrossModel()) {
-            UsesIntent uses = CrossModelSupport.owningModel(context, uses(model, relation.getModel()), relation.getTo());
-            return column(name, caption(relation.getLabel(), p.getField()), "DROPDOWN", crossModelLookup(context, uses, relation.getTo()));
-        }
-        EntityIntent related = byName.get(relation.getTo());
-        String perspective = IntentEntities.resolvePerspective(relation.getTo(), IntentEntities.compositionParents(model), model);
-        String text = IntentEntities.labelFieldOf(related);
-        return column(name, caption(relation.getLabel(), p.getField()), "DROPDOWN",
-                lookup(apiBase(context.getProjectName(), IntentNaming.javaModule(context)), perspective, relation.getTo(),
-                        IntentEntities.keyFieldName(related), text));
+        return column(name, caption(relation.getLabel(), p.getField()), "DROPDOWN", toOneLookup(relation, model, context));
     }
 
     private static Map<String, Object> crossModelColumn(PromptFieldIntent p, CrossModelSupport.TargetInfo info, UsesIntent uses,

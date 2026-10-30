@@ -62,10 +62,10 @@
             <artifactId>dirigible-components-core-java</artifactId>
         </dependency>
 
-        <!-- IDE -->
+        <!-- Workspace - the model files the BPM modeler reads and writes -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ide-workspace</artifactId>
+            <artifactId>dirigible-components-core-workspace</artifactId>
         </dependency>
 
         <!-- Libraries -->

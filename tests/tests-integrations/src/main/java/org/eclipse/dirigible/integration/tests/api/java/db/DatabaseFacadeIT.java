@@ -26,8 +26,10 @@ import org.eclipse.dirigible.components.api.db.DatabaseFacade;
 import org.eclipse.dirigible.components.data.management.service.DatabaseDefinitionService;
 import org.eclipse.dirigible.components.data.sources.config.SystemDataSourceName;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.components.database.DirigibleConnection;
 import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.eclipse.dirigible.database.sql.dialects.SqlDialectFactory;
@@ -599,6 +601,120 @@ class DatabaseFacadeIT extends IntegrationTest {
 
     }
 
+
+    /**
+     * #8143 - Database.query returned every BLOB one byte short, a plain JSON array parameter for a
+     * BLOB / VARBINARY column was bound as SQL ARRAY, and {"type":"VARBINARY"} was refused.
+     */
+    @Nested
+    class BinaryTest {
+        private static final String BINARY_TABLE = "QA_BINARY";
+
+        @BeforeEach
+        void createBinaryTable() throws SQLException {
+            dropTableIfExists(BINARY_TABLE);
+            DirigibleDataSource defaultDataSource = dataSourcesManager.getDefaultDataSource();
+            // PostgreSQL has no VARBINARY: its variable-length binary type is BYTEA, which takes no length.
+            boolean postgres = defaultDataSource.isOfType(DatabaseSystem.POSTGRESQL);
+            DataType varbinaryType = postgres ? DataType.BYTEA : DataType.VARBINARY;
+            String[] varbinaryArgs = postgres ? new String[0] : new String[] {"(100)"};
+            String createTableSql = SqlDialectFactory.getDialect(defaultDataSource)
+                                                     .create()
+                                                     .table(BINARY_TABLE)
+                                                     .columnInteger(ID_COLUMN)
+                                                     .columnBlob("BL", true)
+                                                     .column("VB", varbinaryType, false, true, false, varbinaryArgs)
+                                                     .build();
+            try (DirigibleConnection connection = defaultDataSource.getConnection();
+                    PreparedStatement preparedStatement = connection.prepareStatement(createTableSql)) {
+                preparedStatement.executeUpdate();
+            }
+        }
+
+        @Test
+        void testQueryReturnsEveryBlobByte() throws Throwable {
+            insertBinaryRow(1, new byte[] {10, 20, 30, 40, 50}, new byte[] {1, 2, 3});
+            insertBinaryRow(2, new byte[] {7}, new byte[] {9});
+
+            String result = DatabaseFacade.query(selectBinaryRows());
+
+            JsonAsserter.assertEquals("[{\"Id\":1,\"BL\":[10,20,30,40,50],\"VB\":[1,2,3]},{\"Id\":2,\"BL\":[7],\"VB\":[9]}]", result);
+        }
+
+        @Test
+        void testPlainJsonArrayParamIsBoundAsBytesOfBinaryColumn() throws Throwable {
+            String parametersJson = "[3, [10,20,30,40,50], [1,2,3]]";
+
+            int updatedRows = DatabaseFacade.update(insertBinarySql(), parametersJson);
+            assertThat(updatedRows).isEqualTo(1);
+
+            String result = DatabaseFacade.query(selectBinaryRows());
+            JsonAsserter.assertEquals("[{\"Id\":3,\"BL\":[10,20,30,40,50],\"VB\":[1,2,3]}]", result);
+        }
+
+        @Test
+        void testTypedBlobAndVarbinaryParams() throws Throwable {
+            String parametersJson = """
+                    [4, {"type":"BLOB","value":[10,20,30,40,50]}, {"type":"VARBINARY","value":[1,2,3]}]
+                    """;
+
+            int updatedRows = DatabaseFacade.update(insertBinarySql(), parametersJson);
+            assertThat(updatedRows).isEqualTo(1);
+
+            String result = DatabaseFacade.query(selectBinaryRows());
+            JsonAsserter.assertEquals("[{\"Id\":4,\"BL\":[10,20,30,40,50],\"VB\":[1,2,3]}]", result);
+        }
+
+        @Test
+        void testReadModifyWriteKeepsTheStoredBytes() throws Throwable {
+            insertBinaryRow(5, new byte[] {1, 2, 3, 4, 5}, new byte[] {6, 7});
+
+            String read = DatabaseFacade.query(selectBinaryRows());
+            String blob = GsonHelper.parseJson(read)
+                                    .getAsJsonArray()
+                                    .get(0)
+                                    .getAsJsonObject()
+                                    .get("BL")
+                                    .toString();
+
+            int updatedRows = DatabaseFacade.update(insertBinarySql(), "[6, " + blob + ", [6,7]]");
+            assertThat(updatedRows).isEqualTo(1);
+
+            String result = DatabaseFacade.query(selectBinaryRows());
+            JsonAsserter.assertEquals("[{\"Id\":5,\"BL\":[1,2,3,4,5],\"VB\":[6,7]},{\"Id\":6,\"BL\":[1,2,3,4,5],\"VB\":[6,7]}]", result);
+        }
+
+        private String selectBinaryRows() throws SQLException {
+            ISqlDialect dialect = getDialect();
+            return dialect.select()
+                          .column(ID_COLUMN)
+                          .column("BL")
+                          .column("VB")
+                          .from(BINARY_TABLE)
+                          .order(ID_COLUMN)
+                          .build();
+        }
+
+        private String insertBinarySql() throws SQLException {
+            return getDialect().insert()
+                               .into(BINARY_TABLE)
+                               .column(ID_COLUMN)
+                               .column("BL")
+                               .column("VB")
+                               .build();
+        }
+
+        private void insertBinaryRow(int id, byte[] blob, byte[] varbinary) throws SQLException {
+            try (DirigibleConnection connection = dataSourcesManager.getDefaultDataSource()
+                                                                    .getConnection();
+                    PreparedStatement preparedStatement = connection.prepareStatement(insertBinarySql())) {
+                preparedStatement.setInt(1, id);
+                preparedStatement.setBytes(2, blob);
+                preparedStatement.setBytes(3, varbinary);
+                preparedStatement.executeUpdate();
+            }
+        }
+    }
 
     @Nested
     class InsertManyTest {

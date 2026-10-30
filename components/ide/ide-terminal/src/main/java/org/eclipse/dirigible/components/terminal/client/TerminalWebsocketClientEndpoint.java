@@ -12,13 +12,14 @@ package org.eclipse.dirigible.components.terminal.client;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
 
-import jakarta.websocket.ClientEndpoint;
+import jakarta.websocket.ClientEndpointConfig;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.ContainerProvider;
-import jakarta.websocket.OnClose;
-import jakarta.websocket.OnMessage;
-import jakarta.websocket.OnOpen;
+import jakarta.websocket.Endpoint;
+import jakarta.websocket.EndpointConfig;
 import jakarta.websocket.Session;
 import jakarta.websocket.WebSocketContainer;
 
@@ -28,11 +29,14 @@ import org.slf4j.LoggerFactory;
 /**
  * Terminal Websocket Proxy Client.
  */
-@ClientEndpoint(subprotocols = "tty")
-public class TerminalWebsocketClientEndpoint {
+public class TerminalWebsocketClientEndpoint extends Endpoint {
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(TerminalWebsocketClientEndpoint.class);
+
+    private static final String SUBPROTOCOL = "tty";
+
+    private static final String AUTHORIZATION_HEADER = "Authorization";
 
     /** The session. */
     private Session session = null;
@@ -44,11 +48,21 @@ public class TerminalWebsocketClientEndpoint {
      * Instantiates a new x terminal websocket client endpoint.
      *
      * @param endpointURI the endpoint URI
+     * @param authorization the Authorization header of the handshake
      */
-    public TerminalWebsocketClientEndpoint(URI endpointURI) {
+    public TerminalWebsocketClientEndpoint(URI endpointURI, String authorization) {
+        ClientEndpointConfig config = ClientEndpointConfig.Builder.create()
+                                                                  .preferredSubprotocols(List.of(SUBPROTOCOL))
+                                                                  .configurator(new ClientEndpointConfig.Configurator() {
+                                                                      @Override
+                                                                      public void beforeRequest(Map<String, List<String>> headers) {
+                                                                          headers.put(AUTHORIZATION_HEADER, List.of(authorization));
+                                                                      }
+                                                                  })
+                                                                  .build();
         try {
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-            container.connectToServer(this, endpointURI);
+            container.connectToServer(this, config, endpointURI);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -67,13 +81,15 @@ public class TerminalWebsocketClientEndpoint {
      * Callback hook for Connection open events.
      *
      * @param session the session which is opened.
+     * @param config the configuration the session was opened with
      */
-    @OnOpen
-    public void onOpen(Session session) {
+    @Override
+    public void onOpen(Session session, EndpointConfig config) {
         if (logger.isInfoEnabled()) {
             logger.info("[ws:terminal-client] connected: " + session.getId());
         }
         this.session = session;
+        session.addMessageHandler(ByteBuffer.class, this::onMessage);
     }
 
     /**
@@ -82,7 +98,7 @@ public class TerminalWebsocketClientEndpoint {
      * @param session the session which is getting closed.
      * @param reason the reason for connection close
      */
-    @OnClose
+    @Override
     public void onClose(Session session, CloseReason reason) {
         if (logger.isInfoEnabled()) {
             logger.info("[ws:terminal-client] disconnected: " + session.getId());
@@ -95,8 +111,7 @@ public class TerminalWebsocketClientEndpoint {
      *
      * @param message the message
      */
-    @OnMessage
-    public void onMessage(ByteBuffer message) {
+    private void onMessage(ByteBuffer message) {
         if (this.messageHandler != null) {
             try {
                 this.messageHandler.handleMessage(message);

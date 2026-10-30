@@ -27,10 +27,12 @@ import org.hibernate.Session;
 import org.hibernate.SessionFactory;
 import org.hibernate.StaleObjectStateException;
 import org.hibernate.Transaction;
+import org.hibernate.exception.LockAcquisitionException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
+import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.OptimisticLockException;
 
 /**
@@ -189,6 +191,41 @@ class JavaEntityStoreUnitOfWorkTest {
     @Test
     void refusesARowLockOutsideAUnit() {
         assertThrows(IllegalStateException.class, () -> store.lockForUpdate(Object.class, 1));
+    }
+
+    /** The share lock of a reference check (#8252) is refused outside a unit, as the update lock is. */
+    @Test
+    void refusesAShareLockOutsideAUnit() {
+        assertThrows(IllegalStateException.class, () -> store.lockForShare("gen.staff.data.employee.EmployeeEntity", 1));
+    }
+
+    /**
+     * A row lock another writer held - the victim a database picked to break a deadlock - is a conflict
+     * the caller can repeat, not a server fault (#8252).
+     */
+    @Test
+    void aDeadlockVictimIsAConflict() {
+        LockAcquisitionException deadlock = new LockAcquisitionException("deadlock detected", null);
+
+        ConcurrentWriteException thrown = assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWork(() -> {
+            throw deadlock;
+        }));
+
+        assertSame(deadlock, thrown.getCause());
+        assertRolledBackBeforeClose();
+    }
+
+    /** So is a lock wait that timed out. */
+    @Test
+    void aLockTimeoutIsAConflict() {
+        LockTimeoutException timeout = new LockTimeoutException("lock wait timed out");
+
+        ConcurrentWriteException thrown = assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWork(() -> {
+            throw timeout;
+        }));
+
+        assertSame(timeout, thrown.getCause());
+        assertRolledBackBeforeClose();
     }
 
     private void assertRolledBackBeforeClose() {

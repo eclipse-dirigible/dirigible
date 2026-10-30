@@ -20,6 +20,14 @@
         <link rel="icon" href="data:;base64,iVBORw0KGgo=" brand-icon />
         <title config-title></title>
         <script>
+            // Early in a first boot the platform's own resources may not be served yet, and a page that
+            // failed to start never polls again - so it reloads until it starts (#8267).
+            let busyPageStarted = false;
+            window.addEventListener('load', () => setTimeout(() => {
+                if (!busyPageStarted) window.location.reload();
+            }, 5000));
+        </script>
+        <script>
             const viewData = {
                 label: 'Loading...',
                 autoFocusTab: false
@@ -74,6 +82,7 @@
         <script>
             const busyPage = angular.module('busyPage', ['blimpKit', 'platformView']);
             busyPage.controller('BusyController', ($scope, $http) => {
+                busyPageStarted = true;
                 $scope.state = {
                     error: false,
                 };
@@ -98,6 +107,7 @@
                                 case "Failed":
                                     job.status = "negative";
                                     job.icon = "sap-icon--message-error";
+                                    break;
                                 default:
                                     job.status = "loading";
                                     break;

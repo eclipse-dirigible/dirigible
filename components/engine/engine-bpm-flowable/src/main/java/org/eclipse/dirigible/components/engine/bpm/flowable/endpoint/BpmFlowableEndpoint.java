@@ -37,10 +37,10 @@ import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceD
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.StartProcessInstanceData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskActionData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.TaskDTO;
+import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ValidationErrorDTO;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.VariableData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.PrincipalType;
-import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
 import org.flowable.common.engine.api.FlowableObjectNotFoundException;
 import org.flowable.engine.history.HistoricProcessInstance;
@@ -95,12 +95,6 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      */
     @Autowired
     private BpmService bpmService;
-
-    /**
-     * The workspace service.
-     */
-    @Autowired
-    private WorkspaceService workspaceService;
 
     /**
      * Gets the process definition xml.
@@ -171,18 +165,22 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
 
         path = sanitizePath(path);
 
-        bpmService.saveModel(workspace, project, path, payload);
-
-        return ResponseEntity.ok(getWorkspaceService().getURI(workspace, project, path));
+        return ResponseEntity.ok(bpmService.saveModel(workspace, project, path, payload));
     }
 
     /**
-     * Gets the workspace service.
+     * Validate a BPMN model posted in the modeler's JSON form, returning the problems the Flowable
+     * process validator found - what the editor's Validate button reports before publish. The literal
+     * {@code /models/validate} path cannot match {@code /models/{workspace}/{project}/{*path}}, which
+     * needs both a workspace and a project segment.
      *
-     * @return the workspace service
+     * @param payload the modeler's JSON model
+     * @return the validation problems, an empty list when the model is valid
+     * @throws IOException when the payload is not readable JSON
      */
-    public WorkspaceService getWorkspaceService() {
-        return workspaceService;
+    @PostMapping(value = "/models/validate", produces = "application/json")
+    public ResponseEntity<List<ValidationErrorDTO>> validateModel(@RequestBody String payload) throws IOException {
+        return ResponseEntity.ok(bpmService.validateModel(payload));
     }
 
     /**

@@ -50,6 +50,7 @@ import org.eclipse.dirigible.components.intent.generator.PickableSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.StatusStepsSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.generator.report.ReportIntentGenerator;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -57,6 +58,7 @@ import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.ImportIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -71,6 +73,7 @@ import org.eclipse.dirigible.components.intent.model.RelatedIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
+import org.eclipse.dirigible.components.intent.model.SingleIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.UniqueIntent;
@@ -172,6 +175,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName, IntentSettings settings) {
         return buildDocument(null, model, intentName, settings).modelJson;
+    }
+
+    /**
+     * Test seam: build the {@code .model} JSON within the given context - the one path that also
+     * carries what needs the project, such as the report manifest. Never use in production code.
+     */
+    static Map<String, Object> buildModelJsonForTest(IntentGenerationContext context) {
+        return buildDocument(context, context.getModel(), IntentNaming.baseName(context), new IntentSettings()).modelJson;
     }
 
     /**
@@ -700,7 +711,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // List-only columns (intent `list:`, #7614): the named properties are the exact list column
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
-            applyListColumns(entityMap, properties, entity.getList());
+            applyListColumns(entityMap, properties, entity);
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
@@ -731,6 +742,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             putWorkflowStatus(entityMap, entity, model, displacedStatuses);
             putLifecycle(entityMap, entity, model);
             putStatusStamps(entityMap, entity);
+            putSingleFlags(entityMap, entity);
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
@@ -813,7 +825,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Composite business keys. Like checks, a List living only in the .model twin - read by the
             // schema template (which emits the constraint) and by the REST template (which turns the
             // database's violation back into the authored message).
-            List<Map<String, Object>> uniqueMaps = buildUniqueConstraints(entity);
+            List<Map<String, Object>> uniqueMaps = buildUniqueConstraints(entity, model);
             if (!uniqueMaps.isEmpty()) {
                 entityMap.put("uniqueConstraints", uniqueMaps);
             }
@@ -826,7 +838,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         // Read-only registers of the records REFERENCING an entity, resolved in their own sweep: a
         // same-model source may be declared after the entity that lists it, so every entity has to be
-        // built before any register can read one.
+        // built before any register can read one. The collection columns go first: a register
+        // reproduces its source's list columns, and they are some of them.
+        buildCollectionColumns(entities, builtByName, compositionParents, settingEntities);
         buildRelatedRegisters(context, entities, builtByName, usesByAlias);
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
@@ -894,6 +908,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, String> processTaskLabels = buildProcessTaskLabels(model);
         if (!processTaskLabels.isEmpty()) {
             body.put("processTaskLabels", processTaskLabels);
+        }
+        // The application's reports, for the Harmonia shell to bake into config.js: its Reports
+        // section and dashboard tiles then need no runtime discovery through the core repository API,
+        // which only ADMINISTRATOR and OPERATOR may call (#8277). A model without the key keeps the
+        // shell's discovery, for the reports a developer generated outside the intent. The
+        // context-less test seams build no report.
+        if (context != null) {
+            List<Map<String, Object>> reports = ReportIntentGenerator.shellManifest(context);
+            if (!reports.isEmpty()) {
+                body.put("reports", reports);
+            }
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
@@ -1281,13 +1306,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * stops being one, whatever its {@code major}; the resolved names, in the authored sequence, are
      * put on the entity as the comma-separated {@code listOrder} the list templates iterate by. The
      * property list itself keeps the control order, so the form and the detail rows are unaffected. A
-     * blank/empty list leaves everything as it was.
+     * collection path (issue #8295) has no property: its column's name takes its place in
+     * {@code listOrder}, and {@link #buildCollectionColumns} emits the column itself. A blank/empty
+     * list leaves everything as it was.
      *
      * @param entityMap the entity being emitted
      * @param properties the entity's properties, in control order
-     * @param list the authored list column names (may be empty)
+     * @param entity the authored entity, whose {@code list:} (may be empty) names the columns
      */
-    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, List<String> list) {
+    private static void applyListColumns(Map<String, Object> entityMap, List<Map<String, Object>> properties, EntityIntent entity) {
+        List<String> list = entity.getList();
         if (list == null || list.isEmpty()) {
             return;
         }
@@ -1297,13 +1325,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (wanted == null) {
                 continue;
             }
+            boolean matched = false;
             for (Map<String, Object> property : properties) {
                 if (!listed.contains(property) && wanted.trim()
                                                         .equalsIgnoreCase(String.valueOf(property.get("name")))) {
                     listed.add(property);
                     listOrder.add(String.valueOf(property.get("name")));
+                    matched = true;
                     break;
                 }
+            }
+            if (!matched && collectionOf(entity, wanted) != null) {
+                listOrder.add(IntentNaming.collectionColumnName(wanted));
             }
         }
         for (Map<String, Object> property : properties) {
@@ -1349,6 +1382,133 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         return applyOrder(properties, List.of(String.valueOf(listOrder)
                                                     .split(",")));
+    }
+
+    /**
+     * An entity's list columns, in list order: its properties and the collection columns its
+     * {@code list:} names (issue #8295), each where the author wrote it. Used where another entity's
+     * list columns are reproduced (a related register), so a collection column is one of them too.
+     *
+     * @param entity the built entity map - this model's, or one read from another model's
+     *        {@code .model}
+     * @return the properties and collection columns, in list order
+     */
+    @SuppressWarnings("unchecked")
+    static List<Map<String, Object>> listColumnsOf(Map<String, Object> entity) {
+        List<Map<String, Object>> columns = new ArrayList<>();
+        if (entity.get("properties") instanceof List<?> properties) {
+            columns.addAll((List<Map<String, Object>>) properties);
+        }
+        if (entity.get("collectionColumns") instanceof List<?> collectionColumns) {
+            columns.addAll((List<Map<String, Object>>) collectionColumns);
+        }
+        return listOrdered(columns, entity.get("listOrder"));
+    }
+
+    /**
+     * The entity's {@code oneToMany} relation a {@code list:} entry is a collection path of (issue
+     * #8295) - {@code <collection>.<property>}, or a bare {@code <collection>} - or {@code null} when
+     * the entry names something else.
+     */
+    private static RelationIntent collectionOf(EntityIntent entity, String entry) {
+        String collection = entry.trim()
+                                 .split("\\.", -1)[0].trim();
+        for (RelationIntent relation : entity.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && collection.equalsIgnoreCase(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Emits the collection columns each entity's {@code list:} names (issue #8295) as the
+     * {@code collectionColumns} model attribute - one entry per path, carrying FACTS the generation
+     * pipeline turns into the controller's batched read and the list cells: the column's name, header
+     * and catalog key, the child entity and its perspective, the child's foreign key back to this
+     * entity, the child property shown, and - when that property is a to-one - its target's display
+     * property, the text its dropdown shows. Each entry is also shaped as a list column
+     * ({@code widgetIsMajor}, {@code collectionColumn}), so wherever the list columns are reproduced it
+     * takes the place {@code listOrder} gives it.
+     *
+     * <p>
+     * A sweep after every entity is built: the child may be declared after its parent.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     * @param compositionParents the composition parent of each child entity
+     * @param settingEntities the entities rendered under the settings perspective
+     */
+    private static void buildCollectionColumns(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName,
+            Map<String, String> compositionParents, Set<String> settingEntities) {
+        for (EntityIntent entity : entities) {
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            if (entityMap == null || entity.getList() == null) {
+                continue;
+            }
+            List<Map<String, Object>> columns = new ArrayList<>();
+            for (String entry : entity.getList()) {
+                Map<String, Object> column = entry == null || propertyNamed(propertiesOf(entityMap), entry.trim()) != null ? null
+                        : collectionColumn(entity, entry.trim(), builtByName, compositionParents, settingEntities);
+                if (column != null) {
+                    columns.add(column);
+                }
+            }
+            if (!columns.isEmpty()) {
+                entityMap.put("collectionColumns", columns);
+            }
+        }
+    }
+
+    /** One collection column, or {@code null} when the entry is not one (the parser reported why). */
+    private static Map<String, Object> collectionColumn(EntityIntent entity, String entry, Map<String, Map<String, Object>> builtByName,
+            Map<String, String> compositionParents, Set<String> settingEntities) {
+        RelationIntent collection = collectionOf(entity, entry);
+        Map<String, Object> child = collection == null ? null : builtByName.get(collection.getTo());
+        if (child == null) {
+            return null;
+        }
+        String[] path = entry.split("\\.", -1);
+        Map<String, Object> shown = propertyNamed(propertiesOf(child), path.length > 1 ? path[1].trim() : "Name");
+        Map<String, Object> foreignKey = null;
+        for (Map<String, Object> property : propertiesOf(child)) {
+            if (entity.getName()
+                      .equals(property.get("relationshipEntityName"))) {
+                foreignKey = property;
+                break;
+            }
+        }
+        if (shown == null || foreignKey == null) {
+            return null;
+        }
+        String name = IntentNaming.collectionColumnName(entry);
+        Map<String, Object> column = new LinkedHashMap<>();
+        column.put("name", name);
+        column.put("widgetLabel", notBlank(collection.getLabel()) ? collection.getLabel()
+                                                                              .trim()
+                : IntentNaming.humanize(collection.getName()));
+        column.put("dataName", IntentNaming.upperSnake(entity.getName()) + "_" + IntentNaming.upperSnake(name));
+        column.put("widgetIsMajor", "true");
+        column.put("collectionColumn", "true");
+        column.put("collectionEntity", collection.getTo());
+        column.put("collectionEntityPerspectiveName", perspectiveFor(collection.getTo(), compositionParents, settingEntities));
+        column.put("collectionForeignKey", foreignKey.get("name"));
+        column.put("collectionProperty", shown.get("name"));
+        if (shown.get("relationshipEntityName") != null) {
+            column.put("collectionToOne", "true");
+            column.put("collectionDisplayProperty", shown.get("widgetDropDownValue"));
+        }
+        return column;
+    }
+
+    /** The property of that name, matched case-insensitively, or {@code null}. */
+    private static Map<String, Object> propertyNamed(List<Map<String, Object>> properties, String name) {
+        for (Map<String, Object> property : properties) {
+            if (name.equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                return property;
+            }
+        }
+        return null;
     }
 
     /**
@@ -1841,6 +2001,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
@@ -1949,8 +2110,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                    .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
+        putFixedAfterCreate(p, ownerEntity, relation);
         putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
+    }
+
+    /**
+     * Emit a {@code fixedAfterCreate: true} relation (#7903) as two scalars: {@code fixedAfterCreate} -
+     * which the REST controllers refuse a changed value of on update and the forms render read-only on
+     * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
+     * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
+     * catalog translates it like any check message. Nothing is emitted for an ordinary relation.
+     */
+    private static void putFixedAfterCreate(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
+        if (!relation.isFixedAfterCreate()) {
+            return;
+        }
+        p.put("fixedAfterCreate", "true");
+        p.put("fixedAfterCreateMessage",
+                "'" + IntentNaming.pascalCase(relation.getName()) + "' cannot change once the " + ownerEntity + " is created");
     }
 
     /**
@@ -2383,9 +2561,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * controller finds the authored message again.
      *
      * @param entity the entity
+     * @param model the parsed intent, for the imports whose {@code duplicateKey} becomes a key here
      * @return one map per declared key: its constraint name, its columns in order, and its message
      */
-    private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity) {
+    private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity, IntentModel model) {
         List<Map<String, Object>> constraints = new ArrayList<>();
         Set<Set<String>> declared = new HashSet<>();
         for (UniqueIntent unique : entity.getUnique()) {
@@ -2395,6 +2574,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             declared.add(keyOf(names));
             constraints.add(uniqueConstraint(entity, names, unique.getMessage()));
+        }
+        // An import's `duplicateKey` is a uniqueness requirement on its target. Without a database
+        // constraint the generated import's check-then-insert races a concurrent upload of the same
+        // file and stores every row twice (#8190), so the key the author already declared becomes a
+        // unique index the database enforces. Deduped against a hand-authored `unique:` and against
+        // another import of the same entity carrying the same key (two imports into one table commonly
+        // share it).
+        for (ImportIntent declaredImport : model.getImports()) {
+            if (!entity.getName()
+                       .equals(declaredImport.getInto())) {
+                continue;
+            }
+            List<String> names = declaredImport.getDuplicateKey();
+            if (names.isEmpty()) {
+                continue; // an import without a duplicate key does not dedupe, so nothing to enforce
+            }
+            if (declared.add(keyOf(names))) {
+                constraints.add(uniqueConstraint(entity, names, null));
+            }
         }
         // A partitioned document number is unique per partition (see propertyMap): the key the author
         // means is (partition, number), synthesized here unless the author already spelled it out - in
@@ -3320,6 +3518,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entityMap.put("statusStamps", stamps);
     }
 
+    /**
+     * The single flags ({@code single:}, #8101) the generated repository keeps at one holder per scope:
+     * {@code singleFlags} lists one {@code { property, per, refuse, message }} per flagged boolean,
+     * {@code per} (the scoping relation's FK property) only when scoped and {@code refuse} with its
+     * conflict {@code message} only for {@code onConflict: refuse}. Absent when no field declares one,
+     * so a model without the key generates byte-identically.
+     */
+    private static void putSingleFlags(Map<String, Object> entityMap, EntityIntent entity) {
+        List<Map<String, Object>> flags = new ArrayList<>();
+        for (FieldIntent field : entity.getFields()) {
+            SingleIntent single = field.getSingle();
+            if (single == null) {
+                continue;
+            }
+            Map<String, Object> flag = new LinkedHashMap<>();
+            flag.put("property", IntentNaming.pascalCase(field.getName()));
+            RelationIntent per = single.getPer() == null ? null : CheckSupport.toOne(entity, single.getPer());
+            if (per != null) {
+                flag.put("per", IntentNaming.pascalCase(per.getName()));
+            }
+            if (single.isRefuse()) {
+                flag.put("refuse", "true");
+                flag.put("message",
+                        "Another " + IntentNaming.humanize(entity.getName()) + " is already " + IntentNaming.humanize(field.getName())
+                                + (per == null ? "" : " for this " + IntentNaming.humanize(per.getName())));
+            }
+            flags.add(flag);
+        }
+        if (!flags.isEmpty()) {
+            entityMap.put("singleFlags", flags);
+        }
+    }
+
     private static void putLifecycle(Map<String, Object> entityMap, EntityIntent entity, IntentModel model) {
         LifecycleIntent lifecycle = entity.getLifecycle();
         RelationIntent status = lifecycle == null ? null : entityStatusRelation(entity);
@@ -3547,7 +3778,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static final List<String> RELATED_COLUMN_KEYS = List.of("name", "widgetLabel", "dataName", "dataType", "dataScale",
             "widgetType", "widgetPattern", "widgetDropDownKey", "widgetDropDownValue", "relationshipEntityName",
             "relationshipEntityPerspectiveName", "widgetOptionsEntityName", "widgetOptionsEntityPerspectiveName", "sensitiveProperty",
-            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber");
+            "referencedModel", "numberStampOnIssue", "widgetDropDownDocumentNumber", "collectionColumn");
 
     /**
      * Emits each entity's {@code related:} declarations as the {@code relatedEntities} model attribute
@@ -3601,7 +3832,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     LoggedValue.of(entity.getName()));
             return null;
         }
-        List<Map<String, Object>> properties = listOrdered(propertiesOf(source), source.get("listOrder"));
+        List<Map<String, Object>> properties = listColumnsOf(source);
         String fkProperty = relatedForeignKey(properties, entity.getName(), related);
         if (fkProperty == null) {
             return null; // reported by the parser
@@ -4471,10 +4702,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Emit the DOCUMENT-level metadata as attributes of the {@code <model>} element: the identity
      * scalars ({@code title}, {@code description}, {@code icon}) verbatim, and the structured values
-     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels}) as
-     * JSON strings - the same flat-attribute mechanism the entity/property level uses, for the same
-     * reason: a flat attribute survives both the mxGraph cell round-trip of a live editor save and the
-     * {@code .edm}-to-{@code .model} regeneration, which a nested element would not.
+     * ({@code languages}, {@code widgets}, {@code customActionLabels}, {@code processTaskLabels},
+     * {@code reports}) as JSON strings - the same flat-attribute mechanism the entity/property level
+     * uses, for the same reason: a flat attribute survives both the mxGraph cell round-trip of a live
+     * editor save and the {@code .edm}-to-{@code .model} regeneration, which a nested element would
+     * not.
      *
      * <p>
      * Without this the {@code <model>} element carried NO attributes at all, so everything the
@@ -4888,9 +5120,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     // The singular "rollupGuard" is no longer emitted (#7448 made it a list) but stays here so an .edm
     // authored before that keeps round-tripping as an object rather than a JSON string.
-    private static final Set<String> STRUCTURED_ATTRIBUTES = Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys",
-            "groupingKeys", "relatedEntities", "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset",
-            "duplicateDefaults", "lookupColumns", "languages", "widgets", "customActionLabels", "processTaskLabels");
+    private static final Set<String> STRUCTURED_ATTRIBUTES =
+            Set.of("rollupGuards", "rollupGuard", "checks", "labelParts", "aggregateKeys", "groupingKeys", "relatedEntities",
+                    "scopedCalendars", "agreeGuards", "lifecycleStatusNameList", "duplicateReset", "duplicateDefaults", "lookupColumns",
+                    "languages", "widgets", "customActionLabels", "processTaskLabels", "singleFlags", "reports", "collectionColumns");
 
     /**
      * Compact, non-HTML-escaping JSON for the structured {@code .edm} attributes. Compact so the value

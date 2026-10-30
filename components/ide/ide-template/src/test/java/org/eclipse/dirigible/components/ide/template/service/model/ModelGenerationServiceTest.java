@@ -17,8 +17,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateMetadataSource;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.junit.jupiter.api.Test;
 
 /**

@@ -68,11 +68,11 @@
                 </thead>
                 <tbody x-h-table-body>
                     <template x-for="row in rows" :key="rowKey(row)">
-                        <tr x-h-table-row data-hoverable="true" @click="startEdit(row)">
+                        <tr x-h-table-row data-hoverable="true" @click="rowClicked($event, row)">
                             <template x-for="p in selected.properties" :key="p.name">
                                 <td x-h-table-cell><span class="admin-cell inline-block" x-text="display(p, row[p.name])"></span></td>
                             </template>
-                            <td x-h-table-cell class="text-right" @click.stop>
+                            <td x-h-table-cell class="text-right" data-row-control>
                                 <button type="button" x-h-button data-variant="transparent" aria-label="Delete" @click="remove(row)">
                                     <svg x-h-lucide role="presentation" data-lucide="trash-2" class="size-4"></svg>
                                 </button>
@@ -119,8 +119,9 @@
                             <div x-h-input-number><input type="number" step="any" :id="'a_' + p.name" x-model.number="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></div>
                         </template>
                         <template x-if="!p.lookup && p.type !== 'boolean' && p.type !== 'number'">
-                            <input x-h-input type="text" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" />
+                            <input x-h-input type="text" :id="'a_' + p.name" x-model="draft[p.name]" :maxlength="p.maxLength" :disabled="p.readonly || (p.pk && !isNew)" />
                         </template>
+                        <p x-h-field-description x-show="p.maxLength && !p.lookup && p.type === 'string' && String(draft[p.name] ?? '').length >= p.maxLength" x-text="'Maximum ' + p.maxLength + ' characters'"></p>
                     </div>
                 </template>
             </div>
@@ -285,6 +286,14 @@
                     this.error = '';
                     await this.lookupsReady;
                     this.editing = true;
+                },
+
+                // A click on a row edits it - except one in the row's Delete cell, which acts on its own.
+                // The guard used to be @click.stop on the cell, which also kept the click from the
+                // document, where Harmonia closes an open menu (#8259).
+                rowClicked(event, row) {
+                    if (event.target.closest('[data-row-control]')) return;
+                    this.startEdit(row);
                 },
 
                 async startEdit(row) {

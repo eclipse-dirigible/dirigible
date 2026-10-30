@@ -17,9 +17,11 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
+import org.eclipse.dirigible.components.base.script.ScriptEngineUnavailableException;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.BpmScriptExecutor;
 import org.eclipse.dirigible.components.engine.bpm.flowable.domain.Bpmn;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmnService;
@@ -27,6 +29,7 @@ import org.flowable.engine.repository.Deployment;
 import org.flowable.engine.repository.ProcessDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -46,13 +49,19 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
     private final BpmnService bpmnService;
     private final BpmService bpmService;
 
+    /**
+     * The runner of the script handlers of the processes, absent where no script engine is deployed.
+     */
+    private final ObjectProvider<BpmScriptExecutor> scriptExecutor;
+
     /** The synchronization callback. */
     private SynchronizerCallback callback;
 
     @Autowired
-    public BpmnSynchronizer(BpmnService bpmnService, BpmService bpmService) {
+    public BpmnSynchronizer(BpmnService bpmnService, BpmService bpmService, ObjectProvider<BpmScriptExecutor> scriptExecutor) {
         this.bpmnService = bpmnService;
         this.bpmService = bpmService;
+        this.scriptExecutor = scriptExecutor;
     }
 
     /**
@@ -178,7 +187,27 @@ public class BpmnSynchronizer extends MultitenantBaseSynchronizer<Bpmn, Long> {
         }
     }
 
+    /**
+     * A definition whose step is a script would deploy and dead-letter every instance at that step
+     * where the script engine is not deployed, so it is refused instead, with the missing engine as the
+     * reason (#8174).
+     *
+     * @param bpmn the process definition
+     * @throws ScriptEngineUnavailableException when the definition runs a script and no engine can run
+     *         it
+     */
+    private void verifyRunnable(Bpmn bpmn) {
+        if (scriptExecutor.getIfAvailable() != null) {
+            return;
+        }
+        BpmnScriptHandlers.find(bpmn.getLocation(), bpmn.getContent())
+                          .ifPresent(handler -> {
+                              throw new ScriptEngineUnavailableException(handler);
+                          });
+    }
+
     private void deployProcess(Bpmn bpmn) {
+        verifyRunnable(bpmn);
         try {
             // A deployment of this key that a retire left suspended for its running instances (see
             // removeFromProcessEngine) is swept here: deleted once they have ended, kept otherwise. The

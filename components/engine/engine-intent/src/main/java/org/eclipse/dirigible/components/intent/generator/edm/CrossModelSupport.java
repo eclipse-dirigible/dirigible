@@ -300,12 +300,9 @@ public final class CrossModelSupport {
         if (source == null) {
             return null;
         }
-        List<Map<String, Object>> properties = (List<Map<String, Object>>) source.get("properties");
-        if (properties == null) {
-            properties = List.of();
-        }
-        // The register shows the source's list columns, so in its list order (intent `list:`, #7614).
-        properties = EdmIntentGenerator.listOrdered(properties, source.get("listOrder"));
+        // The register shows the source's list columns, so in its list order (intent `list:`, #7614),
+        // its collection columns among them (#8295).
+        List<Map<String, Object>> properties = EdmIntentGenerator.listColumnsOf(source);
         String fkProperty = relatedForeignKey(properties, sourceEntity, referencedEntity, via);
         String primaryKey = "Id";
         for (Map<String, Object> property : properties) {

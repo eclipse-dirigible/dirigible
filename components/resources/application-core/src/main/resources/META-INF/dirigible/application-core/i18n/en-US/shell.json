@@ -156,7 +156,16 @@
       "false": "No",
       "min": "min",
       "max": "max",
-      "contains": "contains..."
+      "contains": "contains...",
+      "view": "View",
+      "moreActions": "More actions",
+      "chooseDate": "Choose date",
+      "dismiss": "Dismiss",
+      "notRun": "The report could not be run",
+      "retry": "Retry",
+      "noMatch": "No matching rows",
+      "noMatchHint": "Try adjusting the filters.",
+      "clearFilters": "Clear filters"
     },
     "notfound": {
       "title": "Page not found",
@@ -172,8 +181,9 @@
       "configAll": "Configuration & nomenclature across all applications.",
       "regionLanguage": "Region & Language",
       "language": "Language",
-      "missingTranslations": "Missing translations",
-      "missingWarning": "{{app}} does not provide: {{missing}} - falls back to the default language.",
+      "missingTranslations": "Incomplete translations",
+      "missingScreens": "{{app}} has no {{missing}} translation of its screens - its labels show in the default language.",
+      "missingData": "{{app}} does not provide {{missing}} data - its lists and documents show the default-language values (for example statuses and types). Declare languages: in its intent once the data is translated.",
       "rlDescription": "One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.",
       "formats": "Display formats",
       "formatsHint": "Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.",
@@ -412,7 +422,16 @@
       "promptSelect": "Select..."
     },
     "list": {
-      "resizeColumn": "Resize column"
+      "resizeColumn": "Resize column",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "dateFromValue": "From {{date}}",
+      "dateToValue": "To {{date}}",
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month",
+      "lastMonth": "Last month",
+      "thisYear": "This year"
     },
     "warnings": {
       "title": "Please confirm",
@@ -463,6 +482,31 @@
         "RESOLVED": "Resolved",
         "REJECTED": "Rejected",
         "CANCELLED": "Withdrawn"
+      }
+    },
+    "apiErrors": {
+      "BadRequest": "The request could not be completed. Please review your input.",
+      "ValidationError": "Please correct the highlighted fields.",
+      "Unauthorized": "Your session has ended. Please sign in again.",
+      "InsufficientPermission": "You do not have permission to perform this action.",
+      "TokenExpired": "Your session has expired. Please sign in again.",
+      "NotFound": "The requested item could not be found.",
+      "Conflict": "This is not allowed in the record’s current state.",
+      "UpstreamError": "A dependent service is unavailable. Please try again shortly.",
+      "InternalServerError": "Something went wrong on our end. Please try again.",
+      "NetworkError": "Unable to reach the server. Check your connection and try again.",
+      "ConfirmationDeclined": "Not saved - the warnings were not confirmed.",
+      "default": "Something went wrong. Please try again.",
+      "field": {
+        "required": "This field is required.",
+        "Future": "Date must be in the future.",
+        "Past": "Date must be in the past.",
+        "Pattern": "This value has an invalid format.",
+        "Email": "Enter a valid email address.",
+        "Size": "This value has an invalid length.",
+        "Min": "This value is too small.",
+        "Max": "This value is too large.",
+        "Duplicate": "This value already exists."
       }
     }
   }

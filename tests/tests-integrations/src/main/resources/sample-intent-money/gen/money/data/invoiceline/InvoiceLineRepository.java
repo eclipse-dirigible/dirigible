@@ -28,6 +28,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
     @Override
     public InvoiceLineEntity save(InvoiceLineEntity entity) {
         trimText(entity);
+        roundDecimals(entity);
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
         if (entity.Description == null || entity.Description.isBlank()) {
             throw new ValidationException("InvoiceLine.Description is required");
@@ -41,17 +42,26 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         if (entity.VatRate == null) {
             throw new ValidationException("InvoiceLine.VatRate is required");
         }
+        InvoiceLineEntity saved = insert(entity);
+        return saved;
+    }
+
+    /**
+     * The last steps of a create, once every guard has passed: the status stamps, the document number
+     * and the insert itself - run inside the reference check's transaction when this entity has one.
+     */
+    private InvoiceLineEntity insert(InvoiceLineEntity entity) {
         // The create event is handed to the write itself, which records it in the tenant's event outbox
         // INSIDE the insert's transaction: row and event commit together, so a broker outage can
         // neither swallow an event whose row exists nor fail a call whose row was written. Listeners
         // (intent process triggers, the reactions under gen/events) see it the moment it is durable.
-        InvoiceLineEntity saved = super.save(entity, "sample-intent-money-InvoiceLine-InvoiceLine");
-        return saved;
+        return super.save(entity, "sample-intent-money-InvoiceLine-InvoiceLine");
     }
 
     @Override
     public InvoiceLineEntity update(InvoiceLineEntity entity) {
         trimText(entity);
+        roundDecimals(entity);
         // System-owned fields survive a partial payload: a caller's update carries only the fields
         // its form edits, and a value it leaves null must not erase what the write path computed -
         // the roll-up/aggregate targets (an invoice's Paid, a timesheet's total hours) and the
@@ -107,6 +117,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      */
     public InvoiceLineEntity updateWithoutEvent(InvoiceLineEntity entity) {
         trimText(entity);
+        roundDecimals(entity);
         if (entity.Description == null || entity.Description.isBlank()) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
@@ -192,6 +203,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      */
     public InvoiceLineEntity calculatedForCreate(InvoiceLineEntity submitted) {
         trimText(submitted);
+        roundDecimals(submitted);
         return submitted;
     }
 
@@ -212,6 +224,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
      */
     public InvoiceLineEntity calculatedForUpdate(InvoiceLineEntity submitted) {
         trimText(submitted);
+        roundDecimals(submitted);
         InvoiceLineEntity entity = copyOf(submitted);
         InvoiceLineEntity stored = entity.Id == null ? null : findById(entity.Id);
         if (stored != null) {
@@ -231,6 +244,29 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
     public static void trimText(InvoiceLineEntity entity) {
         if (entity.Description != null) {
             entity.Description = entity.Description.strip();
+        }
+    }
+
+    /**
+     * Rounds the decimal fields of a record about to be written to their column's scale, half up
+     * (#8107) - the value the column will hold. Applied by every write path and by the controllers'
+     * pre-write reads, so a check, a calculation and the stored row all see the same value. A value
+     * within its scale is left as it is.
+     *
+     * @param entity the record, changed in place
+     */
+    public static void roundDecimals(InvoiceLineEntity entity) {
+        if (entity.Quantity != null && entity.Quantity.scale() > 3) {
+            entity.Quantity = entity.Quantity.setScale(3, java.math.RoundingMode.HALF_UP);
+        }
+        if (entity.UnitPrice != null && entity.UnitPrice.scale() > 2) {
+            entity.UnitPrice = entity.UnitPrice.setScale(2, java.math.RoundingMode.HALF_UP);
+        }
+        if (entity.VatRate != null && entity.VatRate.scale() > 2) {
+            entity.VatRate = entity.VatRate.setScale(2, java.math.RoundingMode.HALF_UP);
+        }
+        if (entity.VatAmount != null && entity.VatAmount.scale() > 2) {
+            entity.VatAmount = entity.VatAmount.setScale(2, java.math.RoundingMode.HALF_UP);
         }
     }
 

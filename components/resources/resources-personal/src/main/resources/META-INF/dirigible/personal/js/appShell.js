@@ -58,6 +58,8 @@ document.addEventListener('alpine:init', () => {
     // developers know where translations are still needed (data falls back to the default language).
     language: 'en',
     appLanguages: [],
+    // The perspectives the coverage scan reads, kept until Settings first opens; null once scanned.
+    coveragePerspectives: null,
     // Tenant Configuration: a built-in settings entry showing the predefined, per-tenant-overridable
     // properties (the branding properties for now). Backed by the platform endpoint
     // /services/core/configurations/tenant; requires the tenant's Owner or ADMINISTRATOR/OPERATOR (a
@@ -182,10 +184,23 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Language coverage of the embedded apps: which languages each generated app PROVIDES
-    // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
-    // a JS file, so the array is read with a targeted match rather than executed). One entry per
-    // project; an app without a readable declaration counts as providing only the default language.
+    // Language coverage of the embedded apps, per platform language, in two parts (#8137):
+    // - their SCREENS: whether the app ships a label catalog in that language (its i18n/<locale>
+    //   files), asked of the locales service the i18n layer itself reads - one request for every app;
+    // - their DATA: the data languages its js/config.js declares (the intent's `languages:`; the config
+    //   is a JS file, so it is read with a targeted match rather than executed). Those only matter for
+    //   an app that HAS translatable data (`translatableData`: a multilingual entity); an app generated
+    //   before the flag existed is taken to have some.
+    // Checking only the declaration reported every fully translated module without translatable data as
+    // "missing translations". One entry per project.
+    // Scan the embedded apps' language coverage once, the first time Settings is shown.
+    scanLanguageCoverage() {
+      const perspectives = this.coveragePerspectives;
+      if (!perspectives) return;
+      this.coveragePerspectives = null;
+      this.loadLanguageCoverage(perspectives);
+    },
+
     async loadLanguageCoverage(perspectives) {
       const bases = new Map();
       const collect = (item) => {
@@ -194,7 +209,7 @@ document.addEventListener('alpine:init', () => {
         if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
       };
       (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
-      const coverage = (await Promise.all([...bases].map(async ([app, base]) => {
+      const configs = (await Promise.all([...bases].map(async ([app, base]) => {
         // Only generated apps carry a js/config.js. A missing or unreadable config means this
         // perspective is a platform surface (Inbox, Documents, ...) translated through the shared
         // platform catalogs - it must not be reported as an untranslated app. A readable config
@@ -202,27 +217,61 @@ document.addEventListener('alpine:init', () => {
         try {
           const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
           if (!res.ok) return null;
-          const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
+          const text = await res.text();
+          const match = text.match(/languages:\s*(\[[^\]]*\])/);
           let provided = ['en'];
           if (match) {
             const codes = JSON.parse(match[1].replace(/'/g, '"'));
             if (Array.isArray(codes) && codes.length) provided = codes;
           }
-          return { app, provided };
+          const flag = text.match(/translatableData:\s*(true|false)/);
+          return { app, provided, translatableData: flag ? flag[1] === 'true' : true };
         } catch (e) {
           return null;
         }
       }))).filter(Boolean);
-      this.appLanguages = coverage;
+      const labelled = await this.loadLabelLanguages(configs.map(c => c.app));
+      this.appLanguages = configs.map(c => Object.assign(c, { labelled: labelled ? labelled(c.app) : null }));
     },
 
-    // Apps that do not provide every platform language - the developers' to-do list for missing
-    // translation content. Reactive on both the coverage scan and the platform set.
+    // The platform languages each app ships screen labels for, from one request to the locales
+    // service; null when it cannot be read - the screens are then not judged at all, only the data.
+    async loadLabelLanguages(apps) {
+      if (!apps.length) return null;
+      try {
+        const query = 'extensionPoints=platform-locales&extensionPoints=application-locales'
+            + apps.map(app => '&namespaces=' + encodeURIComponent(app)).join('');
+        const res = await fetch('/services/platform/extensions/locales?' + query,
+                { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+        if (!res.ok) return null;
+        const data = await res.json();
+        const locales = (Array.isArray(data.locales) ? data.locales : []).map(l => l.id || '');
+        const translations = data.translations || {};
+        return (app) => Alpine.store('locale').languages().filter(code => {
+          const locale = locales.find(id => id === code) || locales.find(id => id.indexOf(code + '-') === 0);
+          const catalog = locale && translations[locale] && translations[locale][app];
+          return !!catalog && Object.keys(catalog).length > 0;
+        });
+      } catch (e) {
+        console.error('Failed to read the label catalogs of the applications', e);
+        return null;
+      }
+    },
+
+    // What each app does not translate into the platform languages - the developers' to-do list:
+    // `screens` lists the languages it has no label catalog for (its pages fall back to the baked
+    // English labels, which is why English itself never counts), `data` the languages it has labels
+    // for but declares no data in (its lists and documents show the default-language values). An app
+    // with nothing in either is not listed. Reactive on both the coverage scan and the platform set.
     languageWarnings() {
       const platform = Alpine.store('locale').languages();
       return this.appLanguages
-                 .map(({ app, provided }) => ({ app, missing: platform.filter(code => !provided.includes(code)) }))
-                 .filter(({ missing }) => missing.length > 0);
+                 .map(({ app, provided, translatableData, labelled }) => {
+                   const screens = labelled ? platform.filter(code => code !== 'en' && !labelled.includes(code)) : [];
+                   const data = translatableData ? platform.filter(code => !provided.includes(code) && !screens.includes(code)) : [];
+                   return { app, screens, data };
+                 })
+                 .filter(({ screens, data }) => screens.length > 0 || data.length > 0);
     },
 
     // The platform's language codes with display names for the Settings picker.
@@ -315,7 +364,9 @@ document.addEventListener('alpine:init', () => {
             if (Array.isArray(g.items)) {
               // A navigation group: pull its SETTING entities into Settings, keep the rest in the sidebar.
               const isSetting = (it) => it.kind === 'SETTING' || g.id === 'settings';
-              settings.push(...g.items.filter(isSetting));
+              // Each setting remembers the group it came from, so a projection that lists the group
+              // keeps its settings as well as its sidebar items (#8138).
+              settings.push(...g.items.filter(isSetting).map(it => Object.assign({}, it, { groupId: g.id })));
               const keep = g.items.filter(it => !isSetting(it));
               if (g.id !== 'undefined-group' && keep.length) {
                 appGroups.push(Object.assign({}, g, { items: keep }));
@@ -354,9 +405,9 @@ document.addEventListener('alpine:init', () => {
               .filter(ns => ns && ns !== 'application-core'))];
             AppI18nAddNamespaces(namespaces);
           }
-          // Fire-and-forget: scan which languages each embedded app provides translations for
-          // (drives the missing-translations warnings in Settings).
-          this.loadLanguageCoverage(all);
+          // Which languages each embedded app provides translations for drives only the
+          // missing-translations warnings in Settings, so the scan waits for Settings to open (#8346).
+          this.coveragePerspectives = all;
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -404,6 +455,7 @@ document.addEventListener('alpine:init', () => {
         if (p === '/settings' || p.indexOf('/settings/') === 0) {
           // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
           this.settingsMode = true;
+          this.scanLanguageCoverage();
           this.hostedId = '';
           this.hostedUrl = '';
           const rest = p.indexOf('/settings/') === 0 ? p.slice('/settings/'.length) : '';
@@ -493,8 +545,16 @@ document.addEventListener('alpine:init', () => {
         this.hostedUrl = this.appUrl(item, '');
         this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+      } else {
+        // The app is already on screen: its page re-reads instead (#8130).
+        this.reenterHostedApp();
       }
       this.closeSideNav();
+    },
+
+    /** Signal the page of the hosted app that the user came back to it, so it re-reads (#8130). */
+    reenterHostedApp() {
+      if (this.hostedId && this.$refs.hostedFrame) App.pageReentered(this.$refs.hostedFrame.contentWindow);
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
@@ -608,6 +668,17 @@ document.addEventListener('alpine:init', () => {
         if (res.ok) {
           const data = await res.json();
           this.projections = Array.isArray(data.projections) ? data.projections : [];
+          // A projection translates its name the way a navigation group does (#7610): it declares
+          // `translation: { key: '<project>:<path>' }`, adopted as its tkey. The key's project is a
+          // catalog namespace nothing else loads - a lens project contributes no perspective - so
+          // the shell adds it here, or the switcher stays in English (#8133).
+          this.projections.forEach(p => {
+            const key = p.translation && p.translation.key;
+            if (!p.tkey && typeof key === 'string' && key.indexOf(':') > 0) p.tkey = key;
+          });
+          const namespaces = [...new Set(this.projections.map(p => (p.tkey || '').split(':')[0])
+            .filter(ns => ns && ns !== 'application-core'))];
+          if (namespaces.length && window.AppI18nAddNamespaces) AppI18nAddNamespaces(namespaces);
         }
       } catch (e) {
         console.error('Failed to load application projections', e);
@@ -636,6 +707,9 @@ document.addEventListener('alpine:init', () => {
       try { localStorage.setItem(PROJECTION_KEY, p.id); } catch (e) { /* no storage */ }
       if (this.hostedId && !this.visibleGroups().some(g => (g.items || []).some(i => i.id === this.hostedId))) {
         this.navigate('/dashboard');
+      } else {
+        // The hosted app stays on screen under the new projection: its page re-reads (#8130).
+        this.reenterHostedApp();
       }
     },
 
@@ -693,12 +767,15 @@ document.addEventListener('alpine:init', () => {
     dashKpiReports() { return Alpine.store('reports').kpiReports().filter(r => this.inProjection(r.url)); },
     dashPreviewReports() { return Alpine.store('reports').previewReports().filter(r => this.inProjection(r.url)); },
 
-    /** Settings entities scoped to the projection: explicitly cherry-picked ones always show. */
+    /** Settings entities scoped to the projection: those of a group the projection lists (a group
+     *  means everything in it - sidebar items and settings, #8138), explicitly cherry-picked ones, and
+     *  those of a project with a visible sidebar item. */
     visibleSettingsItems() {
       const proj = this.activeProjection();
       if (!proj) return this.settingsItems;
+      const groupIds = proj.groups || [];
       const itemIds = proj.items || [];
-      return this.settingsItems.filter(it => itemIds.includes(it.id) || this.inProjection(it.path));
+      return this.settingsItems.filter(it => groupIds.includes(it.groupId) || itemIds.includes(it.id) || this.inProjection(it.path));
     },
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },

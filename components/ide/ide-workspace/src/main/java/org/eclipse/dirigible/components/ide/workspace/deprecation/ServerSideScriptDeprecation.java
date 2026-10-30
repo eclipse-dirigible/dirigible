@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -21,8 +22,8 @@ import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
 import org.eclipse.dirigible.components.base.script.ScriptEngineAvailability;
 import org.eclipse.dirigible.components.extensions.modules.ScriptModuleSkipListener;
-import org.eclipse.dirigible.components.ide.problems.domain.Problem;
-import org.eclipse.dirigible.components.ide.problems.service.ProblemService;
+import org.eclipse.dirigible.components.problems.domain.Problem;
+import org.eclipse.dirigible.components.problems.service.ProblemService;
 import org.eclipse.dirigible.components.ide.workspace.deprecation.ServerSideScripts.Kind;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -149,6 +150,18 @@ class ServerSideScriptDeprecation implements PublisherHandler, ScriptModuleSkipL
                              .distinct()
                              .sorted()
                              .toList();
+    }
+
+    /**
+     * Lists what is left to port of a published project, file by file.
+     *
+     * @param project the project name
+     * @return the inventory, or empty when no such project is published
+     */
+    Optional<ServerSideScriptInventory.Inventory> inventory(String project) {
+        ICollection published =
+                repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepositoryStructure.SEPARATOR + project);
+        return published.exists() ? Optional.of(ServerSideScriptInventory.of(project, published)) : Optional.empty();
     }
 
     /**

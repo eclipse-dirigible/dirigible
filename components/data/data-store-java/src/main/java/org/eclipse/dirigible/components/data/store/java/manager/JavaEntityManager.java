@@ -283,6 +283,24 @@ public class JavaEntityManager implements DisposableBean {
     }
 
     /**
+     * Look up by the fully-qualified name of the entity class, for a caller that names an entity it
+     * does not compile against - a to-one reference to a record another model generates (#8100).
+     *
+     * @param entityClassName the entity class's fully-qualified name
+     * @return the registered entry, or empty if no registered entity has that class name
+     */
+    public Optional<RegisteredEntity> findForClassName(String entityClassName) {
+        for (RegisteredEntity r : registered.values()) {
+            if (r.entityClass()
+                 .getName()
+                 .equals(entityClassName)) {
+                return Optional.of(r);
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
      * @return the current {@link SessionFactory}, lazily creating an empty one if needed
      */
     public SessionFactory getSessionFactory() {

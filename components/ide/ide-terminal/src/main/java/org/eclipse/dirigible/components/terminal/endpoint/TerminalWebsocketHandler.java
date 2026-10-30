@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.terminal.endpoint;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import org.eclipse.dirigible.components.terminal.client.TerminalWebsocketClientEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +22,15 @@ import org.springframework.web.socket.handler.BinaryWebSocketHandler;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TERMINAL_PREFIX;
+import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TTYD_HOST;
+import static org.eclipse.dirigible.components.terminal.endpoint.TerminalWebsocketConfig.TTYD_PORT;
 
 /**
  * The Console Websocket Handler.
@@ -39,6 +45,23 @@ class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProt
 
     /** The session to client. */
     private static final Map<String, TerminalWebsocketClientEndpoint> SESSION_TO_CLIENT = new ConcurrentHashMap<>();
+
+    /** ttyd's client opens a session with a JSON object, the only message starting with a brace. */
+    private static final byte HANDSHAKE_COMMAND = '{';
+
+    private static final String AUTH_TOKEN = "AuthToken";
+
+    /** The token the backend was started with. */
+    private final String ttydToken;
+
+    /**
+     * Instantiates a new terminal websocket handler.
+     *
+     * @param ttydToken the token the backend was started with
+     */
+    TerminalWebsocketHandler(String ttydToken) {
+        this.ttydToken = ttydToken;
+    }
 
     /**
      * After connection established.
@@ -71,7 +94,8 @@ class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProt
      */
     private TerminalWebsocketClientEndpoint startClientWebsocket(WebSocketSession session) throws URISyntaxException {
 
-        final TerminalWebsocketClientEndpoint clientEndPoint = new TerminalWebsocketClientEndpoint(new URI("ws://localhost:9000/ws"));
+        final TerminalWebsocketClientEndpoint clientEndPoint =
+                new TerminalWebsocketClientEndpoint(new URI("ws://" + TTYD_HOST + ":" + TTYD_PORT + "/ws"), "Basic " + ttydToken);
 
         // add listener
         clientEndPoint.addMessageHandler(message -> session.sendMessage(new BinaryMessage(message)));
@@ -95,9 +119,29 @@ class TerminalWebsocketHandler extends BinaryWebSocketHandler implements SubProt
         if (clientEndPoint != null) {
             synchronized (clientEndPoint) {
                 // send message to websocket
-                clientEndPoint.sendMessage(message.getPayload());
+                clientEndPoint.sendMessage(withAuthToken(message.getPayload(), ttydToken));
             }
         }
+    }
+
+    /**
+     * Sets the backend's token on the message ttyd's client opens a session with - the terminal page
+     * sends it without one - and passes every other message on unchanged.
+     *
+     * @param payload the message the terminal page sent
+     * @param token the token the backend was started with
+     * @return the message to send to the backend
+     */
+    static ByteBuffer withAuthToken(ByteBuffer payload, String token) {
+        if (!payload.hasRemaining() || payload.get(payload.position()) != HANDSHAKE_COMMAND) {
+            return payload;
+        }
+        JsonObject handshake = JsonParser.parseString(StandardCharsets.UTF_8.decode(payload.duplicate())
+                                                                            .toString())
+                                         .getAsJsonObject();
+        handshake.addProperty(AUTH_TOKEN, token);
+        return ByteBuffer.wrap(handshake.toString()
+                                        .getBytes(StandardCharsets.UTF_8));
     }
 
     /**

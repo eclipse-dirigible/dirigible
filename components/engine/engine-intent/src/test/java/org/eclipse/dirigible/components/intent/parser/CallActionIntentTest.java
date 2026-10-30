@@ -19,6 +19,8 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptIntent;
+import org.eclipse.dirigible.components.intent.model.ActionPromptOptionIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.junit.jupiter.api.Test;
 
@@ -224,6 +226,270 @@ class CallActionIntentTest {
         assertIssue(
                 YAML.replace("    success: Escalation requested", "    success: Escalation requested\n    primary: true\n    scope: page"),
                 "declares primary but has scope [page]");
+    }
+
+    /** The "Invite member" example of #8296: a dialog that says what it acts on. */
+    static final String INVITE = """
+            name: teams
+            entities:
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: founded, type: date }
+                relations:
+                  - { name: Lead, kind: manyToOne, to: Person }
+              - name: Person
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+            actions:
+              - name: InviteMember
+                forEntity: Team
+                label: Invite member
+                description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+                submit: Invite
+                prompt:
+                  - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+                  - name: roles
+                    type: multiselect
+                    label: Roles
+                    required: true
+                    default: [Member]
+                    options:
+                      - { value: Member, help: Uses the team's workspace }
+                      - { value: Lead,   help: Manages the team's members }
+                call:
+                  path: /services/java/teams/custom/api/TeamApi/teams/{id}/invitations
+                  body: { email: "{email}", roles: "{roles}" }
+                success: Invitation sent
+            """;
+
+    private static final String OPTIONS = """
+                    options:
+                      - { value: Member, help: Uses the team's workspace }
+                      - { value: Lead,   help: Manages the team's members }
+            """;
+
+    private static final String EMAIL = "{ name: email, type: email, label: Email, required: true, help: \"name@company.com\" }";
+
+    @Test
+    void theInviteExampleParses() {
+        ActionIntent action = IntentParser.parse(INVITE)
+                                          .getActions()
+                                          .get(0);
+
+        assertEquals("Invite a person to {name}. They get an email with a link to the team's workspace.", action.getDescription());
+        assertEquals("Invite", action.getSubmit());
+        assertEquals("name@company.com", action.getPrompt()
+                                               .get(0)
+                                               .getHelp());
+        ActionPromptIntent roles = action.getPrompt()
+                                         .get(1);
+        assertTrue(roles.isMultiselect());
+        assertEquals(List.of("Member"), roles.getDefaultValue());
+        assertEquals(List.of("Member", "Lead"), roles.getOptions()
+                                                     .stream()
+                                                     .map(ActionPromptOptionIntent::caption)
+                                                     .toList(),
+                "an option without a label is captioned by its value");
+        assertEquals("Manages the team's members", roles.getOptions()
+                                                        .get(1)
+                                                        .getHelp());
+    }
+
+    @Test
+    void aBareOptionIsItsValueAndItsLabel() {
+        ActionPromptIntent roles = IntentParser.parse(INVITE.replace(OPTIONS, "        options: [Member, Lead]\n"))
+                                               .getActions()
+                                               .get(0)
+                                               .getPrompt()
+                                               .get(1);
+
+        assertEquals(List.of("Member", "Lead"), roles.getOptions()
+                                                     .stream()
+                                                     .map(ActionPromptOptionIntent::getValue)
+                                                     .toList());
+        assertEquals("Lead", roles.getOptions()
+                                  .get(1)
+                                  .caption());
+    }
+
+    @Test
+    void aMultiselectNeedsOptionsAndAKnownDefault() {
+        assertIssue(INVITE.replace(OPTIONS, ""), "action [InviteMember] prompt input [roles] is a multiselect without options");
+        assertIssue(INVITE.replace("default: [Member]", "default: [Member, Owner]"),
+                "action [InviteMember] prompt input [roles] default names [Owner], which is not one of its options [Member, Lead]");
+        assertIssue(INVITE.replace("value: Lead,", "value: Member,"), "prompt input [roles] lists the option [Member] twice");
+        assertIssue(INVITE.replace("default: [Member]", "default: Member"),
+                "prompt input [roles] default [Member] does not fit its type [multiselect] - expected a list of its option values");
+    }
+
+    @Test
+    void optionsOnAnotherTypeAreRefused() {
+        assertIssue(INVITE.replace("type: multiselect", "type: string")
+                          .replace("        default: [Member]\n", ""),
+                "action [InviteMember] prompt input [roles] declares options but has type [string] - only a multiselect chooses from options");
+    }
+
+    @Test
+    void aDescriptionPlaceholderMustNameAPropertyOfTheEntity() {
+        assertIssue(INVITE.replace("Invite a person to {name}.", "Invite a person to {title}."),
+                "action [InviteMember] description names [{title}], which is not a field or to-one relation of [Team]");
+        assertIssue(INVITE.replace("    submit: Invite\n", "    submit: Invite\n    scope: page\n")
+                          .replace("teams/{id}/invitations", "invitations"),
+                "action [InviteMember] description names [{name}] but the action has scope [page]");
+        // A to-one relation is a property too; the confirm text is checked the same way.
+        String withLead = INVITE.replace("Invite a person to {name}.", "Invite a person to {name}, led by {Lead}.");
+        assertEquals("Invite", IntentParser.parse(withLead)
+                                           .getActions()
+                                           .get(0)
+                                           .getSubmit());
+        String confirm = INVITE.replace("    prompt:\n", "    confirm: Archive {nickname}?\n    prompt:\n");
+        assertIssue(confirm, "action [InviteMember] confirm names [{nickname}], which is not a field or to-one relation of [Team]");
+    }
+
+    @Test
+    void theNameALabelGeneratesIsAProperty() {
+        String labelled = INVITE.replace("  - name: Team\n    fields:", "  - name: Team\n    label: \"{title}\"\n    fields:")
+                                .replace("      - { name: name, type: string }\n      - { name: founded",
+                                        "      - { name: title, type: string }\n      - { name: founded");
+
+        assertEquals("Invite", IntentParser.parse(labelled)
+                                           .getActions()
+                                           .get(0)
+                                           .getSubmit());
+    }
+
+    @Test
+    void aDefaultMustFitItsType() {
+        assertIssue(INVITE.replace("help: \"name@company.com\" }", "help: \"name@company.com\", default: 5 }"),
+                "action [InviteMember] prompt input [email] default [5] does not fit its type [email] - expected a string");
+        String typed = INVITE.replace(EMAIL, EMAIL
+                + "\n      - { name: seats, type: integer, default: 1.5 }\n      - { name: lead, type: boolean, default: yes please }\n"
+                + "      - { name: from, type: date, default: tomorrow }");
+        assertIssue(typed, "prompt input [seats] default [1.5] does not fit its type [integer] - expected a whole number");
+        assertIssue(typed, "prompt input [lead] default [yes please] does not fit its type [boolean] - expected true or false");
+        assertIssue(typed, "prompt input [from] default [tomorrow] does not fit its type [date] - expected a date (yyyy-MM-dd)");
+        assertIssue(INVITE.replace("help: \"name@company.com\" }", "help: \"name@company.com\", default: \"{nickname}\" }"),
+                "action [InviteMember] prompt input [email] default names [{nickname}], which is not a field or to-one relation of [Team]");
+    }
+
+    @Test
+    void aDefaultOfItsTypeOrFromTheRecordParses() {
+        ActionIntent action = IntentParser.parse(INVITE.replace(EMAIL,
+                "{ name: email, type: email, default: \"{name}\" }\n      - { name: seats, type: integer, default: 3 }\n"
+                        + "      - { name: share, type: decimal, default: 0.5 }\n      - { name: lead, type: boolean, default: true }\n"
+                        + "      - { name: from, type: date, default: 2026-11-02 }\n      - { name: since, type: date, default: \"{founded}\" }"))
+                                          .getActions()
+                                          .get(0);
+
+        assertEquals(List.of("{name}", 3L, 0.5, true, "2026-11-02", "{founded}"), action.getPrompt()
+                                                                                        .stream()
+                                                                                        .filter(input -> !input.isMultiselect())
+                                                                                        .map(ActionPromptIntent::getDefaultValue)
+                                                                                        .toList(),
+                "an unquoted date is kept as its ISO text");
+    }
+
+    /**
+     * The "Change skills" example of #8323: a dialog that opens with the record's child rows ticked.
+     */
+    static final String SKILLS = """
+            name: team
+            entities:
+              - name: Skill
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Team
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: members, kind: oneToMany, to: TeamMember }
+              - name: TeamMember
+                list: [name, skills.skill]
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: team,   kind: manyToOne, to: Team, composition: true }
+                  - { name: skills, kind: oneToMany, to: MemberSkill }
+              - name: MemberSkill
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                  - { name: skill,  kind: manyToOne, to: Skill }
+            actions:
+              - name: ChangeSkills
+                forEntity: TeamMember
+                description: "Change the skills of {name}."
+                prompt:
+                  - name: skills
+                    type: multiselect
+                    required: true
+                    default: "{skills.skill}"
+                    options: [Java, SQL, Go]
+                call:
+                  method: POST
+                  path: /services/java/team/custom/api/members/{id}/skills
+                  body: { skills: "{skills}" }
+            """;
+
+    @Test
+    void aCollectionPathDefaultNeedsTheListedColumn() {
+        assertEquals("{skills.skill}", IntentParser.parse(SKILLS)
+                                                   .getActions()
+                                                   .get(0)
+                                                   .getPrompt()
+                                                   .get(0)
+                                                   .getDefaultValue());
+        assertIssue(SKILLS.replace("list: [name, skills.skill]", "list: [name]"),
+                "action [ChangeSkills] prompt input [skills] default names [{skills.skill}], a collection path [TeamMember] does not list"
+                        + " - add it to `list:`");
+        String string = SKILLS.replace("type: multiselect", "type: string")
+                              .replace("        options: [Java, SQL, Go]\n", "");
+        assertIssue(string, "action [ChangeSkills] prompt input [skills] default names [{skills.skill}] - a collection path default fits"
+                + " a multiselect only - input [skills] has type [string]");
+    }
+
+    @Test
+    void aDescriptionMayNameACollectionPath() {
+        String described = SKILLS.replace("Change the skills of {name}.", "{name} has {skills.skill}.");
+        assertEquals("{name} has {skills.skill}.", IntentParser.parse(described)
+                                                               .getActions()
+                                                               .get(0)
+                                                               .getDescription());
+        assertIssue(described.replace("list: [name, skills.skill]", "list: [name]"),
+                "action [ChangeSkills] description names [{skills.skill}], a collection path [TeamMember] does not list");
+        // A bare collection is the path list: writes for the child's label.
+        String bare = SKILLS.replace("  - name: MemberSkill\n", "  - name: MemberSkill\n    label: \"{skill.name}\"\n")
+                            .replace("list: [name, skills.skill]", "list: [name, skills]")
+                            .replace("Change the skills of {name}.", "{name} has {skills}.")
+                            .replace("default: \"{skills.skill}\"", "default: \"{skills}\"");
+        assertEquals("{skills}", IntentParser.parse(bare)
+                                             .getActions()
+                                             .get(0)
+                                             .getPrompt()
+                                             .get(0)
+                                             .getDefaultValue());
+    }
+
+    @Test
+    void descriptionAndSubmitAreACallsOnly() {
+        String page = """
+                name: helpdesk
+                entities:
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                actions:
+                  - { name: OpenNote, forEntity: Note, page: /services/web/helpdesk/note.html, description: Opens it, submit: Open }
+                """;
+        assertIssue(page, "action [OpenNote] declares [description, submit], which only a call: action uses");
     }
 
     private static void assertIssue(String yaml, String expected) {

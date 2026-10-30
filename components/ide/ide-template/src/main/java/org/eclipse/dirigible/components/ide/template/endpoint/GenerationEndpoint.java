@@ -23,7 +23,7 @@ import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.template.domain.GenerationTemplateParameters;
 import org.eclipse.dirigible.components.ide.template.service.GenerationService;
 import org.eclipse.dirigible.components.ide.template.service.model.ModelGenerationService;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.File;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,15 +100,20 @@ public class GenerationEndpoint {
     /**
      * Generates a project's artefacts from one of its model files.
      *
+     * <p>
+     * A template the platform no longer ships - the AngularJS and TypeScript stacks a project generated
+     * before 14.16.0 records - is answered with {@code 409} and the Java template that replaces it, for
+     * the IDE to offer as the project's regeneration; one that nothing replaces is a {@code 400}.
+     *
      * @param workspace the workspace
      * @param project the project
      * @param path the project-relative path of the model file
      * @param parameters the template and its generation parameters
-     * @return the location of the generated model file's project
+     * @return the location of the generated model file's project, or the retired template's successor
      * @throws URISyntaxException the URI syntax exception
      */
     @PostMapping("/model/{workspace}/{project}")
-    public ResponseEntity<URI> generateModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
+    public ResponseEntity<Object> generateModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
             @RequestParam("path") String path, @Valid @RequestBody GenerationTemplateParameters parameters) throws URISyntaxException {
 
         if (!workspaceService.existsWorkspace(workspace)) {
@@ -117,6 +122,18 @@ public class GenerationEndpoint {
         if (!workspaceService.existsProject(workspace, project)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND,
                     format("Project {0} does not exist in Workspace {1}.", project, workspace));
+        }
+
+        String template = parameters.getTemplate();
+        if (modelGenerationService.isRetired(template)) {
+            String successor = modelGenerationService.successorOf(template)
+                                                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, format(
+                                                             "Template {0} was removed in 14.16.0 and has no Java successor. Choose a template to generate [{1}] with.",
+                                                             template, path)));
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                                 .body(new RetiredTemplate(format(
+                                         "Template {0} was removed in 14.16.0. Regenerate [{1}] with its Java successor {2}: the generated code becomes Java and the UI Harmonia, and code that imports the generated TypeScript has to be ported.",
+                                         template, path, successor), template, successor));
         }
 
         try {
@@ -131,6 +148,16 @@ public class GenerationEndpoint {
         }
         return ResponseEntity.created(workspaceService.getURI(workspace, project, path))
                              .build();
+    }
+
+    /**
+     * The answer to a generation that names a retired template.
+     *
+     * @param message what happened and what regenerating with the successor changes
+     * @param template the retired template's module path
+     * @param successor the Java template that replaces it
+     */
+    record RetiredTemplate(String message, String template, String successor) {
     }
 
     /**

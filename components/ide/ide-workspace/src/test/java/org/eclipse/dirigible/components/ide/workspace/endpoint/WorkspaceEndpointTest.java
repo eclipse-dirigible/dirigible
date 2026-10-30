@@ -19,11 +19,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
-import org.eclipse.dirigible.components.ide.workspace.domain.File;
-import org.eclipse.dirigible.components.ide.workspace.domain.Folder;
-import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.workspace.domain.File;
+import org.eclipse.dirigible.components.workspace.domain.Folder;
+import org.eclipse.dirigible.components.workspace.domain.Project;
 import org.eclipse.dirigible.components.ide.workspace.domain.ProjectStatusProvider;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.dirigible.components.ide.workspace.domain.WorkspaceSourceTargetPair;
 import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
 import org.junit.jupiter.api.AfterEach;

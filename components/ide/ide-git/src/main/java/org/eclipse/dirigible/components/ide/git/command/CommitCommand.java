@@ -14,13 +14,13 @@ import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.List;
 
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorException;
-import org.eclipse.dirigible.components.ide.git.domain.GitConnectorFactory;
-import org.eclipse.dirigible.components.ide.git.domain.IGitConnector;
+import org.eclipse.dirigible.components.git.domain.GitConnectorException;
+import org.eclipse.dirigible.components.git.domain.GitConnectorFactory;
+import org.eclipse.dirigible.components.git.domain.IGitConnector;
 import org.eclipse.dirigible.components.ide.git.model.GitPushModel;
 import org.eclipse.dirigible.components.ide.git.project.ProjectPropertiesVerifier;
-import org.eclipse.dirigible.components.ide.git.utils.GitFileUtils;
-import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.git.utils.GitFileUtils;
+import org.eclipse.dirigible.components.workspace.domain.Workspace;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

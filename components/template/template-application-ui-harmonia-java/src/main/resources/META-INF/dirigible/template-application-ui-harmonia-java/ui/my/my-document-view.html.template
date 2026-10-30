@@ -23,6 +23,16 @@
 ## shared basePage.fieldDisplay - option label(s), instance date format, a float's own pattern, the
 ## translated Yes/No (a checkbox's options are its two states) - and the row shown only when that
 ## text is non-empty and the caller may see the field (issue #7522).
+## The column length the controller enforces, as the input's maxlength (#8135): a string column with a
+## declared length - the same set the server refuses past ("exceeds the maximum length of N").
+#macro(maxLength $p)#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time") maxlength="${p.dataLength}"#end#end
+## ...and says why it stops (#8135): once the value fills the column, the field's description names the
+## limit - nothing is shown before, so a long form stays as it was.
+#macro(maxLengthHint $p)
+#if($p.dataTypeJavaClass == "String" && $p.dataLength && "$p.dataLength" != "" && $p.dataTypeJava != "time")
+        <p x-h-field-description x-show="String(form.${p.name} ?? '').length >= ${p.dataLength}" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: ${p.dataLength} })"></p>
+#end
+#end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")options['${property.name}']#{else}null#end#end
 #macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
 #macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
@@ -83,8 +93,9 @@
         </label>
 #end
 #if($property.widgetType == "DROPDOWN")
+## fixedAfterCreate (#7903): picked on create, read-only once the record exists (the controller refuses a change).
         <div x-h-select>
-          <input x-h-select-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
+          <input x-h-select-input x-model="form.${property.name}"#if($property.fixedAfterCreate == "true") :disabled="mode === 'edit'"#end :aria-invalid="fieldError === '${property.name}'" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search data-filter="contains"></div>
             <div x-h-select-list>
@@ -151,8 +162,9 @@
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" x-model="form.${property.name}"#maxLength($property) :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
+#maxLengthHint($property)
       </div>
 #end
 #end
@@ -295,13 +307,13 @@
           </thead>
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
-              <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="#if($immutableStatusProperty || $immutableAlways || $periodLock)mutable && #{end}openItem(row)">
+              <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="itemRowClicked($event, row)">
                 <template x-for="col in tableColumns()" :key="col.name">
                   <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
 #if(!$documentItemsReadOnly)
                 <td x-h-table-cell class="text-right">
-                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end aria-label="Delete" @click.stop="deleteItem(row)"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
+                  <button x-h-button data-variant="transparent" data-size="icon-sm"#if($immutableStatusProperty || $immutableAlways || $periodLock) x-show="mutable"#end aria-label="Delete" data-row-control @click="deleteItem(row)"><svg role="presentation" x-h-lucide data-lucide="trash-2"></svg></button>
                 </td>
 #end
               </tr>
@@ -453,8 +465,9 @@
                 <div x-h-month-picker><input type="text" :aria-invalid="itemFieldError === col.name" /><button x-h-month-picker-trigger aria-label="Choose month"></button><div x-h-month-picker-popup x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
-                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="itemFieldError === col.name" />
+                <input x-h-input type="text" x-model="draft[col.name]" :maxlength="col.maxLength" :pattern="col.pattern" @blur="if (col.normalize) draft[col.name] = col.normalize(draft[col.name])" :aria-invalid="itemFieldError === col.name" />
               </template>
+              <p x-h-field-description x-show="col.maxLength && String(draft[col.name] ?? '').length >= col.maxLength" x-text="T('$projectName:${tprefix}.messages.maxLengthReached', 'Maximum {{count}} characters', { count: col.maxLength })"></p>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
                    server recomputes it on save, so rendering an input only faked editability. -->
               <template x-if="col.readonly">

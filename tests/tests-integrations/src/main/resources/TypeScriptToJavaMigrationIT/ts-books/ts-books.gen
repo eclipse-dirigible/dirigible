@@ -1,0 +1,15 @@
+{
+    "tablePrefix": "TSB_",
+    "brand": "Eclipse Dirigible",
+    "brandUrl": "https://www.dirigible.io/",
+    "title": "TypeScript Books",
+    "description": "A project generated with the TypeScript application template",
+    "projectName": "ts-books",
+    "workspaceName": "workspace",
+    "filePath": "ts-books.model",
+    "templateId": "template-application-angular/template/template.js",
+    "fileName": "ts-books",
+    "genFolderName": "ts-books",
+    "dataSource": "DefaultDB",
+    "roles": []
+}

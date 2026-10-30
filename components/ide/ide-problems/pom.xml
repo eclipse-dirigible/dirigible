@@ -24,6 +24,10 @@
 	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-database</artifactId>
     	</dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-problems</artifactId>
+        </dependency>
         
         <!-- API -->
         <dependency>

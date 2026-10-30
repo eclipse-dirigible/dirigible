@@ -63,6 +63,71 @@ class ModelParameterProcessorTest {
         assertEquals("Exactly one", catalog.get("Customer_exactlyOne_1"));
     }
 
+    /**
+     * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
+     * flag, which refuses nothing, has no message to translate.
+     */
+    @Test
+    void refusingSingleFlagMessageBecomesACatalogKey() {
+        Map<String, Object> refusing = new LinkedHashMap<>();
+        refusing.put("property", "Preferred");
+        refusing.put("refuse", "true");
+        refusing.put("message", "Another Wallet is already Preferred");
+        Map<String, Object> demoting = new LinkedHashMap<>();
+        demoting.put("property", "Base");
+        Map<String, Object> wallet = entity("Wallet", "Wallets", property("Id", "INTEGER"));
+        wallet.put("singleFlags", List.of(refusing, demoting));
+        Map<String, Object> model = model(wallet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "billing.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals("\"bookstore:billing-model.checks.Wallet_single_Preferred\", \"Another Wallet is already Preferred\"",
+                refusing.get("messageArgsJava"));
+        assertFalse(demoting.containsKey("messageArgsJava"));
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("Another Wallet is already Preferred", catalog.get("Wallet_single_Preferred"));
+        assertFalse(catalog.containsKey("Wallet_single_Base"));
+    }
+
+    /**
+     * A relation fixed after create (#7903): every controller refuses a changed value with the message
+     * the en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>}, so the arguments it
+     * hands {@code CheckMessages} name that key and the default text. A flag spelled out as false fixes
+     * nothing.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfARelationFixedAfterCreate() {
+        Map<String, Object> project = property("Project", "INTEGER");
+        project.put("fixedAfterCreate", "true");
+        project.put("fixedAfterCreateMessage", "'Project' cannot change once the \"Timesheet\" is created");
+        Map<String, Object> reviewer = property("Reviewer", "INTEGER");
+        reviewer.put("fixedAfterCreate", "false");
+        reviewer.put("fixedAfterCreateMessage", "unused");
+        Map<String, Object> timesheet = entity("Timesheet", "Timesheets", property("Id", "INTEGER"), project, reviewer);
+        Map<String, Object> model = model(timesheet);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "timesheets.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateRelations");
+        assertEquals(1, fixed.size());
+        assertEquals("Project", fixed.get(0)
+                                     .get("name"));
+        assertEquals(
+                "\"bookstore:timesheets-model.checks.Timesheet_fixed_Project\", "
+                        + "\"'Project' cannot change once the \\\"Timesheet\\\" is created\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("'Project' cannot change once the \"Timesheet\" is created", catalog.get("Timesheet_fixed_Project"));
+        assertFalse(catalog.containsKey("Timesheet_fixed_Reviewer"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");
@@ -80,6 +145,41 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.FALSE, property.get("isRequiredProperty"));
         // Derived from the original string, before it was replaced by its boolean.
         assertEquals(Boolean.TRUE, property.get("dataNotNull"));
+    }
+
+    /**
+     * A details layout on an entity that composes into no master - an AngularJS-era model gave one to
+     * settings registers - is generated as the plain layout, not as a list filtering by a master key
+     * that does not exist (#8051).
+     */
+    @Test
+    void aDetailsLayoutWithoutAMasterBecomesThePlainLayout() {
+        Map<String, Object> status = entity("SalaryStatus", "Settings", property("Id", "INTEGER"));
+        status.put("layoutType", "MANAGE_DETAILS");
+        Map<String, Object> type = entity("SalaryItemType", "Settings", property("Id", "INTEGER"));
+        type.put("layoutType", "LIST_DETAILS");
+
+        ModelParameterProcessor.process(model(status, type), parameters());
+
+        assertEquals("MANAGE", status.get("layoutType"));
+        assertEquals("LIST", type.get("layoutType"));
+    }
+
+    /** A details layout with its master keeps it, and filters by the master's key. */
+    @Test
+    void aDetailsLayoutWithAMasterIsKept() {
+        Map<String, Object> salary = property("Salary", "INTEGER");
+        salary.put("relationshipType", "COMPOSITION");
+        salary.put("relationshipCardinality", "1_n");
+        salary.put("relationshipEntityName", "Salary");
+        Map<String, Object> item = entity("SalaryItem", "Salaries", property("Id", "INTEGER"), salary);
+        item.put("type", "DEPENDENT");
+        item.put("layoutType", "MANAGE_DETAILS");
+
+        ModelParameterProcessor.process(model(entity("Salary", "Salaries", property("Id", "INTEGER")), item), parameters());
+
+        assertEquals("MANAGE_DETAILS", item.get("layoutType"));
+        assertEquals("Salary", item.get("masterEntityId"));
     }
 
     @Test
@@ -113,6 +213,69 @@ class ModelParameterProcessorTest {
         assertSame(customer, listed.get(1));
         assertSame(total, listed.get(2));
         assertSame(due, listed.get(3));
+    }
+
+    /**
+     * A collection column (a {@code list:} collection path, dirigible #8295) takes its place in
+     * {@code listProperties} as the {@code listOrder} gives it, and is resolved into what the
+     * controller reads the child rows by: the child's entity and repository, its order, and - for a
+     * to-one - the target the to-one's dropdown reads. Every entity of the model is then marked to
+     * render the cell.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void aCollectionColumnIsListedAndResolvedForTheController() {
+        Map<String, Object> memberId = property("Id", "INTEGER");
+        memberId.put("dataPrimaryKey", "true");
+        Map<String, Object> email = property("Email", "VARCHAR");
+        Map<String, Object> skills = new LinkedHashMap<>();
+        skills.put("name", "SkillsSkill");
+        skills.put("widgetLabel", "Skill's held");
+        skills.put("dataName", "TEAM_MEMBER_SKILLS_SKILL");
+        skills.put("widgetIsMajor", "true");
+        skills.put("collectionColumn", "true");
+        skills.put("collectionEntity", "TeamMemberSkill");
+        skills.put("collectionEntityPerspectiveName", "team");
+        skills.put("collectionForeignKey", "TeamMember");
+        skills.put("collectionProperty", "Skill");
+        skills.put("collectionToOne", "true");
+        skills.put("collectionDisplayProperty", "Name");
+        Map<String, Object> member = entity("TeamMember", "team", memberId, email);
+        member.put("listOrder", "SkillsSkill,Email");
+        member.put("collectionColumns", List.of(skills));
+
+        Map<String, Object> childId = property("Id", "INTEGER");
+        childId.put("dataPrimaryKey", "true");
+        Map<String, Object> skill = property("Skill", "INTEGER");
+        skill.put("widgetType", "DROPDOWN");
+        skill.put("relationshipEntityName", "Skill");
+        skill.put("relationshipEntityPerspectiveName", "Settings");
+        skill.put("widgetDropDownKey", "Id");
+        skill.put("widgetDropDownValue", "Name");
+        Map<String, Object> child = entity("TeamMemberSkill", "team", childId, skill);
+        Map<String, Object> other = entity("Skill", "Settings", property("Id", "INTEGER"));
+        Map<String, Object> parameters = javaParameters();
+
+        ModelParameterProcessor.process(model(member, child, other), parameters);
+
+        List<Map<String, Object>> listed = (List<Map<String, Object>>) member.get("listProperties");
+        assertSame(skills, listed.get(0), "the column stands where listOrder puts it");
+        assertSame(email, listed.get(1));
+        assertEquals("Skill\\'s held", skills.get("widgetLabelJs"), "the header is printed into a JS string");
+        String data = "gen." + parameters.get("javaGenFolderName") + ".data.";
+        assertEquals("skillsSkill", skills.get("variable"));
+        assertEquals(data + "team.TeamMemberSkillEntity", skills.get("childEntityClass"));
+        assertEquals("teamMemberSkillRepository", skills.get("childRepository"));
+        assertEquals(".orderByAsc(\"Id\")", skills.get("childOrderCriteria"), "without an orderBy: the child's primary key");
+        assertEquals(data + "settings.SkillEntity", skills.get("targetEntityClass"));
+        assertEquals("skillRepository", skills.get("targetRepository"));
+        assertEquals("Id", skills.get("targetKey"));
+        assertEquals("Name", skills.get("targetText"));
+        assertEquals(
+                List.of(Map.of("className", data + "team.TeamMemberSkillRepository", "field", "teamMemberSkillRepository"),
+                        Map.of("className", data + "settings.SkillRepository", "field", "skillRepository")),
+                member.get("collectionRepositories"));
+        assertEquals(Boolean.TRUE, child.get("rendersCollectionColumns"), "a master page renders its child's panel");
     }
 
     /**
@@ -881,8 +1044,8 @@ class ModelParameterProcessorTest {
      * whenTargetDeleted (#7547): every relation carrying a rule learns the target's generated entity
      * class - the package its repository class is resolved into, the owner model's for a cross-model
      * target - and the entity is flagged, so its repository contributes the rule the target's delete
-     * applies. A relation carrying no rule (a hand-authored {@code .model} without the key) gets
-     * neither.
+     * applies. A relation carrying no rule (a hand-authored {@code .model} without the key) still
+     * learns the class, which its writes check the reference against (#8100).
      */
     @Test
     void aTargetDeleteRuleResolvesTheTargetsEntityClass() {
@@ -911,7 +1074,33 @@ class ModelParameterProcessorTest {
                 "a cross-model target resolves to its owner");
         assertEquals("gen.sales_order.data.claims.ExpenseCategoryEntity", category.get("targetEntityClass"));
         assertEquals(Boolean.TRUE, claim.get("hasTargetDeleteRules"));
-        assertNull(approver.get("targetEntityClass"));
+        assertEquals("gen.hr.data.employees.EmployeeEntity", approver.get("targetEntityClass"));
+    }
+
+    /**
+     * A to-one is checked on write (#8100) whether or not it declares a delete rule - except a
+     * {@code keep}, whose reference outlives its target by declaration: a reversal posts the storno of
+     * a deleted source naming the source it reverses, so it is held to neither the check nor a rule.
+     */
+    @Test
+    void everyToOneButAKeepIsCheckedOnWrite() {
+        Map<String, Object> manager = property("Manager", "INTEGER");
+        manager.put("relationshipEntityName", "Employee");
+        manager.put("relationshipEntityPerspectiveName", "Employees");
+        manager.put("widgetType", "DROPDOWN");
+        Map<String, Object> payment = property("Payment", "INTEGER");
+        payment.put("relationshipEntityName", "Payment");
+        payment.put("relationshipEntityPerspectiveName", "Payments");
+        payment.put("widgetType", "DROPDOWN");
+        payment.put("whenTargetDeleted", "keep");
+        Map<String, Object> employee = entity("Employee", "Employees", property("Id", "INTEGER"), manager, payment);
+
+        ModelParameterProcessor.process(model(employee), javaParameters());
+
+        assertEquals("gen.sales_order.data.employees.EmployeeEntity", manager.get("targetEntityClass"));
+        assertEquals(Boolean.TRUE, employee.get("hasReferenceChecks"));
+        assertNull(payment.get("targetEntityClass"), "a keep reference is not checked against its target");
+        assertNull(employee.get("hasTargetDeleteRules"), "neither relation contributes a delete rule");
     }
 
     /**
@@ -1078,6 +1267,21 @@ class ModelParameterProcessorTest {
         assertEquals("Status", lock.get("statusProperty"));
         assertEquals("2,3", lock.get("statusValues"));
         assertEquals(Boolean.FALSE, lock.get("always"));
+    }
+
+    /**
+     * The master filter of the generated list is bound with the FK's own Java class, so a non-numeric
+     * value is a 400 from the controller invoker instead of a 500 out of Hibernate (dirigible #8237).
+     */
+    @Test
+    void aCompositionChildCarriesItsMasterFilterJavaClass() {
+        Map<String, Object> master = entity("Invoice", "Invoices", property("Id", "INTEGER"));
+        Map<String, Object> child = entity("InvoiceItem", "Invoices", compositionTo("Invoice", "Invoices"));
+
+        ModelParameterProcessor.process(model(master, child), javaParameters());
+
+        assertEquals("Invoice", child.get("masterEntityId"));
+        assertEquals("Integer", child.get("masterEntityIdJavaClass"));
     }
 
     @Test

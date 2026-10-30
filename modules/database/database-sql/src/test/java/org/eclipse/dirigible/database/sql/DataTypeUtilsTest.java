@@ -146,4 +146,26 @@ public class DataTypeUtilsTest {
         assertFalse(DataTypeUtils.isCharacterType("BLOB"));
         assertFalse(DataTypeUtils.isCharacterType("BOOLEAN"));
     }
+
+    /**
+     * #8143 - the fixed-size and variable-size binary JDBC types are bound and read exactly like BLOB
+     * (setBinaryStream / getBytes). They were missing from the JDBC-to-DataType map, so a VARBINARY
+     * parameter failed with "Type [-3] not supported" and the typed form {"type":"VARBINARY"} with
+     * "Type [VARBINARY] not supported".
+     */
+    @Test
+    public void binaryJdbcTypesResolveToBlob() {
+        assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.BINARY));
+        assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.VARBINARY));
+        assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.LONGVARBINARY));
+        assertEquals(DataType.BLOB.toString(), DataTypeUtils.getDatabaseTypeName(Types.BINARY));
+        assertEquals(DataType.BLOB.toString(), DataTypeUtils.getDatabaseTypeName(Types.VARBINARY));
+        assertEquals(DataType.BLOB.toString(), DataTypeUtils.getDatabaseTypeName(Types.LONGVARBINARY));
+        assertTrue(DataTypeUtils.isBlob(DataTypeUtils.getDatabaseTypeName(Types.VARBINARY)));
+
+        assertEquals(Types.BLOB, (int) DataTypeUtils.getSqlTypeByDataType("VARBINARY"));
+        assertEquals(Types.BLOB, (int) DataTypeUtils.getSqlTypeByDataType("varbinary"));
+        assertEquals(Types.BLOB, (int) DataTypeUtils.getSqlTypeByDataType("LONGVARBINARY"));
+        assertEquals("BLOB", DataTypeUtils.getUnifiedDatabaseType("VARBINARY"));
+    }
 }

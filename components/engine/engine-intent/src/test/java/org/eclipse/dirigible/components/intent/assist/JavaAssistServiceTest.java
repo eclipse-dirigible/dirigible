@@ -172,9 +172,62 @@ class JavaAssistServiceTest {
         assertTrue(turn.contains("Charge twice the base rate"), "the developer's request is the last thing said");
     }
 
+    @Test
+    void aJavaFileIsWorkedOnUnderTheJavaGuideAlone() {
+        ScriptedAssistService service = new ScriptedAssistService(proposal("Doubles the base rate.", COMPILES));
+
+        service.chat(context(), "Charge twice the base rate", List.of());
+
+        assertFalse(service.systemPrompts.get(0)
+                                         .contains("# Porting TypeScript to Java"),
+                "the port guide is only for a port");
+    }
+
+    @Test
+    void aPortShowsTheScriptAndNamesTheJavaFileItBecomes() {
+        ScriptedAssistService service = new ScriptedAssistService(proposal("Ported the fee rule.", COMPILES));
+
+        AssistReply reply = service.chat(portContext(), "Port this file to Java", List.of());
+
+        assertEquals(COMPILES, reply.proposedSource());
+        assertTrue(reply.diagnostics()
+                        .isEmpty(),
+                "the port compiles against the project's other sources");
+        assertTrue(service.systemPrompts.get(0)
+                                        .contains("# Porting TypeScript to Java"),
+                "a port is worked on under the port guide");
+        String turn = (String) service.calls.get(0)
+                                            .get(0)
+                                            .get("content");
+        assertTrue(turn.contains("This is a PORT"), "the turn says it is a port");
+        assertTrue(turn.contains("```typescript\nexport const fee = () => Rates.base() * 2;"), "the script is shown as TypeScript");
+        assertTrue(turn.contains("custom/Fees.ts is being replaced by the Java file custom/Fees.java"),
+                "the script and the Java file it becomes are both named");
+        assertTrue(turn.contains("// custom/Rates.java"), "a type the script names reaches the assistant as a referenced source");
+    }
+
+    @Test
+    void aPortThatDoesNotCompileIsRepairedLikeAnyProposal() {
+        ScriptedAssistService service =
+                new ScriptedAssistService(proposal("Ported.", DOES_NOT_COMPILE), proposal("Fixed the call.", COMPILES));
+
+        AssistReply reply = service.chat(portContext(), "Port this file to Java", List.of());
+
+        assertEquals(COMPILES, reply.proposedSource());
+        assertEquals(2, service.calls.size(), "one repair round");
+        assertTrue(service.systemPrompts.get(1)
+                                        .contains("# Porting TypeScript to Java"),
+                "the repair round keeps the port guide");
+    }
+
     private static AssistContext context() {
         return new AssistContext("orders", "custom/Fees.java", "package custom;\n\npublic class Fees {\n}\n", "name: orders\n",
                 List.of(RATES));
+    }
+
+    private static AssistContext portContext() {
+        return new AssistContext("orders", "custom/Fees.java", "", null, List.of(RATES),
+                new AssistContext.PortedScript("custom/Fees.ts", "typescript", "export const fee = () => Rates.base() * 2;\n"));
     }
 
     private static ModelClient.ModelReply proposal(String text, String source) {
@@ -189,6 +242,7 @@ class JavaAssistServiceTest {
 
         private final Deque<ModelClient.ModelReply> replies;
         private final List<List<Map<String, Object>>> calls = new ArrayList<>();
+        private final List<String> systemPrompts = new ArrayList<>();
 
         private ScriptedAssistService(ModelClient.ModelReply... scripted) {
             super(new ModelClient(), new JavaSourceCompiler());
@@ -196,7 +250,8 @@ class JavaAssistServiceTest {
         }
 
         @Override
-        ModelClient.ModelReply callModel(List<Map<String, Object>> messages) {
+        ModelClient.ModelReply callModel(String systemPrompt, List<Map<String, Object>> messages) {
+            systemPrompts.add(systemPrompt);
             calls.add(List.copyOf(messages));
             return replies.pop();
         }

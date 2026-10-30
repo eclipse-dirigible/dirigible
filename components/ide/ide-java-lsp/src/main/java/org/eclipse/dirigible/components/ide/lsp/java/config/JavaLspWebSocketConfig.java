@@ -31,7 +31,6 @@ public class JavaLspWebSocketConfig implements WebSocketConfigurer {
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(handler, BaseEndpoint.PREFIX_ENDPOINT_WEBSOCKETS + "ide/java-lsp")
-                .setAllowedOrigins("*");
+        registry.addHandler(handler, BaseEndpoint.PREFIX_ENDPOINT_WEBSOCKETS + "ide/java-lsp");
     }
 }

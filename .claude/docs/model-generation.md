@@ -40,6 +40,19 @@ rides on — runs entirely in Java, in `components/ide/ide-template`
 - **The intent Generate is one call**: `IntentGenerationService` writes the model files and then runs
   the `.settings` recipes through this pipeline itself, reporting each one's outcome in
   `codeGenerations` (`generated`, plus `error`). No client replays a plan any more.
+- **A retired template is answered with its successor, not refused bare (#8051).** The AngularJS and
+  TypeScript stacks went in 14.16.0 (#6588), but projects still record them in their `.gen`.
+  `RetiredTemplates` maps each to its Java successor (or to none); `GenerationEndpoint` answers such a
+  generation `409 {message, template, successor}`, the three IDE clients confirm and regenerate with the
+  successor, and the generation removes a legacy base-name `.gen` that records a retired template.
+  `TypeScriptToJavaMigrationIT` covers it end to end.
+- **A calculated-field formula is `Calc` arithmetic.** The Java templates write it into
+  `Calc.eval("...")` and the Harmonia UI mirrors it. `CalculatedFormulas` (run by the DAO, REST and
+  Harmonia adapters) rewrites the `entity["X"]` / `entity.X` reads of TypeScript-era models to bare
+  names and **refuses the generation**, naming every field, for anything that is not arithmetic over
+  the entity's properties - a JavaScript or Java expression used to generate a repository that did
+  not compile, or failed on every save. A details layout without a composition master is generated
+  as the plain layout (`ModelParameterProcessor.resolveDetailLayoutWithoutMaster`).
 - `ModelGenerationIT` is the regression harness (it replaced the JS-vs-Java parity harness): every
   template renders, twice, with the descriptor and the cross-project entity extension asserted.
 
