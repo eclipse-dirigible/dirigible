@@ -565,6 +565,15 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   by the child's own controller too - otherwise the one operation the lock exists to prevent stayed
   reachable over REST while the UI already withheld it. Opt a collection out with
   `locksWithMaster: false` (below).
+- `refresh: { while: [<status>, ...], every: PT10S }` (entity-level) - **the pages re-read themselves
+  while a record is in a status the server moves on its own** (a scheduled job, an inbound message,
+  another user): the list while a row on screen is in one of `while:`'s statuses, the record and
+  document pages while the record shown in preview is. `while:` is required and names the entity's
+  own seeded statuses (names or ids); `every:` is an ISO-8601 duration between `PT5S` and `PT5M`,
+  default `PT10S`. Polling skips a hidden tab, never touches a record being edited, and stops 10
+  minutes after it began (a Refresh resumes it). Needs a same-model `function: EntityStatus`
+  relation. List only the statuses something else moves the record out of - never a final one:
+  `refresh: { while: [BOOKED, IN_TRANSIT] }`.
 - `immutable: true` (entity-level) - **append-only**: every record is read-only for user writes
   from the moment it is created - update and delete always return 409. The canonical case is a
   snapshot entity (e.g. the frozen copy stored when an invoice is SENT): written once by the flow,

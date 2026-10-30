@@ -97,6 +97,7 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessVarIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelatedIntent;
+import org.eclipse.dirigible.components.intent.model.RefreshIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
@@ -4937,6 +4938,9 @@ public final class IntentParser {
             if (entity.getPeriod() != null) {
                 validatePeriod(entity, issues);
             }
+            if (entity.getRefresh() != null) {
+                validateRefresh(model, entity, issues);
+            }
             if (entity.getImmutableInPeriod() != null) {
                 validateImmutableInPeriod(entity, byName, issues);
             }
@@ -5343,6 +5347,57 @@ public final class IntentParser {
                 issues.add(subject + " show: [" + token + "] is an audit column, and [" + related.getEntity() + "] is not audit: true");
             } else {
                 issues.add(subject + " show references [" + token + "] which is not a field or relation of [" + related.getEntity() + "]");
+            }
+        }
+    }
+
+    /** The shortest poll interval a {@code refresh: every:} may declare (#8375). */
+    private static final java.time.Duration REFRESH_EVERY_MIN = java.time.Duration.ofSeconds(5);
+
+    /** The longest poll interval a {@code refresh: every:} may declare (#8375). */
+    private static final java.time.Duration REFRESH_EVERY_MAX = java.time.Duration.ofMinutes(5);
+
+    /**
+     * An entity's {@code refresh:} (#8375) polls while a record is in one of {@code while:}'s statuses,
+     * so it needs the entity's own {@code function: EntityStatus} relation over a nomenclature seeded
+     * in this model (a cross-model one cannot be resolved here - the #6645 boundary), a non-empty
+     * {@code while:} of its seeded names or ids (the names were resolved on the raw tree), and an
+     * {@code every:} that is an ISO-8601 duration between PT5S and PT5M. An unknown key under
+     * {@code refresh:} is reported by the unknown-key pass.
+     */
+    private static void validateRefresh(IntentModel model, EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] refresh";
+        RefreshIntent refresh = entity.getRefresh();
+        RelationIntent status = LifecycleStages.statusRelation(entity);
+        if (status == null || status.getTo() == null) {
+            issues.add(subject + " polls while a record is in a status, but [" + entity.getName()
+                    + "] has no `function: EntityStatus` relation - declare its status first");
+        } else if (status.isCrossModel()) {
+            issues.add(subject + " polls on the status [" + status.getTo() + "], which belongs to model [" + status.getModel()
+                    + "] and is seeded there - refresh needs a status nomenclature seeded in this model");
+        } else if (refresh.getStatuses() == null || refresh.getStatuses()
+                                                           .isEmpty()) {
+            issues.add(subject + " `while` lists no status - name the statuses a record moves on its own in (e.g. while: [IN_TRANSIT])");
+        } else {
+            java.util.Map<Integer, String> seeded = LifecycleStages.seededStatuses(model, status.getTo());
+            for (Object token : refresh.getStatuses()) {
+                Integer id = RefreshIntent.idOf(token);
+                if (id == null || !seeded.containsKey(id)) {
+                    issues.add(subject + " `while` names [" + (token instanceof Number number ? RefreshIntent.idOf(number) : token)
+                            + "], which is not a seeded status of [" + status.getTo() + "] - known: " + seeded.values());
+                }
+            }
+        }
+        String every = refresh.getEvery();
+        if (every != null) {
+            java.time.Duration duration = null;
+            try {
+                duration = java.time.Duration.parse(every.trim());
+            } catch (java.time.format.DateTimeParseException ex) {
+                issues.add(subject + " `every` [" + every + "] is not an ISO-8601 duration (e.g. PT10S, PT1M)");
+            }
+            if (duration != null && (duration.compareTo(REFRESH_EVERY_MIN) < 0 || duration.compareTo(REFRESH_EVERY_MAX) > 0)) {
+                issues.add(subject + " `every` [" + every + "] must lie between PT5S and PT5M");
             }
         }
     }
