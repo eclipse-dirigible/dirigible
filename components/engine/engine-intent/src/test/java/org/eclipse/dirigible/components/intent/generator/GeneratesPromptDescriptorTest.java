@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -81,6 +82,38 @@ class GeneratesPromptDescriptorTest {
         assertTrue(descriptor.contains("\"url\": \"/services/java/proj/gen/sales/api/paymentmethod/PaymentMethodController\""), descriptor);
         assertTrue(descriptor.contains("\"text\": \"Name\""), descriptor);
     }
+
+    /** A create-from prompt's controls are untouched by the call prompt's input types (#8366). */
+    @Test
+    void aCreateFromPromptsColumnsAreByteIdentical() {
+        String descriptor = descriptor(LOCAL, Map.of());
+        String columns = descriptor.substring(descriptor.indexOf("\"promptColumns\""));
+        assertEquals(EXPECTED_COLUMNS, columns.substring(0, columns.indexOf("]\n") + 1));
+    }
+
+    private static final String EXPECTED_COLUMNS = """
+            "promptColumns": [
+                {
+                  "name": "Amount",
+                  "label": "Amount paid",
+                  "widget": "NUMBER"
+                },
+                {
+                  "name": "Method",
+                  "label": "Method",
+                  "widget": "DROPDOWN",
+                  "lookup": {
+                    "url": "/services/java/proj/gen/sales/api/paymentmethod/PaymentMethodController",
+                    "key": "Id",
+                    "text": "Name"
+                  }
+                },
+                {
+                  "name": "Date",
+                  "label": "Date",
+                  "widget": "DATE"
+                }
+              ]""";
 
     /** A detail of the button's view keeps rendering from its own detail registration. */
     @Test

@@ -2310,7 +2310,7 @@ actions:
     label: Escalate
     fromStatus: [OPEN, ON_HOLD]   # hides the button elsewhere - ADVISORY: the endpoint's 409 decides
     can: Ticket:escalate          # offered only to the roles whose permissions list this token
-    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date | multiselect
+    prompt:                       # inline controls: string | email | text | integer | decimal | boolean | date | multiselect | select | lookup
       - { name: level, type: integer, label: Level, required: true }
       - { name: note,  type: text,    label: Note }
     call:
@@ -2369,8 +2369,8 @@ actions:
 Rules: `description` and `confirm` may name the clicked record's properties as `{property}`: a field, a
 to-one relation (shown by its target's display text) or the `Name` a `label:` generates, of
 `forEntity`. An unknown property is refused, and so is any placeholder on `scope: page`, which has no
-record. A property the record lacks renders empty. `options` is required for `multiselect` and refused
-on every other type, and its values are unique strings. `"{roles}"` sends the ticked values as an
+record. A property the record lacks renders empty. `options` is required for `multiselect` and `select`
+and refused on every other type, and its values are unique strings. `"{roles}"` sends the ticked values as an
 array (`[]` when none), and `required: true` means at least one. A `default` is a literal of the
 input's type (a list of option values for a `multiselect`, a `yyyy-MM-dd` date), or a whole
 `"{property}"` of the record, read when the dialog opens. A record value the control cannot hold is
@@ -2399,6 +2399,39 @@ The column holds the child rows' display texts, so the options' `value`s must be
 option carries ticks nothing. Such a path is the `default` of a `multiselect` only, and it may appear in
 `description` and `confirm`, where the texts are joined with `", "`. An unlisted path is refused - add it
 to `list:` - and so is a path default on any other input type.
+
+**Inputs that fit their values: `email`, `select`, `lookup`.** Do not ask for an address, one choice of
+several or another record as free text:
+
+```yaml
+    prompt:
+      - { name: product, type: lookup, entity: Product, label: Product, required: true }
+      - { name: email,   type: email,  label: Recipient, required: true, help: "name@company.com" }
+      - name: plan
+        type: select
+        label: Plan
+        default: Basic
+        options:
+          - { value: Basic }
+          - { value: Pro, help: Includes priority support }
+    call:
+      path: /services/java/shop/custom/api/TrialApi/customers/{id}/trials
+      body: { productId: "{product}", email: "{email}", plan: "{plan}" }
+```
+
+- `email` renders an email input and checks it with the forms' own `email` rule: an address like
+  `jane@` shows "Enter a valid email address." and disables the run button. An empty optional input
+  passes. The value is sent trimmed. The endpoint still validates: the dialog is advisory. A literal
+  `default:` must be an address.
+- `select` is ONE value of its `options:` (the `multiselect` shape). `required: true` means a choice
+  must be made, and `default:` is an option value or a `"{property}"` of the record (a record value
+  that is no option leaves it empty). `"{plan}"` sends the chosen value, or `null`.
+- `lookup` picks one record of `entity:`, an entity of the SAME model, listed by its label (its
+  `name` field, `label:` or document title). `"{product}"` sends the record's key, typed: an integer key
+  as a number, `null` when nothing is chosen. `entity:` is refused on every other type, a lookup takes
+  no `default:`, and an entity of a `uses:` model is refused. The list is read with the user's own
+  token, so a user who may run the action but not read the entity sees an empty list. Grant the
+  entity's read where you grant the action's `can:`; the parser does not cross-check them.
 
 **`primary: true` - the record's filled button.** The list's details sheet and the record page each
 have one filled button: the record's pending process task, otherwise Edit. An entity-scope action,
