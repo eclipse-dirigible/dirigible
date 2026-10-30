@@ -130,6 +130,12 @@ public class EntityIntent {
      */
     private List<String> list = new ArrayList<>();
     /**
+     * Optional line under the record page's title (dirigible #8370): the own fields and to-one
+     * relations it shows, in order - at most four, which is what fits one line. Absent → no line under
+     * the title.
+     */
+    private List<String> subtitle = new ArrayList<>();
+    /**
      * Optional default ROW order (issue #7727): the property names - fields and to-one relations,
      * case-insensitive - the entity's rows are sorted by, each optionally with a direction
      * ({@code orderBy: [number]}, {@code orderBy: [{ field: date, dir: desc }, number]}). Applied as
@@ -407,6 +413,14 @@ public class EntityIntent {
 
     public void setOrder(List<String> order) {
         this.order = order == null ? new ArrayList<>() : order;
+    }
+
+    public List<String> getSubtitle() {
+        return subtitle;
+    }
+
+    public void setSubtitle(List<String> subtitle) {
+        this.subtitle = subtitle == null ? new ArrayList<>() : subtitle;
     }
 
     public List<String> getList() {

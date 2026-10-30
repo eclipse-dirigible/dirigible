@@ -725,6 +725,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
             applyListColumns(entityMap, properties, entity);
+            // The line under the record page's title (intent `subtitle:`, #8370), as `list:` rides as
+            // `listOrder`: the resolved property names, comma-separated, in the authored sequence.
+            applySubtitle(entityMap, properties, entity);
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
@@ -1359,6 +1362,41 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Emit an entity's record-page subtitle (intent {@code subtitle:}, issue #8370) as the
+     * comma-separated {@code subtitleOrder} - each authored name matched case-insensitively against the
+     * model's property names, so a field and a to-one relation both resolve to the property the form
+     * renders. A scalar, like {@code listOrder}, so it survives the {@code .edm} twin;
+     * {@code ModelParameterProcessor} resolves it into the property maps the record page iterates. No
+     * subtitle leaves no attribute.
+     *
+     * @param entityMap the entity being emitted
+     * @param properties the entity's properties
+     * @param entity the authored entity
+     */
+    private static void applySubtitle(Map<String, Object> entityMap, List<Map<String, Object>> properties, EntityIntent entity) {
+        List<String> subtitle = entity.getSubtitle();
+        if (subtitle == null || subtitle.isEmpty()) {
+            return;
+        }
+        List<String> order = new ArrayList<>();
+        for (String wanted : subtitle) {
+            if (wanted == null) {
+                continue;
+            }
+            for (Map<String, Object> property : properties) {
+                if (wanted.trim()
+                          .equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                    order.add(String.valueOf(property.get("name")));
+                    break;
+                }
+            }
+        }
+        if (!order.isEmpty()) {
+            entityMap.put("subtitleOrder", String.join(",", order));
+        }
+    }
+
+    /**
      * Emit an entity's default row order (intent {@code orderBy:}, issue #7727) as the {@code orderBy}
      * attribute - {@code "<Property> asc,<Property> desc"} in the authored sequence, property names in
      * model (PascalCase) notation. A scalar, like {@code listOrder}, so it survives the {@code .edm}
@@ -1855,6 +1893,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Whether the field is a column in the entity list table; `major: false` keeps it off the list
         // (still shown in forms + the details pane). Defaults to true when unset.
         p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
+        // Where the field sits on the record page (intent `placement:`, #8369). `main` takes a read-only
+        // field out of the Details rail into the main column, shown as a value; `hidden` keeps it off
+        // every generated page in the shape the generator gives its own bookkeeping columns - hidden,
+        // read-only (so a REST create drops it and an update keeps the stored value) and no list column.
+        // `details` is the default for a read-only field and emits nothing, and so does an absent key,
+        // so a model without placement generates byte-identically.
+        if (field.isPlacement("main")) {
+            p.put("widgetPlacement", "MAIN");
+        } else if (field.isPlacement("hidden")) {
+            p.put("isHiddenProperty", "true");
+            p.put("isReadOnlyProperty", "true");
+            p.put("widgetIsMajor", "false");
+        }
         if (notBlank(field.getPattern())) {
             // Input-format regex (#6336): the generated controller rejects a non-matching value and the
             // form input carries it as an HTML pattern. String fields only - see validatePattern.

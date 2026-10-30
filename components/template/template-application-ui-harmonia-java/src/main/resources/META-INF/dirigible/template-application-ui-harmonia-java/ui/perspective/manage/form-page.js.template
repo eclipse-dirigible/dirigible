@@ -1160,13 +1160,13 @@ document.addEventListener('alpine:init', () => {
     // character, so the block and its rows can never disagree.
 #set($railReadOnly = false)
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($railReadOnly = true)#end
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")#set($railReadOnly = true)#end
 #end
     get hasDetailValues() {
 #if($railReadOnly)
       return [
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")
         this.form.${property.name},
 #end
 #end
@@ -1185,7 +1185,31 @@ document.addEventListener('alpine:init', () => {
 #end
     },
 
+    // The record's own label (#8370) - its stored Name (the `label:` value), else its document Number,
+    // read as the draft marker while unstamped (#7722) - or '' when it has none. Never the id: the
+    // database key is not the record's name (#8320).
+    headerLabel() {
+#if($recordLabelProperty != "")
+      const record = this.loadedRecord || this.form;
+      const label = record ? record.${recordLabelProperty} : null;
+      if (label != null && String(label).trim() !== '') return String(window.HarmoniaFormat.documentNumber(label));
+#end
+      return '';
+    },
+
+    // The page is titled with the record's label once there is a record that has one (#8370), and the
+    // caption above it says what the record is; otherwise the entity name in preview, "Update ..." in
+    // edit, "Create ..." on the create form.
     headerTitle() {
+      if ((this.isPreview || this.isEdit) && this.headerLabel()) return this.headerLabel();
+      return this.headerKind();
+    },
+
+    headerCaption() {
+      return (this.isPreview || this.isEdit) && this.headerLabel() ? this.headerKind() : '';
+    },
+
+    headerKind() {
       const name = T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}');
       if (this.isPreview || this.state === 'cannot-create') return name;
       return this.isEdit
@@ -1193,30 +1217,34 @@ document.addEventListener('alpine:init', () => {
         : T('$projectName:${tprefix}.defaults.formHeadCreate', 'Create {{name}}', { name: name });
     },
 
-    // One line of the record's own identity under the title, built from the properties the model
-    // already marks as major - the same flag that picks the list's columns, so the line follows
-    // the model instead of a second hand-kept list. The status is skipped: it is the badge. Each
-    // value is the stored one, printed as every other surface prints it (#8367).
-    summaryLine() {
-      if (!(this.isEdit || this.isPreview) || !this.loadedRecord) return '';
+    // The line under the title (intent `subtitle:`, #8370): exactly the values the model declares, in
+    // order, each as { text, title } - the stored value printed as every other surface prints it
+    // (#8367), and its field's label for the tooltip. An empty value is skipped, and so is a field
+    // the caller may not see. Without a declared subtitle there is no line.
+    subtitleParts() {
+      if (!(this.isEdit || this.isPreview) || !this.loadedRecord) return [];
       const parts = [];
-#foreach($property in $listProperties)
-#if(!$property.dataAutoIncrement && !$property.collectionColumn && $property.widgetIsMajor && $property.widgetType != "DOCUMENT_STATUS" && !$property.isHiddenProperty)
+#foreach($property in $subtitleProperties)
+#if($property.widgetLabel)#set($slabel = $property.widgetLabelJs)#else#set($slabel = $property.name)#end
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
-      this.pushSummary(parts, this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end);
+      this.pushSummary(parts, this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end, T('$projectName:${tprefix}.t.${property.dataName}', '${slabel}'));
 #if($property.roleRead)
       }
 #end
 #end
-#end
-      return parts.slice(0, 4).join(' \u00b7 ');
+      return parts;
     },
 
-    pushSummary(parts, value, widget, pattern, options) {
+    // The subtitle as one line of text.
+    summaryLine() {
+      return this.subtitleParts().map(p => p.text).join(' \u00b7 ');
+    },
+
+    pushSummary(parts, value, widget, pattern, options, title) {
       const text = this.valueOf_(value, widget, pattern, options);
-      if (text !== null) parts.push(text);
+      if (text !== null) parts.push({ text: text, title: title });
     },
 
     // The one place a stored value becomes the text the page shows: the shared basePage.fieldDisplay,

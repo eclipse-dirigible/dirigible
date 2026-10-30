@@ -93,12 +93,12 @@ public class ConsumedAttributesAudit {
             "generateEvents", "generateReopens", "generateReport", "identityProperty", "immutableStatusProperty", "immutableStatusValues",
             "lifecycleStatusNameList", "lifecycleStatusNames", "listOrder", "locksWithMaster", "orderBy", "periodClosedValues",
             "periodEndProperty", "periodLockDateProperty", "periodLockEntity", "periodStartProperty", "periodStatusProperty",
-            "perspectiveIcon", "perspectiveLabel", "projectionReferencedModel", "extensionReferencedEntity", "extensionReferencedModel",
-            "relationshipCardinality", "relationshipIdentityLabel", "relationshipIdentityProperty", "relationshipMasterDeleteRefused",
-            "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty", "relationshipPartner", "relationshipPersonal",
-            "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity", "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity",
-            "widgetLength", "widgetOptionsEntityPerspectiveName", "widgetOptionsFilterBy", "widgetOptionsFilterValue",
-            "widgetOptionsFilterValueJs", "visibleWhen");
+            "subtitleOrder", "perspectiveIcon", "perspectiveLabel", "projectionReferencedModel", "extensionReferencedEntity",
+            "extensionReferencedModel", "relationshipCardinality", "relationshipIdentityLabel", "relationshipIdentityProperty",
+            "relationshipMasterDeleteRefused", "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty",
+            "relationshipPartner", "relationshipPersonal", "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity",
+            "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity", "widgetLength", "widgetOptionsEntityPerspectiveName",
+            "widgetOptionsFilterBy", "widgetOptionsFilterValue", "widgetOptionsFilterValueJs", "visibleWhen");
 
     /**
      * Attributes the entity editor owns: it keeps them in the model for its own authoring surface

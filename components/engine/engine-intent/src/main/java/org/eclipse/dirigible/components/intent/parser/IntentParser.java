@@ -432,6 +432,7 @@ public final class IntentParser {
         validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateLists(model, issues);
+        validateSubtitles(model, issues);
         validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -505,6 +506,7 @@ public final class IntentParser {
             validateSnapshotFileName(entity, model, compositionParent, issues);
             validateLocksWithMaster(entity, model, compositionParent, issues);
             validateVisibleWhen(entity, model, compositionParent, issues);
+            validatePlacement(entity, model, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -1061,6 +1063,83 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /** How many values the record page's subtitle line holds (dirigible #8370). */
+    private static final int SUBTITLE_MAX = 4;
+
+    /**
+     * Each entity's optional {@code subtitle} (dirigible #8370) is the line under its record page's
+     * title, in order: own fields and to-one relations only - not the primary key, not a collection or
+     * a to-many relation (the line prints one value per entry), not a field gated by
+     * {@code visibleWhen} (the line has no per-status gate) - no name twice, and at most four, which is
+     * what fits one line.
+     */
+    private static void validateSubtitles(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<String> subtitle = entity.getSubtitle();
+            if (subtitle == null || subtitle.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            String prefix = "entity [" + entity.getName() + "] subtitle";
+            if (subtitle.size() > SUBTITLE_MAX) {
+                issues.add(prefix + " names " + subtitle.size() + " fields - at most " + SUBTITLE_MAX + " fit one line");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String token : subtitle) {
+                if (token == null || token.isBlank()) {
+                    issues.add(prefix + " has a blank entry");
+                    continue;
+                }
+                String name = token.trim();
+                if (!seen.add(name.toLowerCase(Locale.ROOT))) {
+                    issues.add(prefix + " names [" + name + "] more than once");
+                    continue;
+                }
+                FieldIntent field = fieldNamed(entity, name);
+                if (field != null) {
+                    if (field.isPrimaryKey()) {
+                        issues.add(prefix + " names [" + name + "], the primary key - the line shows what the record is about, not its id");
+                    } else if (field.getVisibleWhen() != null) {
+                        issues.add(prefix + " names [" + name + "], which carries visibleWhen - the line has no per-status gate");
+                    }
+                    continue;
+                }
+                RelationIntent relation = relationNamed(entity, name);
+                if (relation != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    continue;
+                }
+                if (relation != null || name.contains(".")) {
+                    issues.add(
+                            prefix + " names [" + name + "], a collection path or a to-many relation - the line shows one value per entry;"
+                                    + " name an own field or a to-one relation");
+                } else {
+                    issues.add(prefix + " names [" + name + "], which is not a field or to-one relation of the entity");
+                }
+            }
+        }
+    }
+
+    /** The entity's field of that name, matched case-insensitively, or null. */
+    private static FieldIntent fieldNamed(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null && field.getName()
+                                                .equalsIgnoreCase(name)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /** The entity's relation of that name, of any kind, matched case-insensitively, or null. */
+    private static RelationIntent relationNamed(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .equalsIgnoreCase(name)) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /** Whether the entity's {@code list:} shows that collection - as a path, or bare. */
@@ -4236,6 +4315,102 @@ public final class IntentParser {
                     + "] never locks (no immutableWhen / immutable on it or on its composition ancestors)"
                     + " - the declaration would have no effect");
         }
+    }
+
+    /** The values a field's {@code placement:} takes (dirigible #8369). */
+    private static final List<String> PLACEMENTS = List.of("main", "details", "hidden");
+
+    /**
+     * A field's {@code placement:} (dirigible #8369) says where it sits on the generated record page:
+     * {@code main}, {@code details} (the Details rail) or {@code hidden} (no generated page). The rail
+     * shows values, never inputs, so {@code details} needs a read-only field. A hidden field is never
+     * an input and never a column, so it cannot be the primary key, cannot be required unless the
+     * server supplies the value, and cannot be asked for anywhere a page would show it:
+     * {@code major: true}, {@code visibleWhen:}, the entity's {@code list:} or a {@code related:}
+     * register's {@code show:}.
+     */
+    private static void validatePlacement(EntityIntent entity, IntentModel model, List<String> issues) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getPlacement() == null || field.getName() == null) {
+                continue;
+            }
+            String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] placement";
+            String value = field.getPlacement()
+                                .trim()
+                                .toLowerCase(Locale.ROOT);
+            if (!PLACEMENTS.contains(value)) {
+                issues.add(subject + " [" + field.getPlacement() + "] - placement must be main, details or hidden");
+                continue;
+            }
+            if ("details".equals(value) && !isReadOnlyField(field)) {
+                issues.add(subject + ": details - the Details rail shows values, not inputs, so it takes a read-only field;"
+                        + " declare `readOnly: true` or drop the placement");
+            }
+            if (!"hidden".equals(value)) {
+                continue;
+            }
+            if (field.isPrimaryKey()) {
+                issues.add(subject + ": hidden conflicts with primaryKey - the primary key is how every page opens the record");
+            }
+            if (field.isRequired() && !field.isPrimaryKey() && !hasServerSideSource(field)) {
+                issues.add(subject
+                        + ": hidden conflicts with required - a hidden field is never an input, so nothing can supply the required ["
+                        + field.getName() + "]; give it a defaultValue, a calculatedOnCreate or a number:, or drop `required`");
+            }
+            if (Boolean.TRUE.equals(field.getMajor())) {
+                issues.add(subject + ": hidden conflicts with major: true - a hidden field is no list column");
+            }
+            if (field.getVisibleWhen() != null) {
+                issues.add(subject + ": hidden conflicts with visibleWhen - a hidden field is shown under no condition");
+            }
+            if (namesField(entity.getList(), field.getName())) {
+                issues.add(subject + ": hidden conflicts with the entity's list: - a hidden field is no list column");
+            }
+            for (EntityIntent owner : model.getEntities()) {
+                for (RelatedIntent related : owner.getRelated()) {
+                    if (related != null && !related.isCrossModel() && entity.getName()
+                                                                            .equals(related.getEntity())
+                            && namesField(related.getShow(), field.getName())) {
+                        issues.add(subject + ": hidden conflicts with the related: register on [" + owner.getName()
+                                + "], whose show: names it - a hidden field is no register column");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether the field is read-only on the generated pages - the predicate the EDM generator emits
+     * {@code isReadOnlyProperty} by: an author's {@code readOnly}, a {@code uuid}, a status stamp, a
+     * document number.
+     */
+    private static boolean isReadOnlyField(FieldIntent field) {
+        return field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.getStampOn() != null || field.getNumber() != null;
+    }
+
+    /** Whether the server fills the field on a create that omits it. */
+    private static boolean hasServerSideSource(FieldIntent field) {
+        return (field.getDefaultValue() != null && !field.getDefaultValue()
+                                                         .isBlank())
+                || (field.getCalculatedOnCreate() != null && !field.getCalculatedOnCreate()
+                                                                   .isBlank())
+                || (field.getCalculatedActionOnCreate() != null && !field.getCalculatedActionOnCreate()
+                                                                         .isBlank())
+                || field.getNumber() != null || "uuid".equalsIgnoreCase(field.getType());
+    }
+
+    /** Whether a list of property names (a {@code list:}, a {@code show:}) names the field. */
+    private static boolean namesField(List<String> names, String field) {
+        if (names == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (name != null && name.trim()
+                                    .equalsIgnoreCase(field)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
