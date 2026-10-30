@@ -9818,6 +9818,13 @@ public final class IntentParser {
                 issues.add("action [" + name
                         + "] declares primary but has scope [page] - the filled button is a record's, so primary needs scope: entity");
             }
+            if (action.isDestructive() && action.isPrimary()) {
+                issues.add("action [" + name
+                        + "] declares destructive and primary - a destructive action is never the record's filled button");
+            }
+            if (action.isDestructive() && "page".equals(scope)) {
+                issues.add("action [" + name + "] declares destructive but has scope [page] - the destructive group is a record menu's");
+            }
             boolean hasPage = action.getPage() != null && !action.getPage()
                                                                  .isBlank();
             if (action.getCall() != null) {
@@ -11870,6 +11877,9 @@ public final class IntentParser {
             String subject = "transition [" + t.getName() + "]";
             if (!names.add(t.getName())) {
                 issues.add("duplicate " + subject);
+            }
+            if (t.isDestructive() && t.isPrimary()) {
+                issues.add(subject + " declares destructive and primary - a destructive action is never the record's filled button");
             }
             EntityIntent entity = null;
             if (t.getForEntity() == null || t.getForEntity()

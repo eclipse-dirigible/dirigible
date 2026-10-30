@@ -97,6 +97,15 @@ class TransitionActionDescriptorTest {
         assertFalse(descriptor.contains("when"), "a when: guard has no client half: " + descriptor);
     }
 
+    /** The descriptor carries {@code destructive} when it is declared, and only then (#8364). */
+    @Test
+    void aDestructiveActionCarriesTheFlagOnlyWhenDeclared() {
+        String destructive = compact(descriptor(YAML.replace("setStatus: 6", "setStatus: 6\n    destructive: true")));
+        assertTrue(destructive.contains("\"destructive\":true"), destructive);
+        String plain = compact(descriptor(YAML));
+        assertFalse(plain.contains("\"destructive\""), plain);
+    }
+
     /** The descriptor's JSON with its pretty-printing whitespace removed, for readable assertions. */
     private static String compact(String descriptor) {
         return descriptor.replaceAll("\\s+", "");

@@ -122,6 +122,11 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
             // descriptor without it is byte-identical to before.
             view.put("primary", true);
         }
+        if (action.isDestructive()) {
+            // A red run button and a place in the destructive group of the record's menus (#8364) -
+            // emitted only when declared, so a descriptor without it is byte-identical to before.
+            view.put("destructive", true);
+        }
         if (action.getCall() != null) {
             putCall(view, action, context);
         }

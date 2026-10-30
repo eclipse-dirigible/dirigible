@@ -168,7 +168,8 @@ class HarmoniaRecordActionsIT {
             assertEquals("notes", ids(context, "panel.rowActions({ Id: 2, Status: 3 })"), "an INVOICED row only the unguarded one");
         }
         String view = read(MANAGE + "form-view.html.template");
-        assertTrue(view.contains("x-show=\"!isPreview || def.locksWithMaster === false || rowActions(row).length\""),
+        assertTrue(view.contains(
+                "x-show=\"!isPreview || def.locksWithMaster === false || rowActions(row).length || rowDestructiveActions(row).length\""),
                 "the panel's row menu must show on the master's preview for a row with actions");
         assertTrue(view.contains("x-show=\"(!isPreview || def.locksWithMaster === false) && !isForbidden('update')\""),
                 "Edit must stay withheld on the master's preview");
@@ -209,6 +210,133 @@ class HarmoniaRecordActionsIT {
                     "a pending process task still comes first");
             assertEquals("notes,invoice,void", ids(context, "form.menuRecordActions"), "and the primary action returns to the menu");
         }
+    }
+
+    /**
+     * A destructive action (#8364) leaves every menu's actions group for its destructive group: the
+     * list's row and sheet, the record page, a composition panel's row and a related register's row
+     * each list it apart, by the same status guards. A row whose only action is destructive still gets
+     * its menu.
+     */
+    @Test
+    void aDestructiveActionLeavesTheActionsGroupForTheDestructiveOne() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.actions.push({ id: 'purge', view: 'ProformaInvoice', type: 'entity', label: 'Purge',"
+                    + " destructive: true, statusProperty: 'Status', from: [3] });");
+            assertEquals("false,false,false,true",
+                    context.eval("js", "store.actions.map(function (a) { return store.isDestructive(a); }).join(',')")
+                           .asString());
+
+            String list = MANAGE + "list-page.js.template";
+            context.eval("js",
+                    "var list = { caView: 'ProformaInvoice', selected: null, " + method(list, "    rowActions(row) {") + ", "
+                            + method(list, "    rowDestructiveActions(row) {") + ", " + method(list, "    get recordActions() {") + ", "
+                            + method(list, "    get primaryCustomAction() {") + ", " + method(list, "    get menuActions() {") + ", "
+                            + method(list, "    get menuDestructiveActions() {") + " };");
+            assertEquals("notes", ids(context, "list.rowActions({ Id: 2, Status: 3 })"), "a CLOSED row's actions group");
+            assertEquals("purge", ids(context, "list.rowDestructiveActions({ Id: 2, Status: 3 })"), "and its destructive group");
+            assertEquals("", ids(context, "list.rowDestructiveActions({ Id: 1, Status: 2 })"), "the status guard still applies");
+            context.eval("js", "list.selected = { Id: 2, Status: 3 };");
+            assertEquals("notes", ids(context, "list.menuActions"), "the sheet's actions group");
+            assertEquals("purge", ids(context, "list.menuDestructiveActions"), "the sheet's destructive group");
+
+            String form = MANAGE + "form-page.js.template";
+            context.eval("js",
+                    "var form = { id: 2, mode: 'preview', loadedRecord: { Id: 2, Status: 3 }, recordTasks: [], canEdit: false,"
+                            + " editInMenu: false, menuHasPrint: false, menuHasCalendars: false, menuHasDelete: false,"
+                            + " get isPreview() { return this.mode === 'preview'; }, get isEdit() { return this.mode === 'edit'; }, "
+                            + method(form, "    get recordActions() {").replace("'${name}'", "'ProformaInvoice'") + ", "
+                            + method(form, "    get primaryCustomAction() {") + ", " + method(form, "    get menuRecordActions() {") + ", "
+                            + method(form, "    get menuDestructiveActions() {") + ", " + method(form, "    get primaryAction() {") + ", "
+                            + method(form, "    get menuHasAboveDelete() {") + ", " + method(form, "    get hasOverflowMenu() {") + " };");
+            assertEquals("notes", ids(context, "form.menuRecordActions"), "the record page's actions group");
+            assertEquals("purge", ids(context, "form.menuDestructiveActions"), "the record page's destructive group");
+            context.eval("js", "store.actions = store.actions.filter(function (a) { return a.id !== 'notes'; });");
+            assertEquals(Boolean.TRUE, context.eval("js", "form.hasOverflowMenu")
+                                              .asBoolean(),
+                    "a record the user may not delete, whose only action is destructive, still has its menu");
+
+            context.eval("js",
+                    "var panel = { def: { entity: 'ProformaInvoice', primaryKey: 'Id', locksWithMaster: true }, isPreview: true, "
+                            + method(DETAIL, "    rowActions(row) {") + ", " + method(DETAIL, "    rowDestructiveActions(row) {") + " };");
+            assertEquals("", ids(context, "panel.rowActions({ Id: 2, Status: 3 })"), "the panel row's actions group is empty");
+            assertEquals("purge", ids(context, "panel.rowDestructiveActions({ Id: 2, Status: 3 })"), "the panel row's destructive group");
+            String menuShow = attribute(read(MANAGE + "form-view.html.template"), "<div class=\"inline-flex\" x-show=\"");
+            assertEquals(Boolean.TRUE, context
+                                              .eval("js",
+                                                      "(function (row) { with (panel) { return !!(" + menuShow
+                                                              + "); } })({ Id: 2, Status: 3 })")
+                                              .asBoolean(),
+                    "a row whose only action is destructive still gets its menu on the master's preview: " + menuShow);
+
+            context.eval("js", "var register = { def: { entity: 'ProformaInvoice', local: true, primaryKey: 'Id' }, "
+                    + method(RELATED, "    rowActions(row) {") + ", " + method(RELATED, "    rowDestructiveActions(row) {") + " };");
+            assertEquals("", ids(context, "register.rowActions({ Id: 2, Status: 3 })"), "the register row's actions group is empty");
+            assertEquals("purge", ids(context, "register.rowDestructiveActions({ Id: 2, Status: 3 })"),
+                    "the register row's destructive group");
+
+            context.eval("js",
+                    "page.record = { Id: 2, Status: 3 }; page.recordLoaded = true; " + "page.destructiveRecordActions = function () {"
+                            + body(DOCUMENT + "document-page.js.template", "    destructiveRecordActions() {") + "};");
+            assertEquals("", ids(context, "page.recordActions()"), "the document page's actions group");
+            assertEquals("purge", ids(context, "page.destructiveRecordActions()"), "the document page's destructive group");
+        }
+    }
+
+    /**
+     * Each menu that lists a record's actions renders the destructive ones (#8364) in the negative
+     * variant, after the destructive group's separator and before Delete.
+     */
+    @Test
+    void theManagePagesWireTheDestructiveGroup() throws Exception {
+        String listView = read(MANAGE + "list-view.html.template");
+        assertGroup(listView, 0, "x-for=\"action in rowDestructiveActions(row)\"", "askDelete(row)");
+        assertGroup(listView, 0, "x-for=\"action in menuDestructiveActions\"", "askDelete(selected)");
+        String formView = read(MANAGE + "form-view.html.template");
+        assertGroup(formView, 0, "x-for=\"action in menuDestructiveActions\"", "askDelete()");
+        String rowGroup = "x-for=\"action in rowDestructiveActions(row)\"";
+        assertGroup(formView, 0, rowGroup, "askDelete(row)");
+        assertGroup(formView, formView.indexOf(rowGroup) + 1, rowGroup, null);
+        String documentView = read(DOCUMENT + "document-view.html.template");
+        assertGroup(documentView, 0, "x-for=\"action in destructiveRecordActions()\"", null);
+        assertGroup(documentView, 0, rowGroup, null);
+        String formPage = read(MANAGE + "form-page.js.template");
+        assertTrue(formPage.contains("this.menuDestructiveActions.length > 0"), "the overflow menu must count the destructive actions");
+    }
+
+    /**
+     * The destructive x-for in the markup: its item is negative, a separator sits right above it, and
+     * Delete (when the menu has one) right after it.
+     */
+    private static void assertGroup(String markup, int from, String xFor, String delete) {
+        int at = markup.indexOf(xFor, from);
+        assertTrue(at >= 0, "no " + xFor);
+        int end = markup.indexOf("</template>", at);
+        assertTrue(markup.substring(at, end)
+                         .contains("x-h-menu-item data-variant=\"negative\""),
+                xFor + " must render its items in the negative variant");
+        int separator = markup.lastIndexOf("x-h-menu-separator", at);
+        int previousItem = markup.lastIndexOf("x-h-menu-item", at);
+        assertTrue(separator > previousItem, xFor + " must sit right after the destructive group's separator");
+        if (delete != null) {
+            int deleteAt = markup.indexOf("@click=\"" + delete + "\"", end);
+            int nextItem = markup.indexOf("x-h-menu-item", end);
+            assertTrue(deleteAt > 0 && markup.lastIndexOf("x-h-menu-item", deleteAt) == nextItem, xFor + " must sit right before Delete");
+        }
+    }
+
+    /** The value of the first attribute that starts with the prefix. */
+    private static String attribute(String markup, String prefix) {
+        int start = markup.indexOf(prefix);
+        assertTrue(start >= 0, "no " + prefix);
+        start += prefix.length();
+        return markup.substring(start, markup.indexOf('"', start));
+    }
+
+    /** The body of a page template's method, between its braces, exactly as shipped. */
+    private static String body(String template, String firstLine) throws Exception {
+        String method = method(template, firstLine);
+        return method.substring(firstLine.length(), method.length() - 1);
     }
 
     private static String ids(Context context, String expression) {

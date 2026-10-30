@@ -2392,6 +2392,17 @@ applies wins, in `order`). Refused on `scope: page`. Without it, the record's ac
 the row's `⋯`, the sheet's More actions, the record page's `⋯` and, for a `related:` register's rows, a
 `⋯` beside Open.
 
+**`destructive: true` - an action that destroys data.** An entity-scope action (`call:` or `page:`) or a
+`transitions:` entry that cannot be undone - purge an archive, void a document - declares
+`destructive: true`. It then leaves the actions group of every menu that lists the record's actions and
+sits in the destructive group instead, in red, directly above Delete and behind Delete's separator (the
+last group, after a separator, in a menu without Delete; a record the user may not delete still shows
+it, at the bottom). Its confirm or prompt dialog runs from a red button; the caption is unchanged
+(`submit:`, else Run). A `page:` action opens its page as before - only its menu item changes. It
+excludes `primary: true` (a destructive action is never the record's filled button) and is refused on
+`scope: page` (the destructive group is a record menu's). The endpoint stays authoritative: nothing
+changes server side.
+
 **`call:` or `generates:`?** `generates:` inserts the target row through its OWN generated controller -
 right when the rules fit `fromStatus:` / `defaults:`. When the rules live in the application's endpoint
 (and some cannot be expressed in the DSL at all), copying them into the intent duplicates them; `call:`
@@ -2445,6 +2456,10 @@ observe a workflow status set. Pair it with a posting on the same status to deri
 An optional `notify:` block mails the counterparty **after** the flip commits (with `attach: print`, the
 document itself). It is fail-soft on purpose: the status flip is the endpoint's contract, so a mail
 problem is logged and the transition still succeeds.
+
+`primary: true` and `destructive: true` work on a transition as on an action (see § actions): a
+transition that cannot be undone (Void, Cancel) declares `destructive: true` to run from a red button
+and sit beside Delete in the record's menus. The two exclude each other.
 
 ### generates - create one document from another (create-from)
 

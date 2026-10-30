@@ -231,6 +231,13 @@ document.addEventListener('alpine:init', () => {
       return Boolean(transition || (action.guard && action.guard.property));
     },
 
+    // Whether an action destroys data (`destructive: true`, issue #8364). Every menu that lists a
+    // record's actions keeps these out of its actions group and lists them in its destructive group,
+    // beside Delete, in the negative variant; their dialog runs from a red button.
+    isDestructive(action) {
+      return Boolean(action && action.destructive);
+    },
+
     // Trigger a contributed action. Two flavours, decided by the descriptor:
     //   - `endpoint` present: POST the selected record's id to a server endpoint (a create-from /
     //     generate action) AFTER an explicit confirmation, then toast the result and raise

@@ -430,11 +430,23 @@
                       <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
                            Preview stays - the record remains readable. -->
                       <li x-h-menu-item x-show="canWrite() &amp;&amp; !isRowImmutable(row)" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                      <li x-h-menu-separator x-show="canWrite() &amp;&amp; !isRowImmutable(row)"></li>
+                      <!-- The destructive group (#8364): the row's destructive actions, then Delete, in red
+                           behind one separator - shown when it holds either. -->
+                      <li x-h-menu-separator x-show="rowDestructiveActions(row).length || (canWrite() &amp;&amp; !isRowImmutable(row))"></li>
+                      <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                        <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
+                            x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                      </template>
                       <li x-h-menu-item x-show="canWrite() &amp;&amp; !isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
 #else
                       <li x-h-menu-item x-show="canWrite()" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                      <li x-h-menu-separator x-show="canWrite()"></li>
+                      <!-- The destructive group (#8364): the row's destructive actions, then Delete, in red
+                           behind one separator - shown when it holds either. -->
+                      <li x-h-menu-separator x-show="rowDestructiveActions(row).length || canWrite()"></li>
+                      <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                        <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
+                            x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                      </template>
                       <li x-h-menu-item x-show="canWrite()" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
 #end
                     </ul>
@@ -562,9 +574,14 @@
             </li>
 #end
 #end
-            <li x-h-menu-separator x-show="menuHasDelete &amp;&amp; menuHasAnythingAbove"></li>
-            <!-- The one destructive action, alone in its group. It is withheld from a record its
-                 status makes read-only, which the controller would refuse with a 409 anyway. -->
+            <li x-h-menu-separator x-show="(menuDestructiveActions.length || menuHasDelete) &amp;&amp; menuHasAnythingAbove"></li>
+            <!-- The destructive group, last: the record's destructive actions (#8364), then Delete. Delete
+                 is withheld from a record its status makes read-only, which the controller would refuse
+                 with a 409 anyway. -->
+            <template x-for="action in menuDestructiveActions" :key="action.id">
+              <li x-h-menu-item data-variant="negative" @click="$store.customActions.trigger(action, selectedId, selected)"
+                  x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+            </template>
             <li x-h-menu-item data-variant="negative" x-show="menuHasDelete" @click="askDelete(selected)">
               <svg role="presentation" x-h-lucide data-lucide="trash-2"></svg>
               <span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span>

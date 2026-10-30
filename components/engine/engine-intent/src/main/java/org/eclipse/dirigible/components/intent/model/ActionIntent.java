@@ -58,6 +58,13 @@ public class ActionIntent {
      */
     private Boolean primary;
 
+    /**
+     * When {@code true} the action destroys data (#8364): its dialog runs from a red button, and it
+     * sits in the destructive group of every menu that lists the record's actions, beside Delete.
+     * Excludes {@link #primary}; entity scope only.
+     */
+    private Boolean destructive;
+
     /** Same-origin path opened in the app-wide dialog when the action is triggered. */
     private String page;
 
@@ -147,6 +154,19 @@ public class ActionIntent {
     /** Whether this action is the record's filled button when it applies (see {@link #primary}). */
     public boolean isPrimary() {
         return Boolean.TRUE.equals(primary);
+    }
+
+    public Boolean getDestructive() {
+        return destructive;
+    }
+
+    public void setDestructive(Boolean destructive) {
+        this.destructive = destructive;
+    }
+
+    /** Whether this action destroys data (see {@link #destructive}). */
+    public boolean isDestructive() {
+        return Boolean.TRUE.equals(destructive);
     }
 
     public String getPage() {

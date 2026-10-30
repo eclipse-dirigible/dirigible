@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -62,200 +63,211 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
     private static final String ACTIONS = "/services/platform/extensions/views?extensionPoints=" + PROJECT + "-custom-action";
     private static final String PASSWORD = "secret";
 
-    private static final String INTENT_YAML = """
-            name: helpdesk
-            entities:
-              - name: TicketStatus
-                function: Setting
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-              - name: EscalationStatus
-                function: Setting
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-              - name: WatcherStatus
-                function: Setting
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-              - name: Ticket
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: subject, type: string, required: true }
-                relations:
-                  - { name: Status, kind: manyToOne, to: TicketStatus, function: EntityStatus, init: 1 }
-                  - { name: watchers, kind: oneToMany, to: Watcher }
-                related:
-                  - { entity: Escalation, show: [id, reason, Status] }
-              - name: Escalation
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: reason, type: string }
-                relations:
-                  - { name: Ticket, kind: manyToOne, to: Ticket }
-                  - { name: Status, kind: manyToOne, to: EscalationStatus, function: EntityStatus, init: 1 }
-              - name: Team
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-                relations:
-                  - { name: members, kind: oneToMany, to: TeamMember }
-              - name: Skill
-                function: Setting
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-              - name: TeamMember
-                list: [name, skills.skill]
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string }
-                relations:
-                  - { name: team,   kind: manyToOne, to: Team, composition: true }
-                  - { name: skills, kind: oneToMany, to: MemberSkill }
-              - name: MemberSkill
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                relations:
-                  - { name: member, kind: manyToOne, to: TeamMember, composition: true }
-                  - { name: skill,  kind: manyToOne, to: Skill }
-              - name: Watcher
-                fields:
-                  - { name: id, type: integer, primaryKey: true, generated: true }
-                  - { name: email, type: string }
-                relations:
-                  - { name: Ticket, kind: manyToOne, to: Ticket, composition: true }
-                  - { name: Status, kind: manyToOne, to: WatcherStatus, function: EntityStatus, init: 1 }
-            actions:
-              - name: EscalateTicket
-                forEntity: Ticket
-                label: Escalate
-                icon: arrow-up
-                fromStatus: [OPEN, ON_HOLD]
-                can: Ticket:escalate
-                prompt:
-                  - { name: level, type: integer, label: Level, required: true }
-                  - { name: note,  type: text,    label: Note }
-                call:
-                  method: POST
-                  path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/escalations
-                  body: { kind: MANUAL, level: "{level}", note: "{note}" }
-                success: Escalation requested
-              - name: RetryEscalation
-                forEntity: Escalation
-                label: Retry
-                fromStatus: [FAILED]
-                can: Escalation:retry
-                confirm: Run this escalation again?
-                primary: true
-                call:
-                  method: POST
-                  path: /services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry
-              - name: MuteWatcher
-                forEntity: Watcher
-                label: Mute
-                fromStatus: [ACTIVE]
-                can: Watcher:mute
-                call:
-                  method: POST
-                  path: /services/java/helpdesk/custom/api/TicketApi/watchers/{id}/mute
-              - name: InviteMember
-                forEntity: Team
-                label: Invite member
-                can: Team:invite
-                description: "Invite a person to {name}. They get an email with a link to the team's workspace."
-                submit: Invite
-                prompt:
-                  - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
-                  - name: roles
-                    type: multiselect
-                    label: Roles
-                    required: true
-                    default: [Member]
-                    options:
-                      - { value: Member, help: Uses the team's workspace }
-                      - { value: Lead,   help: Manages the team's members }
-                call:
-                  path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/invitations
-                  body: { email: "{email}", roles: "{roles}" }
-                success: Invitation sent
-              - name: ChangeSkills
-                forEntity: TeamMember
-                label: Change skills
-                can: TeamMember:changeSkills
-                description: "Change the skills of {name} - now {skills.skill}."
-                submit: Change
-                prompt:
-                  - name: skills
-                    type: multiselect
-                    label: Skills
-                    required: true
-                    default: "{skills.skill}"
-                    options: [Java, SQL, Go]
-                call:
-                  path: /services/java/helpdesk/custom/api/TicketApi/members/{id}/skills
-                  body: { skills: "{skills}" }
-                success: Skills changed
-            permissions:
-              - role: SupportLead
-                can: [Ticket:read, Ticket:escalate, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
-                      TeamMember:read, TeamMember:changeSkills]
-              - role: Agent
-                can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
-            seeds:
-              - name: ticket-statuses
-                entity: TicketStatus
-                rows:
-                  - { id: 1, name: OPEN }
-                  - { id: 2, name: ON_HOLD }
-                  - { id: 3, name: CLOSED }
-              - name: escalation-statuses
-                entity: EscalationStatus
-                rows:
-                  - { id: 1, name: PENDING }
-                  - { id: 2, name: DONE }
-                  - { id: 3, name: FAILED }
-              - name: tickets
-                entity: Ticket
-                rows:
-                  - { id: 1, subject: Printer jammed, Status: 1 }
-                  - { id: 2, subject: Password reset, Status: 3 }
-              - name: escalations
-                entity: Escalation
-                rows:
-                  - { id: 1, reason: Pager down, Ticket: 1, Status: 3 }
-              - name: teams
-                entity: Team
-                rows:
-                  - { id: 1, name: Platform }
-              - name: skills
-                entity: Skill
-                rows:
-                  - { id: 1, name: Java }
-                  - { id: 2, name: SQL }
-                  - { id: 3, name: Go }
-              - name: team-members
-                entity: TeamMember
-                rows:
-                  - { id: 1, name: Ann, team: 1 }
-              - name: member-skills
-                entity: MemberSkill
-                rows:
-                  - { id: 1, member: 1, skill: 1 }
-                  - { id: 2, member: 1, skill: 2 }
-              - name: watcher-statuses
-                entity: WatcherStatus
-                rows:
-                  - { id: 1, name: ACTIVE }
-                  - { id: 2, name: MUTED }
-              - name: watchers
-                entity: Watcher
-                rows:
-                  - { id: 1, email: ann@example.com, Ticket: 1, Status: 1 }
-                  - { id: 2, email: bob@example.com, Ticket: 1, Status: 2 }
-            """;
+    private static final String INTENT_YAML =
+            """
+                    name: helpdesk
+                    entities:
+                      - name: TicketStatus
+                        function: Setting
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                      - name: EscalationStatus
+                        function: Setting
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                      - name: WatcherStatus
+                        function: Setting
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                      - name: Ticket
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: subject, type: string, required: true }
+                        relations:
+                          - { name: Status, kind: manyToOne, to: TicketStatus, function: EntityStatus, init: 1 }
+                          - { name: watchers, kind: oneToMany, to: Watcher }
+                        related:
+                          - { entity: Escalation, show: [id, reason, Status] }
+                      - name: Escalation
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: reason, type: string }
+                        relations:
+                          - { name: Ticket, kind: manyToOne, to: Ticket }
+                          - { name: Status, kind: manyToOne, to: EscalationStatus, function: EntityStatus, init: 1 }
+                      - name: Team
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                        relations:
+                          - { name: members, kind: oneToMany, to: TeamMember }
+                      - name: Skill
+                        function: Setting
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                      - name: TeamMember
+                        list: [name, skills.skill]
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string }
+                        relations:
+                          - { name: team,   kind: manyToOne, to: Team, composition: true }
+                          - { name: skills, kind: oneToMany, to: MemberSkill }
+                      - name: MemberSkill
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                        relations:
+                          - { name: member, kind: manyToOne, to: TeamMember, composition: true }
+                          - { name: skill,  kind: manyToOne, to: Skill }
+                      - name: Watcher
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: email, type: string }
+                        relations:
+                          - { name: Ticket, kind: manyToOne, to: Ticket, composition: true }
+                          - { name: Status, kind: manyToOne, to: WatcherStatus, function: EntityStatus, init: 1 }
+                    actions:
+                      - name: EscalateTicket
+                        forEntity: Ticket
+                        label: Escalate
+                        icon: arrow-up
+                        fromStatus: [OPEN, ON_HOLD]
+                        can: Ticket:escalate
+                        prompt:
+                          - { name: level, type: integer, label: Level, required: true }
+                          - { name: note,  type: text,    label: Note }
+                        call:
+                          method: POST
+                          path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/escalations
+                          body: { kind: MANUAL, level: "{level}", note: "{note}" }
+                        success: Escalation requested
+                      - name: PurgeTicket
+                        forEntity: Ticket
+                        label: Purge
+                        fromStatus: [CLOSED]
+                        can: Ticket:purge
+                        destructive: true
+                        confirm: "Purge every message of {subject}?"
+                        call:
+                          method: POST
+                          path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/purge
+                      - name: RetryEscalation
+                        forEntity: Escalation
+                        label: Retry
+                        fromStatus: [FAILED]
+                        can: Escalation:retry
+                        confirm: Run this escalation again?
+                        primary: true
+                        call:
+                          method: POST
+                          path: /services/java/helpdesk/custom/api/TicketApi/escalations/{id}/retry
+                      - name: MuteWatcher
+                        forEntity: Watcher
+                        label: Mute
+                        fromStatus: [ACTIVE]
+                        can: Watcher:mute
+                        call:
+                          method: POST
+                          path: /services/java/helpdesk/custom/api/TicketApi/watchers/{id}/mute
+                      - name: InviteMember
+                        forEntity: Team
+                        label: Invite member
+                        can: Team:invite
+                        description: "Invite a person to {name}. They get an email with a link to the team's workspace."
+                        submit: Invite
+                        prompt:
+                          - { name: email, type: email, label: Email, required: true, help: "name@company.com" }
+                          - name: roles
+                            type: multiselect
+                            label: Roles
+                            required: true
+                            default: [Member]
+                            options:
+                              - { value: Member, help: Uses the team's workspace }
+                              - { value: Lead,   help: Manages the team's members }
+                        call:
+                          path: /services/java/helpdesk/custom/api/TicketApi/teams/{id}/invitations
+                          body: { email: "{email}", roles: "{roles}" }
+                        success: Invitation sent
+                      - name: ChangeSkills
+                        forEntity: TeamMember
+                        label: Change skills
+                        can: TeamMember:changeSkills
+                        description: "Change the skills of {name} - now {skills.skill}."
+                        submit: Change
+                        prompt:
+                          - name: skills
+                            type: multiselect
+                            label: Skills
+                            required: true
+                            default: "{skills.skill}"
+                            options: [Java, SQL, Go]
+                        call:
+                          path: /services/java/helpdesk/custom/api/TicketApi/members/{id}/skills
+                          body: { skills: "{skills}" }
+                        success: Skills changed
+                    permissions:
+                      - role: SupportLead
+                        can: [Ticket:read, Ticket:escalate, Ticket:purge, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
+                              TeamMember:read, TeamMember:changeSkills]
+                      - role: Agent
+                        can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
+                    seeds:
+                      - name: ticket-statuses
+                        entity: TicketStatus
+                        rows:
+                          - { id: 1, name: OPEN }
+                          - { id: 2, name: ON_HOLD }
+                          - { id: 3, name: CLOSED }
+                      - name: escalation-statuses
+                        entity: EscalationStatus
+                        rows:
+                          - { id: 1, name: PENDING }
+                          - { id: 2, name: DONE }
+                          - { id: 3, name: FAILED }
+                      - name: tickets
+                        entity: Ticket
+                        rows:
+                          - { id: 1, subject: Printer jammed, Status: 1 }
+                          - { id: 2, subject: Password reset, Status: 3 }
+                      - name: escalations
+                        entity: Escalation
+                        rows:
+                          - { id: 1, reason: Pager down, Ticket: 1, Status: 3 }
+                      - name: teams
+                        entity: Team
+                        rows:
+                          - { id: 1, name: Platform }
+                      - name: skills
+                        entity: Skill
+                        rows:
+                          - { id: 1, name: Java }
+                          - { id: 2, name: SQL }
+                          - { id: 3, name: Go }
+                      - name: team-members
+                        entity: TeamMember
+                        rows:
+                          - { id: 1, name: Ann, team: 1 }
+                      - name: member-skills
+                        entity: MemberSkill
+                        rows:
+                          - { id: 1, member: 1, skill: 1 }
+                          - { id: 2, member: 1, skill: 2 }
+                      - name: watcher-statuses
+                        entity: WatcherStatus
+                        rows:
+                          - { id: 1, name: ACTIVE }
+                          - { id: 2, name: MUTED }
+                      - name: watchers
+                        entity: Watcher
+                        rows:
+                          - { id: 1, email: ann@example.com, Ticket: 1, Status: 1 }
+                          - { id: 2, email: bob@example.com, Ticket: 1, Status: 2 }
+                    """;
 
     /**
      * The application's own endpoint: it owns the rule (a CLOSED ticket cannot be escalated, answered
@@ -306,6 +318,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/tickets/{id}/purge")
+                public void purge(@PathParam("id") Integer id) {
+                    received.add(Map.of("call", "purge " + id));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Post("/escalations/{id}/retry")
                 public void retry(@PathParam("id") Integer id) {
                     received.add(Map.of("call", "retry " + id, "contentLength", Request.getNative().getContentLengthLong()));
@@ -351,18 +369,16 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
 
     @Test
     void a_call_action_sends_the_typed_request_to_the_applications_own_endpoint_and_reports_its_answer() {
-        writeProjectFile("app.intent", INTENT_YAML);
-        generateProject();
-        writeProjectFile("custom/api/TicketApi.java", TICKET_API_JAVA);
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
+        deploy();
 
         // Who is offered the buttons is decided by the server: the SupportLead receives both, an Agent -
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
-                "helpdesk-Ticket-EscalateTicket", "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
+        assertEquals(
+                List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
+                        "helpdesk-Ticket-EscalateTicket", "helpdesk-Ticket-PurgeTicket", "helpdesk-Watcher-MuteWatcher"),
+                actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -560,6 +576,118 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         Map<String, Object> change = changes.get(changes.size() - 1);
         assertEquals("skills 1", change.get("call"));
         assertEquals(Map.of("skills", List.of("Java", "Go")), change.get("body"), "the ticked skills, in the options' order");
+    }
+
+    /**
+     * A destructive action (#8364) leaves the actions group for the destructive one: a CLOSED ticket's
+     * row menu, its sheet's and its page's list Purge beside Delete, both in red, at the bottom.
+     */
+    @Test
+    void aDestructiveActionSitsBesideDelete() {
+        deploy();
+        ide.openHomePage();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
+        Selenide.refresh();
+        assertEquals(List.of("Preview", "Edit", "Purge (negative)", "Delete (negative)"), rowMenuEntries("Password reset"),
+                "a CLOSED ticket's row menu");
+        assertEquals(List.of("Escalate", "Preview", "Edit", "Delete (negative)"), rowMenuEntries("Printer jammed"),
+                "an OPEN ticket's row menu has no destructive action");
+
+        browser.clickOnElementContainingText("td", "Password reset");
+        SelenideElement more = Selenide.$("[x-h-sheet] button[aria-label='More actions']")
+                                       .shouldBe(Condition.visible);
+        more.click();
+        List<String> sheet = entries(Selenide.$$("ul[aria-labelledby='" + more.getAttribute("id") + "'] li[x-h-menu-item]")
+                                             .filterBy(Condition.visible));
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        assertEquals(List.of("Purge (negative)", "Delete (negative)"), sheet.subList(sheet.size() - 2, sheet.size()),
+                "the sheet's menu ends with the destructive group: " + sheet);
+
+        List<String> page = pageMenu(2);
+        assertEquals(List.of("Purge", "Delete"), page.subList(page.size() - 2, page.size()),
+                "the record page's menu ends with the destructive group: " + page);
+    }
+
+    /**
+     * A destructive action's dialog runs from a red button (#8364), and any other's from the filled
+     * primary.
+     */
+    @Test
+    void aDestructiveActionRunsFromARedButton() {
+        deploy();
+        ide.openHomePage();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
+        Selenide.refresh();
+        clickRowMenuItem("Password reset", "Purge");
+        // Harmonia sets the dialog's role itself, so the confirm dialog is found by what it says.
+        SelenideElement confirm = Selenide.$$("[data-slot='dialog']")
+                                          .findBy(Condition.text("Purge every message of Password reset?"))
+                                          .shouldBe(Condition.visible);
+        confirm.$$("button")
+               .findBy(Condition.exactText("Run"))
+               .shouldHave(Condition.attribute("data-variant", "negative"))
+               .click();
+        awaitAnnouncement("Purge completed");
+        List<Map<String, Object>> received = received();
+        assertEquals("purge 2", received.get(received.size() - 1)
+                                        .get("call"));
+
+        clickRowMenuItem("Printer jammed", "Escalate");
+        Selenide.$("[data-prompt-dialog]")
+                .shouldBe(Condition.visible)
+                .$$("button")
+                .findBy(Condition.exactText("Run"))
+                .shouldHave(Condition.attribute("data-variant", "primary"));
+    }
+
+    private void deploy() {
+        writeProjectFile("app.intent", INTENT_YAML);
+        generateProject();
+        writeProjectFile("custom/api/TicketApi.java", TICKET_API_JAVA);
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    /** Opens a list row's own menu and clicks the item with the text. */
+    private static void clickRowMenuItem(String subject, String item) {
+        SelenideElement trigger = Selenide.$$("tbody tr")
+                                          .findBy(Condition.text(subject))
+                                          .shouldBe(Condition.visible)
+                                          .$("button[aria-label='Row actions']");
+        trigger.click();
+        Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                .filterBy(Condition.visible)
+                .findBy(Condition.exactText(item))
+                .click();
+    }
+
+    /** A list row's own menu, each item's text followed by " (negative)" when it is in red. */
+    private static List<String> rowMenuEntries(String subject) {
+        SelenideElement trigger = Selenide.$$("tbody tr")
+                                          .findBy(Condition.text(subject))
+                                          .shouldBe(Condition.visible)
+                                          .$("button[aria-label='Row actions']");
+        trigger.click();
+        ElementsCollection items = Selenide.$$("ul[aria-labelledby='" + trigger.getAttribute("id") + "'] li[x-h-menu-item]")
+                                           .filterBy(Condition.visible);
+        items.first()
+             .shouldBe(Condition.visible);
+        List<String> entries = entries(items);
+        Selenide.actions()
+                .sendKeys(Keys.ESCAPE)
+                .perform();
+        return entries;
+    }
+
+    private static List<String> entries(ElementsCollection items) {
+        List<String> entries = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            SelenideElement item = items.get(i);
+            entries.add(item.getText() + ("negative".equals(item.getAttribute("data-variant")) ? " (negative)" : ""));
+        }
+        return entries;
     }
 
     /**

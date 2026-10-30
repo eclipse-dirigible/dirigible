@@ -315,7 +315,7 @@
         </div>
         <div x-h-dialog-footer>
           <button x-h-button data-variant="transparent" @click="$store.customActions.cancelConfirm()" :disabled="$store.customActions.confirmBusy" x-text="T('application-core:shell.customActions.confirmCancel', 'Cancel')"></button>
-          <button x-h-button data-variant="primary" @click="$store.customActions.confirmRun()" :disabled="$store.customActions.confirmBusy">
+          <button x-h-button :data-variant="($store.customActions.confirmAction && $store.customActions.confirmAction.destructive) ? 'negative' : 'primary'" @click="$store.customActions.confirmRun()" :disabled="$store.customActions.confirmBusy">
             <span x-show="$store.customActions.confirmBusy" x-h-spinner></span>
             <span x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.submit) || T('application-core:shell.customActions.confirmRun', 'Run')"></span>
           </button>
@@ -401,7 +401,7 @@
           </div>
           <div x-h-dialog-footer>
             <button x-h-button data-variant="transparent" @click="s.cancelPrompt()" :disabled="s.promptBusy" x-text="T('application-core:shell.customActions.promptCancel', 'Cancel')"></button>
-            <button x-h-button data-variant="primary" @click="s.promptRun()" :disabled="s.promptBusy">
+            <button x-h-button :data-variant="(s.promptAction && s.promptAction.destructive) ? 'negative' : 'primary'" @click="s.promptRun()" :disabled="s.promptBusy">
               <span x-show="s.promptBusy" x-h-spinner></span>
               <span x-text="(s.promptAction && s.promptAction.submit) || T('application-core:shell.customActions.promptRun', 'Run')"></span>
             </button>

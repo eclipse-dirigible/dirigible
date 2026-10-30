@@ -228,6 +228,53 @@ class CallActionIntentTest {
                 "declares primary but has scope [page]");
     }
 
+    /**
+     * {@code destructive: true} (#8364): opt-in, on a call or a page action, kept for the generators.
+     */
+    @Test
+    void aDestructiveEntityActionParses() {
+        assertTrue(IntentParser
+                               .parse(YAML.replace("    success: Escalation requested",
+                                       "    success: Escalation requested\n    destructive: true"))
+                               .getActions()
+                               .get(0)
+                               .isDestructive());
+        assertTrue(IntentParser
+                               .parse(YAML.replace("    success: Escalation requested",
+                                       "    success: Escalation requested\n  - { name: PurgeNotes, forEntity: Ticket, destructive: true,"
+                                               + " page: /services/web/helpdesk/purge.html }"))
+                               .getActions()
+                               .get(1)
+                               .isDestructive(),
+                "a page: action may be destructive too");
+        assertFalse(IntentParser.parse(YAML)
+                                .getActions()
+                                .get(0)
+                                .isDestructive(),
+                "destructive is opt-in");
+    }
+
+    /** A destructive action is never the record's filled button (#8364). */
+    @Test
+    void aDestructivePrimaryActionIsRefused() {
+        assertIssue(
+                YAML.replace("    success: Escalation requested",
+                        "    success: Escalation requested\n    primary: true\n    destructive: true"),
+                "action [EscalateTicket] declares destructive and primary - a destructive action is never the record's filled button");
+    }
+
+    /**
+     * The destructive group is a record menu's, so a page-scope action cannot be destructive (#8364).
+     */
+    @Test
+    void aDestructivePageScopeActionIsRefused() {
+        assertIssue(
+                YAML.replace("    success: Escalation requested",
+                        "    success: Escalation requested\n  - { name: PurgeAll, forEntity: Ticket, scope: page, destructive: true,"
+                                + " page: /services/web/helpdesk/purge.html }"),
+                "action [PurgeAll] declares destructive but has scope [page] - the destructive group is a record menu's");
+    }
+
     /** The "Invite member" example of #8296: a dialog that says what it acts on. */
     static final String INVITE = """
             name: teams
