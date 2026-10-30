@@ -58,6 +58,7 @@ import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.ImportIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -824,7 +825,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Composite business keys. Like checks, a List living only in the .model twin - read by the
             // schema template (which emits the constraint) and by the REST template (which turns the
             // database's violation back into the authored message).
-            List<Map<String, Object>> uniqueMaps = buildUniqueConstraints(entity);
+            List<Map<String, Object>> uniqueMaps = buildUniqueConstraints(entity, model);
             if (!uniqueMaps.isEmpty()) {
                 entityMap.put("uniqueConstraints", uniqueMaps);
             }
@@ -2560,9 +2561,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * controller finds the authored message again.
      *
      * @param entity the entity
+     * @param model the parsed intent, for the imports whose {@code duplicateKey} becomes a key here
      * @return one map per declared key: its constraint name, its columns in order, and its message
      */
-    private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity) {
+    private static List<Map<String, Object>> buildUniqueConstraints(EntityIntent entity, IntentModel model) {
         List<Map<String, Object>> constraints = new ArrayList<>();
         Set<Set<String>> declared = new HashSet<>();
         for (UniqueIntent unique : entity.getUnique()) {
@@ -2572,6 +2574,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             declared.add(keyOf(names));
             constraints.add(uniqueConstraint(entity, names, unique.getMessage()));
+        }
+        // An import's `duplicateKey` is a uniqueness requirement on its target. Without a database
+        // constraint the generated import's check-then-insert races a concurrent upload of the same
+        // file and stores every row twice (#8190), so the key the author already declared becomes a
+        // unique index the database enforces. Deduped against a hand-authored `unique:` and against
+        // another import of the same entity carrying the same key (two imports into one table commonly
+        // share it).
+        for (ImportIntent declaredImport : model.getImports()) {
+            if (!entity.getName()
+                       .equals(declaredImport.getInto())) {
+                continue;
+            }
+            List<String> names = declaredImport.getDuplicateKey();
+            if (names.isEmpty()) {
+                continue; // an import without a duplicate key does not dedupe, so nothing to enforce
+            }
+            if (declared.add(keyOf(names))) {
+                constraints.add(uniqueConstraint(entity, names, null));
+            }
         }
         // A partitioned document number is unique per partition (see propertyMap): the key the author
         // means is (partition, number), synthesized here unless the author already spelled it out - in

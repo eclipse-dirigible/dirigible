@@ -4595,7 +4595,9 @@ Each import generates `gen/events/<module>/<Name>Import.java`: an **upload** end
 write role, and a bean method `importFile(fileName, bytes)` a job can call. A file is imported **whole
 or not at all**: an unreadable value answers 400, and a record repeating the `duplicateKey` of a row
 already imported (or of another record of the file) answers 409 - so re-uploading a statement saves
-nothing. Every attempt is recorded in the entity's `<TABLE>_IMPORTS` ledger (file name, checksum,
+nothing. The `duplicateKey` also becomes a database unique constraint on the target, so two
+simultaneous uploads of one file cannot both store its lines: one imports, the rest answer 409. Every
+attempt is recorded in the entity's `<TABLE>_IMPORTS` ledger (file name, checksum,
 records, status, who, when). After the rows are committed, every `@Component` implementing
 `<Name>Import.Hook` in `custom/` is called with them - that is where matching rules go (a hook is
 code, not intent; mention it as a boundary when the requirement asks for matching).

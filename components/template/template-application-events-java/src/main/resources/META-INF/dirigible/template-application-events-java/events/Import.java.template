@@ -139,6 +139,17 @@ public class ${className}Import {
                 return written;
             });
         } catch (RuntimeException e) {
+#if($hasDuplicateKey)
+            // The whole unit of work rolled back, so nothing of this file was saved. A concurrent
+            // upload of the same file commits first and its rows now violate the target's unique
+            // constraint on the duplicate key, so re-checking tells the loser apart from a genuine
+            // failure: it reports DUPLICATE, exactly as a later sequential upload would (#8190).
+            String concurrent = duplicateOf(rows);
+            if (concurrent != null) {
+                LOG.warn("Import {}: [{}] lost a concurrent import on the duplicate key - {}", NAME, fileName, concurrent);
+                return refused(ImportResult.duplicate(NAME, fileName, checksum, concurrent));
+            }
+#end
             LOG.error("Import {}: saving the records of [{}] failed - nothing was saved", NAME, fileName, e);
             return refused(ImportResult.rejected(NAME, fileName, checksum, "saving the records failed: " + e.getMessage()));
         }

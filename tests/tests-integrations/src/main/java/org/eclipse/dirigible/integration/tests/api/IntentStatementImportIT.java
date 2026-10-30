@@ -27,9 +27,15 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.restassured.path.json.config.JsonPathConfig;
@@ -144,11 +150,7 @@ class IntentStatementImportIT extends IntegrationTest {
 
     @Test
     void a_statement_file_imports_once_into_rows_and_a_second_upload_is_refused_as_a_duplicate() throws SQLException {
-        writeProjectFile("app.intent", INTENT_YAML);
-        writeProjectFile("custom/MatchingHook.java", MATCHING_HOOK_JAVA);
-        generateProject();
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
+        deployBankimport();
 
         byte[] csv = fixture("bank-statement-bg.csv");
         restAssuredExecutor.execute(() -> given().multiPart("file", "bank-statement-bg.csv", csv, "text/csv")
@@ -220,6 +222,77 @@ class IntentStatementImportIT extends IntegrationTest {
                 List.of("bankCsv IMPORTED 3 bank-statement-bg.csv", "bankCsv DUPLICATE 0 bank-statement-bg.csv",
                         "swift IMPORTED 3 statement.mt940", "swift DUPLICATE 0 statement-again.mt940", "swift REJECTED 0 junk.txt"),
                 ledger());
+    }
+
+    /**
+     * Four simultaneous uploads of the same file - a double-click on Upload, a retrying client - must
+     * import it exactly once: the target carries a unique constraint on the declared duplicate key, so
+     * only one upload commits its rows and the rest are refused as duplicates, whatever the timing
+     * (#8190). Without the constraint each upload's check-then-insert passed and every line was stored
+     * as many times as there were overlapping requests.
+     */
+    @Test
+    void concurrent_uploads_of_one_file_import_it_exactly_once() {
+        deployBankimport();
+
+        byte[] csv = fixture("bank-statement-bg.csv");
+        int attempts = 4;
+        List<Integer> statuses = Collections.synchronizedList(new ArrayList<>(attempts));
+
+        restAssuredExecutor.execute(() -> uploadConcurrently(csv, attempts, statuses));
+
+        long imported = statuses.stream()
+                                .filter(code -> code == 200)
+                                .count();
+        long duplicate = statuses.stream()
+                                 .filter(code -> code == 409)
+                                 .count();
+        assertEquals(attempts, statuses.size(), "every concurrent upload returned: " + statuses);
+        assertEquals(1, imported, "exactly one concurrent upload imports the file: " + statuses);
+        assertEquals(attempts - 1, duplicate, "every other concurrent upload is a duplicate: " + statuses);
+        assertEquals(3, lines("bank-statement-bg.csv").size(), "the file's lines are stored exactly once");
+    }
+
+    /** Releases {@code attempts} uploads of the same file together and collects their status codes. */
+    private static void uploadConcurrently(byte[] csv, int attempts, List<Integer> statuses) {
+        ExecutorService pool = Executors.newFixedThreadPool(attempts);
+        CountDownLatch ready = new CountDownLatch(attempts);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<?>> futures = new ArrayList<>(attempts);
+        try {
+            for (int i = 0; i < attempts; i++) {
+                futures.add(pool.submit(() -> {
+                    ready.countDown();
+                    go.await();
+                    statuses.add(given().multiPart("file", "bank-statement-bg.csv", csv, "text/csv")
+                                        .when()
+                                        .post(CSV_UPLOAD)
+                                        .getStatusCode());
+                    return null;
+                }));
+            }
+            assertTrue(ready.await(30, TimeUnit.SECONDS), "the uploads parked at the barrier");
+            go.countDown();
+            for (Future<?> future : futures) {
+                future.get(60, TimeUnit.SECONDS);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread()
+                  .interrupt();
+            throw new IllegalStateException("interrupted while uploading concurrently", e);
+        } catch (java.util.concurrent.ExecutionException | java.util.concurrent.TimeoutException e) {
+            throw new IllegalStateException("a concurrent upload did not complete", e);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    private void deployBankimport() {
+        writeProjectFile("app.intent", INTENT_YAML);
+        writeProjectFile("custom/MatchingHook.java", MATCHING_HOOK_JAVA);
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     private void assertLine(Map<String, Object> row, int lineNumber, String bookedOn, String amount, String details) {
