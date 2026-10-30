@@ -173,7 +173,7 @@ class FieldPlacementHarmoniaIT extends UserInterfaceIntegrationTest {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 PreparedStatement update = connection.prepareStatement(
-                        "UPDATE PLACEMENT_SHIPMENT SET SHIPMENT_CARRIER_NOTE = ?, SHIPMENT_SYNC_TOKEN = ? WHERE SHIPMENT_ID = ?")) {
+                        "UPDATE \"PLACEMENT_SHIPMENT\" SET \"SHIPMENT_CARRIER_NOTE\" = ?, \"SHIPMENT_SYNC_TOKEN\" = ? WHERE \"SHIPMENT_ID\" = ?")) {
             update.setString(1, note);
             update.setString(2, token);
             update.setInt(3, id);

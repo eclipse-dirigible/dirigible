@@ -2710,7 +2710,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 PreparedStatement update = connection.prepareStatement(
-                        "UPDATE EMISSION_TEAM_NOTE SET TEAM_NOTE_SYNC_TOKEN = ?, TEAM_NOTE_DIGEST = ? WHERE TEAM_NOTE_ID = ?")) {
+                        "UPDATE \"EMISSION_TEAM_NOTE\" SET \"TEAM_NOTE_SYNC_TOKEN\" = ?, \"TEAM_NOTE_DIGEST\" = ? WHERE \"TEAM_NOTE_ID\" = ?")) {
             update.setString(1, "tok-8369");
             update.setString(2, "line one\nline two");
             update.setInt(3, note);

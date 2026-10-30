@@ -142,7 +142,7 @@ class RecordValueDisplayHarmoniaIT extends UserInterfaceIntegrationTest {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 PreparedStatement update = connection.prepareStatement(
-                        "UPDATE RECORDVALUE_SHIPMENT SET SHIPMENT_DISPATCHED = ?, SHIPMENT_ATTEMPTS = ? WHERE SHIPMENT_ID = ?")) {
+                        "UPDATE \"RECORDVALUE_SHIPMENT\" SET \"SHIPMENT_DISPATCHED\" = ?, \"SHIPMENT_ATTEMPTS\" = ? WHERE \"SHIPMENT_ID\" = ?")) {
             update.setTimestamp(1, dispatched);
             update.setInt(2, attempts);
             update.setInt(3, id);
