@@ -272,6 +272,9 @@ document.addEventListener('alpine:init', () => {
       // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
       const routePath = (window.location.hash || '').split('?')[0];
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      // The option lists go out first and are awaited only where the page needs them: the header is
+      // requested while they arrive, not after the last of them (#8344).
+      const optionsLoaded = this.loadOptions(true);
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
@@ -310,12 +313,10 @@ document.addEventListener('alpine:init', () => {
         });
       }
 
-      await this.loadOptions(true);
-
       if (this.isEdit || this.isPreview) {
         this.state = 'loading';
         try {
-          await this.loadHeader();
+          await this.loadHeader(optionsLoaded);
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           await this.loadMutable();
 #end
@@ -328,6 +329,7 @@ document.addEventListener('alpine:init', () => {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
         }
       } else {
+        await optionsLoaded;
         // A field the user typed or picked during the awaited loads keeps that value: a default or a URL
         // prefill only fills a field still holding its blank value, never overwrites an entry (#8315).
         const touched = new Set(Object.keys(this.form)
@@ -456,8 +458,11 @@ document.addEventListener('alpine:init', () => {
 
     // GET the master record into both the header form and `record` (the footer reads calculated totals
     // from `record`). Called on load and after every item change so server-side totals stay fresh.
-    async loadHeader() {
+    // `optionsLoaded` is init's option load, still in flight while the header is fetched (#8344): the
+    // filtered-label splice below and the pristine snapshot both wait for it.
+    async loadHeader(optionsLoaded) {
       const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+      await optionsLoaded;
       this.record = record || {};
       this.recordLoaded = true;
       for (const key of Object.keys(this.form)) {
@@ -502,19 +507,23 @@ document.addEventListener('alpine:init', () => {
       await this.loadHeader();
     },
 
+    // The lists do not depend on each other, so they are all requested at once (#8344); each one
+    // reports its own failure, so the whole never rejects.
     async loadOptions(deferDependsOn) {
+      await Promise.all([
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN" && $property.aggregate != "true")
-      // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
-      // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
-      // not in the form yet, so init() passes deferDependsOn and decides after the record load.
-      if (!deferDependsOn) await this.refreshOptions${property.name}();
+        // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
+        // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
+        // not in the form yet, so init() passes deferDependsOn and decides after the record load.
+        deferDependsOn ? null : this.refreshOptions${property.name}(),
 #else
-      await this.loadAllOptions${property.name}();
+        this.loadAllOptions${property.name}(),
 #end
 #end
 #end
+      ]);
     },
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
