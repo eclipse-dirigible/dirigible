@@ -257,6 +257,13 @@ document.addEventListener('alpine:init', () => {
       this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
       this.detailDefs = this.id != null ? App.detailsFor('${name}') : [];
       this.relatedDefs = this.id != null ? App.relatedFor('${name}') : [];
+#if($hasDropdowns)
+      // The option lists go out first and are awaited only where the form needs them: the record is
+      // requested while they arrive, not after the last of them (#8344).
+      const optionsLoaded = this.loadOptions(true);
+#else
+      const optionsLoaded = null;
+#end
 #if($roleWrite)
       // Whether this caller may write ${name} at all (#8089), settled before the form shows: a caller
       // who may only read gets the preview on /edit and a notice on /create - never a form whose save
@@ -274,12 +281,8 @@ document.addEventListener('alpine:init', () => {
       this.access = { read: true, write: true };
 #end
 
-#if($hasDropdowns)
-      await this.loadOptions(true);
-#end
-
       if (this.isEdit || this.isPreview) {
-        await this.loadRecord();
+        await this.loadRecord(false, optionsLoaded);
         // A contributed action changes the record behind the page (#8116): re-read it, so its status and
         // the actions it now allows show without a reload. Preview only - the actions are offered there,
         // and an edit in progress must not be overwritten.
@@ -287,6 +290,7 @@ document.addEventListener('alpine:init', () => {
           if (this.isPreview) await this.loadRecord(true);
         });
       } else {
+        await optionsLoaded;
         // A field the user typed or picked during the awaited loads keeps that value: a default or a URL
         // prefill only fills a field still holding its blank value, never overwrites an entry (#8315).
         const touched = new Set(Object.keys(this.form)
@@ -385,10 +389,13 @@ document.addEventListener('alpine:init', () => {
     // lands on the record page, so server-assigned values (document numbers, defaults, calculated
     // fields, the initial status) are the ones the user sees. `quiet` keeps the form on screen while
     // the fresh record is fetched (a background re-read) instead of showing the loading state.
-    async loadRecord(quiet) {
+    // `optionsLoaded` is init's option load, still in flight while the record is fetched (#8344): the
+    // filtered-label splice below and the pristine snapshot both wait for it.
+    async loadRecord(quiet, optionsLoaded) {
       if (!quiet) this.state = 'loading';
       try {
         const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+        await optionsLoaded;
         this.loadedRecord = record;
         // Copy only known form fields so server-only props don't leak into the body.
         for (const key of Object.keys(this.form)) {
@@ -449,19 +456,23 @@ document.addEventListener('alpine:init', () => {
     },
 
 #if($hasDropdowns)
+    // The lists do not depend on each other, so they are all requested at once (#8344); each one
+    // reports its own failure, so the whole never rejects.
     async loadOptions(deferDependsOn) {
+      await Promise.all([
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN" && !$property.widgetDependsOnHeader)
-      // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
-      // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
-      // not in the form yet, so init() passes deferDependsOn and decides after the record load.
-      if (!deferDependsOn) await this.refreshOptions${property.name}();
+        // A Depends-On picker's list is the cascade's to decide (#7669): loading the whole of it
+        // here put rows in the chooser that the trigger goes on to refuse. At init the trigger is
+        // not in the form yet, so init() passes deferDependsOn and decides after the record load.
+        deferDependsOn ? null : this.refreshOptions${property.name}(),
 #else
-      await this.loadAllOptions${property.name}();
+        this.loadAllOptions${property.name}(),
 #end
 #end
 #end
+      ]);
     },
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT")

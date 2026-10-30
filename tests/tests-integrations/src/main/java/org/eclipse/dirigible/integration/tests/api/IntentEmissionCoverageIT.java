@@ -4139,6 +4139,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06' }",
                         "{ OrderedOn: '2026-01-01', Unit: '9', Channel: 'mail' }"),
                 "the URL prefill must fill the untouched fields and leave the typed one alone");
+        // #8344: an opened record requests all of its independent option lists at once and the record
+        // itself alongside them - not one list per round trip with the record queued behind the last.
+        // Every list stays pending here, so a page still loading them in series has asked for one.
+        assertEquals("2 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/Bill/BillDocumentPage.js"), "BillDocumentPage", "Bill"),
+                "the document page must request its option lists and its header together");
+        assertEquals("2 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/Claim/ClaimFormPage.js"), "ClaimFormPage", "Claim"),
+                "the form page must request its option lists and its record together");
+        // The personal and partner forms have no picker for their owner FK, so one list each: still
+        // pending, and the record must be requested anyway.
+        assertEquals("1 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js"), "ClaimMyFormPage", "my/Claim"),
+                "the personal form must request its option lists and its record together");
+        assertEquals("1 lists, record requested",
+                pageEditRequests(contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerFormPage.js"),
+                        "PartnerTicketPartnerFormPage", "partner/PartnerTicket"),
+                "the partner form must request its option lists and its record together");
         // ...in the create branch only: the form literal stays blank, since loadRecord copies just the
         // keys a record carries and a literal default would surface on an edit of a row holding none...
         assertTrue(reorderDoc.contains("Rush: false,") && reorderDoc.contains("Unit: '',"),
@@ -8821,6 +8839,45 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + "); };" + " page.init();");
             return context.eval("js",
                     "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies].join('|')")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated page's edit-mode {@code init()} (#8344) over the shipped shell runtime against a
+     * REST client on which no relation option list ever answers - a request with {@code baseUrl: ''} is
+     * an option list and stays pending; every other request (the record, its satellites) answers at
+     * once. Answers {@code <option lists requested> lists, record <requested|not requested>}: a page
+     * that loads its lists one after another has requested exactly one and not yet the record.
+     */
+    private static String pageEditRequests(String pageScript, String componentName, String route) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback(), getElementById: () => null };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
+                            + " window.location = { hash: '#/" + route + "/7/edit' };"
+                            + " window.PineconeRouter = { context: { params: { id: '7' } } };"
+                            + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
+            for (String script : List.of("components/pages/basePage.js", "components/pages/baseFormPage.js", "components/printActions.js",
+                    "services/apiError.js")) {
+                context.eval("js", shellScript(script));
+            }
+            context.eval("js",
+                    "App.detailsFor = () => []; App.relatedFor = () => []; var __lists = 0; var __record = false;"
+                            + " var __answer = (url, options) => {"
+                            + "   if (options && options.baseUrl === '') { __lists++; return new Promise(() => {}); }"
+                            + "   if (/\\/7$/.test(url)) __record = true;" + "   return Promise.resolve({ Id: 7 }); };"
+                            + " App.services.api = { get: __answer, getAll: __answer, post: __answer };");
+            context.eval("js", pageScript);
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); page.$watch = () => {}; page.$nextTick = (f) => f && f();"
+                            + " page.watchViewport = () => {}; page.refreshIcons = () => {}; page.onActionDone = () => {};"
+                            + " page.onTasksChanged = () => {}; page.loadRestrictedFields = () => {}; page.loadAccess = async () => {};"
+                            + " page.canWrite = () => true; page.init();");
+            return context.eval("js", "__lists + ' lists, record ' + (__record ? 'requested' : 'not requested')")
                           .asString();
         }
     }

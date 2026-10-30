@@ -66,10 +66,13 @@ document.addEventListener('alpine:init', () => {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id || null;
       this.mode = this.id ? 'edit' : 'create';
-      await this.loadOptions();
+      // The option lists and the record are requested together: the record no longer waits for the
+      // last of the lists to arrive (#8344).
+      const optionsLoaded = this.loadOptions();
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
+          await optionsLoaded;
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
@@ -107,6 +110,7 @@ document.addEventListener('alpine:init', () => {
         this.loadChildren();
 #end
       } else {
+        await optionsLoaded;
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
         // `defaultValue: now`: a new record is dated today, in the field's own shape; a query-param
@@ -158,19 +162,24 @@ document.addEventListener('alpine:init', () => {
 
     async loadOptions() {
       const loaded = {};
+      // The lists do not depend on each other, so they are all requested at once (#8344).
+      await Promise.all([
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
-      try {
-        const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        (async () => {
+          try {
+            const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
 #if($property.widgetPickable)
-        // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
-        loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
+            // Picker rule (intent `pickable:`): a failing row is listed disabled with the rule's message, or hidden.
+            loaded['${property.name}'] = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
 #else
-        loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })), '$!{property.widgetOptionsOrdered}');
+            loaded['${property.name}'] = this.sortOptions((rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: #labelOf($property "r") })), '$!{property.widgetOptionsOrdered}');
 #end
-      } catch (e) { loaded['${property.name}'] = []; }
+          } catch (e) { loaded['${property.name}'] = []; }
+        })(),
 #end
 #end
+      ]);
       this.options = loaded;
     },
 #if($statusProp != "")
