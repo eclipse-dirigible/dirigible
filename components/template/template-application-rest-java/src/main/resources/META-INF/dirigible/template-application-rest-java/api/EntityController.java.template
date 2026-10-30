@@ -796,17 +796,45 @@ public class ${name}Controller {
                         yield "e." + field + " in (:" + paramName + ")";
                     }
                     case "LIKE" -> "e." + field + " like :" + paramName;
+                    // A case-insensitive substring of a text field - what a relation picker over a large
+                    // table searches its target by as the user types (dirigible #8343).
+                    case "CONTAINS" -> "lower(e." + field + ") like :" + paramName + " escape '!'";
                     // A half-open range [from, to) - what the slot picker asks for the days it shows (#7837).
                     case "GTE" -> "e." + field + " >= :" + paramName;
                     case "LT" -> "e." + field + " < :" + paramName;
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
                 hql.append(first ? " where " : " and ").append(clause);
-                params.put(paramName, operator.equals("IN") ? value : coerceValue(field, value));
+                params.put(paramName, switch (operator) {
+                    case "IN" -> value;
+                    case "CONTAINS" -> containsPattern(field, value);
+                    default -> coerceValue(field, value);
+                });
                 first = false;
             }
         }
         return hql.toString();
+    }
+
+    /**
+     * The LIKE pattern of a CONTAINS condition: the value lower-cased, its wildcards escaped with
+     * {@code !}, between two {@code %}. Only a text field can be matched this way.
+     */
+    private static String containsPattern(String field, Object value) {
+        try {
+            if (${name}Entity.class.getField(field)
+                                      .getType() != String.class) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "CONTAINS needs a text field: " + field);
+            }
+        } catch (NoSuchFieldException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field, e);
+        }
+        String text = value == null ? "" : String.valueOf(value)
+                                                 .toLowerCase(Locale.ROOT);
+        return "%" + text.replace("!", "!!")
+                         .replace("%", "!%")
+                         .replace("_", "!_")
+                + "%";
     }
 
     private static String requireKnownField(String field) {

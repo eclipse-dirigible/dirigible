@@ -18,7 +18,8 @@
  * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses,
  *           fieldMap, clearError, validateOnBlur, scrollToSummary, navigateBack, refreshIcons,
  *           applyApiError, mapCauses, applyLoadError, inlineCreated,
- *           adoptCreatedOption, rememberInlineCreated, savedAlongside.
+ *           adoptCreatedOption, rememberInlineCreated, savedAlongside,
+ *           pickers, pickerRows, searchPicker.
  *
  * NOTE: Do NOT put ES6 getters in this object — the spread operator invokes
  * them at spread-time and copies the result as a plain value, breaking Alpine
@@ -247,6 +248,66 @@ function baseFormPage() {
         console.error('[baseFormPage] failed to resolve the inline-created option ' + id, e);
       }
       return null;
+    },
+
+    // Relation pickers over a large table (#8343). A picker lists a bounded first page of its target,
+    // and a target holding more than that is searched on the server as the user types, so opening a
+    // record never waits on, transfers or renders the whole referenced table (1,393 customers held a
+    // sales invoice's page for 20 s). Per field: where its rows come from and whether that first page
+    // was all of them.
+    pickers: {},
+    pickerPageSize: 100,
+
+    /**
+     * The first page of a picker's target rows matching `conditions`, remembered for searchPicker. A
+     * page that comes back larger than asked for is from a controller that ignores `$limit` - it is
+     * the whole set, which needs no search either.
+     */
+    async pickerRows(field, url, { conditions = [], text, ordered } = {}) {
+      const limit = this.pickerPageSize;
+      const rows = await App.services.api.post(url + '/search', { conditions, $limit: limit + 1 }, { baseUrl: '' });
+      const list = Array.isArray(rows) ? rows : [];
+      const complete = list.length !== limit + 1;
+      this.pickers[field] = { url, conditions, text, ordered, complete, sequence: 0 };
+      return complete ? list : list.slice(0, limit);
+    },
+
+    /**
+     * Bound to the picker's search box: a picker whose first page was not all of its target asks the
+     * server for the rows whose label contains the typed text, and adds them to the options, where the
+     * select's own `contains` filter shows them beside the matches already listed. The page maps rows
+     * to options with its `optionsFrom<Field>`, the same way as the first page.
+     */
+    async searchPicker(field, term) {
+      const picker = this.pickers[field];
+      const typed = String(term || '').trim();
+      if (!picker || picker.complete || !picker.text || !typed) return;
+      const sequence = ++picker.sequence;
+      let rows;
+      try {
+        rows = await this.pickerMatches(picker, typed);
+      } catch (e) {
+        console.error('[baseFormPage] picker search failed for ' + field, e);
+        return;
+      }
+      // A newer keystroke, or a reload of the list, has superseded this answer.
+      if (sequence !== picker.sequence || this.pickers[field] !== picker) return;
+      const options = this['options' + field] || [];
+      const listed = new Set(options.map(o => String(o.value)));
+      const found = this['optionsFrom' + field](rows).filter(o => !listed.has(String(o.value)));
+      if (found.length) this['options' + field] = this.sortOptions(options.concat(found), picker.ordered);
+    },
+
+    // CONTAINS is case-insensitive; a controller generated before it existed refuses it with a 400,
+    // and is asked again with a plain LIKE.
+    async pickerMatches(picker, typed) {
+      const body = (condition) => ({ conditions: picker.conditions.concat([condition]), $limit: this.pickerPageSize });
+      try {
+        return await App.services.api.post(picker.url + '/search', body({ propertyName: picker.text, operator: 'CONTAINS', value: typed }), { baseUrl: '' });
+      } catch (e) {
+        if (!e || e.httpStatus !== 400) throw e;
+        return App.services.api.post(picker.url + '/search', body({ propertyName: picker.text, operator: 'LIKE', value: '%' + typed + '%' }), { baseUrl: '' });
+      }
     },
 
     // Record an inline-created row in `created` (this.inlineCreated, or a dialog's own list) under

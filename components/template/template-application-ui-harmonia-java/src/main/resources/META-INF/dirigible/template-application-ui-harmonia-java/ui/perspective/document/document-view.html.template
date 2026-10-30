@@ -314,7 +314,7 @@
           <div x-h-select class="flex-1">
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview#if($fixed) || isEdit#end" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
-              <div x-h-select-search data-filter="contains"></div>
+              <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
               <div x-h-select-list>
                 <template x-for="opt in #if($property.widgetPickable)visibleOptions(options${property.name}, form.${property.name})#{else}options${property.name}#end" :key="opt.value">
                   <div x-h-select-option="opt.text" :data-value="String(opt.value)"#if($property.widgetPickable) :aria-disabled="opt.disabled ? 'true' : null" :data-description="opt.description || null"#end></div>
@@ -329,7 +329,7 @@
         <div x-h-select>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview#if($fixed) || isEdit#end"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
-            <div x-h-select-search data-filter="contains"></div>
+            <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
             <div x-h-select-list>
               <template x-for="opt in #if($property.widgetPickable)visibleOptions(options${property.name}, form.${property.name})#{else}options${property.name}#end" :key="opt.value">
                 <div x-h-select-option="opt.text" :data-value="String(opt.value)"#if($property.widgetPickable) :aria-disabled="opt.disabled ? 'true' : null" :data-description="opt.description || null"#end></div>
@@ -347,7 +347,7 @@
           <div x-h-select class="flex-1">
             <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
-              <div x-h-select-search data-filter="contains"></div>
+              <div x-h-select-search data-filter="contains"#if(!($property.widgetLeafOnly && $property.widgetHierarchyProperty)) @input.debounce.300ms="searchPicker('${property.name}', $event.target.value)"#end></div>
               <div x-h-select-list>
                 <template x-for="opt in options${property.name}" :key="opt.value">
                   <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
