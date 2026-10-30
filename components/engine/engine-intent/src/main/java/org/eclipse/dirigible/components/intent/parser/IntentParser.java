@@ -278,6 +278,12 @@ public final class IntentParser {
             java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
     /** One {@code {...}} placeholder of a {@code call:} action's path or body. */
     private static final java.util.regex.Pattern CALL_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * An email address as the shell's forms check it - the {@code email} rule of
+     * {@code formValidation.js} - so a literal default the parser accepts is one the dialog accepts.
+     */
+    private static final java.util.regex.Pattern EMAIL_ADDRESS = java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     /** The methods a {@code call:} action may send. */
     private static final Set<String> CALL_METHODS = Set.of("POST", "PUT", "DELETE");
     /** The field types a {@code fileName:} token may carry a {@code :pattern} date format on. */
@@ -9919,6 +9925,7 @@ public final class IntentParser {
                 continue;
             }
             validatePromptOptions(input, subject, issues);
+            validatePromptEntity(input, model, subject, issues);
             validatePromptDefault(input, action, entity, subject, issues);
         }
         for (String name : ActionPlaceholders.in(action.getDescription())) {
@@ -9953,21 +9960,22 @@ public final class IntentParser {
     }
 
     /**
-     * A {@code multiselect} input chooses from its {@code options:} - required, each a unique,
-     * non-blank value - and no other input type has any (#8296).
+     * A {@code multiselect} (#8296) or a {@code select} (#8366) input chooses from its {@code options:}
+     * - required, each a unique, non-blank value - and no other input type has any.
      */
     private static void validatePromptOptions(ActionPromptIntent input, String subject, List<String> issues) {
         String prefix = subject + " prompt input [" + input.getName() + "]";
-        if (!input.isMultiselect()) {
+        if (!input.choosesFromOptions()) {
             if (!input.getOptions()
                       .isEmpty()) {
-                issues.add(prefix + " declares options but has type [" + input.getType() + "] - only a multiselect chooses from options");
+                issues.add(prefix + " declares options but has type [" + input.getType()
+                        + "] - only a multiselect or a select chooses from options");
             }
             return;
         }
         if (input.getOptions()
                  .isEmpty()) {
-            issues.add(prefix + " is a multiselect without options - list the values it chooses from under options:");
+            issues.add(prefix + " is a " + input.getType() + " without options - list the values it chooses from under options:");
             return;
         }
         Set<String> values = new HashSet<>();
@@ -9982,6 +9990,29 @@ public final class IntentParser {
     }
 
     /**
+     * A {@code lookup} input (#8366) picks one record of an {@code entity:} of this model, and no other
+     * input type names one. An entity of a {@code uses:} model is not one of this model's.
+     */
+    private static void validatePromptEntity(ActionPromptIntent input, IntentModel model, String subject, List<String> issues) {
+        String prefix = subject + " prompt input [" + input.getName() + "]";
+        String entity = input.getEntity();
+        boolean named = entity != null && !entity.isBlank();
+        if (!input.isLookup()) {
+            if (named) {
+                issues.add(prefix + " declares entity but has type [" + input.getType() + "] - only a lookup picks a record of an entity");
+            }
+            return;
+        }
+        if (!named) {
+            issues.add(prefix + " is a lookup without an entity - name the entity whose record it picks under entity:");
+        } else if (!IntentEntities.byName(model)
+                                  .containsKey(entity)) {
+            issues.add(prefix + " names entity [" + entity
+                    + "], which is not an entity of this model - a lookup picks a record of its own model");
+        }
+    }
+
+    /**
      * A prompt input's {@code default:} (#8296) is a literal of its type - a list of option values for
      * a multiselect - or a whole {@code "{property}"} of the clicked record. A listed collection path
      * (#8323) holds a list of texts, so only a multiselect takes it as its default.
@@ -9990,6 +10021,12 @@ public final class IntentParser {
             List<String> issues) {
         Object value = input.getDefaultValue();
         if (value == null) {
+            return;
+        }
+        if (input.isLookup()) {
+            // A literal key differs per environment, and a record default would need the key rather than
+            // the display text the dialog reads (#8366).
+            issues.add(subject + " prompt input [" + input.getName() + "] is a lookup, and a lookup takes no default");
             return;
         }
         String key = "prompt input [" + input.getName() + "] default";
@@ -10008,15 +10045,15 @@ public final class IntentParser {
                     + " or \"{property}\" of the clicked record");
             return;
         }
-        if (input.isMultiselect()) {
+        if (input.choosesFromOptions()) {
             Set<String> options = input.getOptions()
                                        .stream()
                                        .filter(option -> option != null && option.getValue() != null)
                                        .map(ActionPromptOptionIntent::getValue)
                                        .collect(Collectors.toCollection(LinkedHashSet::new));
-            for (Object ticked : (List<?>) value) {
-                if (!options.contains(ticked)) {
-                    issues.add(subject + " " + key + " names [" + ticked + "], which is not one of its options " + options);
+            for (Object chosen : input.isSelect() ? List.of(value) : (List<?>) value) {
+                if (!options.contains(chosen)) {
+                    issues.add(subject + " " + key + " names [" + chosen + "], which is not one of its options " + options);
                 }
             }
         }
@@ -10029,6 +10066,8 @@ public final class IntentParser {
             case "decimal" -> value instanceof Number ? null : "a number";
             case "boolean" -> value instanceof Boolean ? null : "true or false";
             case "date" -> value instanceof String text && isIsoDate(text) ? null : "a date (yyyy-MM-dd)";
+            case ActionPromptIntent.EMAIL -> value instanceof String text && EMAIL_ADDRESS.matcher(text.trim())
+                                                                                          .matches() ? null : "an email address";
             case ActionPromptIntent.MULTISELECT -> value instanceof List<?> list && list.stream()
                                                                                         .allMatch(String.class::isInstance) ? null
                                                                                                 : "a list of its option values";

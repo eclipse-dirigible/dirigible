@@ -31,7 +31,9 @@
  * Its dialog says what it acts on (issue #8296): a `description` paragraph and the `confirm` text name
  * the clicked record's properties as `{property}` (`recordFields` says where each is read), `submit`
  * captions the run button, and a prompt input may open with a `default`, carry a `help` line, or be a
- * MULTISELECT of declared `options`, sent as a JSON array in options order.
+ * MULTISELECT of declared `options`, sent as a JSON array in options order. An EMAIL input refuses an
+ * address the forms' `email` rule refuses, a DROPDOWN may choose from declared `options` without a
+ * request, and a lookup's key is sent typed by its `keyType` (issue #8366).
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
@@ -84,6 +86,8 @@ document.addEventListener('alpine:init', () => {
     promptOptions: {},    // col.name -> dropdown options (dependsOn-filtered when a cascade is active)
     promptBusy: false,
     promptError: '',
+    promptBlurred: {},    // col.name -> the input has lost focus once: its format line may show (#8366)
+    promptChecked: false, // Run was pressed: every format line may show
     // Why the last run of the prompt failed (issue #8365) - the endpoint's refusal or the catalog
     // line for a fault, shown in an alert INSIDE the dialog, which stays open with its inputs.
     promptRefusal: '',
@@ -360,6 +364,8 @@ document.addEventListener('alpine:init', () => {
       this.promptOptions = {};
       this.promptError = '';
       this.promptRefusal = '';
+      this.promptBlurred = {};
+      this.promptChecked = false;
       this.dialogDescription = '';
       this.promptAction = action;
       this.promptId = (id !== undefined && id !== null && id !== '') ? id : null;
@@ -378,13 +384,15 @@ document.addEventListener('alpine:init', () => {
 
     // An input's default as its control holds it: a MULTISELECT the ticked option values (in options
     // order, an unknown or non-list value ticking nothing), a dropdown key as a string. A value the
-    // control cannot hold as it is - a date the backend serialised as an array - is left empty.
+    // control cannot hold as it is - a date the backend serialised as an array, a value that is none
+    // of a select's options (#8366) - is left empty.
     setPromptDefault(col, v) {
       if (col.widget === 'MULTISELECT') {
         this.promptValues[col.name] = Array.isArray(v) ? this.optionOrder(col, v) : [];
         return;
       }
       if (v === undefined || v === null || v === '' || typeof v === 'object') return;
+      if (Array.isArray(col.options) && !col.options.some((o) => String(o.value) === String(v))) return;
       this.promptValues[col.name] = col.widget === 'DROPDOWN' ? String(v) : v;
     },
 
@@ -455,6 +463,8 @@ document.addEventListener('alpine:init', () => {
       this.promptOptions = {};
       this.promptError = '';
       this.promptRefusal = '';
+      this.promptBlurred = {};
+      this.promptChecked = false;
       this.dialogDescription = '';
     },
 
@@ -471,6 +481,11 @@ document.addEventListener('alpine:init', () => {
     // static `where:` filter when it declares one (the same semantics as the item dialog).
     async loadPromptOptions() {
       for (const col of this.promptCols) {
+        // A select's declared options (#8366): no request, and an option's help is its second line.
+        if (col.widget === 'DROPDOWN' && !col.lookup && Array.isArray(col.options)) {
+          this.promptOptions[col.name] = col.options.map((o) => ({ value: o.value, text: o.label || o.value, help: o.help }));
+          continue;
+        }
         if (col.widget !== 'DROPDOWN' || !col.lookup) continue;
         try {
           let rows;
@@ -585,6 +600,9 @@ document.addEventListener('alpine:init', () => {
         this.promptError = missing.map((c) => c.label || c.name).join(', ');
         return;
       }
+      // An address the forms would refuse is never sent (#8366): its line shows, and Run waits for it.
+      this.promptChecked = true;
+      if (this.promptHasInvalid) return;
       const action = this.promptAction;
       this.promptError = '';
       this.promptRefusal = '';
@@ -606,6 +624,35 @@ document.addEventListener('alpine:init', () => {
         this.notify(action.label || 'Action', outcome.message, 'negative');
         this.cancelPrompt();
       }
+    },
+
+    // Whether an input holds a value of the wrong format - an EMAIL the forms' `email` rule refuses
+    // (#8366). An empty input is valid here: whether it may be empty is the required check's.
+    promptInvalid(col) {
+      if (!col || col.widget !== 'EMAIL') return false;
+      const v = this.promptValues[col.name];
+      return !this.isEmptyInput(v) && !this.isEmailAddress(v);
+    },
+
+    // Whether an invalid input's line shows: once the input has lost focus, or once Run was pressed.
+    promptShowsInvalid(col) {
+      return this.promptInvalid(col) && (this.promptChecked || Boolean(this.promptBlurred[col.name]));
+    },
+
+    promptBlur(col) { this.promptBlurred[col.name] = true; },
+
+    // Whether any input holds a value of the wrong format - Run is disabled while one does.
+    get promptHasInvalid() {
+      return this.promptCols.some((c) => this.promptInvalid(c));
+    },
+
+    // The forms' own `email` rule (formValidation.js), so a value one surface accepts the other does.
+    isEmailAddress(v) {
+      const text = String(v).trim();
+      if (window.FormValidation && typeof FormValidation.validate === 'function') {
+        return FormValidation.validate({ v: text }, { v: [{ rule: 'email' }] }).valid;
+      }
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
     },
 
     // Whether the page's prompt dialog has the alert a refusal is shown in (issue #8365).
@@ -675,6 +722,9 @@ document.addEventListener('alpine:init', () => {
       if (widget === 'CHECKBOX') return Boolean(v);
       if (widget === 'MULTISELECT') return this.optionOrder(col, Array.isArray(v) ? v : []);
       if (v === undefined || v === null || v === '') return null;
+      // An address is sent trimmed; a lookup's key typed by its keyType (#8366), so `teamId: 42`.
+      if (widget === 'EMAIL') return String(v).trim() || null;
+      if (widget === 'DROPDOWN' && col.keyType === 'number') return Number(v);
       return widget === 'NUMBER' ? Number(v) : v;
     },
 

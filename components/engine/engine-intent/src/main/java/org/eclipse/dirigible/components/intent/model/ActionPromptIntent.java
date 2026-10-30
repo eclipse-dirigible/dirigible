@@ -21,15 +21,27 @@ import com.google.gson.annotations.SerializedName;
  *
  * <p>
  * An input may open with a value ({@link #defaultValue}) and explain itself ({@link #help}); a
- * {@code multiselect} is a set of values chosen from its {@link #options} (issue #8296).
+ * {@code multiselect} is a set of values chosen from its {@link #options} (issue #8296). An
+ * {@code email} input checks the address, a {@code select} is one value of its {@link #options} and
+ * a {@code lookup} picks one record of the model's {@link #entity} (issue #8366).
  */
 public class ActionPromptIntent {
 
     /** The type whose value is a set of {@link #options}. */
     public static final String MULTISELECT = "multiselect";
 
+    /** The type whose value is one of {@link #options}. */
+    public static final String SELECT = "select";
+
+    /** The type whose value is the key of one record of {@link #entity}. */
+    public static final String LOOKUP = "lookup";
+
+    /** The type whose value is an email address. */
+    public static final String EMAIL = "email";
+
     /** The input types a prompt control may declare. */
-    public static final Set<String> TYPES = Set.of("string", "email", "text", "integer", "decimal", "boolean", "date", MULTISELECT);
+    public static final Set<String> TYPES =
+            Set.of("string", EMAIL, "text", "integer", "decimal", "boolean", "date", MULTISELECT, SELECT, LOOKUP);
 
     /** The input's name, referenced as {@code {name}} in the call's body. */
     private String name;
@@ -53,8 +65,13 @@ public class ActionPromptIntent {
     /** One line under the control. */
     private String help;
 
-    /** The values a {@link #MULTISELECT} chooses from; refused on every other type. */
+    /**
+     * The values a {@link #MULTISELECT} or a {@link #SELECT} chooses from; refused on every other type.
+     */
     private List<ActionPromptOptionIntent> options = new ArrayList<>();
+
+    /** The entity of the model a {@link #LOOKUP} picks a record of; refused on every other type. */
+    private String entity;
 
     public String getName() {
         return name;
@@ -112,8 +129,31 @@ public class ActionPromptIntent {
         this.options = options == null ? new ArrayList<>() : options;
     }
 
+    public String getEntity() {
+        return entity;
+    }
+
+    public void setEntity(String entity) {
+        this.entity = entity;
+    }
+
     /** Whether the input is a {@link #MULTISELECT}. */
     public boolean isMultiselect() {
         return MULTISELECT.equals(type);
+    }
+
+    /** Whether the input is a {@link #SELECT}. */
+    public boolean isSelect() {
+        return SELECT.equals(type);
+    }
+
+    /** Whether the input is a {@link #LOOKUP}. */
+    public boolean isLookup() {
+        return LOOKUP.equals(type);
+    }
+
+    /** Whether the input chooses from its {@link #options} - a multiselect or a select. */
+    public boolean choosesFromOptions() {
+        return isMultiselect() || isSelect();
     }
 }
