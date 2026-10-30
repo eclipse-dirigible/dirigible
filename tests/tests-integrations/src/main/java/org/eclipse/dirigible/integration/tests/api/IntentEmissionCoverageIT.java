@@ -3514,15 +3514,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // fieldDisplay() - never a disabled input, never the raw form value. A DATE field (dueOn) is
         // the one the #7501 review's "raw model values" finding named.
         String billDocumentView = contentOf("gen/emission/views/Bill/Bill-document.html");
-        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.DueOn, 'DATE', '', null) || '\\u2014'\""),
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(record.DueOn, 'DATE', '', null) || '\\u2014'\""),
                 "the preview must read a DATE field through fieldDisplay(), not print the raw form value: " + billDocumentView);
         // ...and a DROPDOWN relation through its option label (#7576): the options travel as the Alpine
         // scope's options<Prop>, which an x-text expression resolves, so the preview cannot drop the
         // relation.
-        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(form.Person, 'DROPDOWN', '', optionsPerson) || '\\u2014'\""),
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(record.Person, 'DROPDOWN', '', optionsPerson) || '\\u2014'\""),
                 "the preview must show a DROPDOWN relation's option label through fieldDisplay(): " + billDocumentView);
         // ...and so must the rail's Details, the section the read-only fields live in (#7522).
-        assertTrue(billDocumentView.contains("fieldDisplay(form.SendOutcome, "),
+        assertTrue(billDocumentView.contains("x-text=\"fieldDisplay(record.SendOutcome, "),
                 "the Details rail must read a read-only field through fieldDisplay(): " + billDocumentView);
         assertFalse(billDocumentView.contains("x-text=\"form."), "no read-only value may print a raw form value: " + billDocumentView);
         // One read-only rendering: the separate frozen-header card and the form it swapped out are gone,
@@ -3993,12 +3993,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             assertFalse(form.contains("x-text=\"form."), "a read-only card must not print a raw form value: " + form);
         }
         assertTrue(
-                claimMyFormView.contains("x-text=\"fieldDisplay(form.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
+                claimMyFormView.contains("x-text=\"fieldDisplay(record.Approved, 'CHECKBOX', '', [{ value: true, text: T('")
                         && claimMyFormView.contains(".defaults.yes', 'Yes') }, { value: false, text: T('"),
                 "a read-only checkbox must render its translated state, not the literal true/false: " + claimMyFormView);
-        assertTrue(claimForm.contains("x-text=\"checkboxText(form.Approved)\""),
+        assertTrue(claimForm.contains("x-text=\"fieldText(loadedRecord?.Approved, 'CHECKBOX', '', [{ value: true, text: T('"),
                 "a read-only checkbox on the record page must render its translated state, not the literal true/false: " + claimForm);
-        assertTrue(claimForm.contains("x-text=\"fieldText(form.CreatedAt, true, false, null)\""),
+        // #8367: both print the record as the server answered it, not the input buffer.
+        assertTrue(claimForm.contains("x-text=\"fieldText(loadedRecord?.CreatedAt, 'DATETIME-LOCAL', '', null)\""),
                 "an audit timestamp must render through the instance format, not as a raw ISO string: " + claimForm);
 
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");

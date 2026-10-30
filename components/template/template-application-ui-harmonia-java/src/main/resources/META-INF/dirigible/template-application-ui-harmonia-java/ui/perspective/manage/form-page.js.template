@@ -124,6 +124,10 @@ function harmoniaCalcEval(expr, vars, scale) {
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
+## How fieldDisplay reads a property (#8367): a date-typed one as a date whatever its widget, a
+## number: { stampOn: issue } one as a document number, and a float - only a float - through its pattern.
+#macro(displayWidget $p)#if($p.numberStampOnIssue)DOCUMENT_NUMBER#elseif($p.isDateType && $p.widgetType == "DATE")DATE#elseif($p.isDateType)DATETIME-LOCAL#else$!{p.widgetType}#end#end
+#macro(displayPattern $p)#if($p.isFloatType)$!{p.formatPattern}#end#end
 ## What a delete confirmation calls the record (#8134): its Name, else its document Number, else none -
 ## the page then names it by id.
 #set($recordLabelProperty = "")
@@ -212,10 +216,13 @@ document.addEventListener('alpine:init', () => {
     // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
     // (an outage must not lock the UI - the server still refuses the write).
     mutable: true,
-    // The record as the server answered it, set once it has loaded (#8116): what its contributed actions'
-    // status guards read. The form holds only the editable fields, and until the load it holds blanks.
-    loadedRecord: null,
 #end
+
+    // The record as the server answered it, set once it has loaded (#8116): what its contributed actions'
+    // status guards read, and what every value the page SHOWS is printed from (#8367). The form is the
+    // input buffer - its dates are cut to the shape a date input takes, so a stored 13:49:11 reads
+    // 13:49 there - and until the load it holds blanks.
+    loadedRecord: null,
 
     // Record action bar (issue #7491). Two viewport flags, because the page changes twice: below
     // 1024px the side rail stops being a column and becomes the last section of one, and below 768px
@@ -1165,16 +1172,17 @@ document.addEventListener('alpine:init', () => {
 
     // One line of the record's own identity under the title, built from the properties the model
     // already marks as major - the same flag that picks the list's columns, so the line follows
-    // the model instead of a second hand-kept list. The status is skipped: it is the badge.
+    // the model instead of a second hand-kept list. The status is skipped: it is the badge. Each
+    // value is the stored one, printed as every other surface prints it (#8367).
     summaryLine() {
-      if (!(this.isEdit || this.isPreview)) return '';
+      if (!(this.isEdit || this.isPreview) || !this.loadedRecord) return '';
       const parts = [];
 #foreach($property in $listProperties)
 #if(!$property.dataAutoIncrement && !$property.collectionColumn && $property.widgetIsMajor && $property.widgetType != "DOCUMENT_STATUS" && !$property.isHiddenProperty)
 #if($property.roleRead)
       if (this.canSee('${property.name}')) {
 #end
-      this.pushSummary(parts, #if($property.numberStampOnIssue)window.HarmoniaFormat.documentNumber(this.form.${property.name})#{else}this.form.${property.name}#end, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS")true#{else}false#end, #if($property.widgetType == "DROPDOWN")this.options${property.name}#{else}null#end);
+      this.pushSummary(parts, this.loadedRecord.${property.name}, '#displayWidget($property)', '#displayPattern($property)', #if($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT")this.options${property.name}#{else}null#end);
 #if($property.roleRead)
       }
 #end
@@ -1183,25 +1191,25 @@ document.addEventListener('alpine:init', () => {
       return parts.slice(0, 4).join(' \u00b7 ');
     },
 
-    pushSummary(parts, value, isDate, isNumber, options) {
-      const text = this.valueOf_(value, isDate, isNumber, options);
+    pushSummary(parts, value, widget, pattern, options) {
+      const text = this.valueOf_(value, widget, pattern, options);
       if (text !== null) parts.push(text);
     },
 
-    // The one place a stored value becomes the text the page shows. Returns null for "nothing
-    // here" so the caller decides between skipping it (the summary) and the em dash (a field).
-    valueOf_(value, isDate, isNumber, options) {
-      if (value === null || value === undefined || value === '') return null;
+    // The one place a stored value becomes the text the page shows: the shared basePage.fieldDisplay,
+    // so the record page prints a value exactly as the list, the document page and the Details cards
+    // do (#8367) - a date through the instance pattern with nothing cut first, a float through its own
+    // pattern, an integer as it is stored, an option key as its label. Returns null for "nothing here"
+    // so the caller decides between skipping it (the summary) and the em dash (a field).
+    valueOf_(value, widget, pattern, options) {
       if (Array.isArray(value) && !value.length) return null;
-      if (options) return this.optionText(options, value);
-      if (!window.HarmoniaFormat) return String(value);
-      if (isNumber) return HarmoniaFormat.number(value, null, '');
-      return HarmoniaFormat.value(value, !!isDate);
+      const text = this.fieldDisplay(value, widget, pattern, options);
+      return text === '' || text === null || text === undefined ? null : String(text);
     },
 
     // Preview renders values, not disabled inputs, so an empty one needs to read as empty.
-    fieldText(value, isDate, isNumber, options) {
-      const text = this.valueOf_(value, isDate, isNumber, options);
+    fieldText(value, widget, pattern, options) {
+      const text = this.valueOf_(value, widget, pattern, options);
       return text === null ? '\u2014' : text;
     },
 

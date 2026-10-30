@@ -41,6 +41,9 @@ document.addEventListener('alpine:init', () => {
 #end
     },
     options: {},
+    // The record as the server answered it (#8367): what the read-only cards print. The form is the
+    // input buffer, whose dates are cut to the shape a date input takes.
+    record: {},
 
     apiPath: '/${javaPerspectiveName}/${name}MyController',
     // The personal items controller (composition child inherits the personal scope one hop).
@@ -124,6 +127,7 @@ document.addEventListener('alpine:init', () => {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
           await optionsLoaded;
+          this.record = record || {};
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           try {
             const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');

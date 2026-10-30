@@ -28,8 +28,14 @@
 #end
 #end
 #macro(valueOptions $property)#if($property.widgetType == "CHECKBOX")[{ value: true, text: T('$projectName:${tprefix}.defaults.yes', 'Yes') }, { value: false, text: T('$projectName:${tprefix}.defaults.no', 'No') }]#elseif(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")options${property.name}#{else}null#end#end
-#macro(valueDisplay $property)fieldDisplay(form.${property.name}, '#if($property.numberStampOnIssue)DOCUMENT_NUMBER#else$!{property.widgetType}#end', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property))#end
-#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #end#valueDisplay($property) !== ''"#end
+## A shown value reads the record as the server answered it (loadedRecord, #8367), never the input
+## buffer: `form` holds a date cut to the shape its input takes (13:49:11 -> 13:49). fieldDisplay reads
+## a date-typed property as a date whatever its widget, and gives a pattern to a float only, so an
+## integer prints as stored. The gate only tests for emptiness, so it may read the form.
+#macro(displayWidget $p)#if($p.numberStampOnIssue)DOCUMENT_NUMBER#elseif($p.isDateType && $p.widgetType == "DATE")DATE#elseif($p.isDateType)DATETIME-LOCAL#else$!{p.widgetType}#end#end
+#macro(displayArgs $property)'#displayWidget($property)', '#if($property.isFloatType)$!{property.formatPattern}#end', #valueOptions($property)#end
+#macro(valueDisplay $property)fieldText(loadedRecord?.${property.name}, #displayArgs($property))#end
+#macro(valueGate $property)x-show="#if($property.roleRead)canSee('${property.name}') && #end#if($property.visibleWhenJs)${property.visibleWhenJs} && #{end}fieldDisplay(form.${property.name}, #displayArgs($property)) !== ''"#end
 ## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
 ## title bar (same treatment as the document layout), never as an editable input.
 #set($statusProp = "")
@@ -333,7 +339,7 @@
         <template x-if="isPreview">
           <div class="vbox gap-1">
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>
-            <div class="text-sm wrap-anywhere" x-text="#if($property.widgetType == "DROPDOWN")fieldText(form.${property.name}, false, false, options${property.name})#elseif($property.widgetType == "MULTISELECT")multiText(form.${property.name}, options${property.name})#elseif($property.widgetType == "CHECKBOX")checkboxText(form.${property.name})#elseif($property.isDateType)fieldText(form.${property.name}, true, false, null)#elseif($property.isNumberType)fieldText(form.${property.name}, false, true, null)#{else}fieldText(form.${property.name}, false, false, null)#end"></div>
+            <div class="text-sm wrap-anywhere" x-text="#if($property.widgetType == "CHECKBOX")checkboxText(loadedRecord?.${property.name})#{else}#valueDisplay($property)#end"></div>
           </div>
         </template>
         <template x-if="!isPreview">
@@ -767,22 +773,10 @@
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
             <div class="vbox" #valueGate($property)>
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
-#if($property.widgetType == "DROPDOWN")
-              <span class="text-sm wrap-anywhere" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
-#elseif($property.widgetType == "MULTISELECT")
-              <span class="text-sm wrap-anywhere" x-text="(Array.isArray(form.${property.name}) ? form.${property.name} : String(form.${property.name} || '').split(',')).filter(v => v !== '').map(v => (options${property.name}.find(o => String(o.value) === String(v).trim()) || {}).text || v).join(', ')"></span>
-#elseif($property.widgetType == "CHECKBOX")
-              <!-- The translated state, as the preview shows it - fieldText would print true/false (#7522). -->
-              <span class="text-sm wrap-anywhere" x-text="checkboxText(form.${property.name})"></span>
-#elseif($property.numberStampOnIssue)
-              <!-- A number: { stampOn: issue } field reads as the draft marker until it is stamped (#7722). -->
-              <span class="text-sm wrap-anywhere" x-text="window.HarmoniaFormat.documentNumber(form.${property.name}) || '—'"></span>
-#else
-              <!-- Through the same formatter every other surface uses: these are the audit columns, so
-                   most of them ARE dates, and printed raw they read as the backend's serialization
-                   (2026-09-30T10:29) rather than the instance's date format. -->
-              <span class="text-sm wrap-anywhere" x-text="fieldText(form.${property.name}, #if($property.isDateType)true#{else}false#end, #if($property.isNumberType)true#{else}false#end, null)"></span>
-#end
+## The stored value through the page's one formatter (#8367): option labels, a checkbox's translated
+## state, the draft marker of an unstamped number (#7722), the instance date pattern with the seconds the
+## server holds, an integer without decimals.
+              <span class="text-sm wrap-anywhere" x-text="#valueDisplay($property)"></span>
             </div>
 #end
 #end
