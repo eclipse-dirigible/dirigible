@@ -1000,9 +1000,10 @@ public final class IntentParser {
      * Each entity's optional {@code list} is the exact column set and order of its generated list
      * tables (issue #7614). Validated like {@code order}: no blank entry, no name twice, and every name
      * a property the list can show - a field, a to-one ({@code manyToOne} / {@code oneToOne}) or
-     * {@code subset} relation, or the {@code Name} a {@code label:} synthesizes. A {@code oneToMany}
-     * relation has no column on the entity, so it is listed as a collection path instead (issue #8295)
-     * - see {@link #validateCollectionColumn}.
+     * {@code subset} relation, the {@code Name} a {@code label:} synthesizes, or an audit column of an
+     * {@code audit: true} entity ({@code CreatedAt}, {@code CreatedBy}, {@code UpdatedAt},
+     * {@code UpdatedBy} - issue #8376). A {@code oneToMany} relation has no column on the entity, so it
+     * is listed as a collection path instead (issue #8295) - see {@link #validateCollectionColumn}.
      */
     private static void validateLists(IntentModel model, List<String> issues) {
         for (EntityIntent entity : model.getEntities()) {
@@ -1028,6 +1029,12 @@ public final class IntentParser {
                                                     .isBlank()) {
                 known.add("name");
             }
+            // An audit: true entity carries the four audit properties, and applyListColumns matches them like
+            // any
+            // other (issue #8376) - as a related: register's show: does since #8062.
+            if (entity.isAudited()) {
+                known.addAll(AUDIT_COLUMNS);
+            }
             Set<String> seen = new HashSet<>();
             for (String token : list) {
                 if (token == null || token.isBlank()) {
@@ -1044,6 +1051,9 @@ public final class IntentParser {
                 }
                 if (key.contains(".") || isCollection(entity, key)) {
                     validateCollectionColumn(model, entity, token.trim(), known, issues);
+                } else if (AUDIT_COLUMNS.contains(key)) {
+                    issues.add("entity [" + entity.getName() + "] list: [" + token + "] is an audit column, and [" + entity.getName()
+                            + "] is not audit: true");
                 } else {
                     issues.add("entity [" + entity.getName() + "] list references [" + token
                             + "] which is not a field or to-one relation of the entity");

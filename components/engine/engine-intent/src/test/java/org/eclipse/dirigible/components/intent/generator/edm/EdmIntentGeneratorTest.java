@@ -2810,6 +2810,32 @@ class EdmIntentGeneratorTest {
         assertEquals("false", propertyByName(invoice, "Id").get("widgetIsMajor"));
     }
 
+    /**
+     * The audit columns of an {@code audit: true} entity are list columns like any property (#8376):
+     * {@code listOrder} names them in the authored sequence, in the properties' own names, and they
+     * turn major.
+     */
+    @Test
+    void anAuditedListShowsItsAuditColumns() {
+        String yaml = """
+                name: helpdesk
+                entities:
+                  - name: SupportTicket
+                    audit: true
+                    list: [subject, createdAt, CreatedBy]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: subject, type: string }
+                """;
+        Map<String, Object> ticket =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "helpdesk")), "SupportTicket");
+
+        assertEquals("Subject,CreatedAt,CreatedBy", ticket.get("listOrder"));
+        assertEquals("true", propertyByName(ticket, "CreatedAt").get("widgetIsMajor"));
+        assertEquals("true", propertyByName(ticket, "CreatedBy").get("widgetIsMajor"));
+        assertEquals("false", propertyByName(ticket, "UpdatedAt").get("widgetIsMajor"), "an unlisted audit column stays off the list");
+    }
+
     /** Without {@code list:} nothing changes: no {@code listOrder}, and {@code major} decides alone. */
     @Test
     void noListLeavesMajorAndEmitsNoListOrder() {
