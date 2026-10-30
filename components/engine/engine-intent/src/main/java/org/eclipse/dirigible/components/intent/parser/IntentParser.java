@@ -4741,6 +4741,9 @@ public final class IntentParser {
                           .isEmpty()) {
                     validateVisibleTo(entity, field, declaredRoles, issues);
                 }
+                if (field.isFixedAfterCreate()) {
+                    validateFixedAfterCreate(entity, field, issues);
+                }
             }
             if (idCount > 1) {
                 issues.add("entity [" + name + "] declares " + idCount + " primary-key fields - exactly one is allowed");
@@ -5776,6 +5779,63 @@ public final class IntentParser {
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
             issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
+        }
+    }
+
+    /**
+     * {@code fixedAfterCreate: true} on a field (dirigible #8363) - the field twin of the relation's
+     * key - fixes a value the caller sets on create. It is refused where no caller writes the field at
+     * all (the primary key, a generated, uuid, numbered or status-stamped field, a {@code readOnly} or
+     * derived one, an aggregate) and where an unchanged Edit form would not send back the stored value:
+     * a {@code dependsOn} field (rewritten when its relation is re-picked), a {@code timestamp} (the
+     * datetime input holds a local wall clock to the minute, so seconds, milliseconds and a
+     * daylight-saving fold do not survive the round trip) and a translatable string of a
+     * {@code multilingual} entity (the read overlay hands back a translation, not the base column). A
+     * create-time default ({@code calculatedActionOnCreate}, #6696) stays caller-editable and may be
+     * fixed.
+     *
+     * @param entity the entity declaring the field
+     * @param field the field
+     * @param issues the issue list to add to
+     */
+    private static void validateFixedAfterCreate(EntityIntent entity, FieldIntent field, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares fixedAfterCreate but ";
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (field.isPrimaryKey() || field.isGenerated()) {
+            issues.add(subject + "the platform assigns a primary key or a generated field - no caller sets it");
+        }
+        if ("uuid".equals(type)) {
+            issues.add(subject + "a uuid is assigned by the platform - no caller sets it");
+        }
+        if (field.getNumber() != null) {
+            issues.add(subject + "a number: field is stamped by the platform - no caller sets it");
+        }
+        if (field.getStampOn() != null) {
+            issues.add(subject + "a stampOn: field is stamped on a status move - no caller sets it");
+        }
+        if (field.isReadOnly()) {
+            issues.add(subject + "a readOnly field is never written by a caller already");
+        }
+        if (!isBlank(field.getCalculatedOnCreate()) || !isBlank(field.getCalculatedOnUpdate())
+                || !isBlank(field.getCalculatedActionOnUpdate())) {
+            issues.add(subject + "a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived"
+                    + " (read-only on the New form too) - only calculatedActionOnCreate, a create-time default, may be fixed");
+        }
+        if (field.isAggregate()) {
+            issues.add(subject + "an aggregate is a derived total - no caller sets it");
+        }
+        if (field.getDependsOn() != null) {
+            issues.add(subject + "a dependsOn field is rewritten by the form whenever its relation is re-picked");
+        }
+        if ("timestamp".equals(type)) {
+            issues.add(subject + "a timestamp does not survive the form round trip (the input holds a local time to the minute),"
+                    + " so an unchanged edit would be refused - a key is not a moment; use a string, a date or a number");
+        }
+        if (entity.isMultilingual() && field.hasLanguageColumn()) {
+            issues.add(subject + "it is translatable in a multilingual entity (a reader gets a translation back, not the stored value)"
+                    + " - add translatable: false, as any key should");
         }
     }
 

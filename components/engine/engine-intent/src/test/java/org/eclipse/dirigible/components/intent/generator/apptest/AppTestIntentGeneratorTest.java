@@ -545,6 +545,42 @@ class AppTestIntentGeneratorTest {
     }
 
     /**
+     * A field set on create and fixed afterwards (#8363) is filled by the create flow and left alone by
+     * the edit flow: {@code readOnlyOnEdit}, never {@code readOnly}.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksAFieldFixedAfterCreateReadOnlyOnEditOnly() {
+        String intent = """
+                name: customers
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string, length: 20, required: true, unique: true, normalize: upper, fixedAfterCreate: true }
+                      - { name: name, type: string, length: 100, required: true }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Customer",
+                edmEntity("Customer", "Customer", "Customers", "MANAGE_LIST", "Customers", "sales", "KF_MOD_CUSTOMERS_CUSTOMER", false));
+
+        Map<String, Object> customer =
+                entity(AppTestIntentGenerator.buildManifest("customers", "customers", IntentParser.parse(intent), edm), "Customer");
+        Map<String, Map<String, Object>> fields = new LinkedHashMap<>();
+        for (Map<String, Object> field : (List<Map<String, Object>>) customer.get("fields")) {
+            fields.put(String.valueOf(field.get("name")), field);
+        }
+
+        assertEquals(Boolean.TRUE, fields.get("Code")
+                                         .get("readOnlyOnEdit"));
+        assertNull(fields.get("Code")
+                         .get("readOnly"),
+                "the create flow must still fill it");
+        assertNull(fields.get("Name")
+                         .get("readOnlyOnEdit"));
+    }
+
+    /**
      * The three things a curated, guarded module needs the runner to know (#7663, #7664, #7667): which
      * target rows the picker actually offers, which columns the list actually renders, and which parent
      * state the child refuses outright.

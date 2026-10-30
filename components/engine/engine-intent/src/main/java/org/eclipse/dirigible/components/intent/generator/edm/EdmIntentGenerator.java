@@ -1644,6 +1644,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.getStampOn() != null) {
             p.put("isReadOnlyProperty", "true");
         }
+        // Set on create, fixed afterwards (#8363): the same two scalars as a fixed to-one relation
+        // (#7903, putFixedAfterCreate) - the controllers refuse a changed value with a 409 under
+        // checks.<Entity>_fixed_<Field>, the forms render the input read-only on edit.
+        if (field.isFixedAfterCreate()) {
+            p.put("fixedAfterCreate", "true");
+            p.put("fixedAfterCreateMessage",
+                    "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change once the " + entityName + " is created");
+        }
         // A uuid field is platform-generated: the generated repository assigns a random UUID on create
         // when the value is empty (no hand-written calculatedActionOnCreate needed). The author can
         // still seed/import an explicit value - it is only filled when blank.

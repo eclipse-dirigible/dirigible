@@ -136,10 +136,11 @@ final class ModelTranslations {
     }
 
     /**
-     * The catalog key of a {@code fixedAfterCreate} relation's refusal (issue #7903).
+     * The catalog key of a {@code fixedAfterCreate} property's refusal - a to-one relation (issue
+     * #7903) or a field (#8363).
      *
      * @param entity the entity
-     * @param property the relation's FK property
+     * @param property the fixed property (a field, or a relation's FK)
      * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
      *         property is not fixed after create or carries no message
      */
