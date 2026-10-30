@@ -594,6 +594,25 @@ class CallActionIntentTest {
         IntentParser.parse(TRIAL.replace("required: true, help: \"name@company.com\"", "default: \"jane@example.com\""));
     }
 
+    /**
+     * The address check accepts what the forms' {@code ^[^\s@]+@[^\s@]+\.[^\s@]+$} accepts, and stays
+     * linear on a long input that pattern backtracks on.
+     */
+    @Test
+    void theEmailCheckFollowsTheFormsRule() {
+        java.util.regex.Pattern formsRule = java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
+        for (String text : List.of("jane@example.com", "j@e.c", "jane@mail.example.org", "jane@.example.com", "jane@a..b", "jane@",
+                "@example.com", "jane@example", "jane@example.", "jane@.com", "jane@@example.com", "ja@ne@example.com",
+                "jane doe@example.com", "jane@exa mple.com", "", "jane@a.b.")) {
+            assertEquals(formsRule.matcher(text)
+                                  .matches(),
+                    IntentParser.isEmailAddress(text), text);
+        }
+        String hostile = "a@" + "!.".repeat(100_000);
+        assertTrue(IntentParser.isEmailAddress(hostile));
+        assertFalse(IntentParser.isEmailAddress(hostile + " "));
+    }
+
     /** A select chooses from its options, and its literal default names one (#8366). */
     @Test
     void aSelectNeedsOptionsAndAKnownDefault() {

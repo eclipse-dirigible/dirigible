@@ -279,11 +279,6 @@ public final class IntentParser {
     /** One {@code {...}} placeholder of a {@code call:} action's path or body. */
     private static final java.util.regex.Pattern CALL_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
 
-    /**
-     * An email address as the shell's forms check it - the {@code email} rule of
-     * {@code formValidation.js} - so a literal default the parser accepts is one the dialog accepts.
-     */
-    private static final java.util.regex.Pattern EMAIL_ADDRESS = java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
     /** The methods a {@code call:} action may send. */
     private static final Set<String> CALL_METHODS = Set.of("POST", "PUT", "DELETE");
     /** The field types a {@code fileName:} token may carry a {@code :pattern} date format on. */
@@ -10136,13 +10131,29 @@ public final class IntentParser {
             case "decimal" -> value instanceof Number ? null : "a number";
             case "boolean" -> value instanceof Boolean ? null : "true or false";
             case "date" -> value instanceof String text && isIsoDate(text) ? null : "a date (yyyy-MM-dd)";
-            case ActionPromptIntent.EMAIL -> value instanceof String text && EMAIL_ADDRESS.matcher(text.trim())
-                                                                                          .matches() ? null : "an email address";
+            case ActionPromptIntent.EMAIL -> value instanceof String text && isEmailAddress(text.trim()) ? null : "an email address";
             case ActionPromptIntent.MULTISELECT -> value instanceof List<?> list && list.stream()
                                                                                         .allMatch(String.class::isInstance) ? null
                                                                                                 : "a list of its option values";
             default -> value instanceof String ? null : "a string";
         };
+    }
+
+    /**
+     * An email address as the shell's forms check it - the {@code email} rule of
+     * {@code formValidation.js}, {@code ^[^\s@]+@[^\s@]+\.[^\s@]+$} - so a literal default the parser
+     * accepts is one the dialog accepts. Checked by hand rather than by that pattern, whose two
+     * overlapping runs around the dot backtrack polynomially on a long input.
+     */
+    static boolean isEmailAddress(String text) {
+        int at = text.indexOf('@');
+        if (at <= 0 || at != text.lastIndexOf('@') || text.chars()
+                                                          .anyMatch(Character::isWhitespace)) {
+            return false;
+        }
+        String domain = text.substring(at + 1);
+        int dot = domain.indexOf('.', 1);
+        return dot > 0 && dot < domain.length() - 1;
     }
 
     private static boolean isIsoDate(String text) {
