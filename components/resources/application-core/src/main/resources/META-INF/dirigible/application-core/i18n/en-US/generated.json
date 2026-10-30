@@ -54,6 +54,8 @@
       "reportNoRows": "The {{name}} report returned no rows.",
       "detailSelectRecord": "Select a record to get a list of it's details.",
       "immutable": "This record is read-only in its current status - corrections go through the workflow.",
+      "immutableAlways": "This record cannot be changed once it is created.",
+      "immutablePeriod": "This record is read-only - its accounting period is closed; book the correction in an open period.",
       "requiredLegend": "Fields marked * are required",
       "workflowWaiting": "is waiting for you",
       "workflowAssigned": "assigned",

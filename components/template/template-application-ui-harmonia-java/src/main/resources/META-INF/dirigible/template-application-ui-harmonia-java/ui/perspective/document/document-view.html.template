@@ -77,9 +77,11 @@
           <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText(), form.${docStatusProp})" x-show="(isEdit || isPreview) &amp;&amp; statusText()" x-text="statusText()"></span>
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
-          <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the
-               page renders read-only and says so (the controller's 409 stays authoritative). -->
-          <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', '#if($periodLock && !$immutableStatusProperty && !$immutableAlways)This record is read-only - its accounting period is closed; book the correction in an open period.#{else}This record is read-only in its current status - corrections go through the workflow.#end')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+          <!-- Immutability pre-check: the document refuses user edits/deletes, so the page renders read-only
+               and says why (the controller's 409 stays authoritative). Neutral (#8368): it explains the
+               missing Edit, it reports nothing wrong - and its tooltip names the lock the entity declares:
+               always, by status, or by accounting period. -->
+          <span x-h-badge class="shrink-0" data-variant="outline" x-show="!mutable" :title="#if($immutableAlways)T('$projectName:${tprefix}.messages.immutableAlways', 'This record cannot be changed once it is created.')#elseif($immutableStatusProperty)T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')#{else}T('$projectName:${tprefix}.messages.immutablePeriod', 'This record is read-only - its accounting period is closed; book the correction in an open period.')#end" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
 #end
         </div>
         <!-- Preview says WHICH document this is, from the properties the model marks as major; the
