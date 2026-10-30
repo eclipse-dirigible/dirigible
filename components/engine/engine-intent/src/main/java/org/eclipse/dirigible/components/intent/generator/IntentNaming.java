@@ -177,6 +177,19 @@ public final class IntentNaming {
     }
 
     /**
+     * The URL of the generated application's shell page:
+     * {@code /services/web/<project>/gen/<base name>/index.html} - the model-to-code template generates
+     * it into the folder named after the {@code .model} file, which is the intent's base name. A link
+     * into one of the application's routes is this URL plus {@code #<route>} (#8374).
+     *
+     * @param context the generation context
+     * @return the shell page URL
+     */
+    public static String appShellUrl(IntentGenerationContext context) {
+        return "/services/web/" + context.getProjectName() + "/gen/" + baseName(context) + "/index.html";
+    }
+
+    /**
      * The URL of a standalone report's generated controller:
      * {@code /services/java/<project>/gen/<report folder>/api/reports/<Report>Controller}, beside the
      * page {@link #reportPageFolderUrl} names.

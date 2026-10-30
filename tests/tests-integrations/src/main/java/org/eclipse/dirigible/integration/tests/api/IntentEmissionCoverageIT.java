@@ -3849,6 +3849,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEquals("10,12,11",
                 pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
                 "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
+        // #8374: a link may carry filters in the URL - a report row opening the records it counts. The
+        // list reads them once before its first load: a relation by its exact label (one key EQ, two
+        // keys sharing the label IN, no key = the chip and no rows without a query), a boolean by
+        // true/false; a string column and an unknown name are ignored.
+        String statusRows = "[{ Id: 1, Name: 'OPEN' }, { Id: 2, Name: 'CLOSED' }, { Id: 3, Name: 'CLOSED' }]";
+        assertEquals("posts [[{\"propertyName\":\"Status\",\"operator\":\"EQ\",\"value\":1}]] lists 0 | OPEN",
+                pageUrlFilters(campaignListPage, "CampaignManageListPage", "#/Campaign?Status=OPEN", statusRows),
+                "a label one key carries must filter EQ by that key");
+        assertEquals("posts [[{\"propertyName\":\"Status\",\"operator\":\"IN\",\"value\":[2,3]}]] lists 0 | CLOSED",
+                pageUrlFilters(campaignListPage, "CampaignManageListPage", "#/Campaign?Status=CLOSED", statusRows),
+                "a label two keys share must filter IN by both");
+        assertEquals("posts [] lists 0 no-results | GONE",
+                pageUrlFilters(campaignListPage, "CampaignManageListPage", "#/Campaign?Status=GONE", statusRows),
+                "a label no key carries must keep its chip and show no rows without a query");
+        assertEquals("posts [] lists 1 | ",
+                pageUrlFilters(campaignListPage, "CampaignManageListPage", "#/Campaign?Name=x&Subject=x", statusRows),
+                "a string column and an unknown name must be ignored");
+        String bookingListPage = contentOf("gen/emission/js/components/pages/Booking/BookingManageListPage.js");
+        assertEquals("posts [[{\"propertyName\":\"WithinAllowance\",\"operator\":\"EQ\",\"value\":true}]] lists 0 | Yes",
+                pageUrlFilters(bookingListPage, "BookingManageListPage", "#/Booking?WithinAllowance=true", statusRows),
+                "a boolean must filter EQ by its real true/false");
         assertFalse(campaignListView.contains("detailPanel("), "the record sheet shows the master's fields only, not its collections");
         assertTrue(contentOf("gen/emission/views/Campaign/Campaign-form.html").contains("detailPanel({...d"),
                 "a master's detail collections must render on the form its Preview / Edit open");
@@ -8779,6 +8800,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             return context.eval("js",
                     "(() => { const page = pages['" + componentName + "'](); return " + calls
                             + ".map(c => page.statusVariant(c[0], c[1])).join('|'); })()")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated list page's URL filters (#8374) the way its {@code init()} does - read the
+     * {@code hash}'s query, then the first load - over the shipped {@code basePage.js} with a stubbed
+     * REST client whose relation lookups all answer {@code lookupRows}. Answers
+     * {@code posts <the /search condition lists> lists <entity list reads>[ no-results] | <chip texts>}.
+     */
+    private static String pageUrlFilters(String pageScript, String componentName, String hash, String lookupRows) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js", "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                    + " var document = { addEventListener: (event, callback) => callback() };"
+                    + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };" + " window.location = { hash: '" + hash
+                    + "', pathname: '/' };" + " var App = { services: {} }; var __posts = []; var __lists = 0;" + " App.services.api = {"
+                    + "   getAll: (url, options) => { if (options && options.baseUrl === '') return Promise.resolve(" + lookupRows
+                    + "); __lists++; return Promise.resolve([]); },"
+                    + "   post: (url, body) => { __posts.push(JSON.stringify(body.conditions)); return Promise.resolve([{ Id: 9 }]); } };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            context.eval("js", "var page = pages['" + componentName + "'](); var __done = false;"
+                    + " (async () => { const filtered = await page.applyUrlFilters(); await page.load(filtered); __done = true; })();");
+            return context.eval("js",
+                    "__done ? 'posts [' + __posts.join(',') + '] lists ' + __lists"
+                            + " + (page.displayState === 'no-results' ? ' no-results' : '')"
+                            + " + ' | ' + page.activeFilterChips.map(c => c.text).join(',') : 'pending'")
                           .asString();
         }
     }

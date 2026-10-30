@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.StatementSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
+import org.eclipse.dirigible.components.intent.generator.edm.EdmIntentGenerator;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.PermissionSupport;
 import org.eclipse.dirigible.components.intent.generator.NotifySupport;
@@ -338,6 +339,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             entry.put("widget", document.get("widget"));
             entry.put("columns", columnsOf(document));
         }
+        // A list tile links each row to the records it counts (#8374).
+        if (document.containsKey("drill")) {
+            entry.put("drill", document.get("drill"));
+        }
         entry.put("url", IntentNaming.reportPageFolderUrl(project, name) + "/index.html");
         entry.put("apiBase", IntentNaming.reportControllerUrl(project, name));
         return entry;
@@ -419,6 +424,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
 
         StatementQuery statementQuery = null;
+        // A plain aggregation's resolved dimensions and whether a lifecycle scope narrows it - what
+        // decides whether its rows drill down to the source's list (#8374).
+        List<ResolvedDimension> plainDimensions = List.of();
+        boolean scoped = false;
         List<Map<String, Object>> parameters;
         List<Map<String, Object>> conditions;
         List<Map<String, Object>> joinRows;
@@ -443,7 +452,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             query = correspondence.query();
             views.add(correspondence.view());
         } else {
-            for (ResolvedDimension dimension : resolveDimensions(context, model, source, baseAlias, report, joins, aggregated)) {
+            plainDimensions = resolveDimensions(context, model, source, baseAlias, report, joins, aggregated);
+            for (ResolvedDimension dimension : plainDimensions) {
                 columns.add(dimension.column());
                 dimensionColumns.put(expressionKey(dimension.declared()), new WidgetDimension(dimension.column(), dimension.bucket()));
             }
@@ -475,6 +485,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
             String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
             Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
+            scoped = scope != null;
             // A statement takes the balance window too: its ledger reduction is the balance report's,
             // and the authored `parameters:` are appended to the same list below.
             parameters = report.isLedgerKind() ? balanceParameters() : new ArrayList<>();
@@ -528,6 +539,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (report.getWidget() != null) {
             document.put("widget", widget(report, dimensionColumns, measureColumns));
         }
+        Map<String, Object> drill = drill(context, model, source, report, plainDimensions, scoped);
+        if (drill != null) {
+            document.put("drill", drill);
+        }
         if (balance) {
             // The report kind rides on the .report so the generated page knows to render the
             // balance affordances (window pickers, totals row).
@@ -558,6 +573,92 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         document.put("security", security(context, report.getName(), PermissionSupport.gates(context.getModel(), context.getSettings())));
         return new Emission(document, views);
+    }
+
+    /**
+     * The drill-down of a report's rows to the records they count (#8374): {@code { app, route,
+     * columns: [{ alias, property, by }] }}, from which a row links to the source's list, filtered by
+     * the row's dimension values. Only where that list can repeat exactly what the row counts:
+     * <ul>
+     * <li>a plain aggregation - no {@code kind:}, no {@code aging:} - with no {@code filter:}, no
+     * {@code parameters:} and no lifecycle scope in force, since the list cannot repeat a narrowing it
+     * does not know, and a link must never show more rows than the row counts;</li>
+     * <li>over a same-model source with a browse route of its own (not a composition child, not an
+     * extension);</li>
+     * <li>with at least one dimension, every one a column of the source's list and either a bare
+     * same-model to-one relation, matched by its label (the report groups by the label, so the faithful
+     * filter is every key carrying it), or an integer, decimal or boolean field, matched by value.</li>
+     * </ul>
+     *
+     * @return the drill block, or {@code null} when the report's rows do not drill
+     */
+    private static Map<String, Object> drill(IntentGenerationContext context, IntentModel model, EntityIntent source, ReportIntent report,
+            List<ResolvedDimension> dimensions, boolean scoped) {
+        boolean plain = (report.getKind() == null || report.getKind()
+                                                           .isBlank())
+                && !report.isAging() && report.isAggregated();
+        boolean narrowed = scoped || (report.getFilter() != null && !report.getFilter()
+                                                                           .isBlank())
+                || (report.getParameters() != null && !report.getParameters()
+                                                             .isEmpty());
+        if (!plain || narrowed || source == null || dimensions.isEmpty() || context == null) {
+            return null;
+        }
+        String route = EdmIntentGenerator.browseRoute(model, source);
+        if (route == null) {
+            return null;
+        }
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (ResolvedDimension dimension : dimensions) {
+            String by = drillMatch(model, source, dimension);
+            if (by == null) {
+                return null;
+            }
+            Map<String, Object> column = new LinkedHashMap<>();
+            column.put("alias", dimension.column()
+                                         .get("alias"));
+            column.put("property", IntentNaming.pascalCase(dimension.declared()
+                                                                    .trim()));
+            column.put("by", by);
+            columns.add(column);
+        }
+        Map<String, Object> drill = new LinkedHashMap<>();
+        drill.put("app", IntentNaming.appShellUrl(context));
+        drill.put("route", route);
+        drill.put("columns", columns);
+        return drill;
+    }
+
+    /**
+     * How the source's list matches one dimension of a drilling report: {@code label} for a bare
+     * same-model to-one relation, {@code value} for an integer, decimal or boolean field, or
+     * {@code null} when the dimension cannot drill - a bucket, a {@code relation.field} path, a string,
+     * date or time field, a cross-model relation, or a property that is no column of the source's list.
+     */
+    private static String drillMatch(IntentModel model, EntityIntent source, ResolvedDimension dimension) {
+        if (dimension.bucket() != null) {
+            return null;
+        }
+        String name = dimension.declared()
+                               .trim();
+        if (name.contains(".") || !EdmIntentGenerator.isListColumn(source, name)) {
+            return null;
+        }
+        FieldIntent field = fieldByName(source, name);
+        if (field != null) {
+            String type = field.getType() == null ? ""
+                    : field.getType()
+                           .trim()
+                           .toLowerCase(Locale.ROOT);
+            boolean generatedKey = field.isPrimaryKey() && field.isGenerated();
+            return !generatedKey && ("integer".equals(type) || "decimal".equals(type) || "boolean".equals(type)) ? "value" : null;
+        }
+        RelationIntent relation = relationByName(source, name);
+        if (relation != null && !relation.isCrossModel() && entityByName(model, relation.getTo()) != null
+                && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+            return "label";
+        }
+        return null;
     }
 
     /**

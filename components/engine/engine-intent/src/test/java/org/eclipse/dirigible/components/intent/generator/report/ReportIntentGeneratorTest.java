@@ -1317,4 +1317,181 @@ class ReportIntentGeneratorTest {
         assertEquals(2, query.split("JOIN \"SHIPPING_CUSTOMER\"", -1).length - 1, query);
         assertTrue(query.contains("WHERE Customer_BillTo.\"CUSTOMER_NAME\" <> 'X' and Customer_ShipTo.\"CUSTOMER_NAME\" <> 'Y'"), query);
     }
+
+    // --- drill: a report row opens the records it counts (#8374) ---
+
+    private static final String TICKETS = """
+            name: helpdesk
+            entities:
+              - name: TicketPriority
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: TicketStatus
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Ticket
+                list: [subject, priority, status, escalated, effort]
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: subject,   type: string }
+                  - { name: escalated, type: boolean }
+                  - { name: effort,    type: integer }
+                  - { name: openedOn,  type: date }
+                  - { name: hours,     type: decimal }
+                relations:
+                  - { name: priority, kind: manyToOne, to: TicketPriority }
+                  - { name: status,   kind: manyToOne, to: TicketStatus, function: EntityStatus }
+              - name: TicketNote
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: score, type: integer }
+                relations:
+                  - { name: ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
+            reports:
+              - name: TicketsByStatus
+                source: Ticket
+                dimensions: [priority, status]
+                measures: ["count(*)"]
+                widget: { kind: list, limit: 5 }
+            seeds:
+              - name: ticket-statuses
+                entity: TicketStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: REOPENED }
+            """;
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> drillOf(String yaml) {
+        IntentModel model = IntentParser.parse(yaml);
+        return (Map<String, Object>) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                          .get(0))
+                                                          .get("drill");
+    }
+
+    private static String withReport(String report) {
+        return TICKETS.substring(0, TICKETS.indexOf("reports:")) + "reports:\n" + report + TICKETS.substring(TICKETS.indexOf("seeds:"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aReportOverPlainDimensionsCarriesItsDrill() {
+        Map<String, Object> drill = drillOf(withReport("""
+                  - name: TicketsByEscalation
+                    source: Ticket
+                    dimensions: [escalated, effort]
+                    measures: ["count(*)"]
+                """));
+        assertEquals("/services/web/proj/gen/helpdesk/index.html", drill.get("app"));
+        assertEquals("/Ticket", drill.get("route"));
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) drill.get("columns");
+        assertEquals(2, columns.size(), columns.toString());
+        assertEquals("Escalated", columns.get(0)
+                                         .get("property"));
+        assertEquals("value", columns.get(0)
+                                     .get("by"));
+        assertEquals("Effort", columns.get(1)
+                                      .get("alias"));
+        assertEquals("value", columns.get(1)
+                                     .get("by"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aRelationDimensionDrillsByLabel() {
+        Map<String, Object> drill = drillOf(TICKETS);
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) drill.get("columns");
+        assertEquals(List.of("Priority", "Status"), columns.stream()
+                                                           .map(c -> c.get("property"))
+                                                           .toList());
+        assertEquals(List.of("label", "label"), columns.stream()
+                                                       .map(c -> c.get("by"))
+                                                       .toList());
+        // The alias is the row key the report page and the tile read the cell by.
+        assertEquals("Priority", columns.get(0)
+                                        .get("alias"));
+    }
+
+    @Test
+    void aBucketOrPathDimensionLeavesNoDrill() {
+        assertNull(drillOf(withReport("""
+                  - name: TicketsByMonth
+                    source: Ticket
+                    dimensions: ["month(openedOn)", status]
+                    measures: ["count(*)"]
+                """)), "a month() bucket cannot be a list filter");
+        assertNull(drillOf(withReport("""
+                  - name: TicketsByPriorityName
+                    source: Ticket
+                    dimensions: [priority.name]
+                    measures: ["count(*)"]
+                """)), "a relation.field path cannot be a list filter");
+        assertNull(drillOf(withReport("""
+                  - name: TicketsBySubject
+                    source: Ticket
+                    dimensions: [subject]
+                    measures: ["count(*)"]
+                """)), "a string dimension is out of scope");
+    }
+
+    @Test
+    void aFilterScopeOrParameterLeavesNoDrill() {
+        assertNull(drillOf(withReport("""
+                  - name: EscalatedByStatus
+                    source: Ticket
+                    filter: "escalated == true"
+                    dimensions: [status]
+                    measures: ["count(*)"]
+                """)), "the list cannot repeat a filter it does not know");
+        assertNull(drillOf(withReport("""
+                  - name: OpenedSince
+                    source: Ticket
+                    dimensions: [status]
+                    measures: ["count(*)"]
+                    parameters:
+                      - { name: fromDate, target: openedOn, op: ge }
+                """)), "the list cannot repeat a parameter");
+        String staged = withReport("""
+                  - name: LiveByPriority
+                    source: Ticket
+                    dimensions: [priority]
+                    measures: ["count(*)"]
+                """).replace("- { id: 1, name: OPEN }", "- { id: 1, name: OPEN, stage: live }");
+        assertNull(drillOf(staged), "a lifecycle scope in force narrows the rows the list would show");
+        assertNull(drillOf(withReport("""
+                  - name: AllTickets
+                    source: Ticket
+                    dimensions: [status]
+                """)), "a report without measures lists records, it does not count them");
+    }
+
+    @Test
+    void anUnlistedDimensionLeavesNoDrill() {
+        assertNull(drillOf(withReport("""
+                  - name: TicketsByHours
+                    source: Ticket
+                    dimensions: [hours]
+                    measures: ["count(*)"]
+                """)), "hours is no column of the Ticket list");
+    }
+
+    @Test
+    void aCompositionChildSourceLeavesNoDrill() {
+        assertNull(drillOf(withReport("""
+                  - name: NotesByScore
+                    source: TicketNote
+                    dimensions: [score]
+                    measures: ["count(*)"]
+                """)), "a composition child has no browse route of its own");
+    }
+
+    @Test
+    void aCalendarSourceDrillsToItsListRoute() {
+        String yaml = TICKETS.replace("  - name: Ticket\n    list:",
+                "  - name: Ticket\n    view: calendar\n    calendar: { start: openedOn, title: subject }\n    list:");
+        assertTrue(yaml.contains("view: calendar"), yaml);
+        assertEquals("/Ticket/list", drillOf(yaml).get("route"));
+    }
 }

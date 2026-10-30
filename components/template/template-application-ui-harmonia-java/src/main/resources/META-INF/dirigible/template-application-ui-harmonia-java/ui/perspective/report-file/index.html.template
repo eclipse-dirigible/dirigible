@@ -230,7 +230,17 @@
             <tbody x-h-table-body>
               <template x-for="(row, ri) in rows" :key="ri">
                 <tr x-h-table-row data-hoverable="true">
+#if($drill)
+                  <!-- Drill-down (#8374): the first cell opens the list of the records this row counts. -->
+                  <template x-for="(col, ci) in columns" :key="ci">
+                    <td x-h-table-cell :class="alignClass(col)">
+                      <template x-if="ci === 0 && drillHref(row)"><a :href="drillHref(row)" target="_parent" class="font-medium underline" x-text="cellText(col, row)"></a></template>
+                      <template x-if="!(ci === 0 && drillHref(row))"><span x-text="cellText(col, row)"></span></template>
+                    </td>
+                  </template>
+#else
                   <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
+#end
                 </tr>
               </template>
             </tbody>

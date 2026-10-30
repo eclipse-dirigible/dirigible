@@ -202,6 +202,97 @@ function basePage() {
       }
     },
 
+    /**
+     * Re-read this component's data while what it shows is moving (issue #8375): a record in a status
+     * the server moves on its own - a scheduled job, an inbound message, another user - which otherwise
+     * looks stuck until the user presses Refresh. The entity's intent `refresh:` names those statuses.
+     * The page registers here once, in init(), and calls pollCheck() after each of its reads.
+     *
+     * - After a read, while isMoving() answers true, ONE setTimeout(everyMs) is pending - never an
+     *   interval - and it runs reread().
+     * - A tick is skipped while the tab is hidden or the page's root is detached; when the tab shows
+     *   again, the poll that fell due meanwhile runs at once.
+     * - Polling stops pollWindowMs (10 minutes) after it began. A Refresh or a re-entry
+     *   (pollCheck(true)), or a status that starts moving again, restarts that window.
+     * - A failed re-read keeps what is on screen, logs the error and stops polling; a Refresh resumes it.
+     * - destroy() clears the timer.
+     */
+    pollWhile(isMoving, reread, everyMs) {
+      this._poll = { isMoving, reread, everyMs, timer: null, since: 0, due: false, stopped: false };
+      if (!this._pollVisibility) {
+        this._pollVisibility = () => {
+          const poll = this._poll;
+          if (poll && poll.due && !document.hidden) {
+            poll.due = false;
+            this.pollTick();
+          }
+        };
+        document.addEventListener('visibilitychange', this._pollVisibility);
+      }
+    },
+
+    // How long a poll runs before it stops by itself (#8375).
+    pollWindowMs: 10 * 60 * 1000,
+
+    // The step after each read: schedule the next re-read while something on screen moves. `restart`
+    // (a Refresh, a re-entry) resumes a poll that failed or ran out, with a fresh window.
+    pollCheck(restart) {
+      const poll = this._poll;
+      if (!poll) return;
+      if (restart) {
+        poll.stopped = false;
+        poll.since = 0;
+      }
+      if (poll.timer !== null) clearTimeout(poll.timer);
+      poll.timer = null;
+      poll.due = false;
+      if (poll.stopped === 'failed' || poll.stopped === 'destroyed') return;
+      let moving = false;
+      try { moving = !!poll.isMoving.call(this); } catch (e) { moving = false; }
+      if (!moving) {
+        // Settled: the next status that starts moving opens a new window.
+        poll.since = 0;
+        if (poll.stopped === 'expired') poll.stopped = false;
+        return;
+      }
+      if (poll.stopped === 'expired') return;
+      const now = Date.now();
+      if (!poll.since) poll.since = now;
+      if (now - poll.since >= this.pollWindowMs) {
+        poll.stopped = 'expired';
+        return;
+      }
+      poll.timer = setTimeout(() => {
+        poll.timer = null;
+        this.pollTick();
+      }, poll.everyMs);
+    },
+
+    // One poll: skipped while nobody can see the page, never after the window closed.
+    pollTick() {
+      const poll = this._poll;
+      if (!poll || poll.stopped) return;
+      const detached = !!(this.$root && this.$root.isConnected === false);
+      if (document.hidden || detached) {
+        poll.due = true;
+        return;
+      }
+      if (Date.now() - poll.since >= this.pollWindowMs) {
+        poll.stopped = 'expired';
+        return;
+      }
+      let pending;
+      try {
+        pending = Promise.resolve(poll.reread.call(this));
+      } catch (e) {
+        pending = Promise.reject(e);
+      }
+      pending.then(() => this.pollCheck(), (e) => {
+        console.error('[poll] re-read failed - polling stopped until the next Refresh', e);
+        poll.stopped = 'failed';
+      });
+    },
+
     // When a list last read its rows from the server, for the "Updated <time>" stamp beside its
     // Refresh button (issue #8130) - the Inbox's stamp, so it reads the same on every page.
     lastUpdated: null,
@@ -217,6 +308,16 @@ function basePage() {
     destroy() {
       (this._windowListeners || []).forEach((entry) => window.removeEventListener(entry.type, entry.listener));
       this._windowListeners = [];
+      // A page navigated away from stops polling (#8375).
+      if (this._poll) {
+        if (this._poll.timer !== null) clearTimeout(this._poll.timer);
+        this._poll.timer = null;
+        this._poll.stopped = 'destroyed';
+      }
+      if (this._pollVisibility) {
+        document.removeEventListener('visibilitychange', this._pollVisibility);
+        this._pollVisibility = null;
+      }
       // The two files are cached by the browser independently, so a page may be running this one
       // against a previous app.js - which must not turn every destroy into an exception.
       if (App.leaveGuard) App.leaveGuard.release(this);

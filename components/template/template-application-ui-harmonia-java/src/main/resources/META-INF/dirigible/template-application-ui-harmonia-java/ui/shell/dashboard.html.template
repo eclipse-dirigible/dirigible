@@ -100,8 +100,12 @@
                 <tbody x-h-table-body>
                   <template x-for="(row, i) in kpiRows(r)" :key="i">
                     <tr x-h-table-row data-hoverable="true">
-                      <template x-for="c in kpiColumns(r)" :key="c.alias">
-                        <td x-h-table-cell :class="kpiAlignClass(c)" x-text="kpiCellText(r, row, c)"></td>
+                      <!-- A report that drills (#8374): the row's first cell opens the list of the records it counts. -->
+                      <template x-for="(c, ci) in kpiColumns(r)" :key="c.alias">
+                        <td x-h-table-cell :class="kpiAlignClass(c)">
+                          <template x-if="ci === 0 && kpiDrillLink(r, row)"><a :href="'#' + kpiDrillLink(r, row)" @click.prevent="openDrill(kpiDrillLink(r, row))" class="font-medium underline" x-text="kpiCellText(r, row, c)"></a></template>
+                          <template x-if="!(ci === 0 && kpiDrillLink(r, row))"><span x-text="kpiCellText(r, row, c)"></span></template>
+                        </td>
                       </template>
                     </tr>
                   </template>

@@ -130,11 +130,30 @@ document.addEventListener('alpine:init', () => {
       return numeric ? this.displayNumber(v, '0') : v;
     },
     kpiAlignClass(c) { return c.align === 'right' ? 'text-right' : ''; },
+    // The list route filtered to the records one tile row counts (#8374), from the report's `drill`:
+    // one parameter per dimension, a relation by its label, a number or boolean by its value. null when
+    // the report does not drill, or when a dimension of the row is empty - the list's filters cannot
+    // say "is empty".
+    kpiDrillLink(r, row) {
+      const drill = r && r.drill;
+      if (!drill || !Array.isArray(drill.columns) || !drill.columns.length) return null;
+      const parts = [];
+      for (const c of drill.columns) {
+        const v = row[c.alias];
+        if (v === null || v === undefined || v === '') return null;
+        parts.push(encodeURIComponent(c.property) + '=' + encodeURIComponent(String(v)));
+      }
+      return drill.route + '?' + parts.join('&');
+    },
 
     // Decimals from the column pattern, separators from the instance Number setting (shell format.js).
     displayNumber(v, pattern) {
       return window.HarmoniaFormat.number(v, pattern, '');
     },
+
+    // Through the router, as every shell navigation goes: it would read the href's '#' as part of the
+    // path. The href stays for open-in-a-new-tab.
+    openDrill(link) { window.PineconeRouter.navigate(link); },
 
     openReport(r) { this.${dollar}store.reports.selected = r; window.PineconeRouter.navigate('/reports'); },
   }));
