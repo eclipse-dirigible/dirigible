@@ -2983,6 +2983,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryFormPage = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
         assertTrue(entryFormPage.contains("/mutable"),
                 "the edit form page must ask the mutable pre-check so a direct /edit URL opens read-only");
+        // The Read-only badge is neutral and says why (#8368): it explains the missing Edit and reports
+        // nothing wrong, and its tooltip key is chosen at generation time from the lock the entity
+        // declares - so a catalog entry never stands in for another case.
+        String snapshotForm = contentOf("gen/emission/views/Snapshot/Snapshot-form.html");
+        assertTrue(
+                snapshotForm.contains("data-variant=\"outline\" x-show=\"!mutable\"") && snapshotForm.contains("messages.immutableAlways"),
+                "an append-only record carries the outline badge with the 'cannot be changed once created' text: " + snapshotForm);
+        assertFalse(snapshotForm.contains("messages.immutable'"),
+                "an append-only record must not say 'in its current status': " + snapshotForm);
+        String entryView = contentOf("gen/emission/views/Entry/Entry-form.html");
+        assertTrue(entryView.contains("data-variant=\"outline\" x-show=\"!mutable\"") && entryView.contains("messages.immutable'"),
+                "a status-locked record keeps the status text, in the outline variant: " + entryView);
+        String ledgerBookingForm = contentOf("gen/emission/views/LedgerBooking/LedgerBooking-form.html");
+        assertTrue(ledgerBookingForm.contains("messages.immutablePeriod"),
+                "a period-locked record carries the period text: " + ledgerBookingForm);
+        assertFalse(ledgerBookingForm.contains("messages.immutable'"),
+                "a period-locked record must not fall back to the status text: " + ledgerBookingForm);
+        for (String view : List.of(snapshotForm, entryView, ledgerBookingForm)) {
+            assertFalse(view.contains("data-variant=\"warning\" x-show=\"!mutable\""),
+                    "the Read-only badge must not be a warning: " + view);
+        }
         String entryListPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
         assertTrue(entryListPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
