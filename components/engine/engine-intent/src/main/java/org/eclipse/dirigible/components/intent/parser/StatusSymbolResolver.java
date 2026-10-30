@@ -195,6 +195,13 @@ final class StatusSymbolResolver {
                 putResolved(edge, "from", status, subject + " from");
                 putResolvedList(edge, "to", status, subject + " to");
             }
+            // refresh.while (#8375): the statuses the entity's pages poll in. Only the record's own,
+            // same-model nomenclature resolves here; the parser refuses refresh: without one, in its
+            // own words rather than a status-name message.
+            Map<?, ?> refresh = asMap(entity.get("refresh"));
+            if (refresh != null && status.entity() != null && status.model() == null) {
+                putResolvedList(refresh, "while", status, "entity [" + entityName + "] refresh while");
+            }
             if (entity.get("immutableWhen") != null) {
                 String rewritten = rewriteExpression(text(entity, "immutableWhen"), statusRelation, status,
                         "entity [" + entityName + "] immutableWhen");

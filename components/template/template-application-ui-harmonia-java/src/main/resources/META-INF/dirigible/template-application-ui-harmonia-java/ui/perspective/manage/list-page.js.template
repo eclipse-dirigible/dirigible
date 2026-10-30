@@ -18,6 +18,9 @@
 #set($recordLabelProperty = "")
 #foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Name")#set($recordLabelProperty = "Name")#end#end
 #if($recordLabelProperty == "")#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Number")#set($recordLabelProperty = "Number")#end#end#end
+## intent `refresh:` (#8375): the status property whose value says a row is moving.
+#set($refreshStatusProp = "")
+#if($refreshWhile)#foreach($property in $properties)#if($property.widgetType == "DOCUMENT_STATUS")#set($refreshStatusProp = $property.name)#end#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}ManageListPage', () => ({
     ...basePage(),
@@ -114,6 +117,12 @@ document.addEventListener('alpine:init', () => {
       // A link may carry filters in the URL - a report row opening the records it counts (#8374). They
       // apply before the first load, which then runs as an applied filter does.
       const urlFiltered = await this.applyUrlFilters();
+#if($refreshWhile && $refreshStatusProp != "")
+      // A row in a status the server moves on its own (intent `refresh:`, #8375) is re-read every
+      // ${refreshEvery} s while this page shows it - quietly, under the search, filters, sort, page and
+      // open sheet in force. Registered before the first read, which is what starts it.
+      this.pollWhile(() => this.hasMovingRows(), () => this.load(true, true), ${refreshEvery}000);
+#end
       await this.load(urlFiltered);
       if (!this.urlLookupsLoaded) this.loadLookups();
       this.selectFromRoute();
@@ -182,7 +191,7 @@ document.addEventListener('alpine:init', () => {
 
     // `quiet` keeps the current rows, page and filters on screen until the fresh rows arrive (a
     // background re-read), so it re-runs the filter in force rather than the full list.
-    async load(quiet) {
+    async load(quiet#if($refreshWhile && $refreshStatusProp != ""), polled#end) {
       if (!quiet) {
         this.state = 'loading';
         this.currentPage = 1;
@@ -202,7 +211,14 @@ document.addEventListener('alpine:init', () => {
         if (this.selected) {
           this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
         }
+#if($refreshWhile && $refreshStatusProp != "")
+        this.pollCheck();
+#end
       } catch (e) {
+#if($refreshWhile && $refreshStatusProp != "")
+        // A failed poll keeps the rows on screen; pollWhile logs it and stops until the next Refresh.
+        if (polled) throw e;
+#end
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ${name}.');
         this.state = 'error';
       }
@@ -213,7 +229,19 @@ document.addEventListener('alpine:init', () => {
     async refresh() {
       await this.load(true);
       this.loadLookups();
+#if($refreshWhile && $refreshStatusProp != "")
+      // A Refresh (or a re-entry) resumes a poll that failed or ran out, with a fresh window (#8375).
+      this.pollCheck(true);
+#end
     },
+#if($refreshWhile && $refreshStatusProp != "")
+
+    // Whether a row on this page is in a status the server moves on its own (intent `refresh:`, #8375).
+    refreshStatuses: [${refreshWhile}],
+    hasMovingRows() {
+      return (this.paginatedItems || []).some(row => this.refreshStatuses.indexOf(Number(row.${refreshStatusProp})) >= 0);
+    },
+#end
 
 #if($hierarchyProperty)
     // --- Hierarchy (intent `hierarchy:`, #7613): the list renders as a TREE-TABLE - the very table
@@ -622,6 +650,10 @@ document.addEventListener('alpine:init', () => {
         this.currentPage = 1;
         this.state = this.items.length === 0 ? 'empty' : 'default';
         if (this.selected) this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
+#if($refreshWhile && $refreshStatusProp != "")
+        this.lastUpdated = new Date();
+        this.pollCheck();
+#end
       } catch (e) {
         if (seq !== this.filterSeq) return;
         this.error = App.services.apiErrors.messageFor(e, 'Could not filter ${name}.');

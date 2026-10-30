@@ -289,6 +289,14 @@ document.addEventListener('alpine:init', () => {
 #end
 
       if (this.isEdit || this.isPreview) {
+#if($refreshWhile && $statusProp != "")
+        // A record in a status the server moves on its own (intent `refresh:`, #8375) is re-read every
+        // ${refreshEvery} s while it is shown in preview. Never while it is edited: an edit in progress
+        // is not overwritten.
+        this.refreshStatuses = [${refreshWhile}];
+        this.pollWhile(() => this.isPreview && this.refreshStatuses.indexOf(Number(this.form.${statusProp})) >= 0,
+          () => (this.isPreview ? this.loadRecord(true, null, true) : null), ${refreshEvery}000);
+#end
         await this.loadRecord(false, optionsLoaded);
         // A contributed action changes the record behind the page (#8116): re-read it, so its status and
         // the actions it now allows show without a reload. Preview only - the actions are offered there,
@@ -401,7 +409,7 @@ document.addEventListener('alpine:init', () => {
     // the fresh record is fetched (a background re-read) instead of showing the loading state.
     // `optionsLoaded` is init's option load, still in flight while the record is fetched (#8344): the
     // filtered-label splice below and the pristine snapshot both wait for it.
-    async loadRecord(quiet, optionsLoaded) {
+    async loadRecord(quiet, optionsLoaded#if($refreshWhile && $statusProp != ""), polled#end) {
       if (!quiet) this.state = 'loading';
       try {
         const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
@@ -453,7 +461,14 @@ document.addEventListener('alpine:init', () => {
         this.state = 'ready';
         // What the server holds is what every exit compares the buffer against (issue #7359).
         this.markPristine();
+#if($refreshWhile && $statusProp != "")
+        this.pollCheck();
+#end
       } catch (e) {
+#if($refreshWhile && $statusProp != "")
+        // A failed poll keeps the record on screen; pollWhile logs it and stops polling (#8375).
+        if (polled) throw e;
+#end
         this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
       }
     },

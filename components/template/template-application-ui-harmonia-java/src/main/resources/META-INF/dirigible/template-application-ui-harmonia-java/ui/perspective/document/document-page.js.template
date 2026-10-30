@@ -314,6 +314,14 @@ document.addEventListener('alpine:init', () => {
       }
 
       if (this.isEdit || this.isPreview) {
+#if($refreshWhile && $docStatusProp != "")
+        // A document in a status the server moves on its own (intent `refresh:`, #8375) has its header
+        // re-read every ${refreshEvery} s while it is shown in preview. Never while it is edited: an
+        // edit in progress is not overwritten.
+        this.refreshStatuses = [${refreshWhile}];
+        this.pollWhile(() => this.isPreview && this.refreshStatuses.indexOf(Number(this.form.${docStatusProp})) >= 0,
+          async () => { if (this.isPreview) { await this.loadHeader(); this.pollCheck(); } }, ${refreshEvery}000);
+#end
         this.state = 'loading';
         try {
           await this.loadHeader(optionsLoaded);
@@ -325,6 +333,9 @@ document.addEventListener('alpine:init', () => {
 #end
           this.state = 'ready';
           await this.loadItems();
+#if($refreshWhile && $docStatusProp != "")
+          this.pollCheck();
+#end
         } catch (e) {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} document.' });
         }

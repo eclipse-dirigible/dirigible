@@ -311,6 +311,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // calendar still edits on the document page - Print, line items and inline process tasks
             // included. The property names are PascalCased to match the .model property (and the
             // Jackson-serialized controller row) the calendar page reads.
+            // refresh: (#8375) - the pages re-read themselves while a record is in one of these
+            // statuses: the seed ids, comma-joined, and the interval in seconds. Nothing without the
+            // key, so the pages of a model that does not use it generate byte-identically.
+            if (entity.getRefresh() != null) {
+                entityMap.put("refreshWhile", entity.getRefresh()
+                                                    .statusIds()
+                                                    .stream()
+                                                    .map(String::valueOf)
+                                                    .collect(Collectors.joining(",")));
+                entityMap.put("refreshEvery", String.valueOf(entity.getRefresh()
+                                                                   .everySeconds()));
+            }
             if (entity.isCalendar()) {
                 CalendarIntent cal = entity.getCalendar();
                 if (dependent) {

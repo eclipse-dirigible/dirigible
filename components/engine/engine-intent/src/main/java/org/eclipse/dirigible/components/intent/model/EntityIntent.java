@@ -188,6 +188,11 @@ public class EntityIntent {
      */
     private String immutableWhen;
     /**
+     * Optional {@code refresh:} (issue #8375): the entity's pages re-read themselves while a record
+     * they show is in one of the listed statuses - one the server moves on its own.
+     */
+    private RefreshIntent refresh;
+    /**
      * Optional append-only marker: {@code immutable: true} makes every record READ-ONLY for user writes
      * from the moment it is created (audit trails, ledger lines, event logs) - REST update and delete
      * always return 409. System writes through the repository stay possible. Mutually exclusive with
@@ -578,6 +583,14 @@ public class EntityIntent {
 
     public String getImmutableWhen() {
         return immutableWhen;
+    }
+
+    public RefreshIntent getRefresh() {
+        return refresh;
+    }
+
+    public void setRefresh(RefreshIntent refresh) {
+        this.refresh = refresh;
     }
 
     public void setImmutableWhen(String immutableWhen) {
