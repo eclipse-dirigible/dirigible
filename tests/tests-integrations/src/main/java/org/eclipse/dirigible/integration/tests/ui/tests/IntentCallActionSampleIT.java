@@ -480,13 +480,13 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible);
 
         // A CLOSED ticket is offered no Escalate button; forced anyway, the endpoint's own refusal is
-        // what the user reads.
+        // what the run resolves to (aRefusedEscalationKeepsTheDialogAndItsInputs shows it in the dialog).
         assertEquals(Boolean.FALSE,
                 Selenide.executeJavaScript("return Alpine.store('customActions').getActions('Ticket', 'entity', { Id: 2, Status: 3 })"
                         + ".some(a => a.label === 'Escalate');"));
-        Selenide.executeJavaScript(
-                "var s = Alpine.store('customActions');" + " s.runCall(s.actions.find(a => a.label === 'Escalate'), 2, { level: 1 });");
-        awaitAnnouncement("Ticket [2] is CLOSED");
+        assertEquals("Ticket [2] is CLOSED", Selenide.executeAsyncJavaScript("var done = arguments[arguments.length - 1];"
+                + " var s = Alpine.store('customActions');"
+                + " s.runCall(s.actions.find(a => a.label === 'Escalate'), 2, { level: 1 }).then(o => done(o.ok ? 'ok' : o.message));"));
 
         // Retry on a FAILED escalation: a confirm, then a POST with no body.
         assertEquals("Run this escalation again?", Selenide.executeJavaScript("var s = Alpine.store('customActions');"
@@ -643,6 +643,45 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                 .$$("button")
                 .findBy(Condition.exactText("Run"))
                 .shouldHave(Condition.attribute("data-variant", "primary"));
+    }
+
+    /**
+     * A refused prompt keeps its dialog (#8365): Escalate on a ticket closed between the menu and the
+     * click - the dialog opened on the row as the menu had it, OPEN - stays open with Level and Note as
+     * typed and the endpoint's reason inside it, and nothing is announced.
+     */
+    @Test
+    void aRefusedEscalationKeepsTheDialogAndItsInputs() {
+        deploy();
+        ide.openHomePage();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
+        Selenide.refresh();
+        Selenide.executeJavaScript("var s = Alpine.store('customActions');"
+                + " s.trigger(s.actions.find(a => a.label === 'Escalate'), 2, { Id: 2, subject: 'Password reset', Status: 1 });");
+        SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        dialog.$("[data-prompt-field='level']")
+              .setValue("3");
+        dialog.$("input[data-prompt-field='note']")
+              .setValue("VIP customer");
+        int announced = ((Number) Selenide.executeJavaScript("return Alpine.store('notifications').items.length;")).intValue();
+        dialog.$$("button")
+              .findBy(Condition.exactText("Run"))
+              .click();
+
+        dialog.$("[data-prompt-refusal]")
+              .shouldBe(Condition.visible)
+              .shouldHave(Condition.exactText("Ticket [2] is CLOSED"));
+        dialog.shouldBe(Condition.visible);
+        dialog.$("[data-prompt-field='level']")
+              .shouldHave(Condition.value("3"));
+        dialog.$("input[data-prompt-field='note']")
+              .shouldHave(Condition.value("VIP customer"));
+        dialog.$$("button")
+              .findBy(Condition.exactText("Run"))
+              .shouldBe(Condition.enabled);
+        assertEquals(announced, ((Number) Selenide.executeJavaScript("return Alpine.store('notifications').items.length;")).intValue(),
+                "a failure shown in the dialog is not also announced");
     }
 
     private void deploy() {

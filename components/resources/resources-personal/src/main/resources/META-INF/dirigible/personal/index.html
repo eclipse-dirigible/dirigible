@@ -362,6 +362,9 @@
             <button x-h-dialog-close @click="s.cancelPrompt()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
           </div>
           <div x-h-dialog-content>
+            <div x-show="s.promptRefusal" x-h-alert data-variant="negative" role="alert" data-prompt-refusal>
+              <div x-h-alert-description x-text="s.promptRefusal"></div>
+            </div>
             <div x-show="s.promptError" x-h-alert data-variant="negative" role="alert">
               <div x-h-alert-description x-text="T('application-core:shell.customActions.promptMissing', 'Required: {{fields}}', { fields: s.promptError })"></div>
             </div>
@@ -472,7 +475,10 @@
               <template x-if="variant !== 'positive' && variant !== 'negative' && variant !== 'warning'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
             </span>
           </div>
-          <span x-h-notification-title class="flex-1" x-text="message"></span>
+          <div class="vbox flex-1 min-w-0">
+            <span x-h-notification-title x-show="title || !description" x-text="title || message"></span>
+            <span x-h-notification-description x-show="description" x-text="description"></span>
+          </div>
           <div x-h-notification-actions data-orientation="vertical">
             <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
               <svg x-h-icon data-icon="close" role="img" aria-label="close"></svg>

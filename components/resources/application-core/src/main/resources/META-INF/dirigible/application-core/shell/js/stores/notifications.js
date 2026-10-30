@@ -79,7 +79,11 @@ document.addEventListener('alpine:init', () => {
         // A refusal has to be READ; a success only has to be seen. Same reason the variant is
         // carried through: the overlay template picks the icon from it.
         const timeout = (variant === 'negative' || variant === 'warning') ? 12000 : 5000;
-        this._toaster.add({ template: 'toast', position: 'top-right', timeout, data: { message: text, variant } });
+        // The title (one line, the action's label) and the description under it, which wraps, so a
+        // message of any length is read whole (issue #8365). `message` is the joined text a page
+        // generated before that layout renders on its one line.
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout,
+          data: { title: n.title || '', description: n.description || '', message: text, variant } });
       } catch (e) {
         console.warn('notifications: could not raise the toast for "' + text + '"', e);
       }
@@ -97,7 +101,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       try {
-        this._toaster.add({ template: 'toast', position: 'top-right', timeout: 4000, data: { message, variant } });
+        this._toaster.add({ template: 'toast', position: 'top-right', timeout: 4000, data: { title: '', description: '', message, variant } });
       } catch (e) {
         console.warn('notifications: could not raise the toast for "' + message + '"', e);
       }
