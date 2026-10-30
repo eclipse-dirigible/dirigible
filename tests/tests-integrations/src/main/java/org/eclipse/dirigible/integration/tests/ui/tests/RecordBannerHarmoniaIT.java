@@ -194,7 +194,7 @@ class RecordBannerHarmoniaIT extends UserInterfaceIntegrationTest {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 PreparedStatement update = connection.prepareStatement(
-                        "UPDATE RECORDBANNER_SHIPMENT SET SHIPMENT_STATUS = ?, SHIPMENT_FAILURE = ? WHERE SHIPMENT_ID = ?")) {
+                        "UPDATE \"RECORDBANNER_SHIPMENT\" SET \"SHIPMENT_STATUS\" = ?, \"SHIPMENT_FAILURE\" = ? WHERE \"SHIPMENT_ID\" = ?")) {
             update.setInt(1, status);
             update.setString(2, failure);
             update.setInt(3, id);
