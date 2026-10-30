@@ -1368,6 +1368,64 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Whether a property is a column of the entity's list (#8374) - the rule {@link #applyListColumns}
+     * and the {@code major} flag apply when the entity is emitted: with a {@code list:} the properties
+     * it names, otherwise every field and relation not marked {@code major: false}. Read where another
+     * generator needs the list's columns without building the {@code .model} (the report generator,
+     * which the model build itself calls for its manifest).
+     *
+     * @param entity the authored entity
+     * @param name the property's authored name
+     * @return whether the list shows the property as a column
+     */
+    public static boolean isListColumn(EntityIntent entity, String name) {
+        if (entity == null || name == null) {
+            return false;
+        }
+        String property = IntentNaming.pascalCase(name.trim());
+        List<String> list = entity.getList();
+        if (list != null && !list.isEmpty()) {
+            return list.stream()
+                       .anyMatch(wanted -> wanted != null && wanted.trim()
+                                                                   .equalsIgnoreCase(property));
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (name.trim()
+                    .equals(field.getName())) {
+                return field.isMajor();
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.trim()
+                    .equals(relation.getName())) {
+                return relation.isMajor();
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The app-shell route an entity's records are browsed on (#8374): {@code /<Entity>}, or
+     * {@code /<Entity>/list} when a calendar or slots view takes over the landing route - the routes
+     * the Harmonia shell registers. {@code null} for an entity with no browse route of its own: a
+     * composition child (listed inside its master's panels) or an extension.
+     *
+     * @param model the model the entity belongs to
+     * @param entity the authored entity
+     * @return the browse route, or {@code null}
+     */
+    public static String browseRoute(IntentModel model, EntityIntent entity) {
+        if (entity == null || entity.getName() == null || entity.getExtend() != null) {
+            return null;
+        }
+        boolean setting = settingEntities(model.getEntities()).contains(entity.getName());
+        if (!setting && computeCompositionParents(model.getEntities()).containsKey(entity.getName())) {
+            return null;
+        }
+        return "/" + entity.getName() + (!setting && (entity.isCalendar() || entity.isSlots()) ? "/list" : "");
+    }
+
+    /**
      * An entity's properties in its list column order: the ones its {@code listOrder} names first, in
      * that sequence, then the rest in control order. Without a {@code listOrder} the list is returned
      * as it is. Used where another entity's list columns are reproduced (a related register).

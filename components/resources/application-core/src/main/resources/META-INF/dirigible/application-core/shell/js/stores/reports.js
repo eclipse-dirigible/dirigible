@@ -122,6 +122,9 @@ document.addEventListener('alpine:init', () => {
         it.widget = r.widget;
         it.columns = r.columns || [];
       }
+      // A report whose rows open the records they count (#8374): the generated app's list tile links
+      // each row there. Read by that dashboard only.
+      if (r.drill) it.drill = r.drill;
       return it;
     },
 
@@ -172,6 +175,7 @@ document.addEventListener('alpine:init', () => {
             it.widget = def.widget;
             it.columns = def.columns || [];
           }
+          if (def.drill) it.drill = def.drill;
         } catch (e) { /* keep defaults */ }
       }));
       // Reassign so Alpine re-renders the sidebar / dashboard with the enriched items.

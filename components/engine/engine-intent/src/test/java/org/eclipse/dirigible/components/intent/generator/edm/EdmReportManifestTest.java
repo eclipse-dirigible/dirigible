@@ -53,15 +53,20 @@ class EdmReportManifestTest {
                 measures: ["sum(total)"]
                 chart: bar
                 dashboard: false
+              - name: InvoicesByTotal
+                source: Invoice
+                dimensions: [total]
+                measures: ["count(*)"]
+                widget: { kind: list, limit: 5 }
             """;
 
     @Test
     void everyReportIsListedInTheIntentsOrderWithTheUrlsItsPageAndControllerAreGeneratedTo() {
         List<Map<String, Object>> reports = reports(INTENT);
 
-        assertEquals(List.of("OpenInvoices", "MonthlyRevenue"), reports.stream()
-                                                                       .map(r -> r.get("name"))
-                                                                       .toList());
+        assertEquals(List.of("OpenInvoices", "MonthlyRevenue", "InvoicesByTotal"), reports.stream()
+                                                                                          .map(r -> r.get("name"))
+                                                                                          .toList());
         Map<String, Object> revenue = reports.get(1);
         // The report-file template renders the page to gen/{{javaGenFolderName}}/reports/{{name}}/ and
         // the controller under gen/{{javaGenFolderName}}/api/{{javaPerspectiveName}}/, where the gen
@@ -94,6 +99,13 @@ class EdmReportManifestTest {
         assertFalse(revenue.containsKey("widget"), "a report without a widget carries none: " + revenue);
         assertFalse(revenue.containsKey("columns"), "nor the columns only a widget tile reads: " + revenue);
         assertFalse(revenue.containsKey("description"), "an absent description is not written as an empty one");
+        assertFalse(open.containsKey("drill"), "a report that does not count records carries no drill: " + open);
+
+        // A list tile over a plain aggregation links each row to the records it counts (#8374).
+        Map<?, ?> drill = (Map<?, ?>) reports.get(2)
+                                             .get("drill");
+        assertEquals("/Invoice", drill.get("route"), String.valueOf(drill));
+        assertEquals("[{alias=Total, property=Total, by=value}]", String.valueOf(drill.get("columns")));
     }
 
     @Test

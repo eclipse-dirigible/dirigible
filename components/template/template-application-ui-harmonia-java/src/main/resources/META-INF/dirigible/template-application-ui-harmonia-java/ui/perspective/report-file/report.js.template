@@ -67,6 +67,20 @@ document.addEventListener('alpine:init', () => {
 #end
     ],
     params: {},         // parameter name -> value ('' = use the server-side default)
+#if($drill)
+    // Drill-down (#8374): each row links to the source's list, filtered by the row's dimension values -
+    // a relation by its label, a number or boolean by its value. `app` is the application's shell page,
+    // `route` the list's route in it.
+    drill: {
+      app: '${drill.app}',
+      route: '${drill.route}',
+      columns: [
+#foreach($drillColumn in $drill.columns)
+        { alias: '${drillColumn.alias}', property: '${drillColumn.property}', by: '${drillColumn.by}' },
+#end
+      ],
+    },
+#end
     showFilters: false,
     filters: {},        // column key -> { from, to, min, max, contains, equals } (per kind)
     state: 'loading',   // loading | error | empty | no-results | default
@@ -278,6 +292,27 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 
+#if($drill)
+    // The list route filtered to the records one row counts - '/Ticket?Priority=High&Status=REOPENED' -
+    // or null when a dimension of the row is empty: the list's filters cannot say "is empty".
+    drillLink(row) {
+      const parts = [];
+      for (const c of this.drill.columns) {
+        const v = row[c.alias];
+        if (v === null || v === undefined || v === '') return null;
+        parts.push(encodeURIComponent(c.property) + '=' + encodeURIComponent(String(v)));
+      }
+      return this.drill.route + '?' + parts.join('&');
+    },
+    // The row's link: the application shell at that route. The page is hosted by the shell's /reports
+    // route (or a dashboard tile), so the link opens in the parent and only its hash changes; opened
+    // standalone, the page navigates itself to the application.
+    drillHref(row) {
+      const link = this.drillLink(row);
+      return link ? this.drill.app + '#' + link : null;
+    },
+
+#end
     columnMeta(key) { return this.reportColumns.find(c => c.key === key) || null; },
 
     // Numeric columns right-align (from the .report column metadata).

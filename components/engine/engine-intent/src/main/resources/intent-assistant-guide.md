@@ -3434,6 +3434,24 @@ hides both tiles of a report. The home dashboard shows report/custom widget tile
 previews — there are no auto per-entity record-count tiles. Prefer a handful of business-meaningful
 widgets.
 
+**A report row opens the records it counts.** Nothing to declare: when a report is a plain count or
+sum over an entity - no `kind:`, no `aging:`, no `filter:`, no `parameters:`, no lifecycle scope in
+force - and every dimension is a column of the entity's list that is a to-one relation (matched by
+its label) or an integer, decimal or boolean field, each row of the report page and of its `list`
+widget tile links to the entity's list, filtered to exactly those records:
+
+```yaml
+reports:
+  - name: TicketsByStatus
+    source: Ticket
+    dimensions: [priority, status]   # both listed relations: "High | REOPENED | 3" opens those 3 tickets
+    measures: ["count(*)"]
+    widget: { kind: list, limit: 5 }
+```
+
+A date bucket (`month(x)`), a `relation.field` path, a string or date dimension, or a filter the list
+cannot repeat leaves the rows as plain text - never a link to more records than the row counts.
+
 ### widgets - custom dashboard widgets
 
 **Use when:** the dashboard needs content the report machinery cannot express - a number computed

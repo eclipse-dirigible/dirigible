@@ -111,8 +111,11 @@ document.addEventListener('alpine:init', () => {
       // No write gate on ${name}: whoever may open this page may write, so there is nothing to ask.
       this.access = { read: true, write: true };
 #end
-      await this.load();
-      this.loadLookups();
+      // A link may carry filters in the URL - a report row opening the records it counts (#8374). They
+      // apply before the first load, which then runs as an applied filter does.
+      const urlFiltered = await this.applyUrlFilters();
+      await this.load(urlFiltered);
+      if (!this.urlLookupsLoaded) this.loadLookups();
       this.selectFromRoute();
       // A custom action changes rows this view lists (a transition flips a status, a create-from adds
       // a record) through its own endpoint, not this page's editing path. Re-read on every action so
@@ -187,7 +190,8 @@ document.addEventListener('alpine:init', () => {
       this.error = null;
       try {
         const conditions = quiet ? this.buildConditions() : [];
-        this.items = conditions.length
+        this.items = quiet && this.filterMatchesNothing ? []
+          : conditions.length
           ? await App.services.api.post(this.apiPath + '/search', { conditions })
           : await App.services.api.getAll(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
@@ -533,6 +537,10 @@ document.addEventListener('alpine:init', () => {
         if (!this.filterHasValue(col, raw)) continue;
         if (col.type === 'string') {
           conds.push({ propertyName: col.name, operator: 'LIKE', value: '%' + String(raw).trim() + '%' });
+        } else if (col.type === 'fk' && Array.isArray(raw)) {
+          // Several keys share the label a link named (#8374): every one of them. An empty list filters
+          // to nothing, which filterMatchesNothing answers without a query.
+          if (raw.length) conds.push({ propertyName: col.name, operator: 'IN', value: raw.map(k => (isNaN(Number(k)) ? k : Number(k))) });
         } else if (col.type === 'number' || col.type === 'fk') {
           const n = Number(raw);
           conds.push({ propertyName: col.name, operator: 'EQ', value: isNaN(n) ? raw : n });
@@ -551,6 +559,7 @@ document.addEventListener('alpine:init', () => {
     // Whether a column's filter value narrows anything: a date range needs at least one of its ends.
     filterHasValue(col, v) {
       if (v === undefined || v === null) return false;
+      if (Array.isArray(v)) return true;
       if (col.type === 'date') return !!(v.from || v.to);
       return String(v).trim() !== '';
     },
@@ -604,7 +613,8 @@ document.addEventListener('alpine:init', () => {
       this.filtering = true;
       this.error = null;
       try {
-        const rows = conditions.length
+        const rows = this.filterMatchesNothing ? []
+          : conditions.length
           ? await App.services.api.post(this.apiPath + '/search', { conditions })
           : await App.services.api.getAll(this.apiPath);
         if (seq !== this.filterSeq) return;   // a newer keystroke already superseded this response
@@ -620,6 +630,65 @@ document.addEventListener('alpine:init', () => {
         if (seq === this.filterSeq) this.filtering = false;
       }
       this.refreshIcons();
+    },
+
+    // A relation filter a link named by a label no record carries (#8374): no row can match, so the
+    // list shows its no-results state without asking the server.
+    get filterMatchesNothing() {
+      return this.filterColumns.some(c => c.type === 'fk' && Array.isArray(this.columnFilters[c.name]) && !this.columnFilters[c.name].length);
+    },
+
+    // ----- Filters from the URL (#8374): a report row links to #/${name}?<Property>=<value>&... --------
+    // Read once, in init(), before the first load; the URL is not rewritten afterwards. A parameter
+    // naming a filter column applies by the column's type: a relation is matched exactly against the
+    // loaded lookup texts (one key filters EQ, several IN, none leaves the chip with no rows), a number
+    // takes Number(value), a boolean true/false. Any other type and an unknown name are ignored.
+    urlFilterTexts: {},   // relation column -> the label a link named, for a chip holding several keys or none
+    urlLookupsLoaded: false,
+    async applyUrlFilters() {
+      if (this.inlineHosted()) return false;
+      const hash = String(window.location.hash || '');
+      const q = hash.indexOf('?');
+      if (q < 0) return false;
+      // name -> value, the first occurrence of each name; a pair that does not decode is skipped.
+      const params = {};
+      hash.substring(q + 1).split('&').forEach((pair) => {
+        if (!pair) return;
+        const eq = pair.indexOf('=');
+        try {
+          const key = decodeURIComponent((eq < 0 ? pair : pair.substring(0, eq)).replace(/\+/g, ' '));
+          if (!Object.prototype.hasOwnProperty.call(params, key)) params[key] = eq < 0 ? '' : decodeURIComponent(pair.substring(eq + 1).replace(/\+/g, ' '));
+        } catch (e) { /* a malformed escape names nothing */ }
+      });
+      const wanted = this.filterColumns.filter(c => Object.prototype.hasOwnProperty.call(params, c.name) && (c.type === 'fk' || c.type === 'number' || c.type === 'boolean'));
+      if (!wanted.length) return false;
+      if (wanted.some(c => c.type === 'fk')) {
+        await this.loadLookups();
+        this.urlLookupsLoaded = true;
+      }
+      const next = { ...this.columnFilters };
+      const texts = { ...this.urlFilterTexts };
+      for (const col of wanted) {
+        const raw = String(params[col.name]);
+        if (col.type === 'fk') {
+          const m = this.lookups[col.name] || {};
+          const keys = Object.keys(m).filter(k => String(m[k]) === raw);
+          if (keys.length === 1) {
+            next[col.name] = keys[0];
+          } else {
+            next[col.name] = keys;
+            texts[col.name] = raw;
+          }
+        } else if (col.type === 'number') {
+          const n = Number(raw);
+          if (raw.trim() !== '' && !isNaN(n)) next[col.name] = n;
+        } else if (raw === 'true' || raw === 'false') {
+          next[col.name] = raw === 'true';
+        }
+      }
+      this.columnFilters = next;
+      this.urlFilterTexts = texts;
+      return this.hasActiveColumnFilters;
     },
 
     get hasActiveColumnFilters() {
@@ -644,6 +713,8 @@ document.addEventListener('alpine:init', () => {
 
     filterValueText(col) {
       const v = this.columnFilters[col.name];
+      // Keys a link matched by label (#8374) print that label - the one they share, or the one none had.
+      if (col.type === 'fk' && Array.isArray(v)) return this.urlFilterTexts[col.name] || (v.length ? this.lookupText(col.name, v[0]) : '');
       if (col.type === 'fk')   return this.lookupText(col.name, v);
       if (col.type === 'date') {
         // "01.10.2026 - 31.10.2026", or the one end an open range has.
@@ -670,6 +741,8 @@ document.addEventListener('alpine:init', () => {
         this.filterDraft = { from: (v && v.from) || '', to: (v && v.to) || '' };
         return;
       }
+      // A label several keys (or none) carry is no single option of the picker: the editor opens empty.
+      if (Array.isArray(v)) { this.filterDraft = ''; return; }
       this.filterDraft = (v === undefined || v === null) ? '' : v;
     },
     backToFilterMenu() { this.filterEditing = null; this.filterDraft = ''; },
