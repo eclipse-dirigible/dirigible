@@ -335,7 +335,7 @@
         <div x-h-dialog-content>
           <p
             x-h-text.muted
-            x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) ? $store.customActions.confirmText : T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"
+            x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) ? $store.customActions.confirmText : $store.customActions.confirmBody"
           ></p>
         </div>
         <div x-h-dialog-footer>
