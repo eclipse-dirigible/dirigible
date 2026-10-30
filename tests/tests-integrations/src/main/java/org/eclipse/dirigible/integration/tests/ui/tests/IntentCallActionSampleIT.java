@@ -155,6 +155,19 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                         call:
                           method: POST
                           path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/purge
+                      - name: AssignTicket
+                        forEntity: Ticket
+                        label: Assign
+                        can: Ticket:assign
+                        submit: Assign
+                        prompt:
+                          - { name: team, type: lookup, entity: Team, label: Team, required: true }
+                          - { name: email, type: email, label: Assignee, required: true }
+                          - { name: priority, type: select, label: Priority, options: [Low, High], default: Low }
+                        call:
+                          path: /services/java/helpdesk/custom/api/TicketApi/tickets/{id}/assignments
+                          body: { teamId: "{team}", email: "{email}", priority: "{priority}" }
+                        success: Ticket assigned
                       - name: RetryEscalation
                         forEntity: Escalation
                         label: Retry
@@ -212,7 +225,7 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                         success: Skills changed
                     permissions:
                       - role: SupportLead
-                        can: [Ticket:read, Ticket:escalate, Ticket:purge, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
+                        can: [Ticket:read, Ticket:escalate, Ticket:purge, Ticket:assign, Escalation:read, Escalation:retry, Watcher:read, Watcher:mute, Team:read, Team:invite,
                               TeamMember:read, TeamMember:changeSkills]
                       - role: Agent
                         can: [Ticket:read, Escalation:read, Watcher:read, Team:read, TeamMember:read]
@@ -324,6 +337,12 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
                     Response.getNative().setStatus(202);
                 }
 
+                @Post("/tickets/{id}/assignments")
+                public void assign(@PathParam("id") Integer id, @Body Map<String, Object> body) {
+                    received.add(Map.of("call", "assign " + id, "body", body));
+                    Response.getNative().setStatus(202);
+                }
+
                 @Post("/escalations/{id}/retry")
                 public void retry(@PathParam("id") Integer id) {
                     received.add(Map.of("call", "retry " + id, "contentLength", Request.getNative().getContentLengthLong()));
@@ -375,10 +394,9 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         // whose role lists neither token - receives neither.
         securityUtil.createUserInDefaultTenant("lead", PASSWORD, "SupportLead");
         securityUtil.createUserInDefaultTenant("agent", PASSWORD, "Agent");
-        assertEquals(
-                List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
-                        "helpdesk-Ticket-EscalateTicket", "helpdesk-Ticket-PurgeTicket", "helpdesk-Watcher-MuteWatcher"),
-                actionIds("lead"));
+        assertEquals(List.of("helpdesk-Escalation-RetryEscalation", "helpdesk-Team-InviteMember", "helpdesk-TeamMember-ChangeSkills",
+                "helpdesk-Ticket-AssignTicket", "helpdesk-Ticket-EscalateTicket", "helpdesk-Ticket-PurgeTicket",
+                "helpdesk-Watcher-MuteWatcher"), actionIds("lead"));
         assertEquals(List.of(), actionIds("agent"));
 
         // The administrator escalates the OPEN ticket through the dialog.
@@ -588,9 +606,9 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         ide.openHomePage();
         browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
         Selenide.refresh();
-        assertEquals(List.of("Preview", "Edit", "Purge (negative)", "Delete (negative)"), rowMenuEntries("Password reset"),
+        assertEquals(List.of("Assign", "Preview", "Edit", "Purge (negative)", "Delete (negative)"), rowMenuEntries("Password reset"),
                 "a CLOSED ticket's row menu");
-        assertEquals(List.of("Escalate", "Preview", "Edit", "Delete (negative)"), rowMenuEntries("Printer jammed"),
+        assertEquals(List.of("Assign", "Escalate", "Preview", "Edit", "Delete (negative)"), rowMenuEntries("Printer jammed"),
                 "an OPEN ticket's row menu has no destructive action");
 
         browser.clickOnElementContainingText("td", "Password reset");
@@ -687,6 +705,55 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
               .shouldBe(Condition.enabled);
         assertEquals(announced, ((Number) Selenide.executeJavaScript("return Alpine.store('notifications').items.length;")).intValue(),
                 "a failure shown in the dialog is not also announced");
+    }
+
+    /**
+     * A call dialog's inputs fit their values (#8366): the Team dropdown lists the teams by name, an
+     * address the forms refuse disables Assign and says so, and the endpoint receives the team's key as
+     * a number, the address and the chosen priority.
+     */
+    @Test
+    void assignPicksATeamAnEmailAndAPriority() {
+        deploy();
+        ide.openHomePage();
+        browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
+        Selenide.refresh();
+        browser.clickOnElementContainingText("td", "Printer jammed");
+        Selenide.$("[x-h-sheet] button[aria-label='More actions']")
+                .shouldBe(Condition.visible)
+                .click();
+        browser.clickOnElementContainingText(HtmlElementType.LI, "Assign");
+        SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
+                                         .shouldBe(Condition.visible);
+        String options = "return JSON.stringify(Alpine.store('customActions').promptOptionsFor('team').map(o => o.text));";
+        for (int i = 0; i < 40 && !"[\"Platform\"]".equals(Selenide.executeJavaScript(options)); i++) {
+            Selenide.sleep(250);
+        }
+        assertEquals("[\"Platform\"]", Selenide.executeJavaScript(options), "the Team dropdown lists the teams by name");
+        assertEquals("Low", Selenide.executeJavaScript("return Alpine.store('customActions').promptValues.priority;"));
+
+        SelenideElement email = dialog.$("input[type='email'][data-prompt-field='email']");
+        email.setValue("jane@");
+        email.pressTab();
+        dialog.$$("[data-slot='field-error']")
+              .findBy(Condition.exactText("Enter a valid email address."))
+              .shouldBe(Condition.visible);
+        SelenideElement assign = dialog.$$("button")
+                                       .findBy(Condition.exactText("Assign"));
+        assign.shouldBe(Condition.disabled);
+
+        email.setValue(" jane@example.com ");
+        // The team is picked through the store the dropdown binds (see GeneratesPromptHarmoniaIT).
+        Selenide.executeJavaScript(
+                "var s = Alpine.store('customActions'); s.promptValues.team = String(s.promptOptionsFor('team')[0].value);");
+        assign.shouldBe(Condition.enabled)
+              .click();
+        awaitAnnouncement("Ticket assigned");
+        List<Map<String, Object>> received = received();
+        Map<String, Object> assignment = received.get(received.size() - 1);
+        assertEquals("assign 1", assignment.get("call"));
+        assertEquals(Map.of("teamId", 1, "email", "jane@example.com", "priority", "Low"), assignment.get("body"),
+                "the team's key as a number, the address trimmed, the chosen priority");
     }
 
     private void deploy() {

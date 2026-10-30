@@ -84,15 +84,34 @@ public final class PromptColumns {
      * A control declared inline with its own type - a {@code call:} action's prompt input. A
      * {@code multiselect} is the {@code MULTISELECT} widget carrying its {@code options}; the
      * {@code help} line and the {@code default} the dialog opens with are carried when declared (issue
-     * #8296), so an input without them is emitted as before.
+     * #8296), so an input without them is emitted as before. An {@code email} is the {@code EMAIL}
+     * widget, a {@code select} the {@code DROPDOWN} widget with its {@code options} and no lookup, and
+     * a {@code lookup} the {@code DROPDOWN} widget reading its entity's records, its key typed by
+     * {@code keyType} (issue #8366).
      *
      * @param input the declared input
+     * @param model the model the action is declared in, for a lookup's entity
+     * @param context the generation context, for a lookup's REST path
      * @return the control, in the shape the shell's prompt dialog renders
      */
-    public static Map<String, Object> declared(ActionPromptIntent input) {
-        String widget = input.isMultiselect() ? "MULTISELECT" : widgetOf(input.getType());
-        Map<String, Object> column = column(input.getName(), caption(input.getLabel(), input.getName()), widget, null);
-        if (input.isMultiselect()) {
+    public static Map<String, Object> declared(ActionPromptIntent input, IntentModel model, IntentGenerationContext context) {
+        String widget = switch (input.getType() == null ? "string" : input.getType()) {
+            case ActionPromptIntent.MULTISELECT -> "MULTISELECT";
+            case ActionPromptIntent.SELECT, ActionPromptIntent.LOOKUP -> "DROPDOWN";
+            case ActionPromptIntent.EMAIL -> "EMAIL";
+            default -> widgetOf(input.getType());
+        };
+        Map<String, Object> column = column(input.getName(), caption(input.getLabel(), input.getName()), widget,
+                input.isLookup() ? localLookup(input.getEntity(), model, context) : null);
+        if (input.isLookup()) {
+            EntityIntent entity = IntentEntities.byName(model)
+                                                .get(input.getEntity());
+            FieldIntent key = IntentEntities.primaryKeyOf(entity);
+            if (key != null && "NUMBER".equals(widgetOf(key.getType()))) {
+                column.put("keyType", "number");
+            }
+        }
+        if (input.choosesFromOptions()) {
             List<Map<String, Object>> options = new ArrayList<>();
             for (ActionPromptOptionIntent declared : input.getOptions()) {
                 Map<String, Object> option = new LinkedHashMap<>();
@@ -130,10 +149,15 @@ public final class PromptColumns {
             UsesIntent uses = CrossModelSupport.owningModel(context, uses(model, relation.getModel()), relation.getTo());
             return crossModelLookup(context, uses, relation.getTo());
         }
+        return localLookup(relation.getTo(), model, context);
+    }
+
+    /** The lookup of an entity of the model: its controller, its key and its label property. */
+    private static Map<String, Object> localLookup(String entityName, IntentModel model, IntentGenerationContext context) {
         EntityIntent related = IntentEntities.byName(model)
-                                             .get(relation.getTo());
-        String perspective = IntentEntities.resolvePerspective(relation.getTo(), IntentEntities.compositionParents(model), model);
-        return lookup(apiBase(context.getProjectName(), IntentNaming.javaModule(context)), perspective, relation.getTo(),
+                                             .get(entityName);
+        String perspective = IntentEntities.resolvePerspective(entityName, IntentEntities.compositionParents(model), model);
+        return lookup(apiBase(context.getProjectName(), IntentNaming.javaModule(context)), perspective, entityName,
                 IntentEntities.keyFieldName(related), IntentEntities.labelFieldOf(related));
     }
 

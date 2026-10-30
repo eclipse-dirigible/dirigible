@@ -160,7 +160,7 @@ class CallActionDescriptorTest {
                 descriptor.get("description"));
         assertEquals("Invite", descriptor.get("submit"));
         List<?> columns = (List<?>) descriptor.get("promptColumns");
-        assertEquals(Map.of("name", "email", "label", "Email", "widget", "TEXT", "help", "name@company.com"), columns.get(0));
+        assertEquals(Map.of("name", "email", "label", "Email", "widget", "EMAIL", "help", "name@company.com"), columns.get(0));
         assertEquals(Map.of("name", "roles", "label", "Roles", "widget", "MULTISELECT", "options",
                 List.of(Map.of("value", "Member", "label", "Member", "help", "Uses the team's workspace"),
                         Map.of("value", "Lead", "label", "Team lead", "help", "Manages the team's members")),
@@ -283,6 +283,65 @@ class CallActionDescriptorTest {
         assertTrue(primary.contains("\"primary\":true"), primary);
         String plain = compact(descriptor(YAML, "EscalateTicket"));
         assertTrue(!plain.contains("\"primary\""), plain);
+    }
+
+    /** The "Send trial" example of #8366. */
+    private static final String TRIAL = """
+            name: shop
+            entities:
+              - name: Product
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+            actions:
+              - name: SendTrial
+                forEntity: Customer
+                prompt:
+                  - { name: product, type: lookup, entity: Product, label: Product, required: true }
+                  - { name: email,   type: email,  label: Recipient, required: true }
+                  - name: plan
+                    type: select
+                    label: Plan
+                    default: Basic
+                    options:
+                      - { value: Basic }
+                      - { value: Pro, help: Includes priority support }
+                call:
+                  path: /services/java/shop/custom/api/TrialApi/customers/{id}/trials
+                  body: { productId: "{product}", email: "{email}", plan: "{plan}" }
+            """;
+
+    @Test
+    void anEmailInputIsTheEmailWidget() {
+        assertEquals(Map.of("name", "email", "label", "Recipient", "widget", "EMAIL"), promptColumns(TRIAL, "SendTrial").get(1));
+    }
+
+    @Test
+    void aSelectIsADropdownOfItsOptions() {
+        assertEquals(
+                Map.of("name", "plan", "label", "Plan", "widget", "DROPDOWN", "default", "Basic", "options",
+                        List.of(Map.of("value", "Basic", "label", "Basic"),
+                                Map.of("value", "Pro", "label", "Pro", "help", "Includes priority support"))),
+                promptColumns(TRIAL, "SendTrial").get(2), "options and no lookup");
+    }
+
+    @Test
+    void aLookupIsADropdownOfTheEntitysRecords() {
+        assertEquals(
+                Map.of("name", "product", "label", "Product", "widget", "DROPDOWN", "lookup",
+                        Map.of("url", "/services/java/proj/gen/shop/api/product/ProductController", "key", "Id", "text", "Name"), "keyType",
+                        "number"),
+                promptColumns(TRIAL, "SendTrial").get(0), "the entity's controller, key and label, and the key typed as a number");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> promptColumns(String yaml, String action) {
+        return (List<Map<String, Object>>) new Gson().fromJson(descriptor(yaml, action), Map.class)
+                                                     .get("promptColumns");
     }
 
     /** The descriptor carries {@code destructive} when it is declared, and only then (#8364). */

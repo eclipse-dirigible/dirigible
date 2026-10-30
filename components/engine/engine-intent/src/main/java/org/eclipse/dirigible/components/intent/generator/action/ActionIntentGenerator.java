@@ -154,7 +154,7 @@ public class ActionIntentGenerator implements IntentTargetGenerator {
                 entry.put("name", input.getName());
                 entry.put("required", input.isRequired());
                 prompt.add(entry);
-                columns.add(PromptColumns.declared(input));
+                columns.add(PromptColumns.declared(input, model, context));
             }
             view.put("prompt", prompt);
             view.put("promptColumns", columns);

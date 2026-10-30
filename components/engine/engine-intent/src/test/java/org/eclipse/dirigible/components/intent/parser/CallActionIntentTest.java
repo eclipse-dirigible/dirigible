@@ -376,7 +376,9 @@ class CallActionIntentTest {
     void optionsOnAnotherTypeAreRefused() {
         assertIssue(INVITE.replace("type: multiselect", "type: string")
                           .replace("        default: [Member]\n", ""),
-                "action [InviteMember] prompt input [roles] declares options but has type [string] - only a multiselect chooses from options");
+                "action [InviteMember] prompt input [roles] declares options but has type [string] - only a multiselect or a select chooses from options");
+        IntentParser.parse(INVITE.replace("type: multiselect", "type: select")
+                                 .replace("        default: [Member]\n", ""));
     }
 
     @Test
@@ -411,7 +413,7 @@ class CallActionIntentTest {
     @Test
     void aDefaultMustFitItsType() {
         assertIssue(INVITE.replace("help: \"name@company.com\" }", "help: \"name@company.com\", default: 5 }"),
-                "action [InviteMember] prompt input [email] default [5] does not fit its type [email] - expected a string");
+                "action [InviteMember] prompt input [email] default [5] does not fit its type [email] - expected an email address");
         String typed = INVITE.replace(EMAIL, EMAIL
                 + "\n      - { name: seats, type: integer, default: 1.5 }\n      - { name: lead, type: boolean, default: yes please }\n"
                 + "      - { name: from, type: date, default: tomorrow }");
@@ -537,6 +539,98 @@ class CallActionIntentTest {
                   - { name: OpenNote, forEntity: Note, page: /services/web/helpdesk/note.html, description: Opens it, submit: Open }
                 """;
         assertIssue(page, "action [OpenNote] declares [description, submit], which only a call: action uses");
+    }
+
+    /** The "Send trial" example of #8366: an email, a select and a lookup. */
+    static final String TRIAL = """
+            name: shop
+            entities:
+              - name: Product
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+            actions:
+              - name: SendTrial
+                forEntity: Customer
+                label: Send trial
+                description: "Send a trial licence to a contact of {name}."
+                submit: Send
+                prompt:
+                  - { name: product, type: lookup, entity: Product, label: Product, required: true }
+                  - { name: email,   type: email,  label: Recipient, required: true, help: "name@company.com" }
+                  - name: plan
+                    type: select
+                    label: Plan
+                    default: Basic
+                    options:
+                      - { value: Basic }
+                      - { value: Pro, help: Includes priority support }
+                call:
+                  path: /services/java/shop/custom/api/TrialApi/customers/{id}/trials
+                  body: { productId: "{product}", email: "{email}", plan: "{plan}" }
+            """;
+
+    @Test
+    void theSendTrialExampleParses() {
+        List<ActionPromptIntent> prompt = IntentParser.parse(TRIAL)
+                                                      .getActions()
+                                                      .get(0)
+                                                      .getPrompt();
+        assertEquals("lookup:Product,email:null,select:null", prompt.stream()
+                                                                    .map(p -> p.getType() + ":" + p.getEntity())
+                                                                    .reduce((a, b) -> a + "," + b)
+                                                                    .orElse(""));
+    }
+
+    /** A literal email default must be an address by the forms' own rule (#8366). */
+    @Test
+    void anEmailDefaultMustBeAnAddress() {
+        assertIssue(TRIAL.replace("required: true, help: \"name@company.com\"", "default: \"jane@\""),
+                "action [SendTrial] prompt input [email] default [jane@] does not fit its type [email] - expected an email address");
+        IntentParser.parse(TRIAL.replace("required: true, help: \"name@company.com\"", "default: \"jane@example.com\""));
+    }
+
+    /** A select chooses from its options, and its literal default names one (#8366). */
+    @Test
+    void aSelectNeedsOptionsAndAKnownDefault() {
+        assertIssue(
+                TRIAL.replace("        default: Basic\n        options:\n          - { value: Basic }\n"
+                        + "          - { value: Pro, help: Includes priority support }\n", ""),
+                "action [SendTrial] prompt input [plan] is a select without options");
+        assertIssue(TRIAL.replace("default: Basic", "default: Gold"),
+                "action [SendTrial] prompt input [plan] default names [Gold], which is not one of its options [Basic, Pro]");
+        IntentParser.parse(TRIAL.replace("default: Basic", "default: \"{name}\""));
+    }
+
+    /**
+     * A lookup names an entity of its own model - not missing, not unknown, not another model's
+     * (#8366).
+     */
+    @Test
+    void aLookupNeedsAnEntityOfTheModel() {
+        assertIssue(TRIAL.replace(", entity: Product", ""), "action [SendTrial] prompt input [product] is a lookup without an entity");
+        assertIssue(TRIAL.replace("entity: Product", "entity: Widget"),
+                "action [SendTrial] prompt input [product] names entity [Widget], which is not an entity of this model");
+        assertIssue(TRIAL.replace("entity: Product", "entity: catalog.Product"),
+                "action [SendTrial] prompt input [product] names entity [catalog.Product], which is not an entity of this model");
+    }
+
+    /** Only a lookup names an entity (#8366). */
+    @Test
+    void entityIsALookupsOnly() {
+        assertIssue(TRIAL.replace("type: email,  label: Recipient", "type: email, entity: Product, label: Recipient"),
+                "action [SendTrial] prompt input [email] declares entity but has type [email] - only a lookup picks a record of an entity");
+    }
+
+    /** A lookup takes no default: a literal key differs per environment (#8366). */
+    @Test
+    void aLookupTakesNoDefault() {
+        assertIssue(TRIAL.replace("entity: Product, label: Product", "entity: Product, label: Product, default: 1"),
+                "action [SendTrial] prompt input [product] is a lookup, and a lookup takes no default");
     }
 
     private static void assertIssue(String yaml, String expected) {
