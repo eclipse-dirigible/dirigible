@@ -209,6 +209,86 @@ class HarmoniaTaskRefreshIT {
         }
     }
 
+    /**
+     * A generated app hosted in a shell's iframe used to run its own copy of the store: two readings of
+     * the inbox on load and two polls every 30 s per tab (#8347). Embedded in a same-origin host with
+     * the store, it mirrors the host's reading instead and polls nothing.
+     */
+    @Test
+    void anEmbeddedPageMirrorsTheHostsReadingAndPollsNothing() {
+        try (Context context = loadEmbedded()) {
+            assertTrue(context.eval("js", "store.embedded")
+                              .asBoolean(),
+                    "the store must follow the host's");
+            assertEquals(2, inboxGets(context), "one reading: the host's assignee page and groups page");
+            assertEquals(1, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the host's tasks are mirrored");
+            assertEquals(1, context.eval("js", "store.getTasks({ ProcessId: 'p1' }).length")
+                                   .asInt(),
+                    "and bucketed by process for the in-record buttons");
+            assertEquals(1, context.eval("js", "__intervals.length")
+                                   .asInt(),
+                    "only the host polls");
+            // The hosted page's first route is its own load, which the host's reading already covers.
+            context.eval("js", "__lastDocumentListener('pinecone:end')();");
+            assertEquals(2, inboxGets(context), "the first route must not re-read");
+            // A later navigation re-reads - through the host, which is the one reader.
+            context.eval("js", "__lastDocumentListener('pinecone:end')();");
+            assertEquals(4, inboxGets(context), "a navigation re-reads once, through the host");
+            assertEquals(1, context.eval("js", "__intervals.length")
+                                   .asInt(),
+                    "still only the host polls");
+        }
+    }
+
+    @Test
+    void aChangeTheHostReadsIsAnnouncedOnTheEmbeddedWindowToo() {
+        try (Context context = loadEmbedded()) {
+            context.eval("js", "__inbox.assignee = []; hostStore.load();");
+            // The stub has one window for both stores: the host's announcement and the follower's
+            // re-announcement on the hosted page's window both land in it.
+            assertEquals("p1|p1", announced(context), "the host announces and the embedded store re-announces");
+            assertEquals(0, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the reading that changed is mirrored");
+        }
+    }
+
+    @Test
+    void anEmbeddedPageOpensATaskInTheHostsDialog() {
+        try (Context context = loadEmbedded()) {
+            context.eval("js", "store.openTask(store.tasks[0]);");
+            assertTrue(context.eval("js", "hostStore.formOpen")
+                              .asBoolean(),
+                    "the host's dialog opens");
+            assertTrue(!context.eval("js", "store.formOpen")
+                               .asBoolean(),
+                    "the embedded page's own dialog stays closed");
+            // The form completes, the host re-reads and schedules its follow-ups; the result is mirrored.
+            context.eval("js", "__inbox.assignee = []; hostStore.closeForm(true);");
+            assertEquals(0, context.eval("js", "store.tasks.length")
+                                   .asInt(),
+                    "the completed task is gone from the embedded page too");
+            assertEquals("2000", pendingDelays(context), "the follow-up series is the host's");
+        }
+    }
+
+    @Test
+    void anEmbeddedPageResolvesSubjectsThroughTheHostsCache() {
+        try (Context context = loadEmbedded("__inbox.assignee = [" + SUBJECT_TASKS + "];")) {
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("INV-5 · ACME", context.eval("js", "store.subject(store.tasks[0])")
+                                                .asString(),
+                    "the line resolved by the host is mirrored");
+            assertEquals("", context.eval("js", "store.subject(store.tasks[1])")
+                                    .asString(),
+                    "and only the row asked for was resolved");
+            context.eval("js", "store.resolveSubjects([store.tasks[0]]);");
+            assertEquals("/svc/Invoice/5|/svc/Customer/9", recordGets(context), "asking again reads nothing: the host's cache answers");
+        }
+    }
+
     @Test
     void aPageReReadsOnlyForTheProcessOfItsOwnRecord() {
         try (Context context = load()) {
@@ -270,6 +350,11 @@ class HarmoniaTaskRefreshIT {
                       .asString();
     }
 
+    private static int inboxGets(Context context) {
+        return context.eval("js", "__inboxGets")
+                      .asInt();
+    }
+
     private static String recordGets(Context context) {
         return context.eval("js", "__recordGets.join('|')")
                       .asString();
@@ -314,13 +399,15 @@ class HarmoniaTaskRefreshIT {
                         };
                         var __documentListeners = {};
                         var document = { addEventListener: function (type, fn) { (__documentListeners[type] = __documentListeners[type] || []).push(fn); } };
+                        var __lastDocumentListener = function (type) { return __documentListeners[type].slice(-1)[0]; };
                         var __stores = {};
                         var Alpine = { store: function (name, value) { if (value !== undefined) { __stores[name] = value; } return __stores[name]; } };
                         var __timers = [];
                         var __timerIds = 0;
                         function setTimeout(fn, ms) { var t = { id: ++__timerIds, fn: fn, ms: ms }; __timers.push(t); return t.id; }
                         function clearTimeout(id) { __timers = __timers.filter(function (t) { return t.id !== id; }); }
-                        function setInterval() { return 0; }
+                        var __intervals = [];
+                        function setInterval(fn, ms) { __intervals.push(ms); return 0; }
                         function clearInterval() {}
                         var __runTimer = function () { var t = __timers.shift(); if (t) t.fn(); };
                         var console = { log: function () {}, warn: function () {}, error: function () {} };
@@ -343,6 +430,7 @@ class HarmoniaTaskRefreshIT {
                         var __records = { '/svc/Invoice/5': { Number: 'INV-5', Customer: 9 }, '/svc/Invoice/6': { Number: 'INV-6', Customer: 9 },
                                           '/svc/Customer/9': { Name: 'ACME' } };
                         var __recordGets = [];
+                        var __inboxGets = 0;
                         var __invoiceSubject = function (id) {
                           return { url: '/svc/Invoice', id: id, fields: [{ property: 'Number' },
                                    { property: 'Customer', kind: 'relation', url: '/svc/Customer', label: 'Name' }] };
@@ -355,6 +443,7 @@ class HarmoniaTaskRefreshIT {
                               __recordGets.push(url);
                               return Promise.resolve(__records[url] || null);
                             }
+                            __inboxGets++;
                             if (__inbox.fail) return Promise.reject(new Error('500'));
                             var key = /type=assignee/.test(url) ? 'assignee' : 'groups';
                             var items = __inbox[key];
@@ -378,6 +467,32 @@ class HarmoniaTaskRefreshIT {
         // test.
         context.eval("js",
                 "__documentListeners['alpine:init'].forEach(function (fn) { fn(); }); var store = Alpine.store('processTasks');");
+        return context;
+    }
+
+    private static Context loadEmbedded() {
+        return loadEmbedded("__inbox.assignee = [" + ISSUE_TASK + "];");
+    }
+
+    /**
+     * The store of a page hosted in a same-origin iframe of a page with the store (#8347): the shipped
+     * file is evaluated a second time, in a store registry of its own, with the first store reachable
+     * as `window.parent.Alpine.store('processTasks')`. The stub has one window and one document, so
+     * both stores' events and listeners land in the same lists; a test that drives the embedded store's
+     * listener takes the last one registered.
+     */
+    private static Context loadEmbedded(String inbox) {
+        Context context = load();
+        context.eval("js",
+                inbox + " var hostStore = store; hostStore.init();"
+                        + " window.parent = { Alpine: { store: function (name) { return name === 'processTasks' ? hostStore : undefined; },"
+                        + " raw: function (value) { return value; } } };" + " __stores = {};");
+        try {
+            context.eval("js", read(SHELL + "stores/processTasks.js"));
+        } catch (Exception ex) {
+            throw new IllegalStateException("Failed to evaluate stores/processTasks.js", ex);
+        }
+        context.eval("js", "__lastDocumentListener('alpine:init')(); var store = Alpine.store('processTasks'); store.init();");
         return context;
     }
 
