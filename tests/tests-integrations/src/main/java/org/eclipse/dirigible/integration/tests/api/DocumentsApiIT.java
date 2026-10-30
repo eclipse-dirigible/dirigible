@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 
 import java.nio.charset.StandardCharsets;
 
@@ -111,7 +112,7 @@ class DocumentsApiIT extends IntegrationTest {
                    .get(BASE + "/download?path=" + FILE_PATH)
                    .then()
                    .statusCode(200)
-                   .header("Content-Disposition", "attachment; filename=\"" + FILE_NAME + "\"");
+                   .header("Content-Disposition", startsWith("attachment; filename=\"" + FILE_NAME + "\""));
 
             given().when()
                    .get(BASE + "/zip?path=" + FOLDER_PATH)

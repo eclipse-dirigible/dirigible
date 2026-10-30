@@ -21,12 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.restassured.RestAssured;
+import io.restassured.config.HttpClientConfig;
+import io.restassured.config.MultiPartConfig;
+import io.restassured.config.MultipartMode;
+import io.restassured.config.RestAssuredConfig;
 import io.restassured.path.json.JsonPath;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -66,6 +72,17 @@ class IntentAttachmentUploadIT extends IntegrationTest {
     private static final String PEOPLE = API + "/person/PersonController";
     private static final String PHOTOS = API + "/person/PersonPhotoController";
     private static final long TIMEOUT_SECONDS = 90;
+
+    /**
+     * A browser sends a multipart file name as UTF-8; RestAssured's strict default sends it as ASCII.
+     */
+    private static final RestAssuredConfig UTF8_MULTIPART = RestAssured.config()
+                                                                       .httpClient(HttpClientConfig.httpClientConfig()
+                                                                                                   .multipartMode(
+                                                                                                           MultipartMode.BROWSER_COMPATIBLE))
+                                                                       .multiPartConfig(MultiPartConfig.multiPartConfig()
+                                                                                                       .defaultCharset(
+                                                                                                               StandardCharsets.UTF_8));
 
     /** A master and the attachment child it owns - the shape the issue reproduces with. */
     private static final String INTENT_YAML = """
@@ -197,6 +214,39 @@ class IntentAttachmentUploadIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("", hasSize(0)));
+
+        // (5) #8221: a name outside ISO-8859-1 made the raw quoted header invalid, and the container
+        // dropped the whole Content-Disposition, so the browser proposed "download" as the save name. The
+        // name now goes out as an RFC 6266 / 5987 pair - an ASCII fallback plus the percent-encoded UTF-8
+        // filename* - for both disposition types, so saving from the inline viewer proposes it as well.
+        // The space checks that it is encoded as %20, never as the form-encoding '+'.
+        String storedName = "\u0424\u0430\u043a\u0442\u0443\u0440\u0430 1.pdf";
+        AtomicInteger invoice = new AtomicInteger();
+        restAssuredExecutor.execute(() -> invoice.set(given().config(UTF8_MULTIPART)
+                                                             .multiPart("file", storedName, bytes, "application/pdf")
+                                                             .when()
+                                                             .post(PHOTOS + "/upload?Person=" + person)
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .body("[0].FileName", equalTo(storedName))
+                                                             .extract()
+                                                             .path("[0].Id")));
+        for (String type : List.of("attachment", "inline")) {
+            String query = "inline".equals(type) ? "?disposition=inline" : "";
+            restAssuredExecutor.execute(() -> {
+                String disposition = given().when()
+                                            .get(PHOTOS + "/" + invoice.get() + "/download" + query)
+                                            .then()
+                                            .statusCode(200)
+                                            .extract()
+                                            .header("Content-Disposition");
+                assertEquals(type + "; filename=\"_______ 1.pdf\"; filename*=UTF-8''%D0%A4%D0%B0%D0%BA%D1%82%D1%83%D1%80%D0%B0%201.pdf",
+                        disposition, "the " + type + " download must carry the RFC 6266 / 5987 pair");
+                String encoded = disposition.substring(disposition.indexOf("filename*=UTF-8''") + "filename*=UTF-8''".length());
+                assertEquals(storedName, URLDecoder.decode(encoded, StandardCharsets.UTF_8),
+                        "the decoded " + type + " filename* must be the stored FileName, the browser's default save name");
+            });
+        }
     }
 
     /** The one photo row of a person, through the master-scoped list the details panel reads. */
