@@ -45,7 +45,7 @@
     <span x-h-toolbar-title class="shrink-0"
           x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}')#if($docNumProp != '') + (window.HarmoniaFormat.documentNumber(form.${docNumProp}) ? ' ' + window.HarmoniaFormat.documentNumber(form.${docNumProp}) : '')#end + (ownerName ? ' ' + T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + ownerName : '')"></span>
 #if($statusProp != "")
-    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
+    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText(), form.${statusProp})" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
     <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the

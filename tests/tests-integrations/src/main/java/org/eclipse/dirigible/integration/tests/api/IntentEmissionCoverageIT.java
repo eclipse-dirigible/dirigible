@@ -2094,12 +2094,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                       # stage: what each status MEANS to the lifecycle (#6645) - metadata, never a column of
                       # the seeded table. Consumed by a report's `scope:` and by the event-driven create-from's
                       # at-most-once guard, which steps over a target retired into `cancelled`/`void` (#6814).
+                      # variant: the badge colour a row declares, over its stage (#8373) - metadata too.
                       - name: entry-statuses
                         entity: EntryStatus
                         rows:
                           - { id: 1, name: DRAFT,     stage: draft }
                           - { id: 2, name: POSTED,    stage: live }
-                          - { id: 3, name: CANCELLED, stage: cancelled }
+                          - { id: 3, name: CANCELLED, stage: cancelled, variant: warning }
                       - name: pledge-statuses
                         entity: PledgeStatus
                         rows:
@@ -3806,8 +3807,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // DOCUMENT_STATUS widgets).
         assertTrue(campaignListPage.contains("all['Status']"),
                 "the master's list must load the EntityStatus label lookup like any dropdown relation");
-        assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status))"),
+        assertTrue(campaignListView.contains("statusVariant(lookupText('Status', row.Status), row.Status)"),
                 "the master's table must render the EntityStatus column as a resolved badge, not a raw id");
+        // ...coloured by what the seeds say each status means (#8373): POSTED is `stage: live`, CANCELLED
+        // declares `variant: warning` over its `stage: cancelled`, and a status no row classifies (id 9,
+        // here named DRAFT) still falls back to the guess from its name.
+        assertEquals("positive|warning|outline|default",
+                pageStatusVariant(campaignListPage, "CampaignManageListPage",
+                        "[['POSTED', 2], ['CANCELLED', 3], ['DRAFT', 9], ['OPEN', 9]]"),
+                "the list's badge must take its colour from the seed's stage/variant before guessing from the name");
         // ...and a relation column sorts by that label, not by the key behind it (#7721): keys 1, 2, 3
         // label as Sent, draft, Approved, so key order and label order disagree.
         String campaignRows =
@@ -8727,6 +8735,28 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "(() => { const page = pages['" + componentName + "'](); page.options" + statusProperty + " = " + options + ";"
                             + " page.form = { " + statusProperty + ": " + current + " };"
                             + " return '[' + page.statusSteps().map(o => o.value).join(',') + '] active ' + page.activeStep(); })()")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated page's status badge colouring (#8373): the {@code statusVariant(text, id)} answer
+     * for each {@code [text, id]} pair of {@code calls}, pipe-joined. The page is evaluated over the
+     * shipped {@code basePage.js}, so the map it carries is the one generated from the seeds.
+     */
+    private static String pageStatusVariant(String pageScript, String componentName, String calls) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; } };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            return context.eval("js",
+                    "(() => { const page = pages['" + componentName + "'](); return " + calls
+                            + ".map(c => page.statusVariant(c[0], c[1])).join('|'); })()")
                           .asString();
         }
     }

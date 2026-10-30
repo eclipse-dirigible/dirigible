@@ -96,6 +96,61 @@ class LifecycleStageIntentTest {
                 "declares its own `stage` property");
     }
 
+    // --- variant: the badge colour a status seed row declares (#8373) ---
+
+    @Test
+    void aVariantOutsideTheVocabularyIsRejected() {
+        assertIssue(YAML.replace("- { id: 7, name: PAID, stage: live }", "- { id: 7, name: PAID, variant: teal }"),
+                "row declares variant [teal] - expected one of [destructive, info, muted, neutral, success, warning]");
+    }
+
+    @Test
+    void aVariantWithoutAnIdIsRejected() {
+        assertIssue(YAML.replace("- { id: 7, name: PAID, stage: live }", "- { name: PAID, variant: success }"),
+                "row declares a variant but no [id] - the variant colours a status seed id");
+    }
+
+    @Test
+    void aVariantOnANonStatusSeedIsRejected() {
+        String yaml = YAML.replace("""
+                seeds:
+                """, """
+                seeds:
+                  - name: carriers
+                    entity: Carrier
+                    rows:
+                      - { id: 1, name: Rapid, variant: info }
+                """)
+                          .replace("""
+                                    - name: Invoice
+                                  """, """
+                                    - name: Carrier
+                                      fields:
+                                        - { name: id, type: integer, primaryKey: true, generated: true }
+                                        - { name: name, type: string }
+                                    - name: Invoice
+                                  """);
+        assertIssue(yaml, "seed [carriers] declares variant, but [Carrier] is no entity's status - variant colours a status badge");
+    }
+
+    @Test
+    void aVariantPropertyOnTheNomenclatureCollidesWithTheMarker() {
+        assertIssue(
+                YAML.replace("      - { name: name, type: string }\n",
+                        "      - { name: name, type: string }\n      - { name: variant, type: string }\n")
+                    .replace("- { id: 7, name: PAID, stage: live }", "- { id: 7, name: PAID, variant: success }"),
+                "declares its own `variant` property");
+    }
+
+    @Test
+    void aVariantWithoutAStageParses() {
+        IntentModel model =
+                IntentParser.parse(YAML.replace("- { id: 7, name: PAID, stage: live }", "- { id: 7, name: PAID, variant: info }"));
+        Map<Integer, String> variants = LifecycleStages.badgeVariantsOf(model, "InvoiceStatus");
+        assertEquals("information", variants.get(7), "a variant needs no stage");
+        assertEquals("positive", variants.get(3), "a stage alone still colours its row");
+    }
+
     @Test
     void anUnknownScopeIsRejected() {
         assertIssue(YAML.replace("scope: live", "scope: alive"), "is unknown - expected `all`");

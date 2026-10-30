@@ -592,7 +592,16 @@ document.addEventListener('alpine:init', () => {
       const opt = (this.options${statusProp} || []).find(o => String(o.value) === String(v));
       return opt ? opt.text : String(v);
     },
-    statusVariant(text) {
+#set($statusVariantsJs = "{}")
+#foreach($svProperty in $properties)
+#if($svProperty.widgetType == "DOCUMENT_STATUS" && "$!svProperty.widgetStatusVariants" != "")#set($statusVariantsJs = $svProperty.widgetStatusVariants)#end
+#end
+    // What the model says each status means (seed `stage:` / `variant:`, #8373): status id -> badge
+    // variant. A status it does not classify is coloured by a guess from its name.
+    statusVariants: ${statusVariantsJs},
+    statusVariant(text, id) {
+      const declared = id === undefined || id === null ? undefined : this.statusVariants[String(id)];
+      if (declared) return declared;
       const t = String(text || '').toLowerCase();
       if (/draft/.test(t)) return 'outline';
       if (/(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)/.test(t)) return 'negative';

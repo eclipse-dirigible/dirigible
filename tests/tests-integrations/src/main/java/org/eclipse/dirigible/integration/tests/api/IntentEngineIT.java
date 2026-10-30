@@ -3808,7 +3808,8 @@ class IntentEngineIT extends IntegrationTest {
         // calculated field previews live via the calc evaluator with the date functions.
         generateFromModel("template-application-ui-harmonia-java/template/template.js", "loans.model");
         String formView = contentOf("gen/loans/views/Loan/Loan-form.html");
-        assertTrue(formView.contains("statusVariant(statusText())"), "the form should render the status badge");
+        assertTrue(formView.contains("statusVariant(statusText(), form.Status)"),
+                "the form should render the status badge, coloured by the status id first (#8373)");
         assertFalse(formView.contains("f_Status"), "the status must not render as an editable input");
         String formJs = contentOf("gen/loans/js/components/pages/Loan/LoanFormPage.js");
         assertTrue(formJs.contains("harmoniaCalcEval"), "the form should carry the live calc evaluator");

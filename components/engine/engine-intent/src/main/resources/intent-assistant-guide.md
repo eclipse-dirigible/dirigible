@@ -296,7 +296,7 @@ not as an apology.
   declare - an invented one, or a case slip (`Required:` for `required:`, `contributionScheme:` for
   the relation `ContributionScheme`) - is a validation ERROR naming the key and the nearest declared
   name; it is never accepted and ignored. The same holds for a **seed row**, whose keys are the
-  entity's own field and to-one relation names (plus the lifecycle `stage:` marker). Never invent a
+  entity's own field and to-one relation names (plus the lifecycle `stage:` and badge `variant:` markers). Never invent a
   plausible-looking key to express something: if the schema cannot say it, say so instead.
 - **A step's `args:` are checked per KIND, and so are the other fixed-vocabulary maps.** An arg no
   kind knows (`assigne:`) and an arg belonging to another kind (`if:` on a userTask, `timeout:` on a
@@ -3065,6 +3065,30 @@ reports:
 (has `measures`, or `kind: balance`) AND its dimensions/`filter` do not already reference the status —
 a breakdown BY status keeps every row. **Always classify a status nomenclature with `stage:`**: when it
 is unclassified, Generate reports the aggregate as lifecycle-blind and the total silently counts drafts.
+
+#### The status badge's colour - `stage:` and `variant:` on a status seed row
+
+The stage also colours the status badge on every generated page (list, record, document title bar, the
+personal and partner pages): `draft` outlined, `live` green, `cancelled` red, `void` grey. A status that
+is neither - work in progress such as IN_TRANSIT - may declare its colour with `variant:`, one of
+`success | info | warning | destructive | neutral | muted`; it wins over the row's `stage:` and needs none:
+
+```yaml
+seeds:
+  - name: shipment-statuses
+    entity: ShipmentStatus
+    rows:
+      - { id: 1, name: BOOKED,     stage: draft }
+      - { id: 2, name: IN_TRANSIT, variant: info }
+      - { id: 3, name: DELIVERED,  stage: live }
+      - { id: 4, name: RETURNED,   stage: cancelled }
+      - { id: 5, name: LOST,       stage: void }
+```
+
+**Rules:** `variant` is metadata, never a column. It needs the row's `id`, stays inside the vocabulary,
+and is valid only on the seed of a status nomenclature of this model (the target of a
+`function: EntityStatus` relation); a nomenclature that declares its own `variant` property is rejected.
+A status row with neither key is coloured by a guess from its name, as before.
 
 #### Statuses may be named, not numbered
 

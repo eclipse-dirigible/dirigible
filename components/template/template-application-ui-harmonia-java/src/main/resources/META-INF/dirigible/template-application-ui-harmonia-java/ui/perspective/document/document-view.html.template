@@ -70,7 +70,7 @@
 #end
 #if($docStatusProp != "")
           <!-- Document status pill, beside the title. -->
-          <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) &amp;&amp; statusText()" x-text="statusText()"></span>
+          <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText(), form.${docStatusProp})" x-show="(isEdit || isPreview) &amp;&amp; statusText()" x-text="statusText()"></span>
 #end
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
           <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the
