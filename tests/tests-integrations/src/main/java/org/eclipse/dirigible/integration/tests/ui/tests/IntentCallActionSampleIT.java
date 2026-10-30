@@ -597,8 +597,11 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         SelenideElement more = Selenide.$("[x-h-sheet] button[aria-label='More actions']")
                                        .shouldBe(Condition.visible);
         more.click();
-        List<String> sheet = entries(Selenide.$$("ul[aria-labelledby='" + more.getAttribute("id") + "'] li[x-h-menu-item]")
-                                             .filterBy(Condition.visible));
+        ElementsCollection sheetItems = Selenide.$$("ul[aria-labelledby='" + more.getAttribute("id") + "'] li[x-h-menu-item]")
+                                                .filterBy(Condition.visible);
+        sheetItems.findBy(Condition.exactText("Delete"))
+                  .shouldBe(Condition.visible);
+        List<String> sheet = entries(sheetItems);
         Selenide.actions()
                 .sendKeys(Keys.ESCAPE)
                 .perform();
