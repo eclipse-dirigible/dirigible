@@ -656,6 +656,11 @@ class IntentCallActionSampleIT extends UserInterfaceIntegrationTest {
         ide.openHomePage();
         browser.openPath("/services/web/" + PROJECT + "/gen/helpdesk/index.html#/Ticket");
         Selenide.refresh();
+        // The store reads the contributed actions once the page has loaded.
+        String loaded = "return Alpine.store('customActions').actions.some(a => a.label === 'Escalate');";
+        for (int i = 0; i < 40 && !Boolean.TRUE.equals(Selenide.executeJavaScript(loaded)); i++) {
+            Selenide.sleep(250);
+        }
         Selenide.executeJavaScript("var s = Alpine.store('customActions');"
                 + " s.trigger(s.actions.find(a => a.label === 'Escalate'), 2, { Id: 2, subject: 'Password reset', Status: 1 });");
         SelenideElement dialog = Selenide.$("[data-prompt-dialog]")
