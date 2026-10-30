@@ -504,6 +504,7 @@ public final class IntentParser {
             validateSnapshotFileName(entity, model, compositionParent, issues);
             validateLocksWithMaster(entity, model, compositionParent, issues);
             validateVisibleWhen(entity, model, compositionParent, issues);
+            validatePlacement(entity, model, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -4225,6 +4226,102 @@ public final class IntentParser {
                     + "] never locks (no immutableWhen / immutable on it or on its composition ancestors)"
                     + " - the declaration would have no effect");
         }
+    }
+
+    /** The values a field's {@code placement:} takes (dirigible #8369). */
+    private static final List<String> PLACEMENTS = List.of("main", "details", "hidden");
+
+    /**
+     * A field's {@code placement:} (dirigible #8369) says where it sits on the generated record page:
+     * {@code main}, {@code details} (the Details rail) or {@code hidden} (no generated page). The rail
+     * shows values, never inputs, so {@code details} needs a read-only field. A hidden field is never
+     * an input and never a column, so it cannot be the primary key, cannot be required unless the
+     * server supplies the value, and cannot be asked for anywhere a page would show it:
+     * {@code major: true}, {@code visibleWhen:}, the entity's {@code list:} or a {@code related:}
+     * register's {@code show:}.
+     */
+    private static void validatePlacement(EntityIntent entity, IntentModel model, List<String> issues) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getPlacement() == null || field.getName() == null) {
+                continue;
+            }
+            String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] placement";
+            String value = field.getPlacement()
+                                .trim()
+                                .toLowerCase(Locale.ROOT);
+            if (!PLACEMENTS.contains(value)) {
+                issues.add(subject + " [" + field.getPlacement() + "] - placement must be main, details or hidden");
+                continue;
+            }
+            if ("details".equals(value) && !isReadOnlyField(field)) {
+                issues.add(subject + ": details - the Details rail shows values, not inputs, so it takes a read-only field;"
+                        + " declare `readOnly: true` or drop the placement");
+            }
+            if (!"hidden".equals(value)) {
+                continue;
+            }
+            if (field.isPrimaryKey()) {
+                issues.add(subject + ": hidden conflicts with primaryKey - the primary key is how every page opens the record");
+            }
+            if (field.isRequired() && !field.isPrimaryKey() && !hasServerSideSource(field)) {
+                issues.add(subject
+                        + ": hidden conflicts with required - a hidden field is never an input, so nothing can supply the required ["
+                        + field.getName() + "]; give it a defaultValue, a calculatedOnCreate or a number:, or drop `required`");
+            }
+            if (Boolean.TRUE.equals(field.getMajor())) {
+                issues.add(subject + ": hidden conflicts with major: true - a hidden field is no list column");
+            }
+            if (field.getVisibleWhen() != null) {
+                issues.add(subject + ": hidden conflicts with visibleWhen - a hidden field is shown under no condition");
+            }
+            if (namesField(entity.getList(), field.getName())) {
+                issues.add(subject + ": hidden conflicts with the entity's list: - a hidden field is no list column");
+            }
+            for (EntityIntent owner : model.getEntities()) {
+                for (RelatedIntent related : owner.getRelated()) {
+                    if (related != null && !related.isCrossModel() && entity.getName()
+                                                                            .equals(related.getEntity())
+                            && namesField(related.getShow(), field.getName())) {
+                        issues.add(subject + ": hidden conflicts with the related: register on [" + owner.getName()
+                                + "], whose show: names it - a hidden field is no register column");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether the field is read-only on the generated pages - the predicate the EDM generator emits
+     * {@code isReadOnlyProperty} by: an author's {@code readOnly}, a {@code uuid}, a status stamp, a
+     * document number.
+     */
+    private static boolean isReadOnlyField(FieldIntent field) {
+        return field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.getStampOn() != null || field.getNumber() != null;
+    }
+
+    /** Whether the server fills the field on a create that omits it. */
+    private static boolean hasServerSideSource(FieldIntent field) {
+        return (field.getDefaultValue() != null && !field.getDefaultValue()
+                                                         .isBlank())
+                || (field.getCalculatedOnCreate() != null && !field.getCalculatedOnCreate()
+                                                                   .isBlank())
+                || (field.getCalculatedActionOnCreate() != null && !field.getCalculatedActionOnCreate()
+                                                                         .isBlank())
+                || field.getNumber() != null || "uuid".equalsIgnoreCase(field.getType());
+    }
+
+    /** Whether a list of property names (a {@code list:}, a {@code show:}) names the field. */
+    private static boolean namesField(List<String> names, String field) {
+        if (names == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (name != null && name.trim()
+                                    .equalsIgnoreCase(field)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

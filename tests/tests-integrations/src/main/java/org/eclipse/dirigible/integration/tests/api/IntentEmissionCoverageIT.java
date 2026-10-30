@@ -36,10 +36,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -2366,6 +2368,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: TeamMember, kind: manyToOne, to: TeamMember, composition: true }
                   - { name: skill,      kind: manyToOne, to: Skill }
+              # Where a field sits on the record page (#8369): a long read-only digest in the main
+              # column rather than the narrow rail, and a technical token on no generated page at all.
+              - name: TeamNote
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: title,     type: string, length: 100 }
+                  - { name: digest,    type: text, readOnly: true, placement: main }
+                  - { name: syncToken, type: string, length: 64, readOnly: true, placement: hidden }
+                relations:
+                  - { name: Team, kind: manyToOne, to: Team, composition: true }
             """;
 
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
@@ -2568,6 +2580,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
 
         assertEmission();
+        assertFieldPlacementEmission();
 
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
@@ -2580,6 +2593,89 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
         assertCollectionColumnsRuntime();
+        assertFieldPlacementRuntime();
+    }
+
+    /**
+     * {@code placement:} (#8369) in the generated pages: a {@code main} read-only field renders in the
+     * main column as a value, not in the Details rail, and a {@code hidden} one is in no generated view
+     * or page script at all.
+     */
+    private void assertFieldPlacementEmission() {
+        List<String> views = new ArrayList<>();
+        collectGenerated(PROJECT_PATH + "/gen/emission", views);
+        assertFalse(views.isEmpty(), "the generated views and page scripts must be found");
+        // The Administration surface is the exception by design: one level above the database, it
+        // shows every column of every entity.
+        List<String> showing = views.stream()
+                                    .filter(v -> !v.startsWith("gen/emission/admin/"))
+                                    .filter(v -> contentOf(v).contains("SyncToken"))
+                                    .toList();
+        assertEquals(List.of(), showing, "a placement: hidden field must be in no generated page");
+        String noteForm = views.stream()
+                               .filter(v -> v.endsWith("/TeamNote-form.html"))
+                               .findFirst()
+                               .map(this::contentOf)
+                               .orElseThrow(() -> new AssertionError("no TeamNote record page among " + views));
+        // Its only read-only fields are placed elsewhere, so the page has no Details rail at all.
+        int rail = noteForm.indexOf(".defaults.details', 'Details')");
+        String main = rail > 0 ? noteForm.substring(0, rail) : noteForm;
+        assertTrue(
+                main.contains("data-placement=\"main\"") && main.contains("loadedRecord?.Digest")
+                        && main.contains("whitespace-pre-wrap wrap-anywhere") && main.contains("md:col-span-12"),
+                "a placement: main read-only field must render as a full-width value in the main column: " + main);
+        assertFalse(rail > 0 && noteForm.substring(rail)
+                                        .contains("Digest"),
+                "a placement: main field must leave the Details rail: " + noteForm);
+    }
+
+    /**
+     * Every generated page script and view under a collection, by repository path relative to the
+     * project.
+     */
+    private void collectGenerated(String path, List<String> into) {
+        ICollection collection = repository.getCollection(path);
+        if (!collection.exists()) {
+            return;
+        }
+        for (IResource resource : collection.getResources()) {
+            String name = resource.getName();
+            if (name.endsWith(".html") || name.endsWith(".js")) {
+                into.add(resource.getPath()
+                                 .substring(PROJECT_PATH.length() + 1));
+            }
+        }
+        for (ICollection child : collection.getCollections()) {
+            collectGenerated(child.getPath(), into);
+        }
+    }
+
+    /**
+     * {@code placement: hidden} (#8369) at runtime: the field is in no page, but every read still
+     * serves it, and a REST write never changes it - it is read-only, so a create drops it and an
+     * update keeps the stored value.
+     */
+    private void assertFieldPlacementRuntime() {
+        int team = createRecord("/team/TeamController", "{\"Name\":\"Placement\"}");
+        int note = createRecord("/team/TeamNoteController", "{\"Team\":" + team + ",\"Title\":\"Weekly\",\"SyncToken\":\"client\"}");
+        assertNull(readRecord("/team/TeamNoteController", note).get("SyncToken"), "a REST create must not write a hidden, read-only field");
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                PreparedStatement update = connection.prepareStatement(
+                        "UPDATE EMISSION_TEAM_NOTE SET TEAM_NOTE_SYNC_TOKEN = ?, TEAM_NOTE_DIGEST = ? WHERE TEAM_NOTE_ID = ?")) {
+            update.setString(1, "tok-8369");
+            update.setString(2, "line one\nline two");
+            update.setInt(3, note);
+            assertEquals(1, update.executeUpdate(), "the note must exist");
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to store the note's system-owned values", ex);
+        }
+        assertEquals("tok-8369", readRecord("/team/TeamNoteController", note).get("SyncToken"),
+                "GET /{id} must still serve a hidden field");
+        updateRecord("/team/TeamNoteController", note, "{\"Team\":" + team + ",\"Title\":\"Weekly 2\",\"SyncToken\":\"client\"}", 200);
+        Map<String, Object> updated = readRecord("/team/TeamNoteController", note);
+        assertEquals("tok-8369", updated.get("SyncToken"), "a REST update must keep the stored value of a hidden field");
+        assertEquals("line one\nline two", updated.get("Digest"), "a REST update must keep a read-only main-column field");
     }
 
     /**

@@ -491,6 +491,18 @@
           </div>
         </template>
       </div>
+#elseif($property.widgetPlacement == "MAIN" && $property.isReadOnlyProperty == "true" && !$property.isHiddenProperty && !$property.dataAutoIncrement && $property.widgetType != "DOCUMENT_STATUS")
+## A read-only field placed in the main column (intent `placement: main`, #8369) - a long note a job
+## writes, say - shows as a value in preview and edit alike: never an input, and not on the create form,
+## where it has no value yet. It keeps its line breaks and spans the full row unless `size:` says otherwise.
+#if($property.widgetLabel)#set($label = $property.widgetLabelJs)#else#set($label = $property.name)#end
+#if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "12")#end
+      <template x-if="isEdit || isPreview">
+        <div class="vbox gap-1 md:col-span-${span}" data-placement="main"#visibleGate($property)>
+          <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>
+          <div class="text-sm whitespace-pre-wrap wrap-anywhere" x-text="#valueDisplay($property)"></div>
+        </div>
+      </template>
 #end
 #end
     </div>
@@ -752,7 +764,7 @@
          top-to-bottom (edit/preview only). -->
 #set($hasReadOnly = false)
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)#set($hasReadOnly = true)#end
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")#set($hasReadOnly = true)#end
 #end
 #if($hasReadOnly || $history == "true")
     <!-- Beside the record on a wide screen, the last section of it on a narrow one: same content,
@@ -767,7 +779,7 @@
         <div>
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
-#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty)
+#if(($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")) && !$property.isHiddenProperty && $property.widgetPlacement != "MAIN")
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabelJs)#else#set($rolabel = $property.name)#end
             <div class="vbox" #valueGate($property)>
               <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>

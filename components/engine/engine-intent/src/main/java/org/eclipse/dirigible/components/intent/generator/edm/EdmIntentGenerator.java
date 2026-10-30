@@ -1776,6 +1776,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Whether the field is a column in the entity list table; `major: false` keeps it off the list
         // (still shown in forms + the details pane). Defaults to true when unset.
         p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
+        // Where the field sits on the record page (intent `placement:`, #8369). `main` takes a read-only
+        // field out of the Details rail into the main column, shown as a value; `hidden` keeps it off
+        // every generated page in the shape the generator gives its own bookkeeping columns - hidden,
+        // read-only (so a REST create drops it and an update keeps the stored value) and no list column.
+        // `details` is the default for a read-only field and emits nothing, and so does an absent key,
+        // so a model without placement generates byte-identically.
+        if (field.isPlacement("main")) {
+            p.put("widgetPlacement", "MAIN");
+        } else if (field.isPlacement("hidden")) {
+            p.put("isHiddenProperty", "true");
+            p.put("isReadOnlyProperty", "true");
+            p.put("widgetIsMajor", "false");
+        }
         if (notBlank(field.getPattern())) {
             // Input-format regex (#6336): the generated controller rejects a non-matching value and the
             // form input carries it as an HTML pattern. String fields only - see validatePattern.

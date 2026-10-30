@@ -138,10 +138,11 @@ App.registerDetail('${masterEntity}', {
   // item add/edit dialog; the generic detailPanel ignores it). Every editable column (auto-increment
   // PK, the master FK and audit columns excluded). A DROPDOWN lookup carries `entity` + `creatable`
   // (false for SETTING targets and for an `inlineCreate: false` relation, #7748) so the dialog can
-  // offer "Add new <related>".
+  // offer "Add new <related>". A hidden property (intent `placement: hidden`, #8369; the generator's own
+  // bookkeeping) is never an input, so it is no edit column either.
   editColumns: [
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE"))
+#if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE") && !$property.isHiddenProperty)
 #if($property.widgetLabel)#set($elabel = $property.widgetLabelJs)#else#set($elabel = $property.name)#end
 ## Read-only only when DERIVED - an expression, or an update-time recompute. A field whose only
 ## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax

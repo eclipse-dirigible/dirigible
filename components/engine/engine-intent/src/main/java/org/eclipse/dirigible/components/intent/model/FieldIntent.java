@@ -182,6 +182,15 @@ public class FieldIntent {
     private Integer size;
 
     /**
+     * Where the field sits on the generated record page (dirigible #8369): {@code main} - the main
+     * column; {@code details} - the Details rail, the default for a read-only field, accepted to make
+     * that explicit; {@code hidden} - no generated page at all (a technical column a reader has no use
+     * for), while the value stays in the table and in every REST read. Absent, a read-only field sits
+     * in the rail and every other one in the main column.
+     */
+    private String placement;
+
+    /**
      * Optional named input format for a {@code string} field - a preset over {@link #pattern}. Today
      * the only value is {@code email}, which selects the EMAIL widget in the generated UI (so the input
      * is a {@code type="email"} control) and supplies the canonical address regex, giving the same
@@ -557,6 +566,20 @@ public class FieldIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getPlacement() {
+        return placement;
+    }
+
+    public void setPlacement(String placement) {
+        this.placement = placement;
+    }
+
+    /** Whether the field declares {@code placement: <value>} (case-insensitive). */
+    public boolean isPlacement(String value) {
+        return placement != null && placement.trim()
+                                             .equalsIgnoreCase(value);
     }
 
     public Integer getSize() {
