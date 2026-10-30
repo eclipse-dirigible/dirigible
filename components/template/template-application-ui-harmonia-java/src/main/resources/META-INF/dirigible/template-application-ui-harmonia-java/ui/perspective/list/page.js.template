@@ -13,6 +13,11 @@
 ## placeholder (#7722): labelOf reads one row's label, labelRows hands a helper rows already marked.
 #macro(labelOf $dnProp $dnRow)#if($dnProp.widgetDropDownDocumentNumber)window.HarmoniaFormat.documentNumber(${dnRow}.${dnProp.widgetDropDownValue})#else${dnRow}.${dnProp.widgetDropDownValue}#end#end
 #macro(labelRows $dnProp $dnRows)#if($dnProp.widgetDropDownDocumentNumber)this.documentNumberLabels(${dnRows}, '${dnProp.widgetDropDownValue}')#else${dnRows}#end#end
+## What the detail panel's title calls the record (#8320): its Name, else its document Number, else
+## none - the page then names it by id. The same rule as the manage list's drawer.
+#set($recordLabelProperty = "")
+#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Name")#set($recordLabelProperty = "Name")#end#end
+#if($recordLabelProperty == "")#foreach($property in $properties)#if($recordLabelProperty == "" && $property.name == "Number")#set($recordLabelProperty = "Number")#end#end#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}ListPage', () => ({
     ...basePage(),
@@ -92,6 +97,16 @@ document.addEventListener('alpine:init', () => {
     // Dismiss the detail panel: drop the selection so the list returns to full width and the row
     // highlight clears (issue #7463).
     closeDetails()   { this.selected = null; this.refreshIcons(); },
+    // What the detail panel's title calls the record (#8320): its Name, else its Number (a draft's
+    // placeholder read as the draft marker, #7722), else its id.
+    recordLabel(row) {
+      if (!row) return '';
+#if($recordLabelProperty != "")
+      const label = row.${recordLabelProperty};
+      if (label != null && String(label).trim() !== '') return String(window.HarmoniaFormat.documentNumber(label));
+#end
+      return row.${primaryKeysString} == null ? '' : '#' + row.${primaryKeysString};
+    },
     // Render a date/datetime value through the instance Date/Timestamp patterns (shell format.js).
     displayValue(v, isDate) {
       return window.HarmoniaFormat.value(v, isDate);

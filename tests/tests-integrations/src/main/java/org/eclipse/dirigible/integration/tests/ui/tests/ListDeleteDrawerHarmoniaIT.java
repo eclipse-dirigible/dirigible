@@ -41,6 +41,10 @@ import io.restassured.http.ContentType;
  * that no longer exists - titled "#null", every field empty, Edit enabled - until the user closed
  * it by hand; and the confirmation asked about "this record" without saying which. Both are
  * client-side state, so this needs a real browser.
+ *
+ * <p>
+ * #8320: the drawer's header carries no "#5" title link - it showed the database id as if it were
+ * the record's number and only repeated Preview, which the header offers anyway.
  */
 class ListDeleteDrawerHarmoniaIT extends UserInterfaceIntegrationTest {
 
@@ -80,6 +84,18 @@ class ListDeleteDrawerHarmoniaIT extends UserInterfaceIntegrationTest {
                 + ';selected=' + (page.selected ? page.selected.Name : 'none') + ';hash=' + window.location.hash;
             """;
 
+    /**
+     * The drawer's header as {@code <primary action>;link=<title link text or none>}, or
+     * {@code no-header} while it has not rendered.
+     */
+    private static final String DRAWER_HEADER = """
+            var toolbar = document.querySelector('[x-h-sheet] [x-h-toolbar]');
+            var primary = toolbar && toolbar.querySelector('button[data-variant="primary"]');
+            if (!primary) return 'no-header';
+            var link = toolbar.querySelector('button[data-variant="link"]');
+            return primary.textContent.trim() + ';link=' + (link ? link.textContent.trim() : 'none');
+            """;
+
     private static final String FORM = "Alpine.$data(document.querySelector('[x-data=\"StoreFormPage\"]'))";
 
     private static final String FORM_NAME = """
@@ -115,6 +131,8 @@ class ListDeleteDrawerHarmoniaIT extends UserInterfaceIntegrationTest {
         String opened = Selenide.executeJavaScript(LIST_STATE);
         assertEquals("default;rows=2;drawer=true;selected=WH-DEL", opened.substring(0, opened.indexOf(";hash=")),
                 "the drawer must show the selected store");
+        assertEquals("Edit;link=none", poll(DRAWER_HEADER, "Edit;link=none"),
+                "the drawer's header must offer its actions and no title link with the database id (#8320)");
 
         // "..." -> Delete on the open record: the confirmation says which record it is about.
         Selenide.executeJavaScript(PAGE + ".askDelete(" + PAGE + ".selected);");
