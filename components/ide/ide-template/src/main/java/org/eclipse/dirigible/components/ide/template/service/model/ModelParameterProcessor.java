@@ -551,11 +551,15 @@ final class ModelParameterProcessor {
     }
 
     /**
-     * Collects the relations fixed after create (intent {@code fixedAfterCreate: true}, #7903) into
-     * {@code fixedAfterCreateRelations}: each FK property's name and the arguments its refusal hands
-     * {@code CheckMessages} - the fully qualified catalog key the en-US catalog writes the message
-     * under and the default-language text - so every REST controller answers a changed value in the
-     * reader's language. Always present, empty when the entity fixes nothing.
+     * Collects the properties fixed after create (intent {@code fixedAfterCreate: true} on a to-one
+     * relation, #7903, or on a field, #8363) into {@code fixedAfterCreateProperties}: each property's
+     * name and the arguments its refusal hands {@code CheckMessages} - the fully qualified catalog key
+     * the en-US catalog writes the message under and the default-language text - so every REST
+     * controller answers a changed value in the reader's language. A decimal property is marked
+     * {@code decimal}, so the controllers compare it by value ({@code 100} against a stored
+     * {@code 100.00} is no change), and a {@code normalize:} field is marked {@code normalized}, so
+     * they normalize the payload before comparing. A relation is neither, so its generated code is
+     * unchanged. Always present, empty when the entity fixes nothing.
      *
      * @param entity the entity
      * @param parameters the generation parameters (project name and model file path)
@@ -568,13 +572,21 @@ final class ModelParameterProcessor {
                 continue;
             }
             String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
-            Map<String, Object> relation = new LinkedHashMap<>();
-            relation.put("name", property.get("name"));
-            relation.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", property.get("name"));
+            entry.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
                     + JavaLiterals.escape(str(property, "fixedAfterCreateMessage")) + "\"");
-            fixed.add(relation);
+            if ("java.math.BigDecimal".equals(ModelDataTypes.parse(str(property, "dataType"))
+                                                            .javaClass())) {
+                entry.put("decimal", Boolean.TRUE);
+            }
+            if (declaresNormalize(property)) {
+                // Compared as it will be stored: the controller normalizes the payload first.
+                entry.put("normalized", Boolean.TRUE);
+            }
+            fixed.add(entry);
         }
-        entity.put("fixedAfterCreateRelations", fixed);
+        entity.put("fixedAfterCreateProperties", fixed);
     }
 
     /**
@@ -2305,6 +2317,21 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Whether a property declares a {@code normalize:} (#7726) the generated repository applies: a
+     * trim, characters to strip, or an upper/lower case fold.
+     *
+     * @param property the property
+     * @return true when the repository's {@code normalize} rewrites the property's value
+     */
+    private static boolean declaresNormalize(Map<String, Object> property) {
+        Object strip = property.get("normalizeStrip");
+        String caseFold = str(property, "normalizeCase");
+        return "true".equals(str(property, "normalizeTrim")) || (strip != null && !strip.toString()
+                                                                                        .isEmpty())
+                || "upper".equals(caseFold) || "lower".equals(caseFold);
+    }
+
+    /**
      * Pre-renders a property's {@code normalize:} (#7726) for the templates: the characters it strips
      * as the body of a Java string literal ({@code normalizeStripJava}), and the whole step as a
      * JavaScript function ({@code normalizeJs}) the generated form applies on blur - the same
@@ -2317,15 +2344,15 @@ final class ModelParameterProcessor {
      * @return whether the property normalizes anything
      */
     private static boolean resolveNormalizeLiterals(Map<String, Object> property) {
+        if (!declaresNormalize(property)) {
+            return false;
+        }
         boolean trim = "true".equals(str(property, "normalizeTrim"));
         Object stripValue = property.get("normalizeStrip");
         String strip = stripValue == null ? null : stripValue.toString();
         String caseFold = str(property, "normalizeCase");
         boolean hasStrip = strip != null && !strip.isEmpty();
         boolean hasCase = "upper".equals(caseFold) || "lower".equals(caseFold);
-        if (!trim && !hasStrip && !hasCase) {
-            return false;
-        }
         StringBuilder js = new StringBuilder("((v) => typeof v === 'string' ? v");
         if (trim) {
             js.append(".trim()");

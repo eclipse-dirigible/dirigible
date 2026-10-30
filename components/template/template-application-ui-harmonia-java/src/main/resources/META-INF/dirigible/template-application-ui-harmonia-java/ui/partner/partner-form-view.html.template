@@ -91,6 +91,9 @@
           <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end
         </label>
 #end
+## fixedAfterCreate on a FIELD (#8363): the same rule as the picker below - read-only on edit where the
+## input has a read-only state (text, number), disabled where it has none (checkbox, the pickers).
+#if($property.fixedAfterCreate == "true")#set($fixedRo = ' :readonly="mode === ''edit''"')#set($fixedDis = ' :disabled="mode === ''edit''"')#else#set($fixedRo = '')#set($fixedDis = '')#end
 #if($property.widgetType == "DROPDOWN")
 ## fixedAfterCreate (#7903): picked on create, read-only once the record exists (the controller refuses a change).
         <div x-h-select>
@@ -119,51 +122,51 @@
           </div>
         </div>
 #elseif($property.widgetType == "NUMBER")
-        <div x-h-input-number><input type="number" step="any" x-model.number="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" /></div>
+        <div x-h-input-number><input type="number" step="any" x-model.number="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedRo} /></div>
 #elseif($property.widgetType == "CHECKBOX")
         <!-- The checkbox goes beside its label, inside a plain box: x-h-field stretches every
              direct child to full width, which turns the checkbox's own square into a full-width
              bordered rectangle - indistinguishable from an empty text input (#7103). The wrapper
              absorbs the stretch, and the layout is then the power form's. -->
         <div class="hbox items-center gap-3">
-          <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" /></span>
+          <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedDis} /></span>
           <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabelJs}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
         </div>
 #elseif($property.widgetType == "DATE")
         <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces),
              so form.${property.name} round-trips unchanged through toDateInput/toPayload. -->
         <div x-h-date-picker>
-          <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="fieldError === '${property.name}'" />
+          <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
           <button x-h-date-picker-trigger aria-label="Choose date"></button>
           <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
         <div x-h-datetime-picker>
-          <input type="text" :aria-invalid="fieldError === '${property.name}'" />
+          <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
           <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
           <div x-h-datetime-picker-popup="HarmoniaFormat.pickerConfig('dateTime')" x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "TIME")
         <div x-h-time-picker>
-          <input type="text" x-h-time-picker-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'" />
+          <input type="text" x-h-time-picker-input x-model="form.${property.name}" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
           <div x-h-time-picker-popup></div>
         </div>
 #elseif($property.widgetType == "MONTH")
         <!-- Harmonia month picker: model is a YYYY-MM string, so form.${property.name} round-trips unchanged. -->
         <div x-h-month-picker>
-          <input type="text" :aria-invalid="fieldError === '${property.name}'" />
+          <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
           <button x-h-month-picker-trigger aria-label="Choose month"></button>
           <div x-h-month-picker-popup x-model="form.${property.name}"></div>
         </div>
 #elseif($property.widgetType == "WEEK")
         <!-- Harmonia week picker: model is a YYYY-Www ISO-week string, so form.${property.name} round-trips unchanged. -->
         <div x-h-week-picker>
-          <input type="text" :aria-invalid="fieldError === '${property.name}'" />
+          <input type="text" :aria-invalid="fieldError === '${property.name}'"${fixedDis} />
           <button x-h-week-picker-trigger aria-label="Choose week"></button>
           <div x-h-week-picker-popup x-model="form.${property.name}"></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}"#maxLength($property) :aria-invalid="fieldError === '${property.name}'"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
+        <input x-h-input type="text" x-model="form.${property.name}"#maxLength($property) :aria-invalid="fieldError === '${property.name}'"${fixedRo}#if($property.widgetPattern) pattern="${property.widgetPattern}"#end#if($property.normalizeJs) @blur="form.${property.name} = ${property.normalizeJs}(form.${property.name})"#end />
 #end
 #maxLengthHint($property)
       </div>

@@ -13,8 +13,10 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +39,7 @@ import io.restassured.specification.RequestSpecification;
 
 /**
  * A to-one relation picked on create and fixed afterwards (intent {@code fixedAfterCreate: true},
- * dirigible #7903).
+ * dirigible #7903), and a field set on create and fixed afterwards (the same key, #8363).
  *
  * <p>
  * The case: an employee moved their own timesheet to another project-month, so its hours landed on
@@ -66,6 +68,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
     private static final String CATALOG_KEY = "Timesheet_fixed_Project";
     private static final String REFUSAL = "'Project' cannot change once the Timesheet is created";
     private static final String REFUSAL_BG = "Проектът не може да се смени след създаването на отчета";
+    private static final String FIELD_REFUSAL = "'Reference' cannot change once the Timesheet is created";
+    private static final String FIELD_REFUSAL_BG = "Номерът не може да се смени след създаването на отчета";
     private static final long TIMEOUT_SECONDS = 90;
     /** The workflow step runs once the create event has started its instance. */
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
@@ -91,8 +95,11 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
 
               - name: Timesheet
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 200 }
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: note,      type: string, length: 200 }
+                  # Fields set on create and fixed afterwards (#8363): compared normalized, and by value.
+                  - { name: reference, type: string, length: 20, normalize: upper, fixedAfterCreate: true }
+                  - { name: rate,      type: decimal, fixedAfterCreate: true }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true, fixedAfterCreate: true }
@@ -100,19 +107,21 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
               # The partner surface guards it too.
               - name: Expense
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 200 }
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: note,      type: string, length: 200 }
+                  - { name: reference, type: string, length: 20, normalize: upper, fixedAfterCreate: true }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, partner: true }
 
             processes:
-              # A system writer of the fixed relation: the guard is the controllers', so this still lands.
+              # A system writer of the fixed relation and field: the guard is the controllers', so these still land.
               - name: Reassign
                 trigger: { onCreate: Timesheet }
                 steps:
-                  - { name: move, kind: serviceTask, args: { setRelationField: Project, value: 2 } }
-                  - { name: end,  kind: end }
+                  - { name: move,   kind: serviceTask, args: { setRelationField: Project, value: 2 } }
+                  - { name: rename, kind: serviceTask, args: { setField: reference, value: SYS-1 } }
+                  - { name: end,    kind: end }
 
             seeds:
               - name: employees
@@ -132,7 +141,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
             {
               "fixedrel-model": {
                 "checks": {
-                  "Timesheet_fixed_Project": "Проектът не може да се смени след създаването на отчета"
+                  "Timesheet_fixed_Project": "Проектът не може да се смени след създаването на отчета",
+                  "Timesheet_fixed_Reference": "Номерът не може да се смени след създаването на отчета"
                 }
               }
             }
@@ -183,6 +193,84 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
         put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine\"}", null).statusCode(200);
         read(timesheet).body("Project", equalTo(2))
                        .body("Note", equalTo("mine"));
+    }
+
+    /**
+     * A field set on create and fixed afterwards (#8363): the same guard as the relation's, comparing
+     * the value as it is stored - normalized, and a decimal by value.
+     */
+    @Test
+    void a_field_fixed_after_create_is_refused_to_a_user_update_and_still_written_by_the_system() {
+        generateProject();
+        assertGeneratedFieldForms();
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/fixedrel.model.json", BG_OVERLAY);
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // Set on create, as on the New form.
+        int timesheet = create(TIMESHEETS, "{\"Note\":\"week 1\",\"Project\":1,\"Employee\":1,\"Reference\":\"abc-1\",\"Rate\":100}");
+        // The system write lands: the workflow step changes the fixed field through the repository.
+        awaitProject(timesheet, 2);
+        awaitReference(timesheet, "SYS-1");
+
+        // A user update that changes it is refused, in the reader's language, on the personal surface too.
+        String changed = "{\"Note\":\"week 1\",\"Project\":2,\"Employee\":1,\"Reference\":\"OTHER\",\"Rate\":100}";
+        put(TIMESHEETS, timesheet, changed, null).statusCode(409)
+                                                 .body("message", equalTo(FIELD_REFUSAL));
+        put(TIMESHEETS, timesheet, changed, "bg").statusCode(409)
+                                                 .body("message", equalTo(FIELD_REFUSAL_BG));
+        put(MY_TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Reference\":\"OTHER\"}", null).statusCode(409)
+                                                                                            .body("message", equalTo(FIELD_REFUSAL));
+        // A decimal compares by value: a different one is a change...
+        put(TIMESHEETS, timesheet, "{\"Note\":\"week 1\",\"Project\":2,\"Employee\":1,\"Rate\":120}", null).statusCode(409)
+                                                                                                           .body("message", equalTo(
+                                                                                                                   "'Rate' cannot change once the Timesheet is created"));
+        // ...and the partner surface refuses it as well.
+        int expense = create(EXPENSES, "{\"Note\":\"taxi\",\"Project\":1,\"Employee\":1,\"Reference\":\"exp-1\"}");
+        put(PARTNER_EXPENSES, expense, "{\"Note\":\"taxi\",\"Reference\":\"EXP-2\"}", null).statusCode(409)
+                                                                                           .body("message", equalTo(
+                                                                                                   "'Reference' cannot change once the Expense is created"));
+        // The same value as stored once normalized passes - `exp-1` against a stored `EXP-1`.
+        put(PARTNER_EXPENSES, expense, "{\"Note\":\"taxi home\",\"Reference\":\"exp-1\"}", null).statusCode(200)
+                                                                                                .body("Reference", equalTo("EXP-1"));
+
+        // `sys-1` against a stored `SYS-1` and `100` against a stored `100.00` are no change, and the
+        // rest of the record still saves.
+        put(TIMESHEETS, timesheet, "{\"Note\":\"edited\",\"Project\":2,\"Employee\":1,\"Reference\":\"sys-1\",\"Rate\":100}",
+                null).statusCode(200);
+        // An update that omits them keeps the stored values instead of erasing them.
+        put(TIMESHEETS, timesheet, "{\"Note\":\"edited again\",\"Employee\":1}", null).statusCode(200);
+        put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine\"}", null).statusCode(200);
+        ValidatableResponse stored = read(timesheet).body("Reference", equalTo("SYS-1"))
+                                                    .body("Note", equalTo("mine"));
+        Object rate = stored.extract()
+                            .path("Rate");
+        assertEquals(0, new BigDecimal(String.valueOf(rate)).compareTo(new BigDecimal("100")), "Rate kept: " + rate);
+    }
+
+    /**
+     * The New form takes the fixed field and the Edit form renders it read-only, on every surface; a
+     * field the record does not fix stays editable.
+     */
+    private void assertGeneratedFieldForms() {
+        String timesheetForm = contentOf("gen/" + PROJECT + "/views/Timesheet/Timesheet-form.html");
+        assertTrue(elementAt(timesheetForm, "id=\"f_Reference\"").contains(":readonly=\"isEdit\""), timesheetForm);
+        assertTrue(elementAt(timesheetForm, "id=\"f_Rate\"").contains(":readonly=\"isEdit\""), timesheetForm);
+        assertFalse(elementAt(timesheetForm, "id=\"f_Note\"").contains("isEdit"), timesheetForm);
+        String myForm = contentOf("gen/" + PROJECT + "/views/my/Timesheet-form.html");
+        assertTrue(elementAt(myForm, "x-model=\"form.Reference\"").contains(":readonly=\"mode === 'edit'\""), myForm);
+        assertFalse(elementAt(myForm, "x-model=\"form.Note\"").contains("mode === 'edit'"), myForm);
+        String partnerForm = contentOf("gen/" + PROJECT + "/views/partner/Expense-form.html");
+        assertTrue(elementAt(partnerForm, "x-model=\"form.Reference\"").contains(":readonly=\"mode === 'edit'\""), partnerForm);
+    }
+
+    private void awaitReference(int timesheet, String reference) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(TIMESHEETS + "/" + timesheet)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Reference", equalTo(reference)),
+                PROCESS_TIMEOUT_SECONDS);
     }
 
     /**

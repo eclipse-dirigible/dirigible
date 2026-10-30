@@ -23,7 +23,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * A to-one relation picked on create and fixed afterwards ({@code fixedAfterCreate: true}, issue
- * #7903): what the parser refuses, and the attributes the generated controllers and forms read.
+ * #7903), and a field set on create and fixed afterwards (the same key, #8363): what the parser
+ * refuses, and the attributes the generated controllers and forms read.
  */
 class FixedAfterCreateIntentTest {
 
@@ -120,6 +121,189 @@ class FixedAfterCreateIntentTest {
                 """, "is a manyToMany so it cannot declare [fixedAfterCreate]");
     }
 
+    /** A customer whose code is set on create and fixed afterwards (#8363). */
+    private static final String CUSTOMER = """
+            name: customers
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100, required: true }
+            """;
+
+    @Test
+    void aFixedFieldCarriesTheFlagAndTheDefaultTextOfItsRefusal() {
+        Map<String, Object> customer = customer(withField("""
+                  - { name: code, type: string, length: 20, required: true, unique: true, normalize: upper, fixedAfterCreate: true }
+                """));
+        Map<String, Object> code = propertyByName(customer, "Code");
+        assertEquals("true", code.get("fixedAfterCreate"));
+        assertEquals("'Code' cannot change once the Customer is created", code.get("fixedAfterCreateMessage"));
+        // Still a caller-written field: an input on the New form, not the read-only details block.
+        assertFalse(code.containsKey("isReadOnlyProperty"));
+        Map<String, Object> name = propertyByName(customer, "Name");
+        assertFalse(name.containsKey("fixedAfterCreate"));
+        assertFalse(name.containsKey("fixedAfterCreateMessage"));
+    }
+
+    /** The flag rides the {@code .edm} too, so the modeler's regeneration keeps it. */
+    @Test
+    void aFixedFieldRidesTheEdmTwin() {
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(IntentParser.parse(withField("""
+                  - { name: code, type: string, length: 20, fixedAfterCreate: true }
+                """)), "customers");
+        assertTrue(edm.contains("fixedAfterCreate=\"true\""), edm);
+        assertTrue(edm.contains("fixedAfterCreateMessage=\"&apos;Code&apos; cannot change once the Customer is created\""), edm);
+    }
+
+    /**
+     * A create-time default (#6696) stays caller-editable, and the other caller-facing keys combine
+     * with the lock.
+     */
+    @Test
+    void aCreateDefaultMayBeFixed() {
+        Map<String, Object> customer = customer(withField("""
+                  - { name: code, type: string, length: 20, calculatedActionOnCreate: custom.NextCode, fixedAfterCreate: true }
+                  - { name: rate, type: decimal, defaultValue: "1", fixedAfterCreate: true }
+                  - { name: since, type: date, fixedAfterCreate: true }
+                  - { name: ref, type: string, length: 20, pattern: "^[A-Z]+$", unique: true, fixedAfterCreate: true }
+                """));
+        assertEquals("true", propertyByName(customer, "Code").get("fixedAfterCreate"));
+        assertEquals("true", propertyByName(customer, "Rate").get("fixedAfterCreate"));
+        assertEquals("true", propertyByName(customer, "Since").get("fixedAfterCreate"));
+        assertEquals("true", propertyByName(customer, "Ref").get("fixedAfterCreate"));
+    }
+
+    @Test
+    void aFieldNoCallerWritesIsRefused() {
+        assertFieldIssue("""
+                  - { name: key, type: integer, primaryKey: true, generated: true, fixedAfterCreate: true }
+                """, "entity [Customer] field [key] declares fixedAfterCreate but the platform assigns a primary key or a generated field");
+        assertFieldIssue("""
+                  - { name: token, type: uuid, fixedAfterCreate: true }
+                """, "field [token] declares fixedAfterCreate but a uuid is assigned by the platform");
+        assertFieldIssue("""
+                  - { name: number, type: string, length: 40, number: {}, fixedAfterCreate: true }
+                """, "field [number] declares fixedAfterCreate but a number: field is stamped by the platform");
+        assertFieldIssue("""
+                  - { name: locked, type: string, readOnly: true, fixedAfterCreate: true }
+                """, "field [locked] declares fixedAfterCreate but a readOnly field is never written by a caller already");
+        assertFieldIssue("""
+                  - { name: upper, type: string, calculatedOnCreate: "entity.Name", fixedAfterCreate: true }
+                """,
+                "field [upper] declares fixedAfterCreate but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: touched, type: string, calculatedOnUpdate: "entity.Name", fixedAfterCreate: true }
+                """,
+                "field [touched] declares fixedAfterCreate but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: kept, type: string, calculatedActionOnUpdate: custom.Keep, fixedAfterCreate: true }
+                """,
+                "field [kept] declares fixedAfterCreate but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: total, type: decimal, aggregate: true, fixedAfterCreate: true }
+                """, "field [total] declares fixedAfterCreate but an aggregate is a derived total");
+        // A status stamp is written by the repository on the status move.
+        String stamped = """
+                name: customers
+                seeds:
+                  - name: statuses
+                    entity: CustomerStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: APPROVED }
+                entities:
+                  - name: CustomerStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 50 }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: approvedOn, type: date, stampOn: { status: APPROVED }, fixedAfterCreate: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: CustomerStatus, function: EntityStatus, init: DRAFT }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(stamped));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "field [approvedOn] declares fixedAfterCreate but a stampOn: field is stamped on a status move")),
+                String.valueOf(ex.getIssues()));
+    }
+
+    @Test
+    void aDependsOnOrTimestampFieldIsRefused() {
+        assertFieldIssue("""
+                  - { name: signedAt, type: timestamp, fixedAfterCreate: true }
+                """, "field [signedAt] declares fixedAfterCreate but a timestamp does not survive the form round trip");
+        String yaml = """
+                name: customers
+                entities:
+                  - name: Country
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: code, type: string }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: countryCode, type: string, dependsOn: { relation: Country, valueFrom: code }, fixedAfterCreate: true }
+                    relations:
+                      - { name: Country, kind: manyToOne, to: Country }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(
+                             "field [countryCode] declares fixedAfterCreate but a dependsOn field is rewritten by the form whenever its relation is re-picked")),
+                String.valueOf(ex.getIssues()));
+    }
+
+    @Test
+    void aTranslatableKeyOfAMultilingualEntityIsRefused() {
+        String multilingual = """
+                name: customers
+                entities:
+                  - name: Customer
+                    multilingual: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(multilingual + """
+                  - { name: code, type: string, length: 20, fixedAfterCreate: true }
+                """.indent(4)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("field [code] declares fixedAfterCreate but it is translatable in a multilingual entity")
+                             && i.contains("add translatable: false")),
+                String.valueOf(ex.getIssues()));
+
+        Map<String, Object> customer = customer(multilingual + """
+                  - { name: code, type: string, length: 20, translatable: false, fixedAfterCreate: true }
+                """.indent(4));
+        assertEquals("true", propertyByName(customer, "Code").get("fixedAfterCreate"));
+    }
+
+    private static String withField(String field) {
+        return CUSTOMER + field.indent(4);
+    }
+
+    private static Map<String, Object> customer(String yaml) {
+        return entityNamed(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "customers"), "Customer");
+    }
+
+    private static void assertFieldIssue(String field, String expected) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(withField(field)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains(expected)),
+                "expected an issue containing [" + expected + "], got: " + ex.getIssues());
+    }
+
     private static String withRelation(String relation) {
         return HEAD + relation.indent(6);
     }
@@ -137,11 +321,15 @@ class FixedAfterCreateIntentTest {
                 "expected an issue containing [" + expected + "], got: " + ex.getIssues());
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, Object> entity(Map<String, Object> modelJson) {
+        return entityNamed(modelJson, "Timesheet");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> entityNamed(Map<String, Object> modelJson, String name) {
         List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
         return entities.stream()
-                       .filter(e -> "Timesheet".equals(e.get("name")))
+                       .filter(e -> name.equals(e.get("name")))
                        .findFirst()
                        .orElseThrow();
     }

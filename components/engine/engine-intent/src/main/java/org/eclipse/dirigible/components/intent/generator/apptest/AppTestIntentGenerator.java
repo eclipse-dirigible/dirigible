@@ -370,6 +370,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                     || field.getDependsOn() != null || (property != null && "true".equals(string(property.get("isReadOnlyProperty"))))) {
                 out.put("readOnly", true);
             }
+            // fixedAfterCreate (#8363): the New form takes the value, the Edit form renders the input
+            // read-only and the controller refuses a changed value - so a flow fills it on create and
+            // never on edit. Not `readOnly`: that would stop the create flow from filling it.
+            if (field.isFixedAfterCreate()) {
+                out.put("readOnlyOnEdit", true);
+            }
             // The input-format regex the generated controller rejects a non-matching value with (an
             // authored `pattern:`, or the canonical address regex behind `format: email`), so the
             // runner's sample generator can produce a value of that shape instead of a 400. Strings

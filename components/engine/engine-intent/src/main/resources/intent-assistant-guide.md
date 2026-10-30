@@ -209,6 +209,20 @@ not as an apology.
   `checks.<Entity>_fixed_<Relation>`); an update that omits it keeps the stored value. Workflow steps,
   roll-ups and generates write through the repository and are unaffected. Not with
   `calculatedActionOnUpdate` (that recomputes the value on every update).
+- **`fixedAfterCreate: true` on a FIELD = set on create, fixed from then on** (#8363) - the same key, rule
+  and message as on a relation: a customer code printed on invoices, a reference an external ledger
+  matches. The New form takes the value, the Edit form renders the input read-only (the rest of the
+  record stays editable), and a user update that changes it is answered 409 under
+  `checks.<Entity>_fixed_<Field>`; an omitted value keeps the stored one, a `normalize:` field is
+  compared normalized (`c-001` against a stored `C-001` under `normalize: upper` passes) and a
+  `decimal` by value (`100` against `100.00` passes). System writers are unaffected. Refused on the
+  primary key, a `generated`/`uuid`/`number:`/`stampOn:` field, `readOnly: true`, the derived kinds
+  (`calculatedOnCreate`, `calculatedOnUpdate`, `calculatedActionOnUpdate`), `aggregate`, `dependsOn`,
+  a `timestamp` (the form's datetime input holds a local time to the minute, so the value does not
+  survive the round trip) and a translatable string of a `multilingual` entity (add
+  `translatable: false`, as for any key). Accepted beside `calculatedActionOnCreate` (a create-time
+  default), `defaultValue`, `unique`, `pattern`, `format` and `normalize`. Do not reach for
+  `readOnly:` (never caller-written, not even on create) or `immutableWhen` (locks the whole record).
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
@@ -5180,6 +5194,7 @@ or a seeded name.
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not a composition, not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409 |
+| field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
@@ -5229,6 +5244,7 @@ or a seeded name.
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
 - "the user picks it when creating the record and it must never move afterwards" (a timesheet's project-month, an order's customer) -> the relation's `fixedAfterCreate: true`
+- "the code is entered when the record is created and must never change afterwards" (a customer code, an external reference, a file-name key) -> the field's `fixedAfterCreate: true` (not `readOnly:`, not `immutableWhen`)
 - "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)

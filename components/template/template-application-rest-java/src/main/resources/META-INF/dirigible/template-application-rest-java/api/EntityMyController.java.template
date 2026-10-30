@@ -300,7 +300,7 @@ public class ${name}MyController {
 #if($workflowStatusProperty)
         applyWorkflowStatus(existing, entity);
 #end
-#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+#if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
         applyFixedAfterCreate(existing, entity);
 #end
 #if($periodLock)
@@ -697,7 +697,7 @@ public class ${name}MyController {
     private static final String WORKFLOW_STATUS_REFUSAL =
             "'${workflowStatusProperty}' changes through the workflow, not a direct edit";
 #end
-#if($fixedAfterCreateRelations && $fixedAfterCreateRelations.size() > 0)
+#if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
 
     // Relations fixed after create (intent `fixedAfterCreate: true`, dirigible #7903): picked on the
     // New form and fixed from then on. An absent value is not a change - a caller PUTs the fields its
@@ -705,10 +705,27 @@ public class ${name}MyController {
     // the reader's language. System writers (roll-ups, workflow steps, generates) reach the repository
     // directly, never this controller, so they are unaffected.
     private void applyFixedAfterCreate(${name}Entity stored, ${name}Entity entity) {
-#foreach($fixed in $fixedAfterCreateRelations)
+## A fixed FIELD (#8363) is compared as it will be stored: a `normalize:` field is normalized first
+## (idempotent - the repository applies it again on save), so `c-001` against a stored `C-001` under
+## `normalize: upper` is no change; a decimal compares by value, so `100` against a stored `100.00` is
+## none either. A relation (#7903) is never normalized nor decimal, so its code reads as before.
+#set($fixedNormalized = false)
+#foreach($fixed in $fixedAfterCreateProperties)
+#if($fixed.normalized)
+#set($fixedNormalized = true)
+#end
+#end
+#if($fixedNormalized)
+        ${name}Repository.normalize(entity);
+#end
+#foreach($fixed in $fixedAfterCreateProperties)
         if (entity.${fixed.name} == null) {
             entity.${fixed.name} = stored.${fixed.name};
+#if($fixed.decimal)
+        } else if (stored.${fixed.name} == null || entity.${fixed.name}.compareTo(stored.${fixed.name}) != 0) {
+#else
         } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+#end
             throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
         }
 #end

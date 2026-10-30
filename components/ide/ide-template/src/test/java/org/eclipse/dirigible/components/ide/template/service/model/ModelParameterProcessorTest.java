@@ -113,7 +113,7 @@ class ModelParameterProcessorTest {
 
         ModelParameterProcessor.process(model, parameters);
 
-        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateRelations");
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateProperties");
         assertEquals(1, fixed.size());
         assertEquals("Project", fixed.get(0)
                                      .get("name"));
@@ -126,6 +126,48 @@ class ModelParameterProcessorTest {
         Map<String, Object> catalog = ModelTranslations.checkMessages(model);
         assertEquals("'Project' cannot change once the \"Timesheet\" is created", catalog.get("Timesheet_fixed_Project"));
         assertFalse(catalog.containsKey("Timesheet_fixed_Reviewer"));
+        // A relation is neither decimal nor normalized, so its generated comparison is the #7903 one.
+        assertNull(fixed.get(0)
+                        .get("decimal"));
+        assertNull(fixed.get(0)
+                        .get("normalized"));
+    }
+
+    /**
+     * A fixed field (#8363) is compared as it is stored: a decimal by value ({@code 100} against a
+     * stored {@code 100.00} is no change), a {@code normalize:} field after its normalization.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void aFixedDecimalFieldIsComparedByValue() {
+        Map<String, Object> rate = property("Rate", "DECIMAL");
+        rate.put("fixedAfterCreate", "true");
+        rate.put("fixedAfterCreateMessage", "'Rate' cannot change once the Timesheet is created");
+        Map<String, Object> reference = property("Reference", "VARCHAR");
+        reference.put("fixedAfterCreate", "true");
+        reference.put("fixedAfterCreateMessage", "'Reference' cannot change once the Timesheet is created");
+        reference.put("normalizeCase", "upper");
+        Map<String, Object> timesheet = entity("Timesheet", "Timesheets", property("Id", "INTEGER"), rate, reference);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "timesheets.model");
+
+        ModelParameterProcessor.process(model(timesheet), parameters);
+
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) timesheet.get("fixedAfterCreateProperties");
+        assertEquals(2, fixed.size());
+        assertEquals("Rate", fixed.get(0)
+                                  .get("name"));
+        assertEquals(Boolean.TRUE, fixed.get(0)
+                                        .get("decimal"));
+        assertNull(fixed.get(0)
+                        .get("normalized"));
+        assertEquals("Reference", fixed.get(1)
+                                       .get("name"));
+        assertNull(fixed.get(1)
+                        .get("decimal"));
+        assertEquals(Boolean.TRUE, fixed.get(1)
+                                        .get("normalized"));
+        assertTrue(Boolean.TRUE.equals(timesheet.get("hasNormalize")), "the repository's normalize the controller calls is generated");
     }
 
     @Test

@@ -97,6 +97,14 @@ public class FieldIntent {
      * generator; set this on any other field (e.g. a workflow-managed {@code status}) to do the same.
      */
     private boolean readOnly;
+    /**
+     * Set on create, fixed afterwards ({@code fixedAfterCreate: true}, dirigible #8363 - the field twin
+     * of the to-one relation's key, #7903): the New form takes the value, the Edit form shows it
+     * read-only, and a user update through the generated controllers that changes it is answered 409.
+     * System writers (repository calls, process steps, generates) are unaffected. Unlike
+     * {@link #readOnly}, the caller still writes the field on create.
+     */
+    private boolean fixedAfterCreate;
 
     /**
      * Hidden from the personal (my) surface entirely: absent from its pages and stripped from the
@@ -400,6 +408,14 @@ public class FieldIntent {
 
     public void setReadOnly(boolean readOnly) {
         this.readOnly = readOnly;
+    }
+
+    public boolean isFixedAfterCreate() {
+        return fixedAfterCreate;
+    }
+
+    public void setFixedAfterCreate(boolean fixedAfterCreate) {
+        this.fixedAfterCreate = fixedAfterCreate;
     }
 
     public String getFunction() {
