@@ -1110,6 +1110,10 @@ register without `show:`, and the export), and it overrides each property's `maj
   list:  [Number, Date, Customer, Total, Balance, Due, Status]                             # the list
 ```
 
+An `audit: true` entity may list its audit columns too - `CreatedAt`, `CreatedBy`, `UpdatedAt`, `UpdatedBy` - for
+who created a row and when (`list: [subject, Status, CreatedAt, CreatedBy]`); on an entity without `audit: true` they
+are refused, naming the flag.
+
 Names match like `order:` (case-insensitive, no name twice) and must be a field, a `manyToOne` /
 `oneToOne` / `subset` relation, or the `Name` a `label:` generates - a `oneToMany` / `manyToMany` has no
 column. Without `list:` the list shows the `major` properties (every one unless `major: false`) in

@@ -71,6 +71,38 @@ class ListColumnsIntentTest {
                 ex.getMessage());
     }
 
+    /** A support ticket that wants to show who opened it and when (dirigible #8376). */
+    private static String ticket(boolean audited) {
+        return """
+                name: helpdesk
+                entities:
+                  - name: SupportTicket
+                    audit: %s
+                    list: [subject, CreatedAt, createdby]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: subject, type: string }
+                """.formatted(audited);
+    }
+
+    @Test
+    void anAuditedEntityListsItsAuditColumns() {
+        IntentModel model = IntentParser.parse(ticket(true));
+
+        assertEquals(List.of("subject", "CreatedAt", "createdby"), model.getEntities()
+                                                                        .get(0)
+                                                                        .getList());
+    }
+
+    @Test
+    void aNonAuditedEntityIsToldAboutTheFlag() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(ticket(false)));
+
+        assertTrue(ex.getMessage()
+                     .contains("entity [SupportTicket] list: [CreatedAt] is an audit column, and [SupportTicket] is not audit: true"),
+                ex.getMessage());
+    }
+
     @Test
     void aNameListedTwiceIsRefused() {
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(invoice("[Number, number]")));
