@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.engine.cms.documents;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -169,7 +171,7 @@ public class DocumentsEndpoint extends BaseEndpoint {
         });
         String name = folderName(path) + ".zip";
         return ResponseEntity.ok()
-                             .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + name + "\"")
+                             .header(HttpHeaders.CONTENT_DISPOSITION, attachment(name))
                              .contentType(MediaType.APPLICATION_OCTET_STREAM)
                              .body(archive);
     }
@@ -226,9 +228,20 @@ public class DocumentsEndpoint extends BaseEndpoint {
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                                                             .header(HttpHeaders.CONTENT_TYPE, content.contentType());
         if (asAttachment) {
-            response.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + content.name() + "\"");
+            response.header(HttpHeaders.CONTENT_DISPOSITION, attachment(content.name()));
         }
         return response.body(content.content());
+    }
+
+    /**
+     * An RFC 6266 attachment disposition: a name outside ISO-8859-1 goes out as {@code filename*},
+     * since the servlet container drops a raw header value it cannot encode.
+     */
+    private static String attachment(String fileName) {
+        return ContentDisposition.attachment()
+                                 .filename(fileName, StandardCharsets.UTF_8)
+                                 .build()
+                                 .toString();
     }
 
     /**

@@ -371,7 +371,12 @@ public class ${name}Controller {
         org.eclipse.dirigible.sdk.http.Response.setContentType(entity.ContentType != null ? entity.ContentType : "application/octet-stream");
         // inline lets a stored PDF open (and print) in a browser tab; anything else stays a download
         String dispositionType = "inline".equals(disposition) ? "inline" : "attachment";
-        org.eclipse.dirigible.sdk.http.Response.setHeader("Content-Disposition", dispositionType + "; filename=\"" + entity.FileName + "\"");
+        // RFC 6266 / 5987: a header value outside ISO-8859-1 is dropped by the servlet container, so the
+        // quoted filename is an ASCII fallback and filename* carries the real name, percent-encoded
+        String fallbackName = entity.FileName.replaceAll("[^\\x20-\\x7E]", "_").replace("\"", "_");
+        String encodedName = java.net.URLEncoder.encode(entity.FileName, java.nio.charset.StandardCharsets.UTF_8).replace("+", "%20");
+        org.eclipse.dirigible.sdk.http.Response.setHeader("Content-Disposition",
+                dispositionType + "; filename=\"" + fallbackName + "\"; filename*=UTF-8''" + encodedName);
         try (java.io.InputStream in = org.eclipse.dirigible.sdk.cms.Attachments.open(entity.StoragePath);
                 java.io.OutputStream out = org.eclipse.dirigible.sdk.http.Response.getOutputStream()) {
             in.transferTo(out);
