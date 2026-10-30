@@ -650,6 +650,23 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   use a status-gated `checks: requiredWhen`), on a non-child entity, and on a document's line items
   (they are the document, not a panel). Composes with `visibleTo:` (both gates apply). List columns
   are not gated - a column cannot hide per row.
+- `placement: main | details | hidden` (on a **field**) - **where the field sits on the record
+  page**. Absent, a read-only field (`readOnly: true`, a `uuid`, a `number:`, a status stamp) sits in
+  the narrow Details rail and every other one in the main column. `main` moves a read-only field into
+  the main column, shown as a value (muted label, then the text with its line breaks kept), full width
+  unless `size:` says otherwise, in preview and edit, never as an input and not on the create form -
+  for a long note a job writes (`{ name: carrierNote, type: text, readOnly: true, placement: main }`);
+  on an editable field it changes nothing. `details` is the rail, the default for a read-only field,
+  and is refused on an editable one (the rail shows values, not inputs). `hidden` keeps the field off
+  every generated page - list, filters, export, drawer, record and document pages, detail panels,
+  related registers, my/partner pages - for a technical column no reader needs
+  (`{ name: syncToken, type: string, length: 64, readOnly: true, placement: hidden }`); the value stays
+  in the table, is served by every GET and `/search`, keeps its stored value on a REST update and is
+  never written by a REST caller. Refused for `hidden`: the primary key, a `required` field the server
+  does not fill (`defaultValue`, `calculatedOnCreate`, `calculatedActionOnCreate`, `number:`, a
+  `uuid`), and together with `major: true`, `visibleWhen:`, the entity's `list:` or a `related:`
+  register's `show:`. Unlike `visibleTo:`, which also strips the value from REST, `hidden` only keeps
+  it off the pages.
 - `hierarchy: <RelationName>` (entity-level) - **tree entities**: names the entity's own optional
   to-one SELF-relation forming the tree edge (`hierarchy: Parent` with
   `- { name: Parent, kind: manyToOne, to: <SameEntity> }`). The generated list renders as a
