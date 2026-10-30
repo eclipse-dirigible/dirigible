@@ -1175,7 +1175,17 @@ date pattern for temporal values - a `month` field's `YYYY-MM` string formats th
 (`{period|yyyy MMMM}` renders "2026 July"); deeper paths are rejected - compose by referencing the
 related entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
 a token must never reference a `sensitive` field. Prefer a label for every document-ish entity a
-user will pick in a dropdown (a raw id is what renders otherwise).
+user will pick in a dropdown (a raw id is what renders otherwise). The record page is titled with
+the record's label ("Acme Ltd / 2026-001"), with the entity name as a muted caption above it; without
+a `label:` (or a `Number` field) the page keeps the entity name as its title.
+
+**The line under the record page's title (`subtitle:` on an entity):** `subtitle: [dueDate, customer]`
+declares the values printed under the title, in order, joined with " · ", each with its field's label
+as the tooltip. An entry is an own field or a to-one relation (shown by its option label), printed as
+every other surface prints it (dates by the instance pattern, a dropdown by its label, a number per its
+type); an empty value is skipped. Refused: an unknown name, the primary key, a collection path or a
+to-many relation, a field with `visibleWhen:` (the line has no per-status gate), a name twice, and more
+than four entries. Without `subtitle:` there is no line - the page no longer picks the `major` fields.
 
 **Personal surfaces (`identity` / `personal` / `sensitive`):** an entity representing the person
 declares `identity: <string field>` (conventionally the unique e-mail matched against the login

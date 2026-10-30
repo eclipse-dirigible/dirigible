@@ -431,6 +431,7 @@ public final class IntentParser {
         validateDuplicable(model, issues);
         validateOrders(model, issues);
         validateLists(model, issues);
+        validateSubtitles(model, issues);
         validateOrderBy(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -1061,6 +1062,83 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /** How many values the record page's subtitle line holds (dirigible #8370). */
+    private static final int SUBTITLE_MAX = 4;
+
+    /**
+     * Each entity's optional {@code subtitle} (dirigible #8370) is the line under its record page's
+     * title, in order: own fields and to-one relations only - not the primary key, not a collection or
+     * a to-many relation (the line prints one value per entry), not a field gated by
+     * {@code visibleWhen} (the line has no per-status gate) - no name twice, and at most four, which is
+     * what fits one line.
+     */
+    private static void validateSubtitles(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<String> subtitle = entity.getSubtitle();
+            if (subtitle == null || subtitle.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            String prefix = "entity [" + entity.getName() + "] subtitle";
+            if (subtitle.size() > SUBTITLE_MAX) {
+                issues.add(prefix + " names " + subtitle.size() + " fields - at most " + SUBTITLE_MAX + " fit one line");
+            }
+            Set<String> seen = new HashSet<>();
+            for (String token : subtitle) {
+                if (token == null || token.isBlank()) {
+                    issues.add(prefix + " has a blank entry");
+                    continue;
+                }
+                String name = token.trim();
+                if (!seen.add(name.toLowerCase(Locale.ROOT))) {
+                    issues.add(prefix + " names [" + name + "] more than once");
+                    continue;
+                }
+                FieldIntent field = fieldNamed(entity, name);
+                if (field != null) {
+                    if (field.isPrimaryKey()) {
+                        issues.add(prefix + " names [" + name + "], the primary key - the line shows what the record is about, not its id");
+                    } else if (field.getVisibleWhen() != null) {
+                        issues.add(prefix + " names [" + name + "], which carries visibleWhen - the line has no per-status gate");
+                    }
+                    continue;
+                }
+                RelationIntent relation = relationNamed(entity, name);
+                if (relation != null && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    continue;
+                }
+                if (relation != null || name.contains(".")) {
+                    issues.add(
+                            prefix + " names [" + name + "], a collection path or a to-many relation - the line shows one value per entry;"
+                                    + " name an own field or a to-one relation");
+                } else {
+                    issues.add(prefix + " names [" + name + "], which is not a field or to-one relation of the entity");
+                }
+            }
+        }
+    }
+
+    /** The entity's field of that name, matched case-insensitively, or null. */
+    private static FieldIntent fieldNamed(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null && field.getName()
+                                                .equalsIgnoreCase(name)) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /** The entity's relation of that name, of any kind, matched case-insensitively, or null. */
+    private static RelationIntent relationNamed(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null && relation.getName()
+                                                      .equalsIgnoreCase(name)) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /** Whether the entity's {@code list:} shows that collection - as a path, or bare. */

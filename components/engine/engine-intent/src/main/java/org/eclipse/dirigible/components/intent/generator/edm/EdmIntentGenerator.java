@@ -713,6 +713,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // set - major on, every other property's major off - and their sequence rides the entity as
             // `listOrder`, which the templates read so the list order no longer follows `order:`.
             applyListColumns(entityMap, properties, entity);
+            // The line under the record page's title (intent `subtitle:`, #8370), as `list:` rides as
+            // `listOrder`: the resolved property names, comma-separated, in the authored sequence.
+            applySubtitle(entityMap, properties, entity);
             // Default row order (intent `orderBy:`, #7727): the sequence rides the entity as a single
             // scalar the generation pipeline turns into the list endpoint's ORDER BY.
             applyOrderBy(entityMap, entity.getOrderBy());
@@ -1344,6 +1347,41 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             property.put("widgetIsMajor", listed.contains(property) ? "true" : "false");
         }
         entityMap.put("listOrder", String.join(",", listOrder));
+    }
+
+    /**
+     * Emit an entity's record-page subtitle (intent {@code subtitle:}, issue #8370) as the
+     * comma-separated {@code subtitleOrder} - each authored name matched case-insensitively against the
+     * model's property names, so a field and a to-one relation both resolve to the property the form
+     * renders. A scalar, like {@code listOrder}, so it survives the {@code .edm} twin;
+     * {@code ModelParameterProcessor} resolves it into the property maps the record page iterates. No
+     * subtitle leaves no attribute.
+     *
+     * @param entityMap the entity being emitted
+     * @param properties the entity's properties
+     * @param entity the authored entity
+     */
+    private static void applySubtitle(Map<String, Object> entityMap, List<Map<String, Object>> properties, EntityIntent entity) {
+        List<String> subtitle = entity.getSubtitle();
+        if (subtitle == null || subtitle.isEmpty()) {
+            return;
+        }
+        List<String> order = new ArrayList<>();
+        for (String wanted : subtitle) {
+            if (wanted == null) {
+                continue;
+            }
+            for (Map<String, Object> property : properties) {
+                if (wanted.trim()
+                          .equalsIgnoreCase(String.valueOf(property.get("name")))) {
+                    order.add(String.valueOf(property.get("name")));
+                    break;
+                }
+            }
+        }
+        if (!order.isEmpty()) {
+            entityMap.put("subtitleOrder", String.join(",", order));
+        }
     }
 
     /**

@@ -2379,6 +2379,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: syncToken, type: string, length: 64, readOnly: true, placement: hidden }
                 relations:
                   - { name: Team, kind: manyToOne, to: Team, composition: true }
+              # The record page is titled with the record's label and declares the line under it
+              # (#8370): the due date and the team, nothing the model did not name.
+              - name: TeamOrder
+                label: "{team.name} / {number}"
+                subtitle: [dueDate, team]
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: number,  type: string, length: 20 }
+                  - { name: dueDate, type: date }
+                  - { name: notes,   type: text }
+                relations:
+                  - { name: team, kind: manyToOne, to: Team }
             """;
 
     private static final String INTENT_YAML = INTENT_YAML_ENTITIES.concat(INTENT_YAML_FILES)
@@ -2582,6 +2594,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         assertEmission();
         assertFieldPlacementEmission();
+        assertRecordHeaderEmission();
 
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
@@ -2595,6 +2608,40 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTimedWaitRuntime();
         assertCollectionColumnsRuntime();
         assertFieldPlacementRuntime();
+        assertRecordHeaderRuntime();
+    }
+
+    /**
+     * The record page's title and subtitle (#8370): titled with the stored label, captioned with the
+     * entity name, and the line under it exactly the declared {@code subtitle:} values - an entity
+     * without one has no line.
+     */
+    private void assertRecordHeaderEmission() {
+        String page = contentOf("gen/emission/js/components/pages/TeamOrder/TeamOrderFormPage.js");
+        assertTrue(page.contains("const label = record ? record.Name : null;"),
+                "the record page must title itself with the stored label: " + page);
+        String subtitle = page.substring(page.indexOf("subtitleParts() {"), page.indexOf("summaryLine() {"));
+        assertTrue(subtitle.contains("this.loadedRecord.DueDate, 'DATE'") && subtitle.contains("this.loadedRecord.Team, 'DROPDOWN'"),
+                "the subtitle must print the declared values: " + subtitle);
+        assertTrue(subtitle.indexOf("DueDate") < subtitle.indexOf("this.loadedRecord.Team"),
+                "the subtitle keeps the declared order: " + subtitle);
+        assertFalse(subtitle.contains("Number") || subtitle.contains("Notes") || subtitle.contains("Name,"),
+                "the subtitle must print nothing the model did not declare: " + subtitle);
+        String view = contentOf("gen/emission/views/TeamOrder/TeamOrder-form.html");
+        assertTrue(view.contains("data-record-caption") && view.contains("data-record-subtitle") && view.contains(":title=\"part.title\""),
+                "the record page must render the caption and the subtitle parts with their tooltips: " + view);
+        String plain = contentOf("gen/emission/js/components/pages/Team/TeamFormPage.js");
+        String plainSubtitle = plain.substring(plain.indexOf("subtitleParts() {"), plain.indexOf("summaryLine() {"));
+        assertFalse(plainSubtitle.contains("this.loadedRecord."), "an entity without subtitle: has no subtitle line: " + plainSubtitle);
+    }
+
+    /** The labelled record is served with the label its title shows. */
+    private void assertRecordHeaderRuntime() {
+        int team = createRecord("/team/TeamController", "{\"Name\":\"Acme Ltd\"}");
+        int order = createRecord("/teamorder/TeamOrderController",
+                "{\"Team\":" + team + ",\"Number\":\"2026-001\",\"DueDate\":\"2026-11-30\"}");
+        assertEquals("Acme Ltd / 2026-001", readRecord("/teamorder/TeamOrderController", order).get("Name"),
+                "the record page's title is the stored label");
     }
 
     /**
