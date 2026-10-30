@@ -362,6 +362,7 @@ document.addEventListener('alpine:init', () => {
           const v = this.queryParam(key);
           if (v !== null && !touched.has(key)) this.form[key] = v;
         }
+        await this.ensureHeldOptions();
         this.state = 'empty-form';
       }
 #foreach($property in $properties)
@@ -486,15 +487,7 @@ document.addEventListener('alpine:init', () => {
           ? [] : String(this.form.${property.name}).split(',').map(v => v.trim());
 #end
 #end
-#foreach($property in $properties)
-#if($property.widgetOptionsFilterBy && ($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
-      // Static option filter (intent `where:`): a header value stored outside the filter is absent from
-      // the filtered chooser list, so its label would not resolve on edit. Splice in that row by id -
-      // the filter still governs what may be newly picked. A MULTISELECT holds SEVERAL keys, each of
-      // which may have fallen outside the filter.
-      await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', #if($property.widgetDropDownDocumentNumber)true#{else}false#end);
-#end
-#end
+      await this.ensureHeldOptions();
       // The header now holds exactly what the server holds: that is the state every exit is compared
       // against (issue #7359). Re-taken after every item change, which re-reads the header too.
       this.markPristine();
@@ -524,11 +517,42 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
       ]);
+      // A reload lists each target's first page again: the values the form holds stay listed (#8343).
+      await this.ensureHeldOptions();
     },
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
 
-    // The whole option list of ${property.name}, unnarrowed.
+#if($property.widgetType != "DOCUMENT_STATUS" && !($property.widgetLeafOnly && $property.widgetHierarchyProperty))
+    // The option list of ${property.name}, unnarrowed: the first page of its target, searched on the
+    // server past that (#8343).
+    async loadAllOptions${property.name}() {
+      try {
+        const rows${property.name} = await this.pickerRows('${property.name}', '${property.widgetDropdownControllerUrl}', {
+#if($property.widgetOptionsFilterBy)
+          // Static option filter (intent `where:`): the chooser lists only matching rows.
+          conditions: [{ propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }],
+#end
+          text: '${property.widgetDropDownValue}', ordered: '$!{property.widgetOptionsOrdered}'
+        });
+        this.options${property.name} = this.optionsFrom${property.name}(rows${property.name});
+      } catch (e) {
+        console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
+      }
+    },
+
+    // ${property.name}'s options from its target rows - the first page and every search alike.
+    optionsFrom${property.name}(rows) {
+#if($property.widgetPickable)
+      // Picker rule (intent `pickable:`): a target row failing it is listed disabled with the rule's
+      // message, or hidden - the server's own checks remain the gate.
+      return this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
+#else
+      return this.sortOptions((rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: #labelOf($property "e") })), '$!{property.widgetOptionsOrdered}');
+#end
+    },
+#else
+    // The whole option list of ${property.name}: #if($property.widgetType == "DOCUMENT_STATUS")a status list is short#{else}a leaf-only hierarchy needs every node to tell a leaf#end.
     async loadAllOptions${property.name}() {
       try {
 #if($property.widgetOptionsFilterBy)
@@ -556,6 +580,7 @@ document.addEventListener('alpine:init', () => {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
       }
     },
+#end
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN" && $property.aggregate != "true")
 
     // The right list for the trigger as it now stands: narrowed while the trigger has a value,
@@ -608,10 +633,19 @@ document.addEventListener('alpine:init', () => {
           // The source record leaves it empty: nothing to narrow by, so the whole list - as with no trigger.
           await this.loadAllOptions${property.name}();
         } else {
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty)
           const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
             conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
               { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
           }, { baseUrl: '' });
+#else
+          // The narrowed list is bounded and searched like the whole one (#8343); a search keeps the narrowing.
+          const rows = await this.pickerRows('${property.name}', '${property.widgetDropdownControllerUrl}', {
+            conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
+              { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end],
+            text: '${property.widgetDropDownValue}', ordered: '$!{property.widgetOptionsOrdered}'
+          });
+#end
 #if($property.widgetPickable)
           this.options${property.name} = this.sortOptions(this.pickableOptions(#labelRows($property "rows"), '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', ${property.widgetPickable}), '$!{property.widgetOptionsOrdered}');
           if (adjust) {
@@ -1026,6 +1060,18 @@ document.addEventListener('alpine:init', () => {
         .map(r => ({ value: r[opts.key], text: '\u2003'.repeat(depthOf(r)) + String(r[opts.text] ?? '') }));
     },
 
+    // Every header picker lists the value the header holds, whether or not its option list does: a
+    // value stored outside a `where:` filter, or beyond the first page of a large target (#8343).
+    async ensureHeldOptions() {
+      await Promise.all([
+#foreach($property in $properties)
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "MULTISELECT") && $property.aggregate != "true")
+        this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}', #if($property.widgetDropDownDocumentNumber)true#{else}false#end),
+#end
+#end
+      ]);
+    },
+
     // Static option filter (intent `where:`) label resolution for a HEADER dropdown or multi-select:
     // fetch each out-of-filter row by id and prepend it to the chooser list so a value stored outside
     // the filter still shows its label on edit. The filter still governs what the user can newly pick.
@@ -1045,8 +1091,12 @@ document.addEventListener('alpine:init', () => {
           console.error('[${name}DocumentPage] failed to resolve the filtered current option for ' + prop, e);
           return null;
         })));
+      // The list as it stands now - a reload may have replaced it meanwhile - and only once per value.
+      const listed = this['options' + prop];
       for (const row of rows) {
-        if (row && row[key] != null) opts.unshift({ value: row[key], text: draftNumber ? window.HarmoniaFormat.documentNumber(row[text]) : row[text] });
+        if (row && row[key] != null && !listed.some(o => String(o.value) === String(row[key]))) {
+          listed.unshift({ value: row[key], text: draftNumber ? window.HarmoniaFormat.documentNumber(row[text]) : row[text] });
+        }
       }
     },
 

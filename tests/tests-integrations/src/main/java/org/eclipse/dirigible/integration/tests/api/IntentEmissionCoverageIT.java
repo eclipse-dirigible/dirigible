@@ -8870,7 +8870,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                             + " var __answer = (url, options) => {"
                             + "   if (options && options.baseUrl === '') { __lists++; return new Promise(() => {}); }"
                             + "   if (/\\/7$/.test(url)) __record = true;" + "   return Promise.resolve({ Id: 7 }); };"
-                            + " App.services.api = { get: __answer, getAll: __answer, post: __answer };");
+                            // post's options follow its body: a picker's first page is a search (#8343).
+                            + " App.services.api = { get: __answer, getAll: __answer, post: (url, body, options) => __answer(url, options) };");
             context.eval("js", pageScript);
             context.eval("js",
                     "var page = pages['" + componentName + "'](); page.$watch = () => {}; page.$nextTick = (f) => f && f();"
