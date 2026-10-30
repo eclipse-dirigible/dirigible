@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import static com.codeborne.selenide.Condition.visible;
 
+import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
 import com.codeborne.selenide.WebDriverRunner;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -77,6 +78,19 @@ class ShellRuntimeVintageIT extends UserInterfaceIntegrationTest {
         browser.assertElementExistsByTypeAndText(HtmlElementType.BUTTON, "New");
         Selenide.$(SIDEBAR)
                 .shouldBe(visible);
+
+        // A prompted action refused by its endpoint: this page has no alert in its prompt dialog to show
+        // the reason in (#8365), so the current runtime still closes the dialog and announces it.
+        Selenide.executeJavaScript("var s = Alpine.store('customActions');"
+                + " App.services.api.request = () => Promise.reject({ isApiError: true, httpStatus: 409, errorMessage: 'Ticket [2] is CLOSED' });"
+                + " s.trigger({ label: 'Escalate', type: 'entity', call: { method: 'POST', path: '/services/x/{id}/escalations', body: { level: '{level}' } },"
+                + " prompt: [ { name: 'level', required: true } ], promptColumns: [ { name: 'level', label: 'Level', widget: 'NUMBER' } ] }, 2);"
+                + " s.promptValues.level = 1; s.promptRun();");
+        Selenide.$$("[x-h-notification-overlay] li")
+                .findBy(Condition.text("Escalate - Ticket [2] is CLOSED"))
+                .shouldBe(visible);
+        Selenide.$("[data-prompt-dialog]")
+                .shouldNotBe(visible);
 
         // Standalone below the breakpoint: the sidebar lives in the drawer the hamburger opens.
         WebDriverRunner.getWebDriver()

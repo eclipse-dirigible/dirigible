@@ -31,7 +31,9 @@
  * Its dialog says what it acts on (issue #8296): a `description` paragraph and the `confirm` text name
  * the clicked record's properties as `{property}` (`recordFields` says where each is read), `submit`
  * captions the run button, and a prompt input may open with a `default`, carry a `help` line, or be a
- * MULTISELECT of declared `options`, sent as a JSON array in options order.
+ * MULTISELECT of declared `options`, sent as a JSON array in options order. An EMAIL input refuses an
+ * address the forms' `email` rule refuses, a DROPDOWN may choose from declared `options` without a
+ * request, and a lookup's key is sent typed by its `keyType` (issue #8366).
  *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
@@ -49,7 +51,9 @@
  * #7073). A refusal shows the reason the server sent (a transition outside its `from:` statuses says
  * so in its 409), a success says what happened, and a page action that finished reports through the
  * same path. Nothing an action DOES ends in silence - but an action the user ABANDONED did nothing,
- * so a page that closes itself as `cancelled` is dismissed silently (issue #7149).
+ * so a page that closes itself as `cancelled` is dismissed silently (issue #7149). The one exception
+ * is a prompted run that failed: its reason shows inside the dialog, which stays open with its
+ * inputs (issue #8365).
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('customActions', {
@@ -82,6 +86,11 @@ document.addEventListener('alpine:init', () => {
     promptOptions: {},    // col.name -> dropdown options (dependsOn-filtered when a cascade is active)
     promptBusy: false,
     promptError: '',
+    promptBlurred: {},    // col.name -> the input has lost focus once: its format line may show (#8366)
+    promptChecked: false, // Run was pressed: every format line may show
+    // Why the last run of the prompt failed (issue #8365) - the endpoint's refusal or the catalog
+    // line for a fault, shown in an alert INSIDE the dialog, which stays open with its inputs.
+    promptRefusal: '',
     serverUnavailable: false,   // set once the backend is unreachable; stops re-fetching until a reload
     extraPoints: [],            // extension points added via addProjects (the shared shell's hosted apps)
 
@@ -277,12 +286,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     // The confirm dialog's Run/Cancel pair. Run stays disabled while the POST is in flight so a
-    // double-click cannot fire the mutation twice.
+    // double-click cannot fire the mutation twice. The dialog has no inputs to lose, so it closes
+    // whatever the outcome, and a failure is announced (issue #8365).
     async confirmRun() {
       if (!this.confirmAction || this.confirmBusy) return;
+      const action = this.confirmAction;
       this.confirmBusy = true;
       try {
-        await this.run(this.confirmAction, this.confirmId);
+        const outcome = await this.run(action, this.confirmId);
+        if (!outcome.ok) this.notify(action.label || 'Action', outcome.message, 'negative');
       } finally {
         this.confirmBusy = false;
         this.cancelConfirm();
@@ -351,6 +363,9 @@ document.addEventListener('alpine:init', () => {
       }
       this.promptOptions = {};
       this.promptError = '';
+      this.promptRefusal = '';
+      this.promptBlurred = {};
+      this.promptChecked = false;
       this.dialogDescription = '';
       this.promptAction = action;
       this.promptId = (id !== undefined && id !== null && id !== '') ? id : null;
@@ -369,13 +384,15 @@ document.addEventListener('alpine:init', () => {
 
     // An input's default as its control holds it: a MULTISELECT the ticked option values (in options
     // order, an unknown or non-list value ticking nothing), a dropdown key as a string. A value the
-    // control cannot hold as it is - a date the backend serialised as an array - is left empty.
+    // control cannot hold as it is - a date the backend serialised as an array, a value that is none
+    // of a select's options (#8366) - is left empty.
     setPromptDefault(col, v) {
       if (col.widget === 'MULTISELECT') {
         this.promptValues[col.name] = Array.isArray(v) ? this.optionOrder(col, v) : [];
         return;
       }
       if (v === undefined || v === null || v === '' || typeof v === 'object') return;
+      if (Array.isArray(col.options) && !col.options.some((o) => String(o.value) === String(v))) return;
       this.promptValues[col.name] = col.widget === 'DROPDOWN' ? String(v) : v;
     },
 
@@ -445,6 +462,9 @@ document.addEventListener('alpine:init', () => {
       this.promptValues = {};
       this.promptOptions = {};
       this.promptError = '';
+      this.promptRefusal = '';
+      this.promptBlurred = {};
+      this.promptChecked = false;
       this.dialogDescription = '';
     },
 
@@ -461,6 +481,11 @@ document.addEventListener('alpine:init', () => {
     // static `where:` filter when it declares one (the same semantics as the item dialog).
     async loadPromptOptions() {
       for (const col of this.promptCols) {
+        // A select's declared options (#8366): no request, and an option's help is its second line.
+        if (col.widget === 'DROPDOWN' && !col.lookup && Array.isArray(col.options)) {
+          this.promptOptions[col.name] = col.options.map((o) => ({ value: o.value, text: o.label || o.value, help: o.help }));
+          continue;
+        }
         if (col.widget !== 'DROPDOWN' || !col.lookup) continue;
         try {
           let rows;
@@ -561,6 +586,13 @@ document.addEventListener('alpine:init', () => {
     // Validate + run: required inputs must be present (the generated controller enforces the same
     // with a 400 - the dialog check just keeps the failure local); the values are POSTed together
     // with the source id.
+    //
+    // The dialog closes only when the run worked (issue #8365). A refusal, a fault and a network
+    // failure all keep it open with every input as the user left it and the reason in an alert
+    // inside it - not in a toast, as the user is looking at the dialog - so Run sends the corrected
+    // values, or simply retries. A page generated before that alert existed (the shell runtime is
+    // shared across generated vintages, #7427) cannot show the reason, so there the dialog closes and
+    // the failure is announced, as before.
     async promptRun() {
       if (!this.promptAction || this.promptBusy) return;
       const missing = this.promptCols.filter((c) => c.required && !c.sourceDefault && this.isEmptyInput(this.promptValues[c.name]));
@@ -568,26 +600,85 @@ document.addEventListener('alpine:init', () => {
         this.promptError = missing.map((c) => c.label || c.name).join(', ');
         return;
       }
+      // An address the forms would refuse is never sent (#8366): its line shows, and Run waits for it.
+      this.promptChecked = true;
+      if (this.promptHasInvalid) return;
+      const action = this.promptAction;
       this.promptError = '';
+      this.promptRefusal = '';
       this.promptBusy = true;
+      let outcome;
       try {
-        await this.run(this.promptAction, this.promptId, this.promptValues);
+        outcome = await this.run(action, this.promptId, this.promptValues);
+      } catch (e) {
+        console.error('customActions: the prompted run failed', e);
+        outcome = { ok: false, message: 'Action failed' };
       } finally {
         this.promptBusy = false;
+      }
+      if (outcome.ok) {
+        this.cancelPrompt();
+      } else if (this.showsPromptRefusal()) {
+        this.promptRefusal = outcome.message;
+      } else {
+        this.notify(action.label || 'Action', outcome.message, 'negative');
         this.cancelPrompt();
       }
     },
 
+    // Whether an input holds a value of the wrong format - an EMAIL the forms' `email` rule refuses
+    // (#8366). An empty input is valid here: whether it may be empty is the required check's.
+    promptInvalid(col) {
+      if (!col || col.widget !== 'EMAIL') return false;
+      const v = this.promptValues[col.name];
+      return !this.isEmptyInput(v) && !this.isEmailAddress(v);
+    },
+
+    // Whether an invalid input's line shows: once the input has lost focus, or once Run was pressed.
+    promptShowsInvalid(col) {
+      return this.promptInvalid(col) && (this.promptChecked || Boolean(this.promptBlurred[col.name]));
+    },
+
+    promptBlur(col) { this.promptBlurred[col.name] = true; },
+
+    // Whether any input holds a value of the wrong format - Run is disabled while one does.
+    get promptHasInvalid() {
+      return this.promptCols.some((c) => this.promptInvalid(c));
+    },
+
+    // The forms' own `email` rule (formValidation.js), so a value one surface accepts the other does.
+    isEmailAddress(v) {
+      const text = String(v).trim();
+      if (window.FormValidation && typeof FormValidation.validate === 'function') {
+        return FormValidation.validate({ v: text }, { v: [{ rule: 'email' }] }).valid;
+      }
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text);
+    },
+
+    // Whether the page's prompt dialog has the alert a refusal is shown in (issue #8365).
+    showsPromptRefusal() {
+      return typeof document.querySelector === 'function' && Boolean(document.querySelector('[data-prompt-refusal]'));
+    },
+
     // Send a confirmed / prompted action: its declared call, or the POST to its generated endpoint.
+    // Resolves to { ok: true } or { ok: false, message }: a success is announced here, a failure is
+    // left to the caller, which shows it where the user is looking (issue #8365).
     run(action, id, values) {
       return action.call ? this.runCall(action, id, values) : this.runEndpoint(action, id, values);
+    },
+
+    // The user-facing reason a run failed: a 400/409's own message, else the catalog line.
+    failureMessage(e) {
+      return (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
+        ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
+        : 'Action failed';
     },
 
     // Send a `call` action's request to the application's own endpoint (issue #8090). `{id}` in the
     // path is the clicked record's key; the body is the declared one with its prompt placeholders
     // filled (callValue). The endpoint owns the rule, so its answer is reported and never read: a 2xx
-    // toasts the authored `success`, a 400/409 the endpoint's own message, anything else the generic
-    // failure.
+    // toasts the authored `success`; a failure resolves to the endpoint's own message for a 400/409,
+    // the catalog line for anything else.
     async runCall(action, id, values) {
       const label = action.label || 'Action';
       const call = action.call;
@@ -596,14 +687,12 @@ document.addEventListener('alpine:init', () => {
       const body = call.body ? this.callValue(call.body, action, values || {}) : undefined;
       try {
         await App.services.api.request(call.method || 'POST', url, body, { baseUrl: '' });
-        this.notify(label, action.success || (label + ' completed'), 'positive');
-        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
       } catch (e) {
-        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
-          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
-          : 'Action failed';
-        this.notify(label, msg, 'negative');
+        return { ok: false, message: this.failureMessage(e) };
       }
+      this.notify(label, action.success || (label + ' completed'), 'positive');
+      window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      return { ok: true };
     },
 
     // A body value with its prompt placeholders filled. A string that is exactly "{name}" becomes that
@@ -633,51 +722,54 @@ document.addEventListener('alpine:init', () => {
       if (widget === 'CHECKBOX') return Boolean(v);
       if (widget === 'MULTISELECT') return this.optionOrder(col, Array.isArray(v) ? v : []);
       if (v === undefined || v === null || v === '') return null;
+      // An address is sent trimmed; a lookup's key typed by its keyType (#8366), so `teamId: 42`.
+      if (widget === 'EMAIL') return String(v).trim() || null;
+      if (widget === 'DROPDOWN' && col.keyType === 'number') return Number(v);
       return widget === 'NUMBER' ? Number(v) : v;
     },
 
     // POST { id } to the action's endpoint (a generated create-from controller). The server clones the
-    // source record into a new target record and returns it; we surface a success/error notification and
-    // raise `harmonia:action-done` so the originating view can refresh. The endpoint is an absolute
+    // source record into a new target record and returns it; we surface a success notification and
+    // raise `harmonia:action-done` so the originating view can refresh, and resolve a failure to its
+    // message for the caller (issue #8365). The endpoint is an absolute
     // same-origin path (it targets gen/events, not the entity api base), so we prepend no baseUrl.
     async runEndpoint(action, id, values) {
       const label = action.label || 'Action';
       const body = {};
       if (id !== undefined && id !== null && id !== '') body.id = id;
       if (values && Object.keys(values).length) body.values = values;
+      let created;
       try {
-        const created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
-        // A transition that mails answers { record, notify } - the descriptor's `notifies` says so, set
-        // when the endpoint was generated (issue #7023). Its notify block is fail-soft, so the flip
-        // succeeds even when nothing left the mail server: reporting that as a green toast is exactly
-        // the silence this branch removes - the user learns the customer never got the invoice weeks
-        // later, from the customer.
-        const notified = action.notifies && created ? created.notify : null;
-        const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
-        const ref = record && (record.Number || record.Name || record.Id || record.id);
-        if (notified && notified.status === 'failed') {
-          this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
-            + (notified.message || 'unknown error'), 'warning');
-        } else if (notified && notified.status === 'skipped') {
-          this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
-        } else {
-          // A transition moved a record that already existed; a generate/create-from made a new one.
-          // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
-          const done = action.kind === 'transition'
-            ? (ref ? 'Done - ' + ref : 'Done')
-            : (ref ? 'Created ' + ref : 'Completed');
-          this.notify(label, done, 'positive');
-        }
-        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+        created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
       } catch (e) {
         // A refusal (400/409) carries the authored reason the intent wrote for this exact moment -
         // "allowed only from status [3, 4] - current status is [6]". That is the message the user
         // needs; the generic catalog line is for faults (issue #7073).
-        const msg = (App.services.apiErrors && App.services.apiErrors.refusalMessageFor)
-          ? App.services.apiErrors.refusalMessageFor(e, 'Action failed')
-          : 'Action failed';
-        this.notify(label, msg, 'negative');
+        return { ok: false, message: this.failureMessage(e) };
       }
+      // A transition that mails answers { record, notify } - the descriptor's `notifies` says so, set
+      // when the endpoint was generated (issue #7023). Its notify block is fail-soft, so the flip
+      // succeeds even when nothing left the mail server: reporting that as a green toast is exactly
+      // the silence this branch removes - the user learns the customer never got the invoice weeks
+      // later, from the customer.
+      const notified = action.notifies && created ? created.notify : null;
+      const record = (action.notifies && created && created.record !== undefined) ? created.record : created;
+      const ref = record && (record.Number || record.Name || record.Id || record.id);
+      if (notified && notified.status === 'failed') {
+        this.notify(label, (ref ? ref + ': ' : '') + 'e-mail not sent - '
+          + (notified.message || 'unknown error'), 'warning');
+      } else if (notified && notified.status === 'skipped') {
+        this.notify(label, (ref ? ref + ': ' : '') + 'no e-mail address on the record - nothing was sent', 'warning');
+      } else {
+        // A transition moved a record that already existed; a generate/create-from made a new one.
+        // Reporting a status flip as "Created INV-1" is how the Void toast read before #7073.
+        const done = action.kind === 'transition'
+          ? (ref ? 'Done - ' + ref : 'Done')
+          : (ref ? 'Created ' + ref : 'Completed');
+        this.notify(label, done, 'positive');
+      }
+      window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      return { ok: true };
     },
 
     // Surface the outcome of an action the user just triggered: a transient toast over the page PLUS
