@@ -139,6 +139,13 @@ class ListRefreshHarmoniaIT extends UserInterfaceIntegrationTest {
                 .click();
         assertEquals("default;rows=5;filter=;stamp=true", poll(HOSTED_LIST, "default;rows=5;filter=;stamp=true"),
                 "the application shell must host the list");
+        // One reading of the inbox per tab (#8347): the hosted app's store follows the shell's instead of
+        // reading and polling the inbox a second time.
+        assertEquals("shell=false;hosted=true",
+                Selenide.executeJavaScript("var frame = document.querySelector('iframe[title=\"Application\"]');"
+                        + " return 'shell=' + Alpine.store('processTasks').embedded"
+                        + " + ';hosted=' + frame.contentWindow.Alpine.store('processTasks').embedded;"),
+                "the hosted app must read the shell's inbox store, not its own");
 
         createReceipts("hosted one");
         Selenide.$$("button[x-h-sidebar-menu-nav]")
