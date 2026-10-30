@@ -68,6 +68,7 @@ function baseFormPage() {
     /**
      * Central catch handler for save()/submit. Selects UX by errorType:
      *  - ValidationError (422) -> map causes onto field errors + summary
+     *  - a 400/409 refusal     -> the server's own sentence in the save-failure banner
      *  - everything else       -> generic save-failure banner (localized)
      * Tolerates non-ApiError values.
      */
@@ -90,7 +91,9 @@ function baseFormPage() {
         this.scrollToSummary();
         return;
       }
-      this.saveFailureMessage = App.services.apiErrors.messageFor(err, fallbackMessage);
+      // A refusal naming no field (a `checks:` rule, #8342) is a sentence authored for the user;
+      // refusalMessageFor quotes it and keeps the catalog line for faults.
+      this.saveFailureMessage = App.services.apiErrors.refusalMessageFor(err, fallbackMessage);
       this.state = formState || 'save-failure';
       this.scrollToSummary();
     },

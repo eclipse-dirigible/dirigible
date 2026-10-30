@@ -476,7 +476,7 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       this.itemFieldError = null;
-      this.itemError = App.services.apiErrors.messageFor(e, fallback);
+      this.itemError = App.services.apiErrors.refusalMessageFor(e, fallback);
     },
 
     async ensureItemOptions() {
