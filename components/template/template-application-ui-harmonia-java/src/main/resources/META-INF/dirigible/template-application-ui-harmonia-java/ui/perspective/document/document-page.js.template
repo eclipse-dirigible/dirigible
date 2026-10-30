@@ -637,9 +637,22 @@ document.addEventListener('alpine:init', () => {
       return {
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.isRequiredProperty == "true" && !$property.dataDefaultValue)
-        ${property.name}: [{ rule: 'required', message: 'This field is required.' }],
+        ${property.name}: [{ rule: 'required', message: T('$projectName:${tprefix}.messages.error.required', 'This field is required.') }],
 #elseif(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && $property.widgetType == "EMAIL")
-        ${property.name}: [{ rule: 'email', message: 'Enter a valid email address.' }],
+        ${property.name}: [{ rule: 'email', message: T('$projectName:${tprefix}.messages.error.email', 'Enter a valid email address.') }],
+#end
+#end
+      };
+    },
+
+    // The label of every field validationSchema() checks, in the user's language: the summary of a
+    // failed save names the fields as the form shows them, not by their property names (#8350).
+    validationLabels() {
+      return {
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.aggregate != "true" && (($property.isRequiredProperty == "true" && !$property.dataDefaultValue) || $property.widgetType == "EMAIL"))
+#if($property.widgetLabel)#set($vlabel = $property.widgetLabelJs)#else#set($vlabel = $property.name)#end
+        ${property.name}: T('$projectName:${tprefix}.t.${property.dataName}', '${vlabel}'),
 #end
 #end
       };
@@ -658,7 +671,11 @@ document.addEventListener('alpine:init', () => {
         // Name the failing fields in the visible summary - an invalid field the layout does not
         // render (or one scrolled out of view) is otherwise indistinguishable from a dead button.
         const _failed = Object.keys(this.errors).filter(k => k !== '__summary' && this.errors[k]);
-        if (_failed.length) this.errors.__summary = 'Fields that need attention: ' + _failed.join(', ');
+        if (_failed.length) {
+          const _labels = this.validationLabels();
+          this.errors.__summary = T('$projectName:${tprefix}.messages.error.fieldsNeedAttention', 'Fields that need attention: {{fields}}',
+            { fields: _failed.map(k => _labels[k] || k).join(', ') });
+        }
         this.scrollToSummary();
         return;
       }

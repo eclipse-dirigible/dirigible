@@ -18,50 +18,56 @@
  * end-user (it is logged to the console by api.js). The UI selects what to
  * display based on `errorType` via the resolvers below.
  *
- * Designed for later i18n: swap the flat maps for a locale lookup in one place.
+ * Each catalog line carries its shell key (application-core:shell.apiErrors.*) beside the English
+ * text, so it renders in the user's language once the catalogs are loaded (#8350).
  */
 (function (root) {
   const App = root.App = root.App || {};
   App.services = App.services || {};
 
+  // A catalog entry is [shell key, English text]: the text renders until the catalogs load, and in
+  // the default language; T() is absent only where i18n.js is not loaded.
+  const localize = (entry) => (typeof root.T === 'function' ? root.T(entry[0], entry[1]) : entry[1]);
+
   App.services.apiErrors = {
     // Top-level errorType -> user-facing message.
     messages: {
-      BadRequest:             'The request could not be completed. Please review your input.',
-      ValidationError:        'Please correct the highlighted fields.',
-      Unauthorized:           'Your session has ended. Please sign in again.',
-      InsufficientPermission: 'You do not have permission to perform this action.',
-      TokenExpired:           'Your session has expired. Please sign in again.',
-      NotFound:               'The requested item could not be found.',
-      Conflict:               'This is not allowed in the record\u2019s current state.',
-      UpstreamError:          'A dependent service is unavailable. Please try again shortly.',
-      InternalServerError:    'Something went wrong on our end. Please try again.',
-      NetworkError:           'Unable to reach the server. Check your connection and try again.',
+      BadRequest:             ['application-core:shell.apiErrors.BadRequest', 'The request could not be completed. Please review your input.'],
+      ValidationError:        ['application-core:shell.apiErrors.ValidationError', 'Please correct the highlighted fields.'],
+      Unauthorized:           ['application-core:shell.apiErrors.Unauthorized', 'Your session has ended. Please sign in again.'],
+      InsufficientPermission: ['application-core:shell.apiErrors.InsufficientPermission', 'You do not have permission to perform this action.'],
+      TokenExpired:           ['application-core:shell.apiErrors.TokenExpired', 'Your session has expired. Please sign in again.'],
+      NotFound:               ['application-core:shell.apiErrors.NotFound', 'The requested item could not be found.'],
+      Conflict:               ['application-core:shell.apiErrors.Conflict', 'This is not allowed in the record\u2019s current state.'],
+      UpstreamError:          ['application-core:shell.apiErrors.UpstreamError', 'A dependent service is unavailable. Please try again shortly.'],
+      InternalServerError:    ['application-core:shell.apiErrors.InternalServerError', 'Something went wrong on our end. Please try again.'],
+      NetworkError:           ['application-core:shell.apiErrors.NetworkError', 'Unable to reach the server. Check your connection and try again.'],
       // The user answered "Cancel" to the warnings a save raised (#7466) - nothing was written.
-      ConfirmationDeclined:   'Not saved - the warnings were not confirmed.',
+      ConfirmationDeclined:   ['application-core:shell.apiErrors.ConfirmationDeclined', 'Not saved - the warnings were not confirmed.'],
     },
 
     // 422 cause errorType -> per-field message. Extend as backend cause types appear.
     fieldMessages: {
-      NotNull:   'This field is required.',
-      Required:  'This field is required.',
-      NotEmpty:  'This field is required.',
-      Future:    'Date must be in the future.',
-      Past:      'Date must be in the past.',
-      Pattern:   'This value has an invalid format.',
-      Email:     'Enter a valid email address.',
-      Size:      'This value has an invalid length.',
-      Min:       'This value is too small.',
-      Max:       'This value is too large.',
-      Duplicate: 'This value already exists.',
+      NotNull:   ['application-core:shell.apiErrors.field.required', 'This field is required.'],
+      Required:  ['application-core:shell.apiErrors.field.required', 'This field is required.'],
+      NotEmpty:  ['application-core:shell.apiErrors.field.required', 'This field is required.'],
+      Future:    ['application-core:shell.apiErrors.field.Future', 'Date must be in the future.'],
+      Past:      ['application-core:shell.apiErrors.field.Past', 'Date must be in the past.'],
+      Pattern:   ['application-core:shell.apiErrors.field.Pattern', 'This value has an invalid format.'],
+      Email:     ['application-core:shell.apiErrors.field.Email', 'Enter a valid email address.'],
+      Size:      ['application-core:shell.apiErrors.field.Size', 'This value has an invalid length.'],
+      Min:       ['application-core:shell.apiErrors.field.Min', 'This value is too small.'],
+      Max:       ['application-core:shell.apiErrors.field.Max', 'This value is too large.'],
+      Duplicate: ['application-core:shell.apiErrors.field.Duplicate', 'This value already exists.'],
     },
 
-    default: 'Something went wrong. Please try again.',
+    default: ['application-core:shell.apiErrors.default', 'Something went wrong. Please try again.'],
 
     /** Top-level, user-safe message for an error. `fallback` overrides the catalog default. */
     messageFor(err, fallback) {
       const type = err && err.errorType;
-      return (type && this.messages[type]) || fallback || this.default;
+      const entry = type && this.messages[type];
+      return entry ? localize(entry) : (fallback || localize(this.default));
     },
 
     /**
@@ -102,7 +108,8 @@
     /** Per-field message for a single 422 errorCauses[] entry. */
     fieldMessageFor(cause) {
       const type = cause && cause.errorType;
-      return (type && this.fieldMessages[type]) || this.default;
+      const entry = type && this.fieldMessages[type];
+      return localize(entry || this.default);
     },
 
     /**
