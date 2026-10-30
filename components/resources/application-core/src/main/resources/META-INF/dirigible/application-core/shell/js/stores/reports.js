@@ -19,10 +19,16 @@
  * generation time, so a generated app's shell carries them in App.config.reports, and the store
  * lists those the reader may read (#8277).
  *
- * Without that manifest — the application shell aggregating every published app, or a shell
- * generated before it existed — the store walks the registry tree once through the core repository
- * API and collects every `.../reports/<Name>/index.html` page. That API answers ADMINISTRATOR and
- * OPERATOR only, so for anyone else the walk finds nothing.
+ * The application shell aggregates every published app: one request to /services/platform/reports
+ * answers the same manifest shape for all of them, already filtered to the reports the reader may
+ * read (#8345).
+ *
+ * Without a manifest — a shell generated before it existed — the store walks the project's registry
+ * tree once through the core repository API and collects every `.../reports/<Name>/index.html` page.
+ * That API answers ADMINISTRATOR and OPERATOR only, so for anyone else the walk finds nothing.
+ *
+ * KPI widget values are loaded only when a dashboard asks for them (loadWidgets), never at boot: a
+ * deep link to a record must not pay for the dashboard's queries.
  */
 // Mirror of NamingHelper.sanitizeJavaIdentifier (the generation pipeline) — the rule that maps
 // a raw gen-folder name to the Java package folder the generated report controller lives under.
@@ -50,44 +56,55 @@ document.addEventListener('alpine:init', () => {
     selected: null, // the report shown embedded on the /reports page (chosen from the sidebar)
     loaded: false,
     widgetData: {}, // KPI widget value cache, keyed by report name: { loaded, value | rows | forbidden | error }
+    widgetsWanted: false, // a dashboard asked for the widget values before discovery finished
 
     init() { this.load(); },
 
     async load() {
       try {
-        // The application shell sets aggregateReports to collect reports from EVERY published app
-        // (walk the whole registry); a generated app lists its manifest, or, without one, walks only
-        // its own project's gen tree.
-        const aggregate = !!(App.config && App.config.aggregateReports);
-        const project = (App.config && App.config.projectName) || '';
-        const manifest = App.config && App.config.reports;
-        if (!aggregate && Array.isArray(manifest)) {
-          // Assigned once, after the probe, so a report the reader may not read never flashes in.
-          this.items = await this._readable(manifest.map(r => this._fromManifest(r, project)));
-          this.loaded = true;
-          return;
-        }
-        const base = aggregate
-          ? '/services/core/repository/registry/public'
-          : (project ? '/services/core/repository/registry/public/' + project + '/gen' : '');
-        if (!base) { this.loaded = true; return; }
-        const r = await fetch(base, {
-          headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
-        });
-        if (!r.ok) { this.loaded = true; return; }
-        const tree = await r.json();
-        const found = [];
-        this._walk(tree, found);
-        const seen = new Set();
-        this.items = found
-          .filter(x => { if (seen.has(x.url)) return false; seen.add(x.url); return true; })
-          .sort((a, b) => a.label.localeCompare(b.label));
-        this.loaded = true;
-        this._enrich();
+        await this._discover();
       } catch (e) {
         console.error('reports: discovery failed', e);
-        this.loaded = true;
       }
+      this.loaded = true;
+      if (this.widgetsWanted) this.loadWidgets();
+    },
+
+    async _discover() {
+      // The application shell sets aggregateReports to collect reports from EVERY published app (one
+      // server-side manifest); a generated app lists its own manifest, or, without one, walks only its
+      // own project's gen tree.
+      const aggregate = !!(App.config && App.config.aggregateReports);
+      const project = (App.config && App.config.projectName) || '';
+      const manifest = App.config && App.config.reports;
+      if (aggregate) {
+        const r = await fetch('/services/platform/reports', {
+          headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+        });
+        if (!r.ok) return;
+        this.items = (await r.json())
+          .map(it => this._fromManifest(it, it.project))
+          .sort((a, b) => a.label.localeCompare(b.label));
+        return;
+      }
+      if (Array.isArray(manifest)) {
+        // Assigned once, after the probe, so a report the reader may not read never flashes in.
+        this.items = await this._readable(manifest.map(r => this._fromManifest(r, project)));
+        return;
+      }
+      if (!project) return;
+      const r = await fetch('/services/core/repository/registry/public/' + project + '/gen', {
+        headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+      });
+      if (!r.ok) return;
+      const tree = await r.json();
+      const found = [];
+      this._walk(tree, found);
+      const seen = new Set();
+      this.items = found
+        .filter(x => { if (seen.has(x.url)) return false; seen.add(x.url); return true; })
+        .sort((a, b) => a.label.localeCompare(b.label));
+      await this._enrich();
     },
 
     // One App.config.reports entry as a store item: the same shape the walk and _enrich produce, so
@@ -159,10 +176,6 @@ document.addEventListener('alpine:init', () => {
       }));
       // Reassign so Alpine re-renders the sidebar / dashboard with the enriched items.
       this.items = [...this.items];
-      // The application shell dashboard renders report-attached KPI widgets directly from the store
-      // (a generated per-app dashboard drives its own KPI loading instead — see dashboardPage), so
-      // eagerly load the widget values only when aggregating across every published app.
-      if (App.config && App.config.aggregateReports) this.loadWidgets();
     },
 
     // --- Report-attached KPI widgets on the dashboard (reports[].widget). The value is loaded once
@@ -182,8 +195,11 @@ document.addEventListener('alpine:init', () => {
     // Load each KPI widget's value (memoized in widgetData); tiles render independently, an error on
     // one never blocks the rest. Pass force=true to re-pull already-loaded widgets — used when the
     // dashboard is re-entered so freshly entered records show without a full browser refresh; the
-    // current tile value is kept until the new one arrives (no skeleton flash on refresh).
+    // current tile value is kept until the new one arrives (no skeleton flash on refresh). The shells
+    // call it on entering the dashboard; called before discovery has finished, it is remembered and
+    // runs once the reports are known.
     async loadWidgets(force) {
+      if (!this.loaded) { this.widgetsWanted = true; return; }
       await Promise.all(this.items.filter(r => r.widget).map(async (r) => {
         if (this.widgetData[r.name] && !force) return;
         if (!this.widgetData[r.name]) this.widgetData[r.name] = { loaded: false };

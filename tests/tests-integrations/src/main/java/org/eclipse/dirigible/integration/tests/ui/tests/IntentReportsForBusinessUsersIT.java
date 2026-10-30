@@ -46,6 +46,11 @@ import com.codeborne.selenide.Selenide;
  * Reports section although the report itself answered them. The intent now generates the reports
  * into the shell's configuration: the user the report's {@code can:} grants sees its entry and its
  * KPI tile, one who may not read it sees neither, and no page asks the repository API anything.
+ *
+ * <p>
+ * The application shell, which aggregates every published app, reads the same manifest in one
+ * request to {@code /services/platform/reports}, filtered by the same read gate, and runs a KPI
+ * query only once its dashboard is shown - never on another route (#8345).
  */
 class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
 
@@ -55,6 +60,7 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
     private static final String APP = "/services/web/" + PROJECT + "/gen/shop/index.html#/";
     private static final String REPORT_CONTROLLER = "/services/java/" + PROJECT + "/gen/invoicetally/api/reports/InvoiceTallyController";
     private static final String PASSWORD = "secret";
+    private static final String SHELL = "/services/web/application/index.html";
 
     private static final String INTENT_YAML = """
             name: shop
@@ -80,6 +86,10 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
                   - { id: 1, number: INV-1 }
                   - { id: 2, number: INV-2 }
             """;
+
+    /** The requests the page made to the report's controller - its KPI query among them. */
+    private static final String CONTROLLER_REQUESTS =
+            "return performance.getEntriesByType('resource').map(e => e.name).filter(n => n.indexOf('/InvoiceTallyController') >= 0);";
 
     /** Whether the page ever requested anything from the core repository API. */
     private static final String REPOSITORY_REQUESTS =
@@ -126,6 +136,20 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible)
                 .shouldHave(Condition.text("2"));
         assertEquals(List.of(), Selenide.executeJavaScript(REPOSITORY_REQUESTS), "the shell lists its reports from its own configuration");
+
+        // The application shell, opened on another route than its dashboard, lists the report from
+        // the one aggregated manifest and runs no KPI query; entering the dashboard runs it.
+        openShell(viewer, "#/inbox");
+        assertEquals(List.of("InvoiceTally"), reportNames());
+        assertEquals(List.of(), Selenide.executeJavaScript(REPOSITORY_REQUESTS), "the application shell does not walk the registry");
+        assertEquals(List.of(), Selenide.executeJavaScript(CONTROLLER_REQUESTS), "no KPI query runs off the dashboard");
+        Selenide.executeJavaScript("window.location.hash = '#/dashboard';");
+        for (int i = 0; i < 80 && !Boolean.TRUE.equals(
+                Selenide.executeJavaScript("const d = Alpine.store('reports').widgetData.InvoiceTally; return !!(d && d.loaded);")); i++) {
+            Selenide.sleep(250);
+        }
+        assertEquals(2L, ((Number) Selenide.executeJavaScript("return Alpine.store('reports').widgetData.InvoiceTally.value;")).longValue(),
+                "the dashboard loads the KPI value");
         viewer.close();
 
         // The Clerk may not read the report: no entry, no Reports section, no tile.
@@ -139,6 +163,8 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
                             .findBy(Condition.text("Invoices on file"))
                             .exists(),
                 "nor the report's tile");
+        openShell(clerk, "#/inbox");
+        assertEquals(List.of(), reportNames(), "the application shell's manifest leaves out a report the reader may not read");
         clerk.close();
 
         // The administrator keeps seeing what they saw before.
@@ -154,11 +180,22 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
         // The sign-in redirect drops the fragment, so the route is opened again once the session exists.
         userIde.getBrowser()
                .openPath(APP);
+        waitForReports();
+        return userIde;
+    }
+
+    /** Opens the application shell on a route, in the signed-in session of the IDE. */
+    private static void openShell(IDE userIde, String route) {
+        userIde.getBrowser()
+               .openPath(SHELL + route);
+        waitForReports();
+    }
+
+    private static void waitForReports() {
         for (int i = 0; i < 80 && !Boolean.TRUE.equals(Selenide.executeJavaScript(
                 "return !!(window.Alpine && Alpine.store('reports') && Alpine.store('reports').loaded);")); i++) {
             Selenide.sleep(250);
         }
-        return userIde;
     }
 
     /** The names of the reports the open shell's store lists. */

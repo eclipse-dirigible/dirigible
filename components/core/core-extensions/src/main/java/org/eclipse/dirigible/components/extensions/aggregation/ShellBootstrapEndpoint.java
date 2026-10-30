@@ -31,8 +31,8 @@ import jakarta.servlet.http.HttpServletRequest;
 /**
  * What a shell reads to bootstrap: the aggregated extensions (perspectives, views, shells, menus,
  * editors, themes, projections, locales), the current user's name, the application languages and
- * country, and the branding script, which also tells whether the JavaScript engine is deployed -
- * answered without running a script.
+ * country, the reports the user may read, and the branding script, which also tells whether the
+ * JavaScript engine is deployed - answered without running a script.
  *
  * <p>
  * Each is served at its canonical path under {@code /services/platform/} and at the script URL that
@@ -88,6 +88,8 @@ class ShellBootstrapEndpoint {
 
     private final LocalesAggregator locales;
 
+    private final ReportsAggregator reports;
+
     private final ScriptEngineAvailability scriptEngine;
 
     /**
@@ -101,11 +103,12 @@ class ShellBootstrapEndpoint {
      * @param themes the themes aggregator
      * @param projections the projections aggregator
      * @param locales the locales aggregator
+     * @param reports the reports aggregator
      * @param scriptEngine whether the JavaScript engine is deployed, stated by the branding script
      */
     ShellBootstrapEndpoint(PerspectivesAggregator perspectives, ViewsAggregator views, ShellsAggregator shells, MenusAggregator menus,
             EditorsAggregator editors, ThemesAggregator themes, ProjectionsAggregator projections, LocalesAggregator locales,
-            ScriptEngineAvailability scriptEngine) {
+            ReportsAggregator reports, ScriptEngineAvailability scriptEngine) {
         this.perspectives = perspectives;
         this.views = views;
         this.shells = shells;
@@ -114,6 +117,7 @@ class ShellBootstrapEndpoint {
         this.themes = themes;
         this.projections = projections;
         this.locales = locales;
+        this.reports = reports;
         this.scriptEngine = scriptEngine;
     }
 
@@ -170,6 +174,16 @@ class ShellBootstrapEndpoint {
                                  .contentType(MediaType.TEXT_PLAIN)
                                  .body("Error while loading locale modules: " + e.getMessage());
         }
+    }
+
+    /**
+     * The standalone reports of every published application the caller may read, as one manifest - the
+     * application shell's Reports section and dashboard read it instead of walking the registry and
+     * fetching each {@code .report} (#8345).
+     */
+    @GetMapping(CANONICAL + "reports")
+    ResponseEntity<Object> reports() {
+        return json(reports.aggregate());
     }
 
     @GetMapping({CANONICAL + "user-name", SCRIPT_SERVICES + "user-name.js", PUBLIC_SCRIPT_SERVICES + "user-name.js"})

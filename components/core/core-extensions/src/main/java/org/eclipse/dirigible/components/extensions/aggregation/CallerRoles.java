@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.extensions.aggregation;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +39,22 @@ final class CallerRoles {
         }
         return roles.stream()
                     .anyMatch(role -> role != null && isUserInRole(role.toString()));
+    }
+
+    /**
+     * Whether the caller holds at least one role of a comma-separated list, as a generated controller's
+     * role gate decides it; a blank list gates nothing.
+     *
+     * @param roles the comma-separated roles, may be null
+     * @return whether the caller passes the gate
+     */
+    static boolean holdsAnyOf(String roles) {
+        if (roles == null || roles.isBlank()) {
+            return true;
+        }
+        return Arrays.stream(roles.split(","))
+                     .map(String::trim)
+                     .anyMatch(role -> !role.isEmpty() && isUserInRole(role));
     }
 
     /**
