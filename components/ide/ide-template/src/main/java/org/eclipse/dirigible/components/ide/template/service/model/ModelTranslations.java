@@ -71,6 +71,9 @@ final class ModelTranslations {
      */
     static final String CHECKS_CATALOG = "checks";
 
+    /** The entity-model catalog's sub-object the record-page banner texts live under (#8371). */
+    static final String BANNERS_CATALOG = "banners";
+
     /**
      * The fully qualified i18next key of an entry of this model's catalog -
      * {@code <project>:<catalog prefix>.<path>}, the form the generated views pass to {@code T()} and
@@ -282,6 +285,20 @@ final class ModelTranslations {
         Map<String, Object> checkMessages = checkMessages(model);
         if (!checkMessages.isEmpty()) {
             catalog.put(CHECKS_CATALOG, checkMessages);
+        }
+        // A record-page banner's sentence (#8371), under `banners.<Entity><n>`: translated, then filled.
+        Map<String, Object> bannerTexts = new LinkedHashMap<>();
+        for (Map<String, Object> entity : asMaps(model.get("entities"))) {
+            for (Map<String, Object> banner : asMaps(entity.get("banners"))) {
+                String key = str(banner, "key");
+                String text = str(banner, "text");
+                if (key != null && text != null && !text.isBlank()) {
+                    bannerTexts.put(key, text);
+                }
+            }
+        }
+        if (!bannerTexts.isEmpty()) {
+            catalog.put(BANNERS_CATALOG, bannerTexts);
         }
         // Per-record custom action labels and BPM user-task labels live under their own sub-objects,
         // because the views resolve them through those namespaces.
