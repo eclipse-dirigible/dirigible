@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,10 @@ import org.junit.jupiter.api.Test;
  * order, a required one refused empty, the literal and record defaults it opens with, and the
  * description and confirm text filled from the clicked record - a to-one by its display text. A
  * listed collection path (issue #8323) ticks the record's child rows and joins them in a text.
+ *
+ * <p>
+ * And the sentence an action with no {@code confirm} is asked (issue #8390), as every shell's
+ * confirm dialog renders it from the shipped catalog.
  */
 class CustomActionsCallIT {
 
@@ -75,6 +82,20 @@ class CustomActionsCallIT {
                                                                   key: 'Id', text: 'Name' } } } }""";
 
     private static final String TEAM = "{ Id: 4, Name: 'Platform', Lead: 7 }";
+
+    private static final String EN_US = "/META-INF/dirigible/application-core/i18n/en-US/shell.json";
+
+    /** The shells whose confirm dialog renders the store's sentence (issue #8390). */
+    private static final List<String> SHELLS = List.of("/META-INF/dirigible/application/index.html", "/META-INF/dirigible/admin/index.html",
+            "/META-INF/dirigible/partner/index.html", "/META-INF/dirigible/personal/index.html",
+            "/META-INF/dirigible/template-application-ui-harmonia-java/ui/shell/index.html.template");
+
+    /** A shell generated before #8390, which asks for the key with its old fallback. */
+    private static final String VINTAGE_SHELL = "/ShellRuntimeVintageIT/index.html";
+
+    /** The confirm dialog's body: the declared text, else the default sentence. */
+    private static final Pattern CONFIRM_BODY = Pattern.compile(
+            "x-text=\"([^\"]*(?:\\$store\\.customActions\\.confirmBody|'application-core:shell\\.customActions\\.confirmBody')[^\"]*)\"");
 
     @Test
     void aMultiselectIsSentAsAnArrayInOptionsOrder() throws Exception {
@@ -147,6 +168,57 @@ class CustomActionsCallIT {
             assertEquals("Archive Platform?|Led by Ann.", context.eval("js", "store.confirmText + '|' + store.dialogDescription")
                                                                  .asString());
         }
+    }
+
+    /**
+     * An action with no {@code confirm} is asked a sentence that is true for its kind (issue #8390): a
+     * {@code call} the plain question, a transition, a generated endpoint and a destructive action
+     * (first, whatever else it is) their own; a declared {@code confirm} still wins. Every shell's
+     * dialog renders it from the shipped catalog, and a shell generated before the change reads the
+     * plain question from the same key.
+     */
+    @Test
+    void theDefaultConfirmationFollowsTheAction() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "var __catalog = " + read(EN_US) + ";"
+                    + " window.T = function (key, fallback, options) { var node = __catalog;"
+                    + "   key.substring(key.indexOf(':') + 1).split('.').forEach(function (p) { node = node == null ? node : node[p]; });"
+                    + "   return String(typeof node === 'string' ? node : fallback).replace(/\\{\\{(\\w+)\\}\\}/g, function (m, n) { return options[n]; }); };");
+            String call = "{ label: 'Check carrier', call: { method: 'POST', path: '/services/x/{id}/check' } }";
+            String transition = "{ label: 'Ship', kind: 'transition', endpoint: '/services/x/ship' }";
+            String create = "{ label: 'Create invoice', endpoint: '/services/x/invoice' }";
+            String destructive = "{ label: 'Cancel order', kind: 'transition', endpoint: '/services/x/cancel', destructive: true }";
+            String declared = "{ label: 'Archive', confirm: 'Archive {name}?', call: { method: 'POST', path: '/services/x/{id}/archive' },"
+                    + " recordFields: { name: { property: 'Name' } } }";
+
+            for (String shell : SHELLS) {
+                String body = confirmBody(shell);
+                assertEquals("Run Check carrier for the selected record?", rendered(context, body, call), shell);
+                assertEquals("Run Ship for the selected record? This changes its status.", rendered(context, body, transition), shell);
+                assertEquals("Run Create invoice for the selected record? This creates new records.", rendered(context, body, create),
+                        shell);
+                assertEquals("Run Cancel order for the selected record? This cannot be undone.", rendered(context, body, destructive),
+                        shell);
+                assertEquals("Archive Platform?", rendered(context, body, declared), shell);
+            }
+            assertEquals("Run Check carrier for the selected record?", rendered(context, confirmBody(VINTAGE_SHELL), call));
+        }
+    }
+
+    /** The x-text of a shell's confirm dialog body. */
+    private static String confirmBody(String shell) throws Exception {
+        Matcher matcher = CONFIRM_BODY.matcher(read(shell));
+        if (!matcher.find()) {
+            throw new IllegalStateException("No confirm dialog body in " + shell);
+        }
+        return matcher.group(1);
+    }
+
+    /** What a confirm dialog body shows once the action is triggered on {@link #TEAM}. */
+    private static String rendered(Context context, String body, String action) {
+        context.eval("js", "store.trigger(" + action + ", 4, " + TEAM + ");");
+        return context.eval("js", "(function ($store) { return " + body + "; })({ customActions: store })")
+                      .asString();
     }
 
     private static final String CHANGE_SKILLS =

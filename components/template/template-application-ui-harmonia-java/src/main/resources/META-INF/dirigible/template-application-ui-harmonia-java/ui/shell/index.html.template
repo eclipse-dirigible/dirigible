@@ -362,7 +362,7 @@
           <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><svg role="presentation" x-h-lucide data-lucide="x"></svg></button>
         </div>
         <div x-h-dialog-content>
-          <p x-h-text.muted x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) ? $store.customActions.confirmText : T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"></p>
+          <p x-h-text.muted x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.confirm) ? $store.customActions.confirmText : $store.customActions.confirmBody"></p>
         </div>
         <div x-h-dialog-footer>
           <button x-h-button data-variant="transparent" @click="$store.customActions.cancelConfirm()" :disabled="$store.customActions.confirmBusy" x-text="T('application-core:shell.customActions.confirmCancel', 'Cancel')"></button>
