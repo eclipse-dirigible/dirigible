@@ -247,6 +247,34 @@ document.addEventListener('alpine:init', () => {
       return Boolean(action && action.destructive);
     },
 
+    // The confirm dialog's sentence for the action being confirmed when it declares no `confirm`
+    // (issue #8390): what the platform knows the action does, first match wins. A destructive action
+    // cannot be undone, a transition changes the record's status, a generated `endpoint` (create-from
+    // / generate) creates new records. A `call` reaches the application's own endpoint, whose effect
+    // only its author knows - they declare `confirm` - so it gets the plain question. A getter, so the
+    // markup passes nothing; `confirmBody` keeps its key, so a shell generated before this reads the
+    // plain question too.
+    get confirmBody() {
+      const action = this.confirmAction;
+      const options = { name: (action && action.label) || '' };
+      if (this.isDestructive(action)) {
+        return this.t('shell.customActions.confirmBodyDestructive', 'Run {{name}} for the selected record? This cannot be undone.', options);
+      }
+      if (action && action.kind === 'transition') {
+        return this.t('shell.customActions.confirmBodyTransition', 'Run {{name}} for the selected record? This changes its status.', options);
+      }
+      if (action && action.endpoint) {
+        return this.t('shell.customActions.confirmBodyCreate', 'Run {{name}} for the selected record? This creates new records.', options);
+      }
+      return this.t('shell.customActions.confirmBody', 'Run {{name}} for the selected record?', options);
+    },
+
+    /** Translate a shell key, with {{name}} placeholders; the fallback where the page carries no i18n service. */
+    t(key, fallback, options) {
+      if (typeof window.T === 'function') return T('application-core:' + key, fallback, options);
+      return String(fallback).replace(/\{\{(\w+)\}\}/g, (match, name) => (options && name in options ? options[name] : match));
+    },
+
     // Trigger a contributed action. Two flavours, decided by the descriptor:
     //   - `endpoint` present: POST the selected record's id to a server endpoint (a create-from /
     //     generate action) AFTER an explicit confirmation, then toast the result and raise
