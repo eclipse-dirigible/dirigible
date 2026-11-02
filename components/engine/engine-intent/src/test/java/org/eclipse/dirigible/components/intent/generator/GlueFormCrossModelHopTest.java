@@ -94,7 +94,7 @@ class GlueFormCrossModelHopTest {
 
         assertEquals(1, resolvers.size(), "the form's one-hop path must drive one resolver, got: " + resolvers);
         Map<String, Object> resolver = resolvers.get(0);
-        assertEquals("ResolveCustomerEmail", resolver.get("handler"));
+        assertEquals("ResolveSalesInvoiceCustomerEmail", resolver.get("handler"));
         assertEquals("Customer_email", resolver.get("variable"));
         assertEquals("Customer", resolver.get("fkProperty"));
         assertEquals("Email", resolver.get("targetField"));

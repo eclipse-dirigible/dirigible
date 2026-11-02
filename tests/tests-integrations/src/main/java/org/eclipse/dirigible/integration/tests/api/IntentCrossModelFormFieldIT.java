@@ -121,7 +121,7 @@ class IntentCrossModelFormFieldIT extends IntegrationTest {
 
         // The resolver behind the control loads the OWNER's record. Its package is the one fact only the
         // owner model carries; a guessed one fails the whole client-Java batch.
-        String resolver = contentOf(CONSUMER, "gen/events/xmfinvoices/ResolveCustomerEmail.java");
+        String resolver = contentOf(CONSUMER, "gen/events/xmfinvoices/ResolveSalesInvoiceCustomerEmail.java");
         assertTrue(resolver.contains("import gen.xmfcustomers.data.customer.CustomerEntity;"),
                 "the related record is the OWNER's entity: " + resolver);
         assertTrue(resolver.contains("import gen.xmfcustomers.data.customer.CustomerRepository;"),
@@ -130,7 +130,7 @@ class IntentCrossModelFormFieldIT extends IntegrationTest {
                 "the field must be published as the variable the form control binds to: " + resolver);
 
         // The step that needs it, and the control that shows it.
-        assertTrue(contentOf(CONSUMER, "SendFlow.bpmn").contains("ResolveCustomerEmail"),
+        assertTrue(contentOf(CONSUMER, "SendFlow.bpmn").contains("ResolveSalesInvoiceCustomerEmail"),
                 "the resolver must be inserted before the user task");
         String form = contentOf(CONSUMER, "SendSalesInvoice.form");
         assertTrue(form.contains("\"Customer_email\""), "the form control must bind the resolved variable: " + form);
