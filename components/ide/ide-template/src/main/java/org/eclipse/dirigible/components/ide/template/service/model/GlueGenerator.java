@@ -50,11 +50,12 @@ class GlueGenerator {
     private static final String REPORT_PERSPECTIVE = "Reports";
 
     /** The names of the collections this generator handles. */
-    private static final List<String> COLLECTIONS = List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits",
-            "aborts", "deleteAborts", "setters", "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages",
-            "inboundFiles", "imports", "outbound", "exports", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements",
-            "settlementListeners", "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "sends", "posts",
-            "aggregates", "postings", "postingReopens", "printFeeders", "snapshots", "numbering", "resolves");
+    private static final List<String> COLLECTIONS =
+            List.of("triggers", "resolvers", "fieldLoaders", "assignees", "timerLoaders", "waits", "aborts", "deleteAborts", "setters",
+                    "writers", "notifications", "schedules", "integrations", "inbound", "inboundMessages", "inboundFiles", "imports",
+                    "outbound", "exports", "stepEvents", "rollups", "expansions", "expansionCleanups", "settlements", "settlementListeners",
+                    "settlementCleanups", "generates", "generateEvents", "generateReopens", "transitions", "personalTransitions", "sends",
+                    "posts", "aggregates", "postings", "postingReopens", "printFeeders", "snapshots", "numbering", "resolves");
 
     /** The renderer. */
     private final ModelTemplateRenderer renderer;
@@ -125,6 +126,9 @@ class GlueGenerator {
             case "generates", "generateEvents", "generateReopens" -> each(collection, source, content, model, parameters,
                     GlueGenerator::bindGenerate);
             case "transitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindTransition);
+            // The owner's run from the personal surface (issue #8406): the same descriptor and the same
+            // template as the power run, bound with the personal scope on top.
+            case "personalTransitions" -> each(collection, source, content, model, parameters, GlueGenerator::bindPersonalTransition);
             case "sends" -> each(collection, source, content, model, parameters, GlueGenerator::bindSend);
             case "posts" -> each(collection, source, content, model, parameters, GlueGenerator::bindPost);
             // The reopen sweep renders from the posting it re-runs (#7703), so the two cannot
@@ -193,17 +197,28 @@ class GlueGenerator {
         // A descriptor written before the key type was recorded is an intent-generated one, whose keys
         // are integers.
         context.put("keyParse", keyParse(str(item, "keyType")));
-        // The identity repository the listener resolves a personal task assignee through. A
-        // cross-model target resolves against the owner model's generation folder.
+        // The identity repository the listener resolves a personal task assignee through.
         if (truthy(item, "personalFkProperty")) {
-            String genFolder =
-                    truthy(item, "personalCrossModel") ? sanitize(item, "personalTargetModel") : str(parameters, "javaGenFolderName");
-            context.put("personalIdentityRepositoryClass", "gen." + genFolder + ".data." + sanitize(item, "personalTargetPerspective") + "."
-                    + str(item, "personalTargetEntity") + "Repository");
+            context.put("personalIdentityRepositoryClass", personalIdentityRepositoryClass(item, parameters));
         } else {
             context.remove("personalIdentityRepositoryClass");
         }
         context.put("relationLinks", relationLinks(item.get("relationLinks"), parameters));
+    }
+
+    /**
+     * The repository of the identity entity an entry's personal owner relation points at. A cross-model
+     * target resolves against the owner model's generation folder.
+     *
+     * @param item the descriptor carrying the personal owner coordinates
+     * @param parameters the generation parameters
+     * @return the fully qualified repository class
+     */
+    private static String personalIdentityRepositoryClass(Map<String, Object> item, Map<String, Object> parameters) {
+        String genFolder =
+                truthy(item, "personalCrossModel") ? sanitize(item, "personalTargetModel") : str(parameters, "javaGenFolderName");
+        return "gen." + genFolder + ".data." + sanitize(item, "personalTargetPerspective") + "." + str(item, "personalTargetEntity")
+                + "Repository";
     }
 
     /**
@@ -1126,6 +1141,22 @@ class GlueGenerator {
         bindNotifyOutcome(item, context, parameters);
         bindAttachLanguage(item, context, parameters);
         bindAttachReport(item, context);
+        context.put("personalSurface", "false");
+    }
+
+    /**
+     * Binds the personal run of a transition (issue #8406) - the power binding, scoped to the caller's
+     * identity record through the entity's personal owner relation instead of gated by its write roles.
+     *
+     * @param item the descriptor
+     * @param context the template context
+     * @param parameters the generation parameters
+     */
+    private static void bindPersonalTransition(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
+        bindTransition(item, context, parameters);
+        copy(context, item, "personalFkProperty", "personalIdentityProperty");
+        context.put("personalIdentityRepositoryClass", personalIdentityRepositoryClass(item, parameters));
+        context.put("personalSurface", "true");
     }
 
     /**

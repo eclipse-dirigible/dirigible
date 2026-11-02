@@ -48,6 +48,10 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}MyController',
     // The personal items controller (composition child inherits the personal scope one hop).
     itemsApiPath: '/${javaPerspectiveName}/${documentItemsEntity}MyController',
+    // Entity name used to match the actions contributed for the personal surface ($store.customActions).
+    caView: '${name}',
+    // Whether init() wired the re-read after a document action - init() runs again on the guard's Discard.
+    actionDoneWired: false,
 
     // Role-scoped line-item columns withheld from this caller (see init).
     itemRestricted: [],
@@ -100,6 +104,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+      // A document action moved this document (#8406): read it again, its status and what it accepts now.
+      if (!this.actionDoneWired) {
+        this.actionDoneWired = true;
+        this.onActionDone(() => this.reloadForm());
+      }
 #if($hasRestrictedFields)
       // Role-scoped fields (intent `visibleTo:`): this surface's own controller strips them from the
       // document and ignores them on writes, so the header form and the totals hide them too.
@@ -206,6 +215,26 @@ document.addEventListener('alpine:init', () => {
     // The guard dialog's Discard when the user is STAYING on the page: re-read the document.
     async reloadForm() {
       await this.init();
+    },
+
+    // ----- The document's own actions on the personal surface (#8406) ----------------------------
+    // Only those contributed for this surface - their endpoints are scoped to the caller's own
+    // records - and only once the stored document is on screen: the store fails OPEN on a status it
+    // does not have, so an action offered while the document loads could be refused when clicked.
+    personalActions() {
+      const store = Alpine.store('customActions');
+      if (!store || this.mode !== 'edit' || this.state !== 'default') return [];
+      return store.getActions(this.caView, 'entity', this.record, 'my');
+    },
+    recordActions() {
+      return this.personalActions().filter((a) => !Alpine.store('customActions').isDestructive(a));
+    },
+    // The document's destructive actions (#8364): the menu's last group, in red.
+    destructiveRecordActions() {
+      return this.personalActions().filter((a) => Alpine.store('customActions').isDestructive(a));
+    },
+    runRecordAction(action) {
+      Alpine.store('customActions').trigger(action, this.id, this.record);
     },
 
     queryParam(name) {

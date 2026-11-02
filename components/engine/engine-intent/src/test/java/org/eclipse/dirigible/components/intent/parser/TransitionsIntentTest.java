@@ -201,6 +201,70 @@ class TransitionsIntentTest {
                 "got: " + ex2.getIssues());
     }
 
+    /** A leave request its employee owns through a personal relation (#8406). */
+    private static final String PERSONAL = """
+            name: vacations
+            entities:
+              - name: Employee
+                identity: email
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string, unique: true }
+              - name: VacationStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: VacationRequest
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                  - { name: Status, kind: manyToOne, to: VacationStatus, function: EntityStatus, init: 1 }
+            transitions:
+              - { name: WithdrawVacationRequest, forEntity: VacationRequest, from: [2, 3], setStatus: 6, personal: true }
+            """;
+
+    /** {@code personal: true} (#8406): opt-in, and kept on the model for the generators. */
+    @Test
+    void aPersonalTransitionParses() {
+        assertTrue(IntentParser.parse(PERSONAL)
+                               .getTransitions()
+                               .get(0)
+                               .isPersonal());
+        assertFalse(IntentParser.parse(PERSONAL.replace("setStatus: 6, personal: true }", "setStatus: 6 }"))
+                                .getTransitions()
+                                .get(0)
+                                .isPersonal(),
+                "personal is opt-in");
+    }
+
+    /**
+     * The personal surface is scoped by the entity's own personal relation - without one there is none.
+     */
+    @Test
+    void aPersonalTransitionOnAnEntityWithoutAPersonalRelationIsRefused() {
+        String yaml = PERSONAL.replace("required: true, personal: true }", "required: true }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("transition [WithdrawVacationRequest] declares personal but the entity [VacationRequest]"
+                             + " has no personal: true relation")),
+                "got: " + ex.getIssues());
+    }
+
+    /** A see-only personal surface never writes - a status change included. */
+    @Test
+    void aPersonalTransitionOnAReadOnlyPersonalSurfaceIsRefused() {
+        String yaml = PERSONAL.replace("required: true, personal: true }", "required: true, personal: true, personalReadOnly: true }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("transition [WithdrawVacationRequest] declares personal but the personal surface of"
+                             + " [VacationRequest] is personalReadOnly")),
+                "got: " + ex.getIssues());
+    }
+
     @Test
     void rejectsDuplicateNames() {
         String yaml = VALID + """

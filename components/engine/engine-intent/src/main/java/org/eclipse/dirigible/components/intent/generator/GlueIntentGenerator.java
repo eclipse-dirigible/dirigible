@@ -205,6 +205,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                              .filter(entry -> Boolean.TRUE.equals(entry.get("hasReopen")))
                                              .toList());
         glue.put("transitions", transitions);
+        // The personal subset (issue #8406), filtered from the same descriptors so the owner's run and
+        // the power one cannot disagree about the guards and the write: a transition opted into the
+        // personal surface gets a second controller, and one file per entry is the collection contract.
+        glue.put("personalTransitions", transitions.stream()
+                                                   .filter(entry -> Boolean.TRUE.equals(entry.get("personal")))
+                                                   .toList());
         glue.put("sends", sends);
         glue.put("postings", postings);
         glue.put("postingReopens", postingReopens);
@@ -266,7 +272,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // What a task of this process is ABOUT, wherever it is listed away from its own
             // application: the property names the reader resolves live against the record (#7077).
             trigger.put("subjectFields", TaskSubjectSupport.subjectFields(byName.get(entity)));
-            putPersonalAssignee(trigger, byName.get(entity), model, byName, compositionParents, context);
+            putPersonalOwner(trigger, byName.get(entity), model, byName, compositionParents, context);
             triggers.add(trigger);
         }
         return triggers;
@@ -413,8 +419,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return key == null || key.getType() == null ? "integer" : key.getType();
     }
 
-    private static void putPersonalAssignee(Map<String, Object> trigger, EntityIntent owner, IntentModel model,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {
+    /**
+     * The owner's {@code personal: true} relation as an entry carries it: the FK property plus the
+     * identity target's coordinates - what a trigger resolves its personal assignee through, and what a
+     * personal transition (#8406) resolves the caller's identity record through.
+     */
+    private static void putPersonalOwner(Map<String, Object> entry, EntityIntent owner, IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentGenerationContext context) {
         if (owner == null || owner.getRelations() == null) {
             return;
         }
@@ -422,24 +433,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (!relation.isPersonal()) {
                 continue;
             }
-            trigger.put("personalFkProperty", IntentNaming.pascalCase(relation.getName()));
-            trigger.put("personalTargetEntity", relation.getTo());
+            entry.put("personalFkProperty", IntentNaming.pascalCase(relation.getName()));
+            entry.put("personalTargetEntity", relation.getTo());
             boolean crossModel = relation.getModel() != null && !relation.getModel()
                                                                          .isBlank();
-            trigger.put("personalCrossModel", crossModel);
+            entry.put("personalCrossModel", crossModel);
             if (crossModel) {
                 UsesIntent uses = findUses(model, relation.getModel());
                 CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, relation.getTo());
-                trigger.put("personalTargetModel", relation.getModel());
-                trigger.put("personalIdentityProperty",
+                entry.put("personalTargetModel", relation.getModel());
+                entry.put("personalIdentityProperty",
                         target != null && target.identityProperty() != null ? target.identityProperty() : "Email");
-                trigger.put("personalTargetPerspective", target != null ? target.perspectiveName() : relation.getTo());
+                entry.put("personalTargetPerspective", target != null ? target.perspectiveName() : relation.getTo());
             } else {
                 EntityIntent target = byName.get(relation.getTo());
-                trigger.put("personalTargetModel", "");
-                trigger.put("personalIdentityProperty",
+                entry.put("personalTargetModel", "");
+                entry.put("personalIdentityProperty",
                         target != null && target.getIdentity() != null ? IntentNaming.pascalCase(target.getIdentity()) : "Email");
-                trigger.put("personalTargetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
+                entry.put("personalTargetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             }
             return;
         }
@@ -1898,6 +1909,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // process step authors. Fail-soft in the generated controller: the flip is the contract.
             e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
                     "Transition [" + t.getName() + "] notify"));
+            if (t.isPersonal()) {
+                // The owner's run from the personal surface (#8406): scoped to the caller's identity
+                // record through the entity's personal relation, as its personal controller is.
+                e.put("personal", true);
+                putPersonalOwner(e, entity, model, byName, compositionParents, context);
+            }
             out.add(e);
         }
         return out;

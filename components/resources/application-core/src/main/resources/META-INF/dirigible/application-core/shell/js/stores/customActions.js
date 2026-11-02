@@ -39,6 +39,10 @@
  *   $store.customActions.getActions(view, 'page')            -> the view's toolbar actions
  *   $store.customActions.getActions(view, 'entity', record)  -> the view's per-record actions, minus
  *                                                               those the record's status bars
+ *   $store.customActions.getActions(view, 'entity', record, 'my')
+ *                                                            -> the same on the personal surface: only
+ *                                                               the actions whose descriptor declares
+ *                                                               `surface: 'my'`
  *   $store.customActions.trigger(action, id, record)         -> open the action page in the app-wide
  *                                                               dialog (an entity action passes the
  *                                                               record id as ?id=); the optional record
@@ -180,9 +184,14 @@ document.addEventListener('alpine:init', () => {
     // carrying a live "Generate Invoice" button). Callers that have the row - every generated view
     // does - should pass it; one that has none sees exactly what it saw before, the server's own
     // refusal staying the contract.
-    getActions(view, type, record) {
+    //
+    // `surface` (optional) is the generated surface asking (issue #8406): the personal pages pass
+    // 'my', the power pages pass nothing. A descriptor declares the surface its endpoint serves - a
+    // transition the owner runs on their own record contributes one with `surface: 'my'`, scoped to
+    // the caller's records - so each page lists only the actions whose endpoint answers it.
+    getActions(view, type, record, surface) {
       return (this.actions || []).filter((a) =>
-        a && a.view === view &&
+        a && a.view === view && (a.surface || '') === (surface || '') &&
         (type === 'entity' ? a.type === 'entity'
                            : (a.type === 'page' || a.type === undefined || a.type === null)) &&
         this.appliesTo(a, record) && this.isAvailable(a, record));

@@ -50,6 +50,12 @@ import org.springframework.stereotype.Component;
  * transition is always per-record ({@code type: entity}) - a whole-view status flip has no meaning.
  *
  * <p>
+ * A {@code personal: true} transition (#8406) contributes a second pair,
+ * {@code <name>-transition-my-action}, whose descriptor carries {@code surface: "my"} and the
+ * endpoint of the personal run ({@code <ClassName>TransitionMy/run}): the personal pages offer it
+ * on the owner's own records, the power pages never list it.
+ *
+ * <p>
  * Idempotent: identical input always produces byte-identical output. The {@code .extension} files
  * are intent-owned, so a transition removed from the intent is scrubbed on the next Generate.
  */
@@ -78,20 +84,30 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Skipping transition with no name");
                 continue;
             }
-            String fileBase = name + "-transition-action";
-            String modulePath = project + "/" + fileBase + ".json";
-            context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, t));
-            context.writeModelFile(fileBase + ".json", buildDescriptorModule(project, IntentNaming.javaModule(context), t,
-                    IntentNaming.customActionTranslationKey(project, context, name), statusProperty(model, t.getForEntity())));
+            String translationKey = IntentNaming.customActionTranslationKey(project, context, name);
+            String statusProperty = statusProperty(model, t.getForEntity());
+            writeAction(context, project, name + "-transition-action",
+                    buildDescriptorModule(project, IntentNaming.javaModule(context), t, translationKey, statusProperty, false),
+                    "Transition [" + name + "] on [" + t.getForEntity() + "]");
+            if (t.isPersonal()) {
+                // The owner's run from the personal surface (#8406): a descriptor of its own, because
+                // its endpoint is another controller - one scoped to the caller's own records - and a
+                // page offers only the actions whose endpoint answers it.
+                writeAction(context, project, name + "-transition-my-action",
+                        buildDescriptorModule(project, IntentNaming.javaModule(context), t, translationKey, statusProperty, true),
+                        "Transition [" + name + "] on [" + t.getForEntity() + "], personal surface");
+            }
         }
     }
 
-    private static String buildExtensionJson(String project, String modulePath, TransitionIntent t) {
+    private static void writeAction(IntentGenerationContext context, String project, String fileBase, String descriptor,
+            String description) {
         Map<String, Object> extension = new LinkedHashMap<>();
-        extension.put("module", modulePath);
+        extension.put("module", project + "/" + fileBase + ".json");
         extension.put("extensionPoint", project + "-custom-action");
-        extension.put("description", "Transition [" + t.getName() + "] on [" + t.getForEntity() + "]");
-        return JsonHelper.toJson(extension);
+        extension.put("description", description);
+        context.writeModelFile(fileBase + ".extension", JsonHelper.toJson(extension));
+        context.writeModelFile(fileBase + ".json", descriptor);
     }
 
     /**
@@ -116,17 +132,22 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t, String translationKey,
-            String statusProperty) {
+            String statusProperty, boolean personal) {
         Map<String, Object> view = new LinkedHashMap<>();
-        view.put("id", project + "-" + t.getForEntity() + "-" + t.getName());
+        view.put("id", project + "-" + t.getForEntity() + "-" + t.getName() + (personal ? "-my" : ""));
         String label = IntentNaming.customActionLabel(t.getName(), t.getLabel());
         view.put("label", label);
         // The renderer shows T(translation.key, label) - untranslated apps keep the raw label.
         view.put("translation", Map.of("key", translationKey));
         // The server controller (server half) is served under gen/events; NOT the entity api base.
         view.put("endpoint", "/services/java/" + project + "/gen/events/" + javaModule + "/" + IntentNaming.pascalIdentifier(t.getName())
-                + "Transition/run");
+                + (personal ? "TransitionMy/run" : "Transition/run"));
         view.put("view", t.getForEntity());
+        if (personal) {
+            // The surface the action is offered on (#8406): the personal pages ask for it, and the power
+            // pages - which ask for none - never list it.
+            view.put("surface", "my");
+        }
         view.put("type", "entity");
         // A status flip is not a create: the shell words its toast from `kind` rather than reporting
         // "Created <ref>" for a record that already existed (dirigible #7073).

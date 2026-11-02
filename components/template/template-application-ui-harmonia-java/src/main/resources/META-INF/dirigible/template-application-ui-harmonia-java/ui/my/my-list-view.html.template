@@ -48,17 +48,43 @@
             <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''"
                 x-text="T(col.tkey, col.label)"></th>
           </template>
+          <th x-h-table-head scope="col" class="w-12" data-col-actions data-sticky="end" x-show="hasRowActions"><span class="sr-only" x-text="T('$projectName:${tprefix}.aria.tableRowMenu', 'Table Row Menu')"></span></th>
         </tr>
       </thead>
       <tbody x-h-table-body>
         <template x-for="row in items" :key="row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end">
-          <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="openEntity(row)">
+          <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="rowClicked($event, row)">
             <template x-for="col in columns" :key="col.name">
               <td x-h-table-cell :class="col.number ? 'text-right' : ''">
                 <template x-if="col.status"><span x-h-badge :data-variant="statusVariant(statusText(row), row[col.name])" x-text="statusText(row)"></span></template>
                 <template x-if="!col.status"><span x-text="display(row, col)"></span></template>
               </td>
             </template>
+            <!-- The row's own actions on the personal surface (#8406) - a transition its owner runs on
+                 it - only those its status accepts, and only when it has any. -->
+            <td x-h-table-cell data-row-actions data-sticky="end" class="text-right" x-show="hasRowActions">
+              <template x-if="rowActions(row).length || rowDestructiveActions(row).length">
+                <span class="inline-flex">
+                  <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
+                    <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+                  </button>
+                  <ul x-h-menu data-align="bottom-end">
+                    <template x-for="action in rowActions(row)" :key="action.id">
+                      <li x-h-menu-item @click="runRowAction(action, row)"
+                          x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                    </template>
+                    <!-- The destructive ones (#8364) last, after a separator, in red. -->
+                    <template x-if="rowActions(row).length &amp;&amp; rowDestructiveActions(row).length">
+                      <li x-h-menu-separator></li>
+                    </template>
+                    <template x-for="action in rowDestructiveActions(row)" :key="action.id">
+                      <li x-h-menu-item data-variant="negative" @click="runRowAction(action, row)"
+                          x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></li>
+                    </template>
+                  </ul>
+                </span>
+              </template>
+            </td>
           </tr>
         </template>
       </tbody>

@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.util.List;
 import java.util.Map;
@@ -77,5 +78,50 @@ class GlueTransitionsTest {
         // Rendered as the empty guardExpr, so the template's #if($guardExpr != "") renders nothing.
         assertEquals("", GlueRendering.transitionGuard(t));
         assertEquals("", t.get("guardText"));
+    }
+
+    /**
+     * A personal transition (#8406) carries what its personal run is scoped by: the owner relation's FK
+     * and the identity entity the caller is matched against - the coordinates a trigger's personal
+     * assignee is resolved through.
+     */
+    @Test
+    void aPersonalTransitionCarriesItsOwnerRelation() {
+        IntentModel model = IntentParser.parse("""
+                name: vacations
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string, unique: true }
+                  - name: VacationStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                      - { name: Status, kind: manyToOne, to: VacationStatus, function: EntityStatus, init: 1 }
+                transitions:
+                  - { name: WithdrawVacationRequest, forEntity: VacationRequest, from: [2, 3], setStatus: 6, personal: true }
+                  - { name: CancelVacationRequest, forEntity: VacationRequest, from: [1], setStatus: 7 }
+                """);
+        List<Map<String, Object>> transitions = GlueIntentGenerator.buildTransitionsForTest(model);
+
+        Map<String, Object> personal = transitions.get(0);
+        assertEquals(Boolean.TRUE, personal.get("personal"));
+        assertEquals("Employee", personal.get("personalFkProperty"));
+        assertEquals("Employee", personal.get("personalTargetEntity"));
+        assertEquals("Email", personal.get("personalIdentityProperty"));
+        assertEquals(Boolean.FALSE, personal.get("personalCrossModel"));
+
+        // The power-only transition is the descriptor it always was.
+        Map<String, Object> power = transitions.get(1);
+        assertFalse(power.containsKey("personal"), power.toString());
+        assertFalse(power.containsKey("personalFkProperty"), power.toString());
     }
 }

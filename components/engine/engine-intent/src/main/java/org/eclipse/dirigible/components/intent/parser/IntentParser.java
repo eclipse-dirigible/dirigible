@@ -12421,6 +12421,9 @@ public final class IntentParser {
                     issues.add(subject + " requires the entity [" + entity.getName()
                             + "] to declare a function: EntityStatus relation - the transition writes the status");
                 }
+                if (t.isPersonal()) {
+                    validatePersonalTransition(subject, entity, issues);
+                }
             }
             if (t.getFrom() == null || t.getFrom()
                                         .isEmpty()) {
@@ -12454,6 +12457,30 @@ public final class IntentParser {
             // Optional outbound mail after the flip ("on Void, mail the counterparty"), about the
             // transitioned record itself.
             validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, true, issues);
+        }
+    }
+
+    /**
+     * {@code personal: true} on a transition (#8406) runs it from the owner's personal surface, scoped
+     * by the entity's own {@code personal: true} relation - so the entity must declare one, and its
+     * surface must accept writes: a {@code personalReadOnly} owner may see the record, never move it.
+     */
+    private static void validatePersonalTransition(String subject, EntityIntent entity, List<String> issues) {
+        RelationIntent owner = null;
+        if (entity.getRelations() != null) {
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.isPersonal()) {
+                    owner = relation;
+                    break;
+                }
+            }
+        }
+        if (owner == null) {
+            issues.add(subject + " declares personal but the entity [" + entity.getName()
+                    + "] has no personal: true relation - the personal surface is scoped by its owner relation");
+        } else if (owner.isPersonalReadOnly()) {
+            issues.add(subject + " declares personal but the personal surface of [" + entity.getName()
+                    + "] is personalReadOnly - its owner may see the record, never change its status");
         }
     }
 

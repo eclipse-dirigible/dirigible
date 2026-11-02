@@ -61,6 +61,27 @@
     <div x-h-toolbar-spacer></div>
     <!-- Unsaved-changes marker (issue #7359): a dirty form used to look exactly like a saved one. -->
     <span x-h-badge class="shrink-0" data-variant="warning" x-show="isDirty()" x-text="T('$projectName:${tprefix}.messages.unsavedChanges', 'Unsaved changes')"></span>
+    <!-- The document's own actions on the personal surface (#8406) - a transition its owner runs on it -
+         once the document is on screen, only those its status accepts, and only when it has any. -->
+    <button type="button" x-h-button data-variant="outline" data-size="icon" class="shrink-0" x-h-menu-trigger.dropdown :aria-label="T('$projectName:${tprefix}.defaults.moreActions', 'More actions')" x-show="recordActions().length || destructiveRecordActions().length">
+      <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
+    </button>
+    <ul x-h-menu data-align="bottom-end">
+      <template x-for="action in recordActions()" :key="action.id">
+        <li x-h-menu-item @click="runRecordAction(action)">
+          <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+        </li>
+      </template>
+      <!-- The destructive ones (#8364) last, after a separator, in red. -->
+      <template x-if="recordActions().length &amp;&amp; destructiveRecordActions().length">
+        <li x-h-menu-separator></li>
+      </template>
+      <template x-for="action in destructiveRecordActions()" :key="action.id">
+        <li x-h-menu-item data-variant="negative" @click="runRecordAction(action)">
+          <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+        </li>
+      </template>
+    </ul>
 #if(!$personalReadOnly)
     <!-- Delete (edit only), then Cancel/Discard + Save. A personal read-only surface has no write
          action - only the Back below. -->
