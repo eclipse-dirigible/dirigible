@@ -412,7 +412,10 @@
     },
     "customActions": {
       "confirmTitle": "Run action",
-      "confirmBody": "Run {{name}} for the selected record? This creates or changes data.",
+      "confirmBody": "Run {{name}} for the selected record?",
+      "confirmBodyDestructive": "Run {{name}} for the selected record? This cannot be undone.",
+      "confirmBodyTransition": "Run {{name}} for the selected record? This changes its status.",
+      "confirmBodyCreate": "Run {{name}} for the selected record? This creates new records.",
       "confirmCancel": "Cancel",
       "confirmRun": "Run",
       "promptTitle": "Run action",

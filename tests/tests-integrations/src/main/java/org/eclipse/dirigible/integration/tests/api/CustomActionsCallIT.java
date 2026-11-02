@@ -13,6 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -29,16 +32,38 @@ import org.junit.jupiter.api.Test;
  * order, a required one refused empty, the literal and record defaults it opens with, and the
  * description and confirm text filled from the clicked record - a to-one by its display text. A
  * listed collection path (issue #8323) ticks the record's child rows and joins them in a text.
+ *
+ * <p>
+ * And the sentence an action with no {@code confirm} is asked (issue #8390), as every shell's
+ * confirm dialog renders it from the shipped catalog.
  */
 class CustomActionsCallIT {
 
     private static final String STORE = "/META-INF/dirigible/application-core/shell/js/stores/customActions.js";
+
+    private static final String API_ERRORS = "/META-INF/dirigible/application-core/shell/js/services/apiError.js";
+
+    private static final String FORM_VALIDATION = "/META-INF/dirigible/application-core/shell/js/services/formValidation.js";
+
+    /** The "Send trial" dialog of #8366: a lookup typed by its key, an email and a select. */
+    private static final String TRIAL =
+            """
+                    { label: 'Send trial', view: 'Customer', type: 'entity',
+                      call: { method: 'POST', path: '/services/java/shop/custom/api/TrialApi/customers/{id}/trials',
+                              body: { productId: '{product}', email: '{email}', plan: '{plan}' } },
+                      prompt: [ { name: 'product', required: true }, { name: 'email', required: true }, { name: 'plan', required: false } ],
+                      promptColumns: [ { name: 'product', label: 'Product', widget: 'DROPDOWN', keyType: 'number',
+                                         lookup: { url: '/services/java/shop/gen/shop/api/product/ProductController', key: 'Id', text: 'Name' } },
+                                       { name: 'email', label: 'Recipient', widget: 'EMAIL' },
+                                       { name: 'plan', label: 'Plan', widget: 'DROPDOWN', default: 'Basic',
+                                         options: [ { value: 'Basic', label: 'Basic' }, { value: 'Pro', label: 'Pro', help: 'Includes priority support' } ] } ] }""";
 
     private static final String ESCALATE = """
             { label: 'Escalate', success: 'Escalation requested',
               call: { method: 'POST', path: '/services/java/helpdesk/custom/api/TicketApi/tickets/{id}/escalations',
                       body: { kind: 'MANUAL', level: '{level}', note: '{note}', urgent: '{urgent}', due: '{due}',
                               summary: 'level {level}: {note}', tags: ['{note}', 7] } },
+              prompt: [ { name: 'level', required: true }, { name: 'note', required: false } ],
               promptColumns: [ { name: 'level', widget: 'NUMBER' }, { name: 'note', widget: 'TEXT' },
                                { name: 'urgent', widget: 'CHECKBOX' }, { name: 'due', widget: 'DATE' } ] }""";
 
@@ -57,6 +82,20 @@ class CustomActionsCallIT {
                                                                   key: 'Id', text: 'Name' } } } }""";
 
     private static final String TEAM = "{ Id: 4, Name: 'Platform', Lead: 7 }";
+
+    private static final String EN_US = "/META-INF/dirigible/application-core/i18n/en-US/shell.json";
+
+    /** The shells whose confirm dialog renders the store's sentence (issue #8390). */
+    private static final List<String> SHELLS = List.of("/META-INF/dirigible/application/index.html", "/META-INF/dirigible/admin/index.html",
+            "/META-INF/dirigible/partner/index.html", "/META-INF/dirigible/personal/index.html",
+            "/META-INF/dirigible/template-application-ui-harmonia-java/ui/shell/index.html.template");
+
+    /** A shell generated before #8390, which asks for the key with its old fallback. */
+    private static final String VINTAGE_SHELL = "/ShellRuntimeVintageIT/index.html";
+
+    /** The confirm dialog's body: the declared text, else the default sentence. */
+    private static final Pattern CONFIRM_BODY = Pattern.compile(
+            "x-text=\"([^\"]*(?:\\$store\\.customActions\\.confirmBody|'application-core:shell\\.customActions\\.confirmBody')[^\"]*)\"");
 
     @Test
     void aMultiselectIsSentAsAnArrayInOptionsOrder() throws Exception {
@@ -131,6 +170,57 @@ class CustomActionsCallIT {
         }
     }
 
+    /**
+     * An action with no {@code confirm} is asked a sentence that is true for its kind (issue #8390): a
+     * {@code call} the plain question, a transition, a generated endpoint and a destructive action
+     * (first, whatever else it is) their own; a declared {@code confirm} still wins. Every shell's
+     * dialog renders it from the shipped catalog, and a shell generated before the change reads the
+     * plain question from the same key.
+     */
+    @Test
+    void theDefaultConfirmationFollowsTheAction() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "var __catalog = " + read(EN_US) + ";"
+                    + " window.T = function (key, fallback, options) { var node = __catalog;"
+                    + "   key.substring(key.indexOf(':') + 1).split('.').forEach(function (p) { node = node == null ? node : node[p]; });"
+                    + "   return String(typeof node === 'string' ? node : fallback).replace(/\\{\\{(\\w+)\\}\\}/g, function (m, n) { return options[n]; }); };");
+            String call = "{ label: 'Check carrier', call: { method: 'POST', path: '/services/x/{id}/check' } }";
+            String transition = "{ label: 'Ship', kind: 'transition', endpoint: '/services/x/ship' }";
+            String create = "{ label: 'Create invoice', endpoint: '/services/x/invoice' }";
+            String destructive = "{ label: 'Cancel order', kind: 'transition', endpoint: '/services/x/cancel', destructive: true }";
+            String declared = "{ label: 'Archive', confirm: 'Archive {name}?', call: { method: 'POST', path: '/services/x/{id}/archive' },"
+                    + " recordFields: { name: { property: 'Name' } } }";
+
+            for (String shell : SHELLS) {
+                String body = confirmBody(shell);
+                assertEquals("Run Check carrier for the selected record?", rendered(context, body, call), shell);
+                assertEquals("Run Ship for the selected record? This changes its status.", rendered(context, body, transition), shell);
+                assertEquals("Run Create invoice for the selected record? This creates new records.", rendered(context, body, create),
+                        shell);
+                assertEquals("Run Cancel order for the selected record? This cannot be undone.", rendered(context, body, destructive),
+                        shell);
+                assertEquals("Archive Platform?", rendered(context, body, declared), shell);
+            }
+            assertEquals("Run Check carrier for the selected record?", rendered(context, confirmBody(VINTAGE_SHELL), call));
+        }
+    }
+
+    /** The x-text of a shell's confirm dialog body. */
+    private static String confirmBody(String shell) throws Exception {
+        Matcher matcher = CONFIRM_BODY.matcher(read(shell));
+        if (!matcher.find()) {
+            throw new IllegalStateException("No confirm dialog body in " + shell);
+        }
+        return matcher.group(1);
+    }
+
+    /** What a confirm dialog body shows once the action is triggered on {@link #TEAM}. */
+    private static String rendered(Context context, String body, String action) {
+        context.eval("js", "store.trigger(" + action + ", 4, " + TEAM + ");");
+        return context.eval("js", "(function ($store) { return " + body + "; })({ customActions: store })")
+                      .asString();
+    }
+
     private static final String CHANGE_SKILLS =
             """
                     { label: 'Change skills', view: 'TeamMember', type: 'entity', description: 'Change the skills of {name}: {skills.skill}.',
@@ -194,13 +284,206 @@ class CustomActionsCallIT {
         }
     }
 
+    /**
+     * A refused prompt keeps its dialog open, with the inputs as the user left them and the endpoint's
+     * reason inside it - and announces nothing, as the user is looking at it (#8365).
+     */
     @Test
     void aRefusalShowsTheEndpointsMessage() throws Exception {
         try (Context context = load()) {
-            context.eval("js", "__answer = Promise.reject({ httpStatus: 409, errorMessage: 'Ticket [2] is CLOSED' });" + " store.runCall("
-                    + ESCALATE + ", 2, { level: 1 });");
+            context.eval("js",
+                    "store.trigger(" + ESCALATE + ", 2, { Id: 2 });" + " store.promptValues.level = 1; store.promptValues.note = 'VIP';"
+                            + " __answer = Promise.reject({ httpStatus: 409, errorMessage: 'Ticket [2] is CLOSED' }); store.promptRun();");
 
+            assertEquals("true|1|VIP|Ticket [2] is CLOSED|false", context.eval("js",
+                    "[store.promptOpen, store.promptValues.level, store.promptValues.note, store.promptRefusal, store.promptBusy].join('|')")
+                                                                         .asString());
+            assertEquals("", announced(context), "a failure shown in the dialog is not also announced");
+
+            context.eval("js", "store.promptValues.level = 2; __answer = null; store.promptRun();");
+
+            assertEquals("POST /services/java/helpdesk/custom/api/TicketApi/tickets/2/escalations "
+                    + "{\"kind\":\"MANUAL\",\"level\":2,\"note\":\"VIP\",\"urgent\":false,\"due\":null,\"summary\":\"level 2: VIP\","
+                    + "\"tags\":[\"VIP\",7]}", sent(context), "Run again sends the edited values");
+        }
+    }
+
+    /**
+     * A fault or a network failure keeps the dialog open too, with the catalog line inside it: the
+     * likely next step is a retry, with the inputs the user meant (#8365).
+     */
+    @Test
+    void aFailedPromptStaysOpenWithTheCatalogLine() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", read(API_ERRORS));
+            context.eval("js", "store.trigger(" + ESCALATE + ", 1, { Id: 1 }); store.promptValues.level = 3;"
+                    + " __answer = Promise.reject({ httpStatus: 500, errorType: 'InternalServerError', errorMessage: 'ORA-00942' });"
+                    + " store.promptRun();");
+
+            assertEquals("true|3|Something went wrong on our end. Please try again.",
+                    context.eval("js", "[store.promptOpen, store.promptValues.level, store.promptRefusal].join('|')")
+                           .asString(),
+                    "a 500's own text never reaches the screen");
+
+            context.eval("js", "__answer = Promise.reject({ httpStatus: 0, errorType: 'NetworkError', errorMessage: 'Failed to fetch' });"
+                    + " store.promptRun();");
+
+            assertEquals("true|3|Unable to reach the server. Check your connection and try again.",
+                    context.eval("js", "[store.promptOpen, store.promptValues.level, store.promptRefusal].join('|')")
+                           .asString());
+            assertEquals("", announced(context));
+
+            context.eval("js", "store.cancelPrompt();");
+            assertEquals("", context.eval("js", "store.promptRefusal")
+                                    .asString(),
+                    "closing the dialog clears the reason");
+        }
+    }
+
+    /** A successful prompt closes and is announced, as before (#8365). */
+    @Test
+    void aSucceededPromptClosesAndAnnounces() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + ESCALATE + ", 1, { Id: 1 }); store.promptValues.level = 3;"
+                    + " __answer = Promise.reject({ httpStatus: 409, errorMessage: 'Not now' }); store.promptRun();");
+            context.eval("js", "__answer = null; store.promptRun();");
+
+            assertEquals("false||false", context.eval("js", "[store.promptOpen, store.promptRefusal, store.promptBusy].join('|')")
+                                                .asString(),
+                    "a success closes the dialog and clears the reason");
+            assertEquals("Escalate: Escalation requested", announced(context));
+        }
+    }
+
+    /** A confirm has no inputs to lose: a refusal is announced and the dialog closes, as before. */
+    @Test
+    void aRefusedConfirmIsAnnouncedAndCloses() throws Exception {
+        try (Context context = load()) {
+            context.eval("js",
+                    "store.trigger({ label: 'Reopen', confirm: 'Reopen?', call: { method: 'PUT', path: '/services/x/{id}/reopen' } }, 4);"
+                            + " __answer = Promise.reject({ httpStatus: 409, errorMessage: 'Ticket [4] is OPEN' }); store.confirmRun();");
+
+            assertEquals("false", context.eval("js", "String(store.confirmOpen)")
+                                         .asString());
+            assertEquals("Reopen: Ticket [4] is OPEN", announced(context));
+        }
+    }
+
+    /**
+     * A page generated before the refusal alert existed cannot show the reason, so there the dialog
+     * closes and the failure is announced, as before (#8365, the shared runtime of #7427).
+     */
+    @Test
+    void aPageWithoutTheRefusalSlotClosesAndAnnounces() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "__refusalSlot = null; store.trigger(" + ESCALATE + ", 2, { Id: 2 }); store.promptValues.level = 1;"
+                    + " __answer = Promise.reject({ httpStatus: 409, errorMessage: 'Ticket [2] is CLOSED' }); store.promptRun();");
+
+            assertEquals("false|", context.eval("js", "[store.promptOpen, store.promptRefusal].join('|')")
+                                          .asString());
             assertEquals("Escalate: Ticket [2] is CLOSED", announced(context));
+        }
+    }
+
+    /**
+     * An address the forms' email rule refuses blocks the run before any request, and its line shows;
+     * an empty optional email passes (#8366).
+     */
+    @Test
+    void anInvalidEmailBlocksTheRun() throws Exception {
+        try (Context context = load()) {
+            context.eval("js",
+                    "store.trigger(" + TRIAL + ", 4, { Id: 4 }); store.promptValues.product = '42'; store.promptValues.email = 'jane@';");
+
+            assertEquals("true|false",
+                    context.eval("js", "var c = store.promptCols[1]; [store.promptHasInvalid, store.promptShowsInvalid(c)].join('|')")
+                           .asString(),
+                    "invalid, but its line waits for the input to lose focus");
+            context.eval("js", "store.promptBlur(store.promptCols[1]);");
+            assertEquals(Boolean.TRUE, context.eval("js", "store.promptShowsInvalid(store.promptCols[1])")
+                                              .asBoolean());
+
+            context.eval("js", "store.promptRun();");
+            assertEquals("", sent(context), "nothing was sent");
+            assertEquals(Boolean.TRUE, context.eval("js", "store.promptOpen")
+                                              .asBoolean());
+
+            context.eval("js", "store.promptCols[1].required = false; store.promptValues.email = '';");
+            assertEquals(Boolean.FALSE, context.eval("js", "store.promptHasInvalid")
+                                               .asBoolean(),
+                    "an empty optional email passes");
+            context.eval("js", "store.promptValues.email = 'a@b';");
+            assertEquals(Boolean.TRUE, context.eval("js", "store.promptHasInvalid")
+                                              .asBoolean(),
+                    "the forms' rule, not the browser's: a@b is no address");
+        }
+    }
+
+    @Test
+    void anEmailIsSentTrimmed() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + TRIAL + ", 4, { Id: 4 });"
+                    + " store.promptValues.product = '42'; store.promptValues.email = '  jane@example.com '; store.promptRun();");
+
+            assertEquals("POST /services/java/shop/custom/api/TrialApi/customers/4/trials "
+                    + "{\"productId\":42,\"email\":\"jane@example.com\",\"plan\":\"Basic\"}", sent(context));
+        }
+    }
+
+    /** A select's options are its own: no request, and an option's help rides along (#8366). */
+    @Test
+    void aSelectIsOfferedItsOptionsWithoutARequest() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "__got = ''; store.trigger(" + TRIAL + ", 4, { Id: 4 });");
+
+            assertEquals(
+                    "[{\"value\":\"Basic\",\"text\":\"Basic\"},{\"value\":\"Pro\",\"text\":\"Pro\",\"help\":\"Includes priority support\"}]",
+                    context.eval("js", "JSON.stringify(store.promptOptionsFor('plan'))")
+                           .asString());
+            assertEquals("/services/java/shop/gen/shop/api/product/ProductController", context.eval("js", "__all")
+                                                                                              .asString(),
+                    "only the lookup is read");
+        }
+    }
+
+    /**
+     * A select opens with its default option; a record value that is no option leaves it empty (#8366).
+     */
+    @Test
+    void aSelectDefaultPicksItsOption() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + TRIAL + ", 4, { Id: 4 });");
+            assertEquals("Basic", context.eval("js", "store.promptValues.plan")
+                                         .asString());
+
+            context.eval("js", "store.setPromptDefault(store.promptCols[2], 'Gold'); store.promptValues.plan = undefined;"
+                    + " store.setPromptDefault(store.promptCols[2], 'Gold');");
+            assertEquals("undefined", context.eval("js", "String(store.promptValues.plan)")
+                                             .asString(),
+                    "a value that is no option is not chosen");
+        }
+    }
+
+    /** A lookup is sent as its key, typed by its keyType: productId 42, not "42" (#8366). */
+    @Test
+    void aLookupIsSentAsItsTypedKey() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.runCall(" + TRIAL + ", 4, { product: '42', email: 'jane@example.com', plan: '' });");
+
+            assertEquals("POST /services/java/shop/custom/api/TrialApi/customers/4/trials "
+                    + "{\"productId\":42,\"email\":\"jane@example.com\",\"plan\":null}", sent(context), "an empty select is null");
+        }
+    }
+
+    @Test
+    void aRequiredSelectOrLookupIsRefusedEmpty() throws Exception {
+        try (Context context = load()) {
+            context.eval("js", "store.trigger(" + TRIAL + ", 4, { Id: 4 }); store.promptCols[2].required = true;"
+                    + " store.promptValues.plan = ''; store.promptValues.email = 'jane@example.com'; store.promptRun();");
+
+            assertEquals("Product, Plan", context.eval("js", "store.promptError")
+                                                 .asString());
+            assertEquals("", sent(context), "nothing was sent");
         }
     }
 
@@ -227,14 +510,20 @@ class CustomActionsCallIT {
                         window.dispatchEvent = function () {};
                         var CustomEvent = function (type) { this.type = type; };
                         var __documentListeners = {};
-                        var document = { addEventListener: function (type, fn) { (__documentListeners[type] = __documentListeners[type] || []).push(fn); } };
+                        // The page's prompt dialog carries the refusal alert unless a test removes it (#8365).
+                        var __refusalSlot = {};
+                        var document = { addEventListener: function (type, fn) { (__documentListeners[type] = __documentListeners[type] || []).push(fn); },
+                                         querySelector: function (selector) { return selector === '[data-prompt-refusal]' ? __refusalSlot : null; } };
                         var __stores = {};
                         var Alpine = { store: function (name, value) { if (value !== undefined) { __stores[name] = value; } return __stores[name]; }, data: function () {} };
                         var console = { log: function () {}, warn: function () {}, error: function () {} };
-                        var __sent = '', __announced = '', __answer = null, __got = '';
+                        var __sent = '', __announced = '', __answer = null, __got = '', __all = '';
                         Alpine.store('notifications', { announce: function (n) { __announced = n.title + ': ' + n.description; } });
                         var App = { config: {}, services: {
-                          api: { get: function (url, opts) {
+                          api: { getAll: function (url, opts) {
+                            __all = opts.baseUrl + url;
+                            return Promise.resolve([{ Id: 42, Name: 'Ledger' }]);
+                          }, get: function (url, opts) {
                             __got = opts.baseUrl + url;
                             return Promise.resolve({ Id: 7, Name: 'Ann' });
                           }, request: function (method, url, body, opts) {
@@ -244,6 +533,7 @@ class CustomActionsCallIT {
                           apiErrors: { refusalMessageFor: function (e, fallback) { return (e && e.errorMessage) || fallback; } }
                         } };
                         """);
+        context.eval("js", read(FORM_VALIDATION));
         context.eval("js", read(STORE));
         context.eval("js",
                 "__documentListeners['alpine:init'].forEach(function (fn) { fn(); }); var store = Alpine.store('customActions');");
