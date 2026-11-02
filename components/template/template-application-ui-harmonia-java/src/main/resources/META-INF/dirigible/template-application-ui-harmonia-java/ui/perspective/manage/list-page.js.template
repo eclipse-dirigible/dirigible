@@ -745,6 +745,9 @@ document.addEventListener('alpine:init', () => {
 
     filterValueText(col) {
       const v = this.columnFilters[col.name];
+      // The Filter menu evaluates this for every column, filtered or not (x-show only hides the
+      // value), so a column without a value prints nothing - a date column's range is absent (#8402).
+      if (!this.filterHasValue(col, v)) return '';
       // Keys a link matched by label (#8374) print that label - the one they share, or the one none had.
       if (col.type === 'fk' && Array.isArray(v)) return this.urlFilterTexts[col.name] || (v.length ? this.lookupText(col.name, v[0]) : '');
       if (col.type === 'fk')   return this.lookupText(col.name, v);
