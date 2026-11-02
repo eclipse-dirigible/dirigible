@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.typescript.transpilation;
 
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
+import org.eclipse.dirigible.repository.api.IRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -26,8 +27,11 @@ class TscWatcherServicePublisherHandler implements PublisherHandler {
 
     private final TscWatcherService tscWatcherService;
 
-    TscWatcherServicePublisherHandler(TscWatcherService tscWatcherService) {
+    private final IRepository repository;
+
+    TscWatcherServicePublisherHandler(TscWatcherService tscWatcherService, IRepository repository) {
         this.tscWatcherService = tscWatcherService;
+        this.repository = repository;
     }
 
     @Override
@@ -50,14 +54,26 @@ class TscWatcherServicePublisherHandler implements PublisherHandler {
         // not applicable
     }
 
+    /**
+     * Stops the watcher while a folder or a TypeScript source is removed: a compile in flight read the
+     * sources before, and would write their JavaScript back into the removed location afterwards.
+     */
     @Override
     public void beforeUnpublish(String location) {
-        // not applicable
+        if (mayHoldCompiledOutput(location)) {
+            tscWatcherService.suspend();
+        }
     }
 
     @Override
     public void afterUnpublish(String location) {
-        // not applicable
+        tscWatcherService.resume();
+    }
+
+    private boolean mayHoldCompiledOutput(String location) {
+        String name = location.substring(location.lastIndexOf('/') + 1);
+        return TscWatcherService.isTypeScriptSource(name) || repository.getCollection(location)
+                                                                       .exists();
     }
 
 }

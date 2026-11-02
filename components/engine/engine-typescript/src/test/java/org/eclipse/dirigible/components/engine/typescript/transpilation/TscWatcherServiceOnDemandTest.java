@@ -47,6 +47,18 @@ class TscWatcherServiceOnDemandTest {
     }
 
     @Test
+    void anUnpublishResumesOnlyAWatcherItSuspended(@TempDir Path registry) throws IOException {
+        write(registry, "app/service.ts");
+        TscWatcherService service = new TscWatcherService(repositoryAt(registry));
+
+        service.suspend();
+        service.resume();
+
+        assertFalse(service.isRunning(), "the watcher was not running before the unpublish");
+        assertFalse(Files.exists(registry.resolve("tsconfig.json")), "the registry must be left untouched");
+    }
+
+    @Test
     void recognisesTheSourcesTscCompiles(@TempDir Path registry) throws IOException {
         assertTypeScriptFound(registry, "app/service.ts");
         assertTypeScriptFound(registry, "app/deep/folder/module.mts");

@@ -39,6 +39,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 /**
@@ -66,6 +67,9 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
     // \u001B[H - move cursor to home position (top-left)
     // These are stripped from tsc output to prevent log lines from disappearing or refreshing.
     private static final Pattern CONTROL_CHARS = Pattern.compile("[\\r\\u0007\\u001B\\[2J\\u001B\\[H]");
+
+    /** How long to wait for a destroyed tsc process to exit, so that it writes nothing afterwards. */
+    private static final long PROCESS_EXIT_TIMEOUT_SECONDS = 10;
 
     /** How many times to re-attempt the registry folder creation when it races a concurrent change. */
     private static final int CREATE_FOLDER_ATTEMPTS = 3;
@@ -123,6 +127,11 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
     private ExecutorService executor;
     private Process tscProcess;
 
+    /**
+     * Whether {@link #suspend()} stopped a running watcher that {@link #resume()} has to start again.
+     */
+    private boolean suspended;
+
     TscWatcherService(IRepository repository) {
         this.repository = repository;
     }
@@ -154,6 +163,34 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
     public synchronized void restart() {
         destroy();
         startIfTypeScriptSourcesExist();
+    }
+
+    /**
+     * Stops a running watcher until {@link #resume()}, for a registry location that is about to be
+     * removed. A compile in flight has read its sources already, and writes their JavaScript after they
+     * are deleted - recreating the removed folders with output whose source is gone, which then stays
+     * published. Returns once the tsc process has exited.
+     */
+    synchronized void suspend() {
+        if (isRunning()) {
+            LOGGER.debug("Suspending the tsc watch while a registry location is removed");
+            destroy();
+            suspended = true;
+        }
+    }
+
+    /**
+     * Starts the watcher {@link #suspend()} stopped again, when the registry still holds TypeScript
+     * sources, so that it compiles what is left.
+     */
+    synchronized void resume() {
+        if (!suspended) {
+            return;
+        }
+        suspended = false;
+        if (!isRunning()) {
+            startIfTypeScriptSourcesExist();
+        }
     }
 
     synchronized boolean isRunning() {
@@ -191,7 +228,7 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         return finder.found;
     }
 
-    private static boolean isTypeScriptSource(String fileName) {
+    static boolean isTypeScriptSource(String fileName) {
         return !fileName.startsWith(".") && SOURCE_EXTENSIONS.stream()
                                                              .anyMatch(fileName::endsWith)
                 && DECLARATION_EXTENSIONS.stream()
@@ -376,6 +413,7 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
             if (tscProcess.isAlive()) {
                 LOGGER.debug("Forcibly destroying tsc watch process {}...", tscProcess);
                 tscProcess.destroyForcibly();
+                awaitExit(tscProcess);
             }
 
             tscProcess = null;
@@ -389,6 +427,22 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         }
 
         LOGGER.info("Destroy completed!");
+    }
+
+    /**
+     * Waits for a destroyed process to exit: {@link Process#destroyForcibly()} only requests it, and a
+     * process still running goes on writing its output into the registry.
+     */
+    private static void awaitExit(Process process) {
+        try {
+            if (!process.waitFor(PROCESS_EXIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                LOGGER.warn("tsc watch process {} did not exit within [{}] seconds", process, PROCESS_EXIT_TIMEOUT_SECONDS);
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread()
+                  .interrupt();
+            LOGGER.warn("Interrupted while waiting for tsc watch process {} to exit", process, ex);
+        }
     }
 
     @Override
