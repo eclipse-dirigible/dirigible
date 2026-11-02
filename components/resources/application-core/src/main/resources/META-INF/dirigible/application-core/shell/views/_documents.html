@@ -81,7 +81,7 @@
                   <span x-h-checkbox><input type="checkbox" aria-label="Select all" x-model="selection.allSelected" @change="selectAllChanged()" /></span>
                 </th>
                 <th x-h-table-head scope="col" x-text="T('application-core:shell.documents.name', 'Name')"></th>
-                <th x-h-table-head scope="col"></th>
+                <th x-h-table-head scope="col" data-col-actions data-sticky="end"></th>
               </tr>
             </thead>
             <tbody x-h-table-body>
@@ -98,7 +98,7 @@
                       <svg role="presentation" x-h-lucide :data-lucide="fileIcon(item)"></svg><span x-text="item.name"></span>
                     </button>
                   </th>
-                  <td x-h-table-cell data-row-actions>
+                  <td x-h-table-cell data-row-actions data-sticky="end">
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg></button>
                     <ul x-h-menu aria-label="Item actions" data-align="bottom-end">
                       <li x-show="isDocument(item)" x-h-menu-item @click="copyLink(item)" x-text="T('application-core:shell.documents.copyLink', 'Copy link')"></li>

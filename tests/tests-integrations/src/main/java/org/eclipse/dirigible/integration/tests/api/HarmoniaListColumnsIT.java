@@ -84,6 +84,47 @@ class HarmoniaListColumnsIT {
         }
     }
 
+    /** Every page whose tables carry a row-actions column (dirigible #8372). */
+    private static final List<String> ROW_ACTIONS_PAGES = List.of(UI_BASE + "perspective/manage/list-view.html.template",
+            UI_BASE + "perspective/manage/form-view.html.template", UI_BASE + "perspective/document/document-view.html.template",
+            "/META-INF/dirigible/application-core/shell/views/_documents.html");
+
+    /**
+     * A cell's opening tag, quoted values skipped whole (an Alpine expression may hold a {@code >}).
+     */
+    private static final Pattern CELL_TAG = Pattern.compile("<(?:td|th)\\b(?:[^>\"]|\"[^\"]*\")*>");
+
+    private static final Pattern ROW_ACTIONS_MARKER = Pattern.compile("\\sdata-(?:row|col)-actions[\\s>]");
+
+    /**
+     * A row's actions stay on screen while the columns scroll: every row-actions cell and its header
+     * are pinned with Harmonia's {@code data-sticky="end"}, and each cell has its marked header.
+     */
+    @Test
+    void everyRowActionsCellIsPinnedToTheEnd() throws Exception {
+        for (String page : ROW_ACTIONS_PAGES) {
+            String content = read(page);
+            int cells = 0;
+            int heads = 0;
+            Matcher tag = CELL_TAG.matcher(content);
+            while (tag.find()) {
+                String element = tag.group();
+                if (!ROW_ACTIONS_MARKER.matcher(element)
+                                       .find()) {
+                    continue;
+                }
+                assertTrue(element.contains("data-sticky=\"end\""), page + ": a row-actions cell is not data-sticky=\"end\": " + element);
+                if (element.startsWith("<td")) {
+                    cells++;
+                } else {
+                    heads++;
+                }
+            }
+            assertTrue(cells > 0, page + " has no row-actions cell");
+            assertEquals(cells, heads, page + ": every row-actions cell needs its data-col-actions header");
+        }
+    }
+
     /** The shared half: the directive, the tooltip, the grip, and the stylesheet that truncates. */
     @Test
     void theSharedRuntimeCarriesThePolicy() throws Exception {

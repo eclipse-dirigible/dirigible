@@ -338,7 +338,7 @@
 #end
 #end
 #end
-                <th x-h-table-head scope="col" class="w-12" data-col-actions><span class="sr-only" x-text="T('$projectName:${tprefix}.aria.tableRowMenu', 'Table Row Menu')"></span></th>
+                <th x-h-table-head scope="col" class="w-12" data-col-actions data-sticky="end"><span class="sr-only" x-text="T('$projectName:${tprefix}.aria.tableRowMenu', 'Table Row Menu')"></span></th>
               </tr>
             </thead>
             <tbody x-h-table-body>
@@ -408,7 +408,7 @@
 #end
 #end
 #end
-                  <td x-h-table-cell data-row-actions class="text-right">
+                  <td x-h-table-cell data-row-actions data-sticky="end" class="text-right">
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
                       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
                     </button>
