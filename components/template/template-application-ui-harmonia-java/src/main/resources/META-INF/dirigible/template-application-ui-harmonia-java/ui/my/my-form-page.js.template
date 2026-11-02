@@ -51,6 +51,10 @@ document.addEventListener('alpine:init', () => {
     record: {},
 
     apiPath: '/${javaPerspectiveName}/${name}MyController',
+    // Entity name used to match the actions contributed for the personal surface ($store.customActions).
+    caView: '${name}',
+    // Whether init() wired the re-read after a record action - init() runs again on the guard's Discard.
+    actionDoneWired: false,
 #if($immutableStatusProperty || $immutableAlways || $periodLock)
 
     // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
@@ -61,6 +65,11 @@ document.addEventListener('alpine:init', () => {
 #end
 
     async init() {
+      // A record action moved this record (#8406): read it again, its status and what it accepts now.
+      if (!this.actionDoneWired) {
+        this.actionDoneWired = true;
+        this.onActionDone(() => this.reloadForm());
+      }
 #if($hasRestrictedFields)
       // Role-scoped fields (intent `visibleTo:`): this surface's own controller strips them from the
       // record and ignores them on writes, so the form must not offer the inputs either.
@@ -156,6 +165,26 @@ document.addEventListener('alpine:init', () => {
     // The guard dialog's Discard when the user is STAYING on the page: re-read the record.
     async reloadForm() {
       await this.init();
+    },
+
+    // ----- The record's own actions on the personal surface (#8406) ------------------------------
+    // Only those contributed for this surface - their endpoints are scoped to the caller's own
+    // records - and only once the stored record is on screen: the store fails OPEN on a status it
+    // does not have, so an action offered while the record loads could be refused when clicked.
+    personalActions() {
+      const store = Alpine.store('customActions');
+      if (!store || this.mode !== 'edit' || this.state !== 'default') return [];
+      return store.getActions(this.caView, 'entity', this.record, 'my');
+    },
+    recordActions() {
+      return this.personalActions().filter((a) => !Alpine.store('customActions').isDestructive(a));
+    },
+    // The record's destructive actions (#8364): the menu's last group, in red.
+    destructiveRecordActions() {
+      return this.personalActions().filter((a) => Alpine.store('customActions').isDestructive(a));
+    },
+    runRecordAction(action) {
+      Alpine.store('customActions').trigger(action, this.id, this.record);
     },
 
     queryParam(name) {

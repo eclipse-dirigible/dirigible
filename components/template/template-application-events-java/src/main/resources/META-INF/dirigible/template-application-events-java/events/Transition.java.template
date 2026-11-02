@@ -13,6 +13,16 @@ package gen.events.${javaGenFolderName};
 #else
 #set($notifyCopies = false)
 #end
+## The owner's run from the personal surface (#8406) is this controller scoped to the caller's own
+## records - same guards, same write - so it is rendered from this template under its own name.
+#if($personalSurface == "true")
+#set($personal = true)
+#set($controllerClass = "${className}TransitionMy")
+#set($personalControllerClass = "gen.${javaGenFolderName}.api.${javaPerspective}.${entity}MyController")
+#else
+#set($personal = false)
+#set($controllerClass = "${className}Transition")
+#end
 
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.log.Logger;
@@ -36,21 +46,38 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *
  * Generated from the intent transitions block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories.
- * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Transition/run,
+#if($personal)
+ * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${controllerClass}/run,
+ * to the record's OWNER on the personal surface (issue #8406): the caller's identity record is resolved
+ * exactly as ${entity}MyController resolves it, a record that is not theirs is the same 404 as a missing
+ * one, and the record answered is the one that controller serves - without the fields the personal
+ * surface withholds.
+#else
+ * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${controllerClass}/run,
  * to a caller holding the ${entity}'s write gate (issue #7913) - the roles its generated controller demands.
+#end
  */
 @Controller
-@Component("${javaGenFolderName}_${className}Transition")
-public class ${className}Transition {
+@Component("${javaGenFolderName}_${controllerClass}")
+public class ${controllerClass} {
 
 #if($notify == "true")
     /** Application logger - nested under the platform's `app.` root, like every other app logger. */
-    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Transition");
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${controllerClass}");
 
     /** The delivery outcomes the response reports - the vocabulary the client branches on. */
     private static final String SENT = "sent";
     private static final String SKIPPED = "skipped";
     private static final String FAILED = "failed";
+
+#end
+#if($personal)
+    /** The personal surface this run belongs to - what it answers is what that surface serves. */
+    private final ${personalControllerClass} personalController;
+
+    public ${controllerClass}(${personalControllerClass} personalController) {
+        this.personalController = personalController;
+    }
 
 #end
     public static class Request {
@@ -61,6 +88,16 @@ public class ${className}Transition {
     public String run(@Body Request req) {
         // Every branch returns a JSON body - the guard errors carry {"error": reason}.
         Response.setContentType("application/json");
+#if($personal)
+        // The personal gate (issue #8406): the caller runs the transition on their OWN ${entity}, so
+        // the identity record they map to is resolved first. Asked before anything is read, so a caller
+        // with no identity cannot probe which ids exist either.
+        Object me = me();
+        if (me == null) {
+            Response.setStatus(403);
+            return "{\"error\": \"no identity record is mapped to the current user\"}";
+        }
+#else
         // The role gate (issue #7913): the flip writes the ${entity}, so its caller must hold the same write
         // gate its generated controller demands. Asked before anything is read, so a refused caller cannot
         // probe which ids exist either.
@@ -68,6 +105,7 @@ public class ${className}Transition {
             Response.setStatus(403);
             return "{\"error\": \"forbidden\"}";
         }
+#end
         if (req == null || req.id == null) {
             Response.setStatus(400);
             return "{\"error\": \"missing record id\"}";
@@ -75,7 +113,13 @@ public class ${className}Transition {
         gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository repository =
                 new gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository();
         gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source = repository.findById(req.id);
+#if($personal)
+        // A colleague's record is the same 404 as a missing one - before any guard, so the answer never
+        // says which status someone else's record is in.
+        if (source == null || !me.equals(source.${personalFkProperty})) {
+#else
         if (source == null) {
+#end
             Response.setStatus(404);
             return "{\"error\": \"${entity} not found\"}";
         }
@@ -107,11 +151,37 @@ public class ${className}Transition {
         // record for one that does not: the shape is decided at generation time, and the generated
         // action descriptor carries `notifies` so the client knows which one it is reading.
         java.util.Map<String, Object> notified = sendNotification(source);
+#if($personal)
+        // The record as the personal surface serves it: its sensitive and role-scoped fields withheld.
+        return "{\"record\": " + Json.stringify(personalController.getById(req.id)) + ", \"notify\": " + Json.stringify(notified) + "}";
+#else
         return "{\"record\": " + Json.stringify(source) + ", \"notify\": " + Json.stringify(notified) + "}";
+#end
+#elseif($personal)
+        // The record as the personal surface serves it: its sensitive and role-scoped fields withheld.
+        return Json.stringify(personalController.getById(req.id));
 #else
         return Json.stringify(source);
 #end
     }
+#if($personal)
+
+    /**
+     * The caller's identity record id, resolved exactly as ${entity}MyController resolves it: the
+     * ${personalIdentityProperty} of the identity entity matched against the EFFECTIVE username - the
+     * acting identity when an entitled user armed "act as", else the real login. Null when no record maps.
+     */
+    private static Object me() {
+        String username = User.getEffectiveName();
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+        var matches = new ${personalIdentityRepositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .eq("${personalIdentityProperty}", username));
+        return matches.isEmpty() ? null : matches.get(0).Id;
+    }
+#end
 #if($notify == "true")
 
     /**
@@ -470,6 +540,7 @@ public class ${className}Transition {
         }
     }
 #end
+#if(!$personal)
 
     /** Whether the caller holds ANY role of a comma-separated gate; an empty gate admits nobody. */
     private static boolean isInAnyRole(String roles) {
@@ -481,6 +552,7 @@ public class ${className}Transition {
         }
         return false;
     }
+#end
 #if($notifyCopies)
 
     private static boolean isBlank(String value) {

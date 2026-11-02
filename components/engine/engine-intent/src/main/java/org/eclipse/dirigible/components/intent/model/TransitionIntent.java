@@ -73,6 +73,15 @@ public class TransitionIntent {
      * Excludes {@link #primary}; entity scope only.
      */
     private Boolean destructive;
+
+    /**
+     * When {@code true} the owner of a record runs the transition on it from the personal (my) surface
+     * too (#8406): the action is offered on their own records' pages, and a second run scoped to the
+     * caller's identity record exactly as the entity's personal controller is - a record that is not
+     * theirs is a 404 - is generated beside the power one, which is unchanged. The entity must declare
+     * a {@code personal: true} relation that is not {@code personalReadOnly}.
+     */
+    private Boolean personal;
     /**
      * Optional outbound mail sent AFTER the status flip commits - "on Void, mail the counterparty". The
      * reusable notify block ({@code to} / {@code subject} / {@code body} / {@code attach: print}),
@@ -169,6 +178,22 @@ public class TransitionIntent {
     /** Whether this action destroys data (see {@link #destructive}). */
     public boolean isDestructive() {
         return Boolean.TRUE.equals(destructive);
+    }
+
+    public Boolean getPersonal() {
+        return personal;
+    }
+
+    public void setPersonal(Boolean personal) {
+        this.personal = personal;
+    }
+
+    /**
+     * Whether the record's owner runs this transition from the personal surface (see
+     * {@link #personal}).
+     */
+    public boolean isPersonal() {
+        return Boolean.TRUE.equals(personal);
     }
 
     public NotificationIntent getNotify() {

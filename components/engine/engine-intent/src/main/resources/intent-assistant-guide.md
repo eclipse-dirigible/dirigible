@@ -2575,6 +2575,15 @@ problem is logged and the transition still succeeds.
 transition that cannot be undone (Void, Cancel) declares `destructive: true` to run from a red button
 and sit beside Delete in the record's menus. The two exclude each other.
 
+`personal: true` lets the OWNER of a record run the transition from the personal (My) surface - an
+employee withdrawing their own leave request. It needs the entity's own `personal: true` relation, not
+`personalReadOnly` (refused at parse otherwise). The action then also appears on the personal list's
+row menu and the personal record page, filtered by `from:` like the power one, and runs through a
+second controller, `<ClassName>TransitionMy`: it resolves the caller's identity record as the
+entity's personal controller does (**403** with no identity mapped), answers **404** for a record that
+is not the caller's - before the `from:`/`when:` guards - and then writes exactly as the power run
+does. The power controller and pages are unchanged; without `personal: true` the owner has no button.
+
 ### generates - create one document from another (create-from)
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:

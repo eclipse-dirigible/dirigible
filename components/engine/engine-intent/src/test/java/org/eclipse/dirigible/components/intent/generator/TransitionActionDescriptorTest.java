@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.mock;
@@ -19,6 +20,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import org.eclipse.dirigible.components.intent.generator.transition.TransitionsIntentGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -106,6 +108,61 @@ class TransitionActionDescriptorTest {
         assertFalse(plain.contains("\"destructive\""), plain);
     }
 
+    /** An invoice its customer owns through a personal relation, so its transition may be personal. */
+    private static final String PERSONAL_YAML = """
+            name: billing
+            entities:
+              - name: Customer
+                identity: email
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string, unique: true }
+              - name: InvoiceStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer, personal: true }
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+            transitions:
+              - { name: voidInvoice, forEntity: Invoice, from: [3, 4], setStatus: 6, personal: true }
+            """;
+
+    /**
+     * A personal transition (#8406) contributes a second descriptor for the personal surface: the same
+     * action and guard, the personal run's endpoint, and the surface the pages filter by.
+     */
+    @Test
+    void aPersonalTransitionContributesADescriptorForThePersonalSurface() {
+        String personal = compact(written(PERSONAL_YAML, "/voidInvoice-transition-my-action.json"));
+        assertTrue(personal.contains("\"id\":\"proj-Invoice-voidInvoice-my\""), personal);
+        assertTrue(personal.contains("\"endpoint\":\"/services/java/proj/gen/events/billing/VoidInvoiceTransitionMy/run\""), personal);
+        assertTrue(personal.contains("\"surface\":\"my\""), personal);
+        assertTrue(personal.contains("\"statusProperty\":\"Status\""), personal);
+        assertTrue(personal.contains("\"from\":[3,4]"), personal);
+        assertTrue(personal.contains("\"kind\":\"transition\""), personal);
+        String extension = compact(written(PERSONAL_YAML, "/voidInvoice-transition-my-action.extension"));
+        assertTrue(extension.contains("\"module\":\"proj/voidInvoice-transition-my-action.json\""), extension);
+
+        // The power descriptor is the one it always was: no surface, the power run's endpoint.
+        String power = compact(written(PERSONAL_YAML, "/voidInvoice-transition-action.json"));
+        assertFalse(power.contains("\"surface\""), power);
+        assertTrue(power.contains("\"endpoint\":\"/services/java/proj/gen/events/billing/VoidInvoiceTransition/run\""), power);
+    }
+
+    /** Without {@code personal: true} the personal surface is offered nothing. */
+    @Test
+    void aTransitionThatIsNotPersonalContributesNothingToThePersonalSurface() {
+        List<String> paths = writtenPaths(YAML);
+        assertFalse(paths.stream()
+                         .anyMatch(path -> path.contains("-transition-my-action")),
+                paths.toString());
+    }
+
     /** The descriptor's JSON with its pretty-printing whitespace removed, for readable assertions. */
     private static String compact(String descriptor) {
         return descriptor.replaceAll("\\s+", "");
@@ -113,28 +170,42 @@ class TransitionActionDescriptorTest {
 
     /** The written {@code voidInvoice-transition-action.json} descriptor module. */
     private static String descriptor(String yaml) {
-        IntentModel model = IntentParser.parse(yaml);
-        IRepository repository = mock(IRepository.class);
-        IResource missing = mock(IResource.class);
-        when(repository.getResource(anyString())).thenReturn(missing);
-        when(missing.exists()).thenReturn(false);
-        IntentGenerationContext context = new IntentGenerationContext(model, "/proj", "proj", "workspace", "billing", repository);
+        return written(yaml, "/voidInvoice-transition-action.json");
+    }
 
-        new TransitionsIntentGenerator().generate(context);
-
+    /** The content of the generated file whose path ends with {@code suffix}. */
+    private static String written(String yaml, String suffix) {
         ArgumentCaptor<String> paths = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<byte[]> contents = ArgumentCaptor.forClass(byte[].class);
-        verify(repository, atLeastOnce()).createResource(paths.capture(), contents.capture());
+        verify(generate(yaml), atLeastOnce()).createResource(paths.capture(), contents.capture());
         for (int i = 0; i < paths.getAllValues()
                                  .size(); i++) {
             if (paths.getAllValues()
                      .get(i)
-                     .endsWith("/voidInvoice-transition-action.json")) {
+                     .endsWith(suffix)) {
                 return new String(contents.getAllValues()
                                           .get(i),
                         StandardCharsets.UTF_8);
             }
         }
-        return fail("the transition descriptor was not written: " + paths.getAllValues());
+        return fail("[" + suffix + "] was not written: " + paths.getAllValues());
+    }
+
+    /** The paths of every file the generator wrote. */
+    private static List<String> writtenPaths(String yaml) {
+        ArgumentCaptor<String> paths = ArgumentCaptor.forClass(String.class);
+        verify(generate(yaml), atLeastOnce()).createResource(paths.capture(), any(byte[].class));
+        return paths.getAllValues();
+    }
+
+    /** Runs the generator against a repository holding nothing yet, and hands that repository back. */
+    private static IRepository generate(String yaml) {
+        IntentModel model = IntentParser.parse(yaml);
+        IRepository repository = mock(IRepository.class);
+        IResource missing = mock(IResource.class);
+        when(repository.getResource(anyString())).thenReturn(missing);
+        when(missing.exists()).thenReturn(false);
+        new TransitionsIntentGenerator().generate(new IntentGenerationContext(model, "/proj", "proj", "workspace", "billing", repository));
+        return repository;
     }
 }

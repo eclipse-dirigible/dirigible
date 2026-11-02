@@ -36,6 +36,10 @@ document.addEventListener('alpine:init', () => {
     // Controller path for the PERSONAL surface, relative to App.config.restBase.
     apiPath: '/${javaPerspectiveName}/${name}MyController',
 
+    // Entity name used to match the actions contributed for the personal surface ($store.customActions).
+    // Set here (not inline in the view) so Velocity substitutes it.
+    caView: '${name}',
+
     async init() {
 #if($hasRestrictedFields)
       // Role-scoped fields (intent `visibleTo:`): this surface's own controller strips them from the
@@ -54,6 +58,8 @@ document.addEventListener('alpine:init', () => {
       this.loadLookups();
       // Back on this list through the sidebar or the hosting shell, which re-renders nothing (#8130).
       this.onReentered(() => this.refresh());
+      // A row action moved a record (#8406): the row shows its new status and the actions it accepts now.
+      this.onActionDone(() => this.refresh());
     },
 
     lookups: {},   // relationship column name -> { fkValue: label }
@@ -175,5 +181,34 @@ document.addEventListener('alpine:init', () => {
 #end
     newEntity() { this.navigate('/my/${name}/create'); },
     openEntity(row) { this.navigate('/my/${name}/' + row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end + '/edit'); },
+    // A click on a row opens it - except one that started in the row's own "..." menu, which acts on
+    // its own. Not @click.stop on the menu: that would keep the click from the document, where
+    // Harmonia closes an open menu (#8259).
+    rowClicked(event, row) {
+      if (event.target.closest('[data-row-actions]')) return;
+      this.openEntity(row);
+    },
+
+    // ----- The rows' own actions on the personal surface (#8406) ----------------------------------
+    // Only the actions contributed for this surface - their endpoints are scoped to the caller's own
+    // records - by the store call the power list makes, so the same status guards apply per row.
+    // Whether this surface has any per-record action at all decides the actions column.
+    get hasRowActions() {
+      const actions = Alpine.store('customActions');
+      return Boolean(actions && actions.getActions(this.caView, 'entity', null, 'my').length);
+    },
+    rowActions(row) {
+      const actions = Alpine.store('customActions');
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row, 'my').filter((a) => !actions.isDestructive(a)) : [];
+    },
+    rowDestructiveActions(row) {
+      const actions = Alpine.store('customActions');
+      return (row && actions) ? actions.getActions(this.caView, 'entity', row, 'my').filter((a) => actions.isDestructive(a)) : [];
+    },
+    // Runs one of a row's actions on that row. Here rather than in the markup: there, a $store call
+    // whose arguments carry the row's key expression is read by Velocity as one reference, and refused.
+    runRowAction(action, row) {
+      Alpine.store('customActions').trigger(action, row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end, row);
+    },
   }));
 });

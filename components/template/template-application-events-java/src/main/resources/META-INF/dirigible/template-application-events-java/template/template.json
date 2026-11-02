@@ -235,6 +235,13 @@
             "collection": "transitions"
         },
         {
+            "location": "/template-application-events-java/events/Transition.java.template",
+            "action": "generate",
+            "rename": "gen/events/{{javaGenFolderName}}/{{className}}TransitionMy.java",
+            "engine": "velocity",
+            "collection": "personalTransitions"
+        },
+        {
             "location": "/template-application-events-java/events/Send.java.template",
             "action": "generate",
             "rename": "gen/events/{{javaGenFolderName}}/{{className}}.java",
