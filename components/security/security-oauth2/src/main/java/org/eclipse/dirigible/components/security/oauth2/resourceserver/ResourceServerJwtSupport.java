@@ -21,11 +21,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.commons.config.InvalidConfigException;
 import org.eclipse.dirigible.components.base.http.access.AuthenticatedBearerToken;
 import org.eclipse.dirigible.components.base.http.access.BearerTokenAuthenticator;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClientRegistry;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -89,6 +92,13 @@ import com.nimbusds.jose.util.DefaultResourceRetriever;
  * accepted here and refused by that filter when the request names no tenant.
  *
  * <p>
+ * Under the same strategy an access token of a client that is not one of the deployment's own is
+ * accepted when the integration client registry knows the client and has not revoked it - checked
+ * on every request, whatever the audiences. Such a token becomes an
+ * {@link IntegrationClientAuthenticationToken} holding no role: nothing from its scopes, and the
+ * registry's roles only once the tenant selection filter has entered the client's own tenant.
+ *
+ * <p>
  * The signing keys come from the provider's JWKS endpoint through Nimbus: cached for five minutes,
  * refreshed when a token names a key the cache does not hold, and at most once every thirty seconds
  * - a burst of tokens carrying unknown key ids costs one call to the provider, not one per token,
@@ -124,7 +134,14 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
     private static final OAuth2Error KIND_NOT_ACCEPTED = new OAuth2Error(OAuth2ErrorCodes.INVALID_TOKEN, "Token kind is not accepted",
             "https://tools.ietf.org/html/rfc6750#section-3.1");
 
+    private static final String NOT_A_REGISTERED_CLIENT = "The token is not intended for this client";
+
     private final ResourceServerJwtSettings settings;
+    private final IntegrationClients integrationClients;
+    /**
+     * The access token audience check of the deployment's own clients, null when none is configured.
+     */
+    private final AudienceValidator ownClients;
     private final NimbusJwtDecoder decoder;
     private final Converter<Jwt, AbstractAuthenticationToken> authenticationConverter;
     private final JwtAuthenticationProvider authenticationProvider;
@@ -138,7 +155,30 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
      */
     public ResourceServerJwtSupport(ResourceServerJwtSettings settings,
             Converter<Jwt, Collection<GrantedAuthority>> scopeAuthoritiesConverter, TenantAwareAuthoritiesMapper groupAuthoritiesMapper) {
+        this(settings, scopeAuthoritiesConverter, groupAuthoritiesMapper, IntegrationClients.none());
+    }
+
+    /**
+     * Instantiates the support of one login profile that also accepts the tenant's integration clients.
+     *
+     * @param settings the rules of the profile
+     * @param scopeAuthoritiesConverter the converter deriving roles from the scopes of a token
+     * @param groupAuthoritiesMapper the mapper deriving roles from the groups of an ID token
+     * @param integrationClientRegistry the integration client registry; supplies null when it is not
+     *        deployed
+     */
+    public ResourceServerJwtSupport(ResourceServerJwtSettings settings,
+            Converter<Jwt, Collection<GrantedAuthority>> scopeAuthoritiesConverter, TenantAwareAuthoritiesMapper groupAuthoritiesMapper,
+            Supplier<IntegrationClientRegistry> integrationClientRegistry) {
+        this(settings, scopeAuthoritiesConverter, groupAuthoritiesMapper, IntegrationClients.of(integrationClientRegistry, settings));
+    }
+
+    private ResourceServerJwtSupport(ResourceServerJwtSettings settings,
+            Converter<Jwt, Collection<GrantedAuthority>> scopeAuthoritiesConverter, TenantAwareAuthoritiesMapper groupAuthoritiesMapper,
+            IntegrationClients integrationClients) {
         this.settings = settings;
+        this.integrationClients = integrationClients;
+        this.ownClients = ownClientsOf(settings);
         this.decoder = NimbusJwtDecoder.withJwkSource(jwkSource(settings.jwkSetUri()))
                                        .jwsAlgorithms(algorithms -> algorithms.addAll(ASYMMETRIC_ALGORITHMS))
                                        .build();
@@ -249,13 +289,39 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
     private List<OAuth2TokenValidator<Jwt>> accessTokenValidators(OAuth2TokenValidator<Jwt> issuedByProvider) {
         List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
         validators.add(issuedByProvider);
-        if (!settings.accessTokenAudiences()
-                     .isEmpty()) {
-            validators.add(
-                    settings.provider() == IdentityProvider.COGNITO ? AudienceValidator.ofCognitoClientId(settings.accessTokenAudiences())
-                            : AudienceValidator.ofAudienceClaim(settings.accessTokenAudiences()));
+        if (ownClients != null) {
+            validators.add(ownClientsOrRegisteredClient());
         }
         return validators;
+    }
+
+    /**
+     * The access token audience check of the deployment's own clients.
+     *
+     * @return the check, null when no audience is configured
+     */
+    private static AudienceValidator ownClientsOf(ResourceServerJwtSettings settings) {
+        if (settings.accessTokenAudiences()
+                    .isEmpty()) {
+            return null;
+        }
+        return settings.provider() == IdentityProvider.COGNITO ? AudienceValidator.ofCognitoClientId(settings.accessTokenAudiences())
+                : AudienceValidator.ofAudienceClaim(settings.accessTokenAudiences());
+    }
+
+    /**
+     * The audience check, passed as well by a registered integration client - a client the registry
+     * knows and has not revoked, which no audience lists.
+     */
+    private OAuth2TokenValidator<Jwt> ownClientsOrRegisteredClient() {
+        return jwt -> {
+            OAuth2TokenValidatorResult result = ownClients.validate(jwt);
+            if (result.hasErrors() && integrationClients.registered(jwt)
+                                                        .isPresent()) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            return result;
+        };
     }
 
     private static boolean isText(Object claimValue) {
@@ -288,7 +354,31 @@ public class ResourceServerJwtSupport implements BearerTokenAuthenticator {
         public AbstractAuthenticationToken convert(Jwt jwt) {
             TokenKind kind = settings.kindOf(jwt)
                                      .orElseThrow(() -> new InvalidBearerTokenException(KIND_NOT_ACCEPTED.getDescription()));
-            return kind == TokenKind.ID ? idTokenConverter.convert(jwt) : accessTokenConverter.convert(jwt);
+            return kind == TokenKind.ID ? idTokenConverter.convert(jwt) : accessTokenAuthentication(jwt);
+        }
+
+        /**
+         * A registered integration client becomes its own identity, without roles, whatever audiences its
+         * token carries; any other access token keeps the rules it always had. A token that passed
+         * validation as a registered client only, and that the registry no longer knows, is refused: the
+         * client was revoked in between, and must not fall back to the roles of its scopes.
+         */
+        private AbstractAuthenticationToken accessTokenAuthentication(Jwt jwt) {
+            if (integrationClients.isCandidate(jwt)) {
+                Optional<IntegrationClient> client = integrationClients.registered(jwt);
+                if (client.isPresent()) {
+                    LOGGER.debug("Access token of the integration client [{}] of tenant [{}].", client.get()
+                                                                                                      .clientId(),
+                            client.get()
+                                  .tenantId());
+                    return new IntegrationClientAuthenticationToken(jwt, client.get());
+                }
+                if (ownClients != null && ownClients.validate(jwt)
+                                                    .hasErrors()) {
+                    throw new InvalidBearerTokenException(NOT_A_REGISTERED_CLIENT);
+                }
+            }
+            return accessTokenConverter.convert(jwt);
         }
 
         private Collection<GrantedAuthority> idTokenAuthorities(Jwt jwt,

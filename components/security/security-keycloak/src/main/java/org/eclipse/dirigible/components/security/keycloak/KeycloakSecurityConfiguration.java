@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.security.keycloak;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
 import org.eclipse.dirigible.components.base.http.access.ProgrammaticRequestMatcher;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClientRegistry;
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.eclipse.dirigible.components.security.oauth2.IdpHintAuthorizationRequestResolver;
 import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
@@ -21,6 +22,7 @@ import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceS
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantGroupsClaim;
 import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -133,13 +135,15 @@ public class KeycloakSecurityConfiguration {
      *
      * @param scopeRoleJwtAuthoritiesConverter the scope-to-role authorities converter
      * @param userAuthoritiesMapper the mapper deriving roles from the Keycloak groups
+     * @param integrationClientRegistry the tenants' integration clients, absent when the registry is
+     *        not deployed - looked up per request, not at startup
      * @return the bearer token support
      */
     @Bean
     public ResourceServerJwtSupport resourceServerJwtSupport(ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter,
-            TenantAwareAuthoritiesMapper userAuthoritiesMapper) {
+            TenantAwareAuthoritiesMapper userAuthoritiesMapper, ObjectProvider<IntegrationClientRegistry> integrationClientRegistry) {
         return new ResourceServerJwtSupport(ResourceServerJwtSettings.keycloak(jwkSetUri, issuerUri, clientId, userNameAttribute),
-                scopeRoleJwtAuthoritiesConverter, userAuthoritiesMapper);
+                scopeRoleJwtAuthoritiesConverter, userAuthoritiesMapper, integrationClientRegistry::getIfAvailable);
     }
 
     /**

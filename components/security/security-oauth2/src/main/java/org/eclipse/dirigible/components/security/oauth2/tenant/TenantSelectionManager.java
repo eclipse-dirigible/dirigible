@@ -20,7 +20,9 @@ import java.util.Set;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.tenant.groups.TenantGroupsParser;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -221,6 +223,33 @@ public class TenantSelectionManager {
     }
 
     /**
+     * Enters the tenant of an integration client for the duration of one request: only the tenant the
+     * registry registers the client for, and only once it is provisioned here. The request continues
+     * with the roles the registry gives the client there - nothing its token's scopes map to.
+     *
+     * @param client the authenticated integration client
+     * @param tenantId the tenant the request names
+     * @return the tenant to run the request in and the authentication to run it as
+     * @throws TenantSelectionException if the client is not registered for the tenant, or if this
+     *         instance does not know it or has not provisioned it
+     */
+    public BearerTenantSelection enterTenantAsClient(IntegrationClientAuthenticationToken client, String tenantId) {
+        IntegrationClient registered = client.getClient();
+        if (!registered.tenantId()
+                       .equals(tenantId)) {
+            refuseNotAMember(tenantId, client.getName());
+            throw new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, tenantId,
+                    "Client [" + client.getName() + "] is not registered for tenant [" + tenantId + "] of this application");
+        }
+        Tenant tenant = registeredAndProvisioned(tenantId, client.getName());
+        IntegrationClientAuthenticationToken entered = client.inItsTenant();
+
+        LOGGER.debug("Integration client [{}] enters tenant [{}] with roles [{}] for this request.", client.getName(), tenantId,
+                registered.roles());
+        return new BearerTenantSelection(TenantImpl.createFromEntity(tenant), entered);
+    }
+
+    /**
      * The tenant a user may enter: one their groups grant, registered here and provisioned.
      *
      * @param assignments what the user's groups say
@@ -232,13 +261,36 @@ public class TenantSelectionManager {
     private Tenant enterableTenant(UserTenantAssignments assignments, String tenantId, String user) {
         if (assignments.rolesFor(tenantId)
                        .isEmpty()) {
-            if (tenantId != null && user != null) {
-                events.publishEvent(
-                        new TenantAccessRefusedEvent(tenantId, user, TenantSelectionException.Reason.NOT_A_MEMBER.name(), Instant.now()));
-            }
+            refuseNotAMember(tenantId, user);
             throw new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, tenantId,
                     "User [" + user + "] is not assigned to tenant [" + tenantId + "] of this application");
         }
+        return registeredAndProvisioned(tenantId, user);
+    }
+
+    /**
+     * Announces a refused attempt to enter a tenant the caller does not belong to.
+     *
+     * @param tenantId the tenant asked for
+     * @param principal the caller
+     */
+    private void refuseNotAMember(String tenantId, String principal) {
+        if (tenantId != null && principal != null) {
+            events.publishEvent(
+                    new TenantAccessRefusedEvent(tenantId, principal, TenantSelectionException.Reason.NOT_A_MEMBER.name(), Instant.now()));
+        }
+    }
+
+    /**
+     * The registration of a tenant that may be entered: registered here and provisioned.
+     *
+     * @param tenantId the tenant asked for
+     * @param user the caller, for the messages
+     * @return the registration of the tenant
+     * @throws TenantSelectionException if this instance does not know the tenant or has not provisioned
+     *         it
+     */
+    private Tenant registeredAndProvisioned(String tenantId, String user) {
         Optional<Tenant> tenant = tenantService.findById(tenantId);
         if (tenant.isEmpty()) {
             warnUnknownTenant(tenantId, user);

@@ -29,7 +29,9 @@ import org.eclipse.dirigible.components.base.callable.CallableResultAndException
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSettings;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSupport;
 import org.eclipse.dirigible.components.tenants.tenant.TenantImpl;
@@ -480,6 +482,58 @@ class TenantSelectionFilterTest {
     }
 
     @Test
+    void anIntegrationClientNamingItsTenantRunsInItAsTheManagerEnteredIt() throws Exception {
+        IntegrationClientAuthenticationToken client = authenticateIntegrationClient(ACME);
+        request.addHeader(TenantSelectionConstants.TENANT_HEADER, ACME);
+        IntegrationClientAuthenticationToken entered = client.inItsTenant();
+        when(tenantSelectionManager.enterTenantAsClient(client, ACME)).thenReturn(new BearerTenantSelection(acmeTenant, entered));
+
+        filter.doFilter(request, response, chain);
+
+        verify(tenantContext).execute(eq(acmeTenant), any(CallableResultAndException.class));
+        verify(tenantSelectionManager, never()).enterTenant(any(), any());
+        assertThat(chain.getRequest()).isNotNull();
+        assertThat(SecurityContextHolder.getContext()
+                                        .getAuthentication()).isSameAs(entered);
+    }
+
+    @Test
+    void anIntegrationClientNamingNoTenantIsRefusedAndNeverServedInTheDefaultTenant() throws Exception {
+        authenticateIntegrationClient(ACME);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentType()).isEqualTo(MediaType.APPLICATION_JSON_VALUE);
+        assertThat(response.getContentAsString()).contains("\"reason\":\"TENANT_REQUIRED\"");
+        assertThat(chain.getRequest()).isNull();
+        verify(tenantContext, never()).execute(any(Tenant.class), any(CallableResultAndException.class));
+    }
+
+    @Test
+    void anIntegrationClientNamingAnotherTenantIsRefusedWithTheReason() throws Exception {
+        IntegrationClientAuthenticationToken client = authenticateIntegrationClient(ACME);
+        request.addHeader(TenantSelectionConstants.TENANT_HEADER, GLOBEX);
+        doThrow(new TenantSelectionException(TenantSelectionException.Reason.NOT_A_MEMBER, GLOBEX,
+                "not registered there")).when(tenantSelectionManager)
+                                        .enterTenantAsClient(client, GLOBEX);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(403);
+        assertThat(response.getContentAsString()).contains("NOT_A_MEMBER");
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
+    void anIntegrationClientIsConfinedOnThePathsEveryoneElseReachesWithoutATenant() {
+        authenticateIntegrationClient(ACME);
+
+        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/services/core/healthcheck"))).isFalse();
+        assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", "/services/security/tenant-selection/current"))).isFalse();
+    }
+
+    @Test
     void thePickerAndWhatItLoadsAreNotFiltered() {
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("GET", TenantSelectionFilter.TENANT_SELECTION_PAGE))).isTrue();
         assertThat(filter.shouldNotFilter(new MockHttpServletRequest("POST", "/services/security/tenant-selection"))).isTrue();
@@ -554,6 +608,28 @@ class TenantSelectionFilterTest {
         securityContext.setAuthentication(authentication);
         SecurityContextHolder.setContext(securityContext);
         return authentication;
+    }
+
+    /**
+     * An authenticated integration client registered for a tenant - without roles, as the chain
+     * authenticates it.
+     */
+    private IntegrationClientAuthenticationToken authenticateIntegrationClient(String tenantId) {
+        Jwt jwt = Jwt.withTokenValue("token")
+                     .header("alg", "RS256")
+                     .subject("service-account-partner")
+                     .claim("typ", "Bearer")
+                     .claim("azp", "partner-client")
+                     .issuedAt(Instant.now())
+                     .expiresAt(Instant.now()
+                                       .plusSeconds(300))
+                     .build();
+        IntegrationClientAuthenticationToken client = new IntegrationClientAuthenticationToken(jwt,
+                new IntegrationClient("partner-client", tenantId, "Partner", Set.of("base-vacations.Vacations.VacationRequestReadOnly")));
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(client);
+        SecurityContextHolder.setContext(securityContext);
+        return client;
     }
 
     private static UserTenantAssignments assignments(Map<String, Set<String>> tenantRoles, Set<String> globalRoles) {
