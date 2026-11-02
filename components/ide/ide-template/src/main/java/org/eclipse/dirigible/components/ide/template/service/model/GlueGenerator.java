@@ -1528,6 +1528,11 @@ class GlueGenerator {
      * its own handler carrying the aggregate blocks of every roll-up that shares that child and
      * relation.
      *
+     * <p>
+     * The roll-ups of a handler share its event, not their filter: each aggregate is computed over the
+     * rows its own {@code where:} selects, so a handler reads the child rows once per distinct filter
+     * (#8330) - and exactly once, as before, when they all declare the same one or none.
+     *
      * @param source the template source
      * @param content the template content
      * @param model the model
@@ -1549,15 +1554,34 @@ class GlueGenerator {
         List<GeneratedFile> files = new ArrayList<>();
         for (List<Map<String, Object>> group : groups.values()) {
             Map<String, Object> first = group.get(0);
-            StringBuilder aggregateBlock = new StringBuilder();
+            // A roll-up recomputes from the store for the parent the fired child row points at, so the
+            // key is read off that row itself - narrowed by the roll-up's OWN where:. The roll-ups of a
+            // group share the handler, not the filter (#8330): each distinct filter reads its own rows,
+            // the first into the template's `rows`, every further one into a query of its own.
+            Map<String, List<Map<String, Object>>> byCriteria = new LinkedHashMap<>();
             for (Map<String, Object> rollup : group) {
-                aggregateBlock.append(RollupAggregates.render(rollup));
+                Map<String, Object> criteria = new LinkedHashMap<>();
+                bindForeignKeyCriteria(criteria, rollup, "entity", strOr(rollup, "fkProperty", ""));
+                byCriteria.computeIfAbsent(str(criteria, "criteriaExpression"), ignored -> new ArrayList<>())
+                          .add(rollup);
+            }
+            StringBuilder aggregateBlock = new StringBuilder();
+            int rowSets = 0;
+            for (Map.Entry<String, List<Map<String, Object>>> rowSet : byCriteria.entrySet()) {
+                rowSets++;
+                String rows = rowSets == 1 ? "rows" : "rows" + rowSets;
+                if (rowSets > 1) {
+                    aggregateBlock.append(RollupAggregates.renderRows(str(first, "childEntity"), rows, rowSet.getKey()));
+                }
+                for (Map<String, Object> rollup : rowSet.getValue()) {
+                    aggregateBlock.append(RollupAggregates.render(rollup, rows));
+                }
             }
             Map<String, Object> context = ModelValues.copy(parameters);
             copy(context, first, "className", "childEntity", "childPerspective", "parentEntity", "fkProperty");
-            // A roll-up recomputes from the store for the parent the fired child row points at, so the
-            // key is read off that row itself.
-            bindForeignKeyCriteria(context, first, "entity", strOr(first, "fkProperty", ""));
+            context.put("criteriaExpression", byCriteria.keySet()
+                                                        .iterator()
+                                                        .next());
             context.put("javaChildPerspective", sanitize(first, "childPerspective"));
             context.put("javaParentPerspective", sanitize(first, "parentPerspective"));
             // A cross-model roll-up writes into the owner model's generated package.

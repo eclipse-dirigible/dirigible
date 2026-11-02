@@ -51,7 +51,7 @@ class RollupAggregatesTest {
 
     @Test
     void emptyOptionalsEmitNoCapacityBlockAtAll() {
-        String rendered = RollupAggregates.render(sumRollup("", "", ""));
+        String rendered = RollupAggregates.render(sumRollup("", "", ""), "rows");
 
         assertThat(rendered).as("the sum itself is always emitted")
                             .contains("parent.Total = sum;");
@@ -69,7 +69,7 @@ class RollupAggregatesTest {
         rollup.put("statusWhenFull", "3");
         rollup.put("statusWhenPartial", "2");
 
-        String rendered = RollupAggregates.render(rollup);
+        String rendered = RollupAggregates.render(rollup, "rows");
 
         assertThat(rendered).contains("parent.Capacity")
                             .contains("parent.Available = capacity.subtract(sum);")
@@ -87,7 +87,7 @@ class RollupAggregatesTest {
         rollup.put("statusWhenFull", "3");
         rollup.put("statusWhenPartial", "2");
 
-        String rendered = RollupAggregates.render(rollup);
+        String rendered = RollupAggregates.render(rollup, "rows");
 
         String owned = "java.util.Objects.equals(parent.Status, 3) || java.util.Objects.equals(parent.Status, 2)";
         assertThat(rendered).as("the first move INTO a roll-up-owned status snapshots the status it displaces")
@@ -114,7 +114,7 @@ class RollupAggregatesTest {
         rollup.put("countField", "Total");
         rollup.put("sumField", "Amount");
 
-        String rendered = RollupAggregates.render(rollup);
+        String rendered = RollupAggregates.render(rollup, "rows");
 
         assertThat(rendered).doesNotContain("capacity")
                             .doesNotContain("parent. ");

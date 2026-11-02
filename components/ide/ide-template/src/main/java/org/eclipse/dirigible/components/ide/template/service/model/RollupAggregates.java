@@ -18,10 +18,12 @@ import static org.eclipse.dirigible.components.ide.template.service.model.ModelV
  * totals when its children change.
  *
  * <p>
- * The emitted code references the {@code rows}, {@code parent}, {@code derived} and {@code changed}
- * names the roll-up handler template provides. Every aggregate is wrapped in its own block so that
- * locals never collide when several are coalesced into one handler, and every one is guarded so it
- * writes the parent - and so raises the parent's update event - only when the value actually moves.
+ * The emitted code references the {@code parent}, {@code derived} and {@code changed} names the
+ * roll-up handler template provides, and the child rows under the variable it is handed: the
+ * template's {@code rows} for the first filter of a coalesced handler, a query of its own for every
+ * other one (see {@link #renderRows}). Every aggregate is wrapped in its own block so that locals
+ * never collide when several are coalesced into one handler, and every one is guarded so it writes
+ * the parent - and so raises the parent's update event - only when the value actually moves.
  * Without that guard the cascade a parent update triggers would not terminate.
  */
 final class RollupAggregates {
@@ -35,15 +37,31 @@ final class RollupAggregates {
      * Renders one aggregate.
      *
      * @param rollup the roll-up descriptor
+     * @param rows the variable holding the child rows this roll-up's own filter selects
      * @return the Java source of the compute block
      */
-    static String render(Map<String, Object> rollup) {
+    static String render(Map<String, Object> rollup, String rows) {
         String countField = str(rollup, "countField");
         return switch (strOrEmpty(rollup, "op")) {
-            case "latest" -> renderLatest(rollup, countField);
-            case "sum" -> renderSum(rollup, countField);
-            default -> renderCount(countField);
+            case "latest" -> renderLatest(rollup, countField, rows);
+            case "sum" -> renderSum(rollup, countField, rows);
+            default -> renderCount(countField, rows);
         };
+    }
+
+    /**
+     * Declares a further row set of a coalesced handler: the child rows one more distinct filter
+     * selects (#8330). Roll-ups sharing a child and a relation share one handler, but not necessarily
+     * one {@code where:} - each must be computed over the rows its own filter selects.
+     *
+     * @param childEntity the child entity
+     * @param rows the variable to declare
+     * @param criteriaExpression the query selecting the rows
+     * @return the Java source of the declaration
+     */
+    static String renderRows(String childEntity, String rows, String criteriaExpression) {
+        return "        java.util.List<" + childEntity + "Entity> " + rows + " = new " + childEntity + "Repository().findAll("
+                + criteriaExpression + ");\n";
     }
 
     /**
@@ -53,9 +71,10 @@ final class RollupAggregates {
      *
      * @param rollup the roll-up descriptor
      * @param countField the parent field to write
+     * @param rows the variable holding the child rows
      * @return the Java source
      */
-    private static String renderLatest(Map<String, Object> rollup, String countField) {
+    private static String renderLatest(Map<String, Object> rollup, String countField, String rows) {
         String childEntity = str(rollup, "childEntity");
         String byField = str(rollup, "byField");
         String ofField = str(rollup, "ofField");
@@ -64,7 +83,9 @@ final class RollupAggregates {
         out.append("            ")
            .append(childEntity)
            .append("Entity latestRow = null;\n");
-        out.append("            for (var row : rows) {\n");
+        out.append("            for (var row : ")
+           .append(rows)
+           .append(") {\n");
         out.append("                if (row.")
            .append(byField)
            .append(" != null && (latestRow == null || latestRow.")
@@ -103,9 +124,10 @@ final class RollupAggregates {
      *
      * @param rollup the roll-up descriptor
      * @param countField the parent field to write
+     * @param rows the variable holding the child rows
      * @return the Java source
      */
-    private static String renderSum(Map<String, Object> rollup, String countField) {
+    private static String renderSum(Map<String, Object> rollup, String countField, String rows) {
         String sumField = str(rollup, "sumField");
         // Emptiness, not nullness: the intent glue writes "" for an unused optional field
         // (GlueIntentGenerator), and the JavaScript this was ported from tested truthiness - so a null
@@ -118,7 +140,9 @@ final class RollupAggregates {
         StringBuilder out = new StringBuilder(512);
         out.append("        {\n");
         out.append("            java.math.BigDecimal sum = java.math.BigDecimal.ZERO;\n");
-        out.append("            for (var row : rows) {\n");
+        out.append("            for (var row : ")
+           .append(rows)
+           .append(") {\n");
         out.append("                if (row.")
            .append(sumField)
            .append(" != null) {\n");
@@ -254,12 +278,15 @@ final class RollupAggregates {
      * Counts the child rows into the parent.
      *
      * @param countField the parent field to write
+     * @param rows the variable holding the child rows
      * @return the Java source
      */
-    private static String renderCount(String countField) {
+    private static String renderCount(String countField, String rows) {
         StringBuilder out = new StringBuilder(256);
         out.append("        {\n");
-        out.append("            int count = rows.size();\n");
+        out.append("            int count = ")
+           .append(rows)
+           .append(".size();\n");
         out.append("            if (parent.")
            .append(countField)
            .append(" == null || parent.")

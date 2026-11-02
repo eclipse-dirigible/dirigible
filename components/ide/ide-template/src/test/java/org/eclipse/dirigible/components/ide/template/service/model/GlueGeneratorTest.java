@@ -724,6 +724,85 @@ class GlueGeneratorTest {
         assertThat(unprefixed.get("table")).isEqualTo("BANK_STATEMENT_LINE");
     }
 
+    /**
+     * Two roll-ups over the same child and relation share one handler per event, but not a filter
+     * (#8330): the first filter reads the template's {@code rows}, a different one reads rows of its
+     * own, and each aggregate counts the rows ITS filter selects.
+     */
+    @Test
+    void coalescedRollupsWithDifferentFiltersEachReadTheirOwnRows() throws IOException {
+        Map<String, Object> credited =
+                creditNoteRollup("Credited", "sum", List.of(clause("ne", "Status", Map.of("kind", "number", "text", "1"))));
+        credited.put("sumField", "Total");
+        Map<String, Object> open =
+                creditNoteRollup("OpenCreditNotes", "count", List.of(clause("ne", "Status", Map.of("kind", "number", "text", "3"))));
+
+        Map<String, Object> context = boundRollups(List.of(credited, open));
+
+        assertThat(context).containsEntry("criteriaExpression",
+                "Criteria.create().eq(\"SalesInvoice\", entity.SalesInvoice).ne(\"Status\", 1)");
+        String block = (String) context.get("aggregateBlock");
+        assertThat(block).contains("for (var row : rows) {")
+                         .contains("java.util.List<CreditNoteEntity> rows2 = new CreditNoteRepository().findAll("
+                                 + "Criteria.create().eq(\"SalesInvoice\", entity.SalesInvoice).ne(\"Status\", 3));")
+                         .contains("int count = rows2.size();");
+        assertThat(block.indexOf("rows2 =")).isGreaterThan(block.indexOf("parent.Credited = sum;"));
+    }
+
+    /**
+     * Roll-ups sharing a filter - or declaring none - still read the child rows exactly once.
+     */
+    @Test
+    void coalescedRollupsWithTheSameFilterShareOneQuery() throws IOException {
+        List<Map<String, Object>> filter = List.of(clause("ne", "Status", Map.of("kind", "number", "text", "1")));
+        Map<String, Object> credited = creditNoteRollup("Credited", "sum", filter);
+        credited.put("sumField", "Total");
+
+        String block = (String) boundRollups(List.of(credited, creditNoteRollup("CreditNotes", "count", filter))).get("aggregateBlock");
+
+        assertThat(block).doesNotContain("findAll")
+                         .contains("int count = rows.size();");
+    }
+
+    private static Map<String, Object> creditNoteRollup(String countField, String op, List<Map<String, Object>> filter) {
+        Map<String, Object> rollup = new LinkedHashMap<>();
+        rollup.put("className", "CreditNoteSalesInvoiceRollupOnTransition");
+        rollup.put("childEntity", "CreditNote");
+        rollup.put("childPerspective", "CreditNote");
+        rollup.put("parentEntity", "SalesInvoice");
+        rollup.put("parentPerspective", "SalesInvoice");
+        rollup.put("fkProperty", "SalesInvoice");
+        rollup.put("topicSuffix", "-transitioned");
+        rollup.put("op", op);
+        rollup.put("countField", countField);
+        rollup.put("filter", filter);
+        return rollup;
+    }
+
+    private static Map<String, Object> boundRollups(List<Map<String, Object>> rollups) throws IOException {
+        List<Map<String, Object>> contexts = new ArrayList<>();
+        ModelTemplateRenderer capturing = new ModelTemplateRenderer(null, null) {
+            @Override
+            String render(GenerationTemplateMetadataSource source, String content, Map<String, Object> parameters) {
+                contexts.add(parameters);
+                return "";
+            }
+
+            @Override
+            String renderPath(String location, String rename, Map<String, Object> parameters) {
+                return rename;
+            }
+        };
+        GenerationTemplateMetadataSource source = new GenerationTemplateMetadataSource();
+        source.setLocation("/events/Rollup.java.template");
+        source.setRename("gen/events/Rollup.java");
+        new GlueGenerator(capturing).generate("rollups", source, "", Map.of("rollups", rollups),
+                new LinkedHashMap<>(Map.of("javaGenFolderName", "sales", "projectName", "sales")));
+        assertThat(contexts).as("roll-ups sharing a child, a relation and an event share one handler")
+                            .hasSize(1);
+        return contexts.get(0);
+    }
+
     private static Map<String, Object> boundArrival(String collection, Map<String, Object> arrival) throws IOException {
         return bound(collection, arrival, Map.of("javaGenFolderName", "shop"));
     }
