@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -124,6 +125,24 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
                     return 'inside=' + inside + ';onTop=' + onTop + ';scrolled=' + (container.scrollLeft > 0);
                     """;
 
+    /**
+     * For the open row menu under {@code arguments[0]}: how many of its items are the element hit 5 px
+     * from their end, out of how many - {@code <on top>/<items>}. The menu's end lies over the pinned
+     * column of the rows below, whose cells must not cover it.
+     */
+    private static final String MENU_ITEMS_ON_TOP =
+            """
+                    var menu = Array.from(document.querySelectorAll(arguments[0] + ' td[data-row-actions] [x-h-menu]')).find(m => m.checkVisibility());
+                    if (!menu) return 'no-menu';
+                    var items = Array.from(menu.querySelectorAll('[data-slot="menu-item"]')).filter(i => i.checkVisibility());
+                    var onTop = items.filter(i => {
+                        var b = i.getBoundingClientRect();
+                        var hit = document.elementFromPoint(b.right - 5, b.top + b.height / 2);
+                        return !!hit && (hit === i || i.contains(hit));
+                    });
+                    return onTop.length + '/' + items.length;
+                    """;
+
     /** The number of open row menus under {@code arguments[0]}. */
     private static final String OPEN_MENUS = """
             return String(Array.from(document.querySelectorAll(arguments[0] + ' td[data-row-actions] [x-h-menu]'))
@@ -144,6 +163,7 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
         generateAndPublish();
         create("/shipment/ShipmentController", shipment("SH-1"));
         create("/shipment/ShipmentController", shipment("SH-2"));
+        create("/shipment/ShipmentController", shipment("SH-3"));
         openNarrow(APP + "/Shipment");
 
         assertEquals(AT_START, actionsAt(LIST_MENU, "start"), "at the start of the scroll the list row's \"...\" must be on screen");
@@ -151,6 +171,10 @@ class StickyRowActionsHarmoniaIT extends UserInterfaceIntegrationTest {
         firstVisible(LIST_MENU).click();
         assertEquals("1", poll(OPEN_MENUS, "1", "[x-data=\"ShipmentManageListPage\"]"),
                 "a click on the pinned \"...\" must open the row's menu");
+        String onTop = Selenide.executeJavaScript(MENU_ITEMS_ON_TOP, "[x-data=\"ShipmentManageListPage\"]");
+        String[] counts = onTop.split("/");
+        assertTrue(counts.length == 2 && counts[0].equals(counts[1]) && !"0".equals(counts[1]),
+                "every item of the open row menu must be on top of the pinned cells below it - " + onTop);
     }
 
     @Test
