@@ -13,7 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.OutputStream;
@@ -24,6 +27,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
@@ -32,6 +36,8 @@ import java.util.stream.Collectors;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.AuthenticatedBearerToken;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClientRegistry;
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantGroupsClaim;
@@ -83,6 +89,7 @@ class ResourceServerJwtSupportTest {
     private static final String COGNITO_ISSUER = "https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_TEST";
     private static final String KEYCLOAK_ISSUER = "https://keycloak.example.org/realms/dirigible";
     private static final String CLIENT_ID = "the-client";
+    private static final String PARTNER = "partner-client";
     private static final String M2M_SCOPES =
             "sample-resource-server/ADMINISTRATOR sample-resource-server/sample-app.Orders.OrderFullAccess openid";
 
@@ -411,6 +418,122 @@ class ResourceServerJwtSupportTest {
         assertEquals(Set.of(), roles(authentication));
     }
 
+    // --- integration clients ------------------------------------------------------------------
+
+    @Test
+    void aRegisteredClientPassesTheAudienceCheckAndHoldsNoRoleNotEvenItsScopes() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = registry(PARTNER, "acme");
+        String token = sign(COGNITO_ISSUER, claims -> claims.subject(PARTNER)
+                                                            .claim("token_use", "access")
+                                                            .claim("client_id", PARTNER)
+                                                            .claim("scope", M2M_SCOPES));
+
+        Authentication authentication = cognito(registry).authenticate(token)
+                                                         .authentication();
+
+        IntegrationClientAuthenticationToken client = assertInstanceOf(IntegrationClientAuthenticationToken.class, authentication);
+        assertEquals(PARTNER, client.getName());
+        assertEquals("acme", client.getClient()
+                                   .tenantId());
+        assertEquals(Set.of(), roles(client), "neither its scopes nor its registered roles before its tenant is entered");
+        assertEquals(Set.of("base-vacations.Vacations.VacationRequestReadOnly"), roles(client.inItsTenant()));
+    }
+
+    @Test
+    void anUnknownOrRevokedClientIsRefused() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = mock(IntegrationClientRegistry.class);
+        when(registry.findActive(anyString())).thenReturn(Optional.empty());
+        String token = sign(COGNITO_ISSUER, claims -> claims.claim("token_use", "access")
+                                                            .claim("client_id", PARTNER)
+                                                            .claim("scope", M2M_SCOPES));
+
+        assertThrows(InvalidBearerTokenException.class, () -> cognito(registry).authenticate(token));
+    }
+
+    @Test
+    void theDeploymentsOwnClientsAreNeverLookedUp() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = registry(PARTNER, "acme");
+        String token = sign(COGNITO_ISSUER, claims -> claims.claim("token_use", "access")
+                                                            .claim("client_id", CLIENT_ID)
+                                                            .claim("scope", M2M_SCOPES));
+
+        Authentication authentication = cognito(registry).authenticate(token)
+                                                         .authentication();
+
+        assertEquals(Set.of("ADMINISTRATOR", "sample-app.Orders.OrderFullAccess"), roles(authentication));
+        verify(registry, never()).findActive(anyString());
+    }
+
+    /**
+     * A Keycloak realm may put the deployment's audience on every token of a client scope - a
+     * registered client is still confined, by the client it names in {@code azp}.
+     */
+    @Test
+    void aRegisteredKeycloakClientIsConfinedEvenWhenItsTokenCarriesTheDeploymentsAudience() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = registry(PARTNER, "acme");
+        String token = sign(KEYCLOAK_ISSUER, claims -> claims.subject("service-account-partner")
+                                                             .claim("typ", "Bearer")
+                                                             .audience(CLIENT_ID)
+                                                             .claim("azp", PARTNER)
+                                                             .claim("scope", "sample-resource-server/OPERATOR"));
+
+        Authentication authentication = keycloak(registry).authenticate(token)
+                                                          .authentication();
+
+        IntegrationClientAuthenticationToken client = assertInstanceOf(IntegrationClientAuthenticationToken.class, authentication);
+        assertEquals(PARTNER, client.getName(), "a client is named by its client id, whatever its subject");
+        assertEquals(Set.of(), roles(client));
+    }
+
+    @Test
+    void anUnregisteredKeycloakClientWithTheDeploymentsAudiencePassesAsBefore() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = mock(IntegrationClientRegistry.class);
+        when(registry.findActive(anyString())).thenReturn(Optional.empty());
+        String token = sign(KEYCLOAK_ISSUER, claims -> claims.subject("service-account-provisioning")
+                                                             .claim("typ", "Bearer")
+                                                             .audience(CLIENT_ID)
+                                                             .claim("azp", "provisioning-m2m")
+                                                             .claim("scope", "sample-resource-server/OPERATOR"));
+
+        Authentication authentication = keycloak(registry).authenticate(token)
+                                                          .authentication();
+
+        assertEquals(Set.of("OPERATOR"), roles(authentication));
+    }
+
+    @Test
+    void outsideTheTokenGroupsStrategyNoClientIsRegistered() throws Exception {
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        IntegrationClientRegistry registry = registry(PARTNER, "acme");
+        String token = sign(COGNITO_ISSUER, claims -> claims.claim("token_use", "access")
+                                                            .claim("client_id", PARTNER)
+                                                            .claim("scope", M2M_SCOPES));
+
+        assertThrows(InvalidBearerTokenException.class, () -> cognito(registry).authenticate(token));
+        verify(registry, never()).findActive(anyString());
+    }
+
+    @Test
+    void withoutTheRegistryDeployedAForeignClientIsRefusedAsBefore() throws Exception {
+        useTokenGroups();
+        DirigibleConfig.OAUTH2_JWT_AUDIENCES.setStringValue(CLIENT_ID);
+        String token = sign(COGNITO_ISSUER, claims -> claims.claim("token_use", "access")
+                                                            .claim("client_id", PARTNER)
+                                                            .claim("scope", M2M_SCOPES));
+
+        assertThrows(InvalidBearerTokenException.class, () -> cognito((IntegrationClientRegistry) null).authenticate(token));
+    }
+
     // --- the chain path and the frame path agree ----------------------------------------------
 
     @Test
@@ -491,6 +614,31 @@ class ResourceServerJwtSupportTest {
 
     private static ResourceServerJwtSupport keycloak() {
         return support(ResourceServerJwtSettings.keycloak(jwkSetUri, KEYCLOAK_ISSUER, CLIENT_ID, "preferred_username"), "groups");
+    }
+
+    private static ResourceServerJwtSupport cognito(IntegrationClientRegistry registry) {
+        return support(ResourceServerJwtSettings.cognito(jwkSetUri, COGNITO_ISSUER, CLIENT_ID, "email"), "cognito:groups", registry);
+    }
+
+    private static ResourceServerJwtSupport keycloak(IntegrationClientRegistry registry) {
+        return support(ResourceServerJwtSettings.keycloak(jwkSetUri, KEYCLOAK_ISSUER, CLIENT_ID, "preferred_username"), "groups", registry);
+    }
+
+    private static ResourceServerJwtSupport support(ResourceServerJwtSettings settings, String providerGroupsClaim,
+            IntegrationClientRegistry registry) {
+        ScopeService scopeService = mock(ScopeService.class);
+        when(scopeService.getScopeRolesMappings()).thenReturn(Collections.emptyMap());
+        return new ResourceServerJwtSupport(settings, new ScopeRoleJwtAuthoritiesConverter(scopeService),
+                new TenantAwareAuthoritiesMapper(new TenantGroupsClaim(), providerGroupsClaim), () -> registry);
+    }
+
+    /** A registry knowing one active client, registered for a tenant with one read-only role. */
+    private static IntegrationClientRegistry registry(String clientId, String tenantId) {
+        IntegrationClientRegistry registry = mock(IntegrationClientRegistry.class);
+        when(registry.findActive(anyString())).thenReturn(Optional.empty());
+        when(registry.findActive(clientId)).thenReturn(Optional.of(
+                new IntegrationClient(clientId, tenantId, "Partner", Set.of("base-vacations.Vacations.VacationRequestReadOnly"))));
+        return registry;
     }
 
     private static ResourceServerJwtSupport support(ResourceServerJwtSettings settings, String providerGroupsClaim) {

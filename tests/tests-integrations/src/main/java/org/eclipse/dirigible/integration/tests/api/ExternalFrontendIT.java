@@ -1196,16 +1196,22 @@ class ExternalFrontendIT extends IntegrationTest {
         }
 
         String accessToken(String subject, String scope) {
+            return accessToken(subject, scope, claims -> {
+            });
+        }
+
+        String accessToken(String subject, String scope, Consumer<JWTClaimsSet.Builder> customizer) {
             Instant now = Instant.now();
-            return sign(new JWTClaimsSet.Builder().issuer(issuer)
-                                                  .subject(subject)
-                                                  .audience("account")
-                                                  .claim("azp", CLIENT_ID)
-                                                  .claim("typ", "Bearer")
-                                                  .claim("scope", scope)
-                                                  .issueTime(Date.from(now))
-                                                  .expirationTime(Date.from(now.plusSeconds(300)))
-                                                  .build());
+            JWTClaimsSet.Builder claims = new JWTClaimsSet.Builder().issuer(issuer)
+                                                                    .subject(subject)
+                                                                    .audience("account")
+                                                                    .claim("azp", CLIENT_ID)
+                                                                    .claim("typ", "Bearer")
+                                                                    .claim("scope", scope)
+                                                                    .issueTime(Date.from(now))
+                                                                    .expirationTime(Date.from(now.plusSeconds(300)));
+            customizer.accept(claims);
+            return sign(claims.build());
         }
 
         private String sign(JWTClaimsSet claims) {

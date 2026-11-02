@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantResolutionStrategy;
 import org.eclipse.dirigible.components.base.tenant.groups.UserTenantAssignments;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSupport;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.TokenKind;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantSelectionEndpoint.TenantSelectionRefusal;
@@ -68,6 +69,12 @@ import jakarta.servlet.http.HttpServletResponse;
  * nothing to do there. An access token carries no groups and passes as it always did.
  *
  * <p>
+ * The access token of a registered integration client is confined to its own tenant: every request
+ * it makes must name that tenant, on every path, and runs there with the roles the registry gives
+ * the client. Naming no tenant or another one is refused - such a client never runs in the default
+ * tenant.
+ *
+ * <p>
  * It runs <em>before</em> authorization on purpose: until a tenant is entered the user has no
  * tenant roles, so authorization would answer 403 before they ever saw the picker or the refusal.
  *
@@ -92,6 +99,9 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
 
     /** Why a user without a tenant is refused. */
     private static final String NO_TENANT_ASSIGNED_MESSAGE = "User is not assigned to any tenant of this application";
+
+    /** Answered to an integration client whose request names no tenant. */
+    static final String TENANT_REQUIRED = "TENANT_REQUIRED";
 
     /**
      * What a request may need before a tenant is known: the picker itself and what it loads, the
@@ -175,6 +185,10 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext()
                                                              .getAuthentication();
+        if (authentication instanceof IntegrationClientAuthenticationToken client) {
+            serveIntegrationClient(client, request, response, chain);
+            return;
+        }
         if (authentication instanceof JwtAuthenticationToken bearer) {
             serveBearer(bearer, request, response, chain);
             return;
@@ -264,6 +278,42 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
         // The tenant scope of this request was opened as the default tenant's before the token was
         // authenticated (see TenantExtractor), and the authorities are the token's global roles - both
         // are replaced for the rest of the chain, which is all a bearer request lives for.
+        SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
+        securityContext.setAuthentication(selection.authentication());
+        SecurityContextHolder.setContext(securityContext);
+        continueInTenant(selection.tenant(), request, response, chain);
+    }
+
+    /**
+     * Serves a request of an integration client in its own tenant, which the request must name.
+     *
+     * @param client the authenticated integration client
+     * @param request the request
+     * @param response the response
+     * @param chain the chain
+     * @throws ServletException the servlet exception
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void serveIntegrationClient(IntegrationClientAuthenticationToken client, HttpServletRequest request,
+            HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
+        String tenantId = requestedTenant(request);
+        if (tenantId == null) {
+            LOGGER.info("Refused a request of the integration client [{}] that names no tenant in [{}].", client.getName(),
+                    TenantSelectionConstants.TENANT_HEADER);
+            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+            response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+            response.getWriter()
+                    .write(gson.toJson(new TenantSelectionRefusal(TENANT_REQUIRED, "An integration client names its tenant in the ["
+                            + TenantSelectionConstants.TENANT_HEADER + "] header of every request")));
+            return;
+        }
+        BearerTenantSelection selection;
+        try {
+            selection = tenantSelectionManager.enterTenantAsClient(client, tenantId);
+        } catch (TenantSelectionException ex) {
+            refuse(response, ex);
+            return;
+        }
         SecurityContext securityContext = SecurityContextHolder.createEmptyContext();
         securityContext.setAuthentication(selection.authentication());
         SecurityContextHolder.setContext(securityContext);
@@ -460,6 +510,11 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         if (TenantResolutionStrategy.TOKEN_GROUPS != resolutionStrategy) {
             return true;
+        }
+        // an integration client is confined to its tenant on every path, the platform's own included
+        if (SecurityContextHolder.getContext()
+                                 .getAuthentication() instanceof IntegrationClientAuthenticationToken) {
+            return false;
         }
         String path = request.getRequestURI();
         return UNFILTERED_PREFIXES.stream()

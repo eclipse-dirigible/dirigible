@@ -24,7 +24,9 @@ import java.util.Set;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
+import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
@@ -341,6 +343,48 @@ class TenantSelectionManagerTest {
     }
 
     @Test
+    void anIntegrationClientEntersItsTenantWithTheRegistrysRolesOnly() {
+        IntegrationClientAuthenticationToken client = integrationClient(ACME, "base-vacations.Vacations.VacationRequestReadOnly");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
+
+        BearerTenantSelection selection = manager.enterTenantAsClient(client, ACME);
+
+        assertThat(selection.tenant()
+                            .getId()).isEqualTo(ACME);
+        assertThat(selection.authentication()).isInstanceOf(IntegrationClientAuthenticationToken.class);
+        assertThat(selection.authentication()
+                            .getName()).isEqualTo("partner-client");
+        assertThat(AuthoritiesUtil.toRoleNames(selection.authentication()
+                                                        .getAuthorities())).containsExactly(
+                                                                "base-vacations.Vacations.VacationRequestReadOnly");
+        assertThat(client.getAuthorities()).isEmpty();
+    }
+
+    @Test
+    void anIntegrationClientIsRefusedAnyOtherTenantAndTheRefusalIsAnnounced() {
+        IntegrationClientAuthenticationToken client = integrationClient(ACME, "base-vacations.Vacations.VacationRequestReadOnly");
+
+        assertThatThrownBy(() -> manager.enterTenantAsClient(client, GLOBEX)).isInstanceOf(TenantSelectionException.class)
+                                                                             .extracting("reason")
+                                                                             .isEqualTo(TenantSelectionException.Reason.NOT_A_MEMBER);
+        verify(tenantService, never()).findById(any());
+        ArgumentCaptor<TenantAccessRefusedEvent> event = ArgumentCaptor.forClass(TenantAccessRefusedEvent.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue()
+                        .principal()).isEqualTo("partner-client");
+    }
+
+    @Test
+    void anIntegrationClientIsRefusedItsTenantUntilItIsProvisionedHere() {
+        IntegrationClientAuthenticationToken client = integrationClient(ACME, "base-vacations.Vacations.VacationRequestReadOnly");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.DEPROVISIONING)));
+
+        assertThatThrownBy(() -> manager.enterTenantAsClient(client, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                           .extracting("reason")
+                                                                           .isEqualTo(TenantSelectionException.Reason.NOT_PROVISIONED_HERE);
+    }
+
+    @Test
     void theTenantsOfABearerTokenAreOfferedLikeALoginsAre() {
         when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.PROVISIONED)));
 
@@ -437,6 +481,23 @@ class TenantSelectionManagerTest {
                                        .plusSeconds(300))
                      .build();
         return new JwtAuthenticationToken(jwt, AuthoritiesUtil.toAuthorities(currentRoles), "jane");
+    }
+
+    /**
+     * The authenticated access token of an integration client registered for a tenant, with its scopes,
+     * which grant nothing.
+     */
+    private static IntegrationClientAuthenticationToken integrationClient(String tenantId, String... roles) {
+        Jwt jwt = Jwt.withTokenValue("token")
+                     .header("alg", "RS256")
+                     .subject("partner-client")
+                     .claim("client_id", "partner-client")
+                     .claim("scope", "codbex-apps/integration")
+                     .issuedAt(Instant.now())
+                     .expiresAt(Instant.now()
+                                       .plusSeconds(300))
+                     .build();
+        return new IntegrationClientAuthenticationToken(jwt, new IntegrationClient("partner-client", tenantId, "Partner", Set.of(roles)));
     }
 
     private Set<String> currentRoleNames() {

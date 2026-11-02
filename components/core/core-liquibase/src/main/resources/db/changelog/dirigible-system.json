@@ -12852,6 +12852,299 @@
           }
         ]
       }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_CLIENTS",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENCLIENT_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_CLIENTS"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_TENANT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_CLIENT_ID",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_NAME",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_REVISION",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_CREATED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_CREATED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_REVOKED_BY",
+                    "type": "VARCHAR(320)"
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENT_REVOKED_AT",
+                    "type": "TIMESTAMP"
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "create-DIRIGIBLE_TENANT_CLIENT_ROLES",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANT_CLIENT_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createTable": {
+              "columns": [
+                {
+                  "column": {
+                    "autoIncrement": true,
+                    "name": "TENCLIENTROLE_ID",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false,
+                      "primaryKey": true,
+                      "primaryKeyName": "PK_DIRIGIBLE_TENANT_CLIENT_ROLES"
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENTROLE_CLIENT",
+                    "type": "BIGINT",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                },
+                {
+                  "column": {
+                    "name": "TENCLIENTROLE_ROLE",
+                    "type": "VARCHAR(255)",
+                    "constraints": {
+                      "nullable": false
+                    }
+                  }
+                }
+              ],
+              "tableName": "DIRIGIBLE_TENANT_CLIENT_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_CLIENTS_CLIENT_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_CLIENTS_CLIENT_ID",
+                  "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENCLIENT_CLIENT_ID",
+              "constraintName": "UK_DIRIGIBLE_TENANT_CLIENTS_CLIENT_ID",
+              "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "UK_DIRIGIBLE_TENANT_CLIENT_ROLES_CLIENT_ROLE",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "constraintName": "UK_DIRIGIBLE_TENANT_CLIENT_ROLES_CLIENT_ROLE",
+                  "tableName": "DIRIGIBLE_TENANT_CLIENT_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addUniqueConstraint": {
+              "columnNames": "TENCLIENTROLE_CLIENT, TENCLIENTROLE_ROLE",
+              "constraintName": "UK_DIRIGIBLE_TENANT_CLIENT_ROLES_CLIENT_ROLE",
+              "tableName": "DIRIGIBLE_TENANT_CLIENT_ROLES"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "FK_DIRIGIBLE_TENANT_CLIENT_ROLES__TENCLIENTROLE_CLIENT",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_TENANT_CLIENT_ROLES__TENCLIENTROLE_CLIENT",
+                  "foreignKeyTableName": "DIRIGIBLE_TENANT_CLIENT_ROLES"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "addForeignKeyConstraint": {
+              "baseColumnNames": "TENCLIENTROLE_CLIENT",
+              "baseTableName": "DIRIGIBLE_TENANT_CLIENT_ROLES",
+              "constraintName": "FK_DIRIGIBLE_TENANT_CLIENT_ROLES__TENCLIENTROLE_CLIENT",
+              "deferrable": false,
+              "initiallyDeferred": false,
+              "onDelete": "CASCADE",
+              "onUpdate": "RESTRICT",
+              "referencedColumnNames": "TENCLIENT_ID",
+              "referencedTableName": "DIRIGIBLE_TENANT_CLIENTS",
+              "validate": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "changeSet": {
+        "id": "IX_DIRIGIBLE_TENANT_CLIENTS_TENCLIENT_TENANT_ID",
+        "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_TENANT_CLIENTS_TENCLIENT_TENANT_ID",
+                  "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+                }
+              }
+            ]
+          }
+        ],
+        "changes": [
+          {
+            "createIndex": {
+              "columns": [
+                {
+                  "column": {
+                    "name": "TENCLIENT_TENANT_ID"
+                  }
+                }
+              ],
+              "indexName": "IX_DIRIGIBLE_TENANT_CLIENTS_TENCLIENT_TENANT_ID",
+              "tableName": "DIRIGIBLE_TENANT_CLIENTS"
+            }
+          }
+        ]
+      }
     }
   ]
 }
