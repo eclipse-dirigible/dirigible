@@ -74,6 +74,18 @@ public interface ISqlDialect<SELECT extends SelectBuilder, INSERT extends Insert
     String getDataTypeName(DataType dataType);
 
     /**
+     * Whether the type this dialect renders for the given data type takes no length argument, so a
+     * length declared for the column has to be dropped - PostgreSQL's {@code bytea}, for instance, is a
+     * syntax error as {@code bytea(100)}. Default is false.
+     *
+     * @param dataType the data type
+     * @return true, if a length argument must not follow the type name
+     */
+    default boolean isLengthless(DataType dataType) {
+        return false;
+    }
+
+    /**
      * PRIMARY KEY argument for a column for the create table script Default is "PRIMARY KEY".
      *
      * @return the primary key argument
