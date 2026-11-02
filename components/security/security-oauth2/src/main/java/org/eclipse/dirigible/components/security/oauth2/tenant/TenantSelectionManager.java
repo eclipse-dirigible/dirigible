@@ -244,8 +244,9 @@ public class TenantSelectionManager {
         Tenant tenant = registeredAndProvisioned(tenantId, client.getName());
         IntegrationClientAuthenticationToken entered = client.inItsTenant();
 
-        LOGGER.debug("Integration client [{}] enters tenant [{}] with roles [{}] for this request.", client.getName(), tenantId,
-                registered.roles());
+        // the registry's tenant id, equal to the requested one by now - the header itself is not logged
+        LOGGER.debug("Integration client [{}] enters tenant [{}] with roles [{}] for this request.", registered.clientId(),
+                registered.tenantId(), registered.roles());
         return new BearerTenantSelection(TenantImpl.createFromEntity(tenant), entered);
     }
 

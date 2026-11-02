@@ -85,8 +85,10 @@ public final class IntegrationClients {
         Set<String> deploymentClients = new HashSet<>(settings.idTokenAudiences());
         deploymentClients.addAll(settings.accessTokenAudiences());
         if (enabled) {
-            LOGGER.info("Access tokens of clients other than {} are accepted when the integration client registry knows them,"
-                    + " confined to the tenant it registers them for, with the roles it gives them there.", deploymentClients);
+            LOGGER.info(
+                    "Access tokens of clients other than the deployment's own [{}] are accepted when the integration client"
+                            + " registry knows them, confined to the tenant it registers them for, with the roles it gives them there.",
+                    deploymentClients.size());
         }
         return new IntegrationClients(registry, deploymentClients, enabled);
     }
