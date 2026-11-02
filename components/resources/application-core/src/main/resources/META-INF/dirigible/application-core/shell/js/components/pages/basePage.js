@@ -493,6 +493,30 @@ function basePage() {
     },
 
     /**
+     * The row a record-page banner speaks about (intent `banners:`, dirigible #8371), or null when it
+     * does not hold. Its own `when` terms read the record; a `related` banner then reads the rows of
+     * the register it names - `rowsByRegister[banner.related.register]`, as the page searched them -
+     * and tests either the latest row (the highest primary key, `row: 'latest'`) or every row
+     * (`row: 'any'`) against its `when` terms. The subject is the matched row, else the record. A
+     * register whose read failed (null) or that has no rows holds no banner. UI-only, like
+     * visibleWhen: a banner decides what the page says, never what the server allows.
+     */
+    bannerSubject(banner, record, rowsByRegister) {
+      if (!banner || !record || typeof record !== 'object') return null;
+      if (!this.visibleWhenHolds(banner.when, record)) return null;
+      const related = banner.related;
+      if (!related) return record;
+      const rows = rowsByRegister ? rowsByRegister[related.register] : null;
+      if (!Array.isArray(rows) || !rows.length) return null;
+      if (related.row === 'any') {
+        return rows.find((row) => this.visibleWhenHolds(related.when, row)) || null;
+      }
+      const key = related.primaryKey || 'Id';
+      const latest = rows.reduce((best, row) => (best === null || Number(row[key]) > Number(best[key]) ? row : best), null);
+      return latest && this.visibleWhenHolds(related.when, latest) ? latest : null;
+    },
+
+    /**
      * Display text of a field shown as a value rather than a control - the read-only Details card and
      * the frozen header card (issue #7522). The same formatting a line cell gets: a DROPDOWN resolves
      * its option label, a MULTISELECT (an array or a stored "1,3" key list) its labels, a date goes

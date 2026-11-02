@@ -55,6 +55,8 @@ import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
+import org.eclipse.dirigible.components.intent.model.BannerIntent;
+import org.eclipse.dirigible.components.intent.model.BannerRelatedIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -858,6 +860,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // reproduces its source's list columns, and they are some of them.
         buildCollectionColumns(entities, builtByName, compositionParents, settingEntities);
         buildRelatedRegisters(context, entities, builtByName, usesByAlias);
+        // Record-page banners (#8371) read the registers just built, for the foreign key and the key of
+        // the rows they test.
+        buildBanners(entities, builtByName);
         // The reverse link of a scoped calendar: the record the calendar filters by gets a way to open
         // it. Same sweep reason as the registers above - the scope target may be declared after the
         // calendar entity that names it.
@@ -4022,6 +4027,118 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         register.put("referencedModel", "/" + uses.resolveProject() + "/" + uses.getModel() + ".model");
         register.put("properties", relatedColumns(info.properties(), related.getShow(), info.fkProperty()));
         return register;
+    }
+
+    /** A {@code {field}} placeholder in a banner's text. */
+    private static final java.util.regex.Pattern BANNER_PLACEHOLDER = java.util.regex.Pattern.compile("\\{([^{}]*)\\}");
+
+    /**
+     * Emits each entity's {@code banners:} (dirigible #8371) as the {@code banners} model attribute. A
+     * List, so it lives only in the {@code .model} twin. Each entry carries its catalog {@code key}
+     * ({@code <Entity><n>}), its {@code text} with the placeholders in the model's property names, its
+     * {@code variant}, its conditions as the {@code visibleWhen} scalar (status names already resolved
+     * to seed ids), the register it reads - the source, the foreign key back here and the source's key,
+     * read off the register entry - its {@code subject} entity, and its {@code action}.
+     *
+     * @param entities the authored entities
+     * @param builtByName every built entity map, by name
+     */
+    private static void buildBanners(List<EntityIntent> entities, Map<String, Map<String, Object>> builtByName) {
+        for (EntityIntent entity : entities) {
+            Map<String, Object> entityMap = builtByName.get(entity.getName());
+            if (entityMap == null || entity.getBanners() == null || entity.getBanners()
+                                                                          .isEmpty()) {
+                continue;
+            }
+            List<Map<String, Object>> banners = new ArrayList<>();
+            int index = 0;
+            for (BannerIntent banner : entity.getBanners()) {
+                index++;
+                if (banner == null) {
+                    continue;
+                }
+                Map<String, Object> b = new LinkedHashMap<>();
+                b.put("key", entity.getName() + index);
+                b.put("text", bannerText(banner.getText()));
+                b.put("variant", banner.variantOrDefault());
+                if (banner.getWhen() != null) {
+                    b.put("when", visibleWhenCondition(banner.getWhen()));
+                }
+                String subject = entity.getName();
+                BannerRelatedIntent related = banner.getRelated();
+                if (related != null && notBlank(related.getEntity())) {
+                    Map<String, Object> register = bannerRegister(entityMap, related);
+                    if (register == null) {
+                        continue; // reported by the parser
+                    }
+                    subject = related.getEntity()
+                                     .trim();
+                    Map<String, Object> r = new LinkedHashMap<>();
+                    r.put("entity", subject);
+                    r.put("fkProperty", register.get("fkProperty"));
+                    r.put("primaryKey", register.get("primaryKey"));
+                    r.put("row", related.getRow() == null ? "latest"
+                            : related.getRow()
+                                     .trim());
+                    if (related.getWhen() != null) {
+                        r.put("when", visibleWhenCondition(related.getWhen()));
+                    }
+                    b.put("related", r);
+                }
+                b.put("subject", subject);
+                if (notBlank(banner.getAction())) {
+                    b.put("action", banner.getAction()
+                                          .trim());
+                }
+                banners.add(b);
+            }
+            if (!banners.isEmpty()) {
+                entityMap.put("banners", banners);
+            }
+        }
+    }
+
+    /** A banner's text with each {@code {field}} placeholder in the model's property name. */
+    private static String bannerText(String text) {
+        if (text == null) {
+            return "";
+        }
+        java.util.regex.Matcher placeholder = BANNER_PLACEHOLDER.matcher(text);
+        StringBuilder out = new StringBuilder();
+        while (placeholder.find()) {
+            placeholder.appendReplacement(out, java.util.regex.Matcher.quoteReplacement("{" + IntentNaming.pascalCase(placeholder.group(1)
+                                                                                                                                 .trim())
+                    + "}"));
+        }
+        placeholder.appendTail(out);
+        return out.toString();
+    }
+
+    /**
+     * The register entry a banner's {@code related} names: its source, and its foreign key when
+     * {@code via} picks one.
+     */
+    private static Map<String, Object> bannerRegister(Map<String, Object> entityMap, BannerRelatedIntent related) {
+        Object registers = entityMap.get("relatedEntities");
+        if (!(registers instanceof List<?> list)) {
+            return null;
+        }
+        String wantedFk = notBlank(related.getVia()) ? IntentNaming.pascalCase(related.getVia()
+                                                                                      .trim())
+                : null;
+        Map<String, Object> found = null;
+        for (Object node : list) {
+            if (node instanceof Map<?, ?> raw && related.getEntity()
+                                                        .trim()
+                                                        .equals(str(raw.get("entity")))
+                    && raw.get("referencedModel") == null && (wantedFk == null || wantedFk.equals(str(raw.get("fkProperty"))))) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> register = (Map<String, Object>) raw;
+                found = register;
+                break;
+            }
+        }
+        return found;
     }
 
     /** The shared scalar part of a register entry. */

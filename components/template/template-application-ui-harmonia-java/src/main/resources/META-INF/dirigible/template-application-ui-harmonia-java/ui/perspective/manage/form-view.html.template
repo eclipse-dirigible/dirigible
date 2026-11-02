@@ -244,6 +244,23 @@
     </div>
   </template>
 #end
+#if($banners && $banners.size() > 0)
+
+  <!-- Banners (intent `banners:`, #8371): what the record - or the latest of its related rows - needs
+       attention for, with the action that fixes it. Preview only, like the record's actions (#8116);
+       re-evaluated on every load, so a banner leaves once its action has run. -->
+  <div class="vbox gap-2 px-4 pt-4" x-show="isPreview &amp;&amp; activeBanners.length &amp;&amp; state === 'ready'" data-record-banners>
+    <template x-for="banner in activeBanners" :key="banner.key">
+      <div x-h-alert :data-variant="banner.variant" role="status" :data-banner="banner.key">
+        <svg x-h-lucide role="presentation" data-lucide="circle-alert"></svg>
+        <div x-h-alert-description x-text="banner.text"></div>
+        <div x-h-alert-actions x-show="bannerAction(banner)">
+          <button type="button" x-h-button data-variant="outline" data-size="sm" @click="runBannerAction(banner)" x-text="bannerActionLabel(banner)"></button>
+        </div>
+      </div>
+    </template>
+  </div>
+#end
 
   <!-- Load failure (edit) -->
   <div x-show="state === 'load-failure'" x-h-info-page class="p-4">

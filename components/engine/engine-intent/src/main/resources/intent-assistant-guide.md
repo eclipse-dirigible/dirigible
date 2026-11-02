@@ -1196,6 +1196,33 @@ type); an empty value is skipped. Refused: an unknown name, the primary key, a c
 to-many relation, a field with `visibleWhen:` (the line has no per-status gate), a name twice, and more
 than four entries. Without `subtitle:` there is no line - the page no longer picks the `major` fields.
 
+**Banners on the record page (`banners:` on an entity):** a sentence the record page shows above the
+form while the record - or the latest of its related rows - needs attention, with the action that
+fixes it:
+
+```yaml
+banners:
+  - text: "The last shipment failed: {failure}"   # required
+    variant: negative                              # information | warning | negative, default information
+    related: { entity: Shipment, row: latest, when: "status == FAILED" }
+    action: RetryShipment                          # optional
+  - text: "This order is on hold."
+    variant: warning
+    when: "status == ON_HOLD"
+```
+
+An entry needs `when`, `related`, or both, and both must hold. `when:` reads the record's own fields and
+to-one relations with the `visibleWhen` grammar (status names resolve). `related:` names one of the
+entity's own `related:` registers (by `entity`, plus `via` when several), never one from another model;
+`row: latest` tests only the row with the highest key, `row: any` holds when any row matches, and its
+`when:` (required) reads the source's own fields, its status names resolved in the source's terms. The
+subject row is the matched related row, else the record: `{field}` placeholders name its own fields (a
+date prints in the instance format; a relation or an unknown name is refused), and `action:` must be an
+action, transition or generates whose `forEntity` is the subject's entity - shown as an outline button
+only while the subject's status guard and roles offer it. Banners render in preview only, in declared
+order, and refresh after every action. UI-only, like `visibleWhen`: a banner decides what the page says,
+never what the server allows.
+
 **Personal surfaces (`identity` / `personal` / `sensitive`):** an entity representing the person
 declares `identity: <string field>` (conventionally the unique e-mail matched against the login
 username). A record-owning to-one relation to it may declare `personal: true` (at most one per

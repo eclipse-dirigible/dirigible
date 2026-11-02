@@ -1644,6 +1644,56 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * A record-page banner's conditions (dirigible #8371) render as the term lists
+     * {@code basePage.bannerSubject} reads - the {@code visibleWhen} shape - and a related banner is
+     * pointed at the controller its register searches and the key its rows are read under, with the
+     * subject's date placeholders and the action descriptor's id.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void bannerConditionsRenderAsTermLists() {
+        Map<String, Object> finishedAt = property("FinishedAt", "TIMESTAMP");
+        Map<String, Object> shipment =
+                entity("Shipment", "Shipments", property("Id", "INTEGER"), property("Failure", "VARCHAR"), finishedAt);
+        Map<String, Object> campaign = entity("Campaign", "Campaigns", property("Id", "INTEGER"));
+        campaign.put("relatedEntities", List.of(register("Shipment", "Shipments")));
+        Map<String, Object> related = new LinkedHashMap<>();
+        related.put("entity", "Shipment");
+        related.put("fkProperty", "Campaign");
+        related.put("primaryKey", "Id");
+        related.put("row", "latest");
+        related.put("when", "Status == 3");
+        Map<String, Object> failed = new LinkedHashMap<>();
+        failed.put("key", "Campaign1");
+        failed.put("text", "Failed at {FinishedAt}: {Failure}");
+        failed.put("variant", "negative");
+        failed.put("related", related);
+        failed.put("subject", "Shipment");
+        failed.put("action", "RetryShipment");
+        Map<String, Object> hold = new LinkedHashMap<>();
+        hold.put("key", "Campaign2");
+        hold.put("text", "It's on hold.");
+        hold.put("variant", "warning");
+        hold.put("when", "Status == 2 && Paid != true");
+        hold.put("subject", "Campaign");
+        campaign.put("banners", List.of(failed, hold));
+
+        ModelParameterProcessor.process(model(campaign, shipment), javaParameters());
+
+        assertEquals("[]", failed.get("whenTermsJs"), "a related-only banner reads nothing off the record");
+        Map<String, Object> resolved = (Map<String, Object>) failed.get("related");
+        assertEquals("[{ property: 'Status', equal: true, value: '3' }]", resolved.get("whenTermsJs"));
+        assertEquals("/services/java/bookstore/gen/sales_order/api/shipments/ShipmentController", resolved.get("apiPath"));
+        assertEquals("/services/java/bookstore/gen/sales_order/api/shipments/ShipmentController|Campaign", resolved.get("register"));
+        assertEquals("['FinishedAt']", failed.get("datesJs"));
+        assertEquals("bookstore-Shipment-RetryShipment", failed.get("actionId"));
+        assertEquals("[{ property: 'Status', equal: true, value: '2' }, { property: 'Paid', equal: false, value: 'true' }]",
+                hold.get("whenTermsJs"));
+        assertEquals("It\\'s on hold.", hold.get("textJs"));
+        assertNull(hold.get("actionId"));
+    }
+
+    /**
      * A register source generated before the perspective travelled on the property: the options entity
      * is resolved in this model instead, which is where a same-model register's target always lives.
      */
