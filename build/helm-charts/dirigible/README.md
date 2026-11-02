@@ -101,6 +101,7 @@ The following table lists all the configurable parameters expose by the Dirigibl
 |------------------------------|---------------------------------|------------------------------------|
 | `dirigible.image`            | Custom Dirigible image          | `""`                               |
 | `image.repository`           | Dirigible image repo            | `dirigiblelabs/dirigible`          |
+| `image.tag`                  | Dirigible image tag (`<version>-java` for the Java edition) | `""` (the chart's `appVersion`) |
 | `image.pullPolicy`           | Image pull policy               | `IfNotPresent`                     |
 | `service.type`               | Service type                    | `ClusterIP`                        |
 | `service.port`               | Service port                    | `8080`                             |

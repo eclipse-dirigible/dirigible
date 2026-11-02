@@ -172,10 +172,8 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           {{- if .Values.dirigible.image }}
           image: "{{ required "Missing Dirigible image" .Values.dirigible.image }}"
-          {{- else if .Values.keycloak.enabled }}
-          image: "{{ required "Missing Keycloak image" .Values.image.repositoryKeycloak }}:{{ required "Missing chart app version" .Chart.AppVersion }}"
           {{- else }}
-          image: "{{ required "Missing image" .Values.image.repository }}:{{ required "Missing chart app version" .Chart.AppVersion }}"
+          image: "{{ required "Missing image" .Values.image.repository }}:{{ required "Missing image tag" (.Values.image.tag | default .Chart.AppVersion) }}"
           {{- end }}
           imagePullPolicy: {{ required "Missing image pull policy" .Values.image.pullPolicy }}
           ports:

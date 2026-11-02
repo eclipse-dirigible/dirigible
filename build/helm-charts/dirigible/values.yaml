@@ -9,6 +9,8 @@ replicaCount: 1
 image:
   # Repository for basic deployment
   repository: dirigiblelabs/dirigible
+  # Image tag; empty uses the chart's appVersion. Set "<version>-java" for the Java edition
+  tag: ""
   # Pull policy for the repositories
   pullPolicy: IfNotPresent
 

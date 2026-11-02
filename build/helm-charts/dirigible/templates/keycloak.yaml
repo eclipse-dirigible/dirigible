@@ -209,7 +209,7 @@ spec:
 
 ---
 
-{{- else if .Values.ingress.enabled }}
+{{- if .Values.ingress.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -269,7 +269,6 @@ spec:
       mode: SIMPLE 
       credentialName:  {{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}
   {{- end }}
-  {{- end }}
 
 ---
 apiVersion: networking.istio.io/v1alpha3
@@ -306,5 +305,6 @@ spec:
   commonName: {{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}
   dnsNames: 
   - {{ required "Missing Keycloak name" .Values.keycloak.name }}.{{ required "Missing ingress host" .Values.ingress.host }}
+{{- end }}
 {{- end }}
 {{- end }}
