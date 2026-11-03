@@ -6020,6 +6020,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildSetters(IntentModel model, IntentSettings settings) {
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         List<Map<String, Object>> setters = new ArrayList<>();
         for (Setter setter : SetFieldSupport.setters(model)) {
             if (!settings.shouldGenerate("setters", setter.className())) {
@@ -6058,9 +6059,65 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("targetPerspective", setter.targetPerspective());
                 entry.put("targetKeyAccessor", setter.targetKeyAccessor());
             }
+            // A status a capacity roll-up holds while the row is settled (#7869): the setter then writes
+            // the column the roll-up restores from instead, so it needs the statuses that mean "held".
+            // Emitted only when used, so every other setter's descriptor stays byte-identical.
+            for (SetFieldSupport.Assignment assignment : setter.assignments()) {
+                List<String> owned =
+                        assignment.relation() ? rollupOwnedStatuses(model, byName, setter.writtenEntity(), assignment.field()) : List.of();
+                if (!owned.isEmpty()) {
+                    entry.put("rollupStatus", assignment.field());
+                    entry.put("rollupDisplacedStatus", IntentNaming.displacedStatusProperty(assignment.field()));
+                    entry.put("rollupOwnedStatuses", String.join(", ", owned));
+                    break;
+                }
+            }
             setters.add(entry);
         }
         return setters;
+    }
+
+    /**
+     * The statuses capacity roll-ups set on one status relation of an entity - their
+     * {@code statusWhenFull} / {@code statusWhenPartial} seed ids, which the roll-up owns while its sum
+     * keeps the row there (#7016). Empty when no roll-up drives that relation. The parent is resolved
+     * as the EDM generator resolves the one it gives the displaced-status column: a cross-model child
+     * names it, a local child reaches it through a local {@code via}.
+     *
+     * @param model the whole intent
+     * @param byName the model's entities, by name
+     * @param entity the entity whose status is written
+     * @param statusProperty the PascalCase status relation property
+     * @return the owned seed ids, in declaration order, without duplicates
+     */
+    private static List<String> rollupOwnedStatuses(IntentModel model, Map<String, EntityIntent> byName, String entity,
+            String statusProperty) {
+        Set<String> owned = new LinkedHashSet<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
+                                                                                       .isBlank()
+                    || rollup.getStatus() == null || !statusProperty.equals(IntentNaming.pascalCase(rollup.getStatus()))) {
+                continue;
+            }
+            String parent;
+            if (rollup.isCrossModelChild()) {
+                parent = rollup.getParent();
+            } else {
+                EntityIntent child = byName.get(rollup.getEntity());
+                RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
+                parent = via == null || (via.getModel() != null && !via.getModel()
+                                                                       .isBlank()) ? null : via.getTo();
+            }
+            if (!entity.equals(parent)) {
+                continue;
+            }
+            for (Integer status : java.util.Arrays.asList(rollup.getStatusWhenFull(), rollup.getStatusWhenPartial())) {
+                if (status != null) {
+                    owned.add(status.toString());
+                }
+            }
+        }
+        return new ArrayList<>(owned);
     }
 
     /** The keys one member write carries - a single-member setter's, or one entry of a set: map's. */

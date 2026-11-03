@@ -380,7 +380,8 @@ class GlueGenerator {
      */
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
-                "clear", "errorMessage", "now", "nowExpression", "via", "targetEntity", "targetPerspective", "targetKeyAccessor");
+                "clear", "errorMessage", "now", "nowExpression", "via", "targetEntity", "targetPerspective", "targetKeyAccessor",
+                "rollupStatus", "rollupDisplacedStatus", "rollupOwnedStatuses");
         copyJavaLiterals(context, item, "value");
         context.put("javaPerspective", sanitize(item, "perspective"));
         // A one-hop setter (#7934) writes through its target's repository, in the target's package.
