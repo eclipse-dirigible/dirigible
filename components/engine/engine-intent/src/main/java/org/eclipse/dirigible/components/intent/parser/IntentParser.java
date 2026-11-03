@@ -5242,7 +5242,15 @@ public final class IntentParser {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
                 if (relation.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, relation, issues);
+                    validateFixedRelation(entity, relation, "fixedAfterCreate", issues);
+                }
+                if (relation.isFixedWhenReferenced()) {
+                    validateFixedRelation(entity, relation, "fixedWhenReferenced", issues);
+                    if (relation.isFixedAfterCreate()) {
+                        issues.add(
+                                "entity [" + entity.getName() + "] relation [" + relation.getName() + "] declares both fixedAfterCreate and"
+                                        + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
                 if (relation.isPersonal()) {
                     personalCount++;
@@ -5434,6 +5442,9 @@ public final class IntentParser {
         }
         if (relation.isFixedAfterCreate()) {
             unsupported.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            unsupported.add("fixedWhenReferenced");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6174,26 +6185,30 @@ public final class IntentParser {
      * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
      * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
      * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     * {@code fixedWhenReferenced: true} (dirigible #8194) fixes the FK once another record references
+     * this one, so it needs the same: a composition parent is preset by the layout and never re-picked
+     * anyway, a status is the workflow's to move, and an update recompute is a system write.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+    private static void validateFixedRelation(EntityIntent entity, RelationIntent relation, String key, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
         boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
         if (!toOne) {
-            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            issues.add(subject + " declares " + key + " but only a manyToOne/oneToOne relation has an FK a user picks");
             return;
         }
         if (relation.isComposition()) {
-            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare " + key);
         }
         if (relation.isEntityStatus()) {
-            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare " + key);
         }
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
-            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+            issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
         }
     }

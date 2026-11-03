@@ -112,6 +112,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: name,    type: string,  required: true, length: 100 }
                   - { name: ceiling, type: decimal, fixedWhenReferenced: true }
+                relations:
+                  - { name: Owner, kind: manyToOne, to: Employee, model: staff, fixedWhenReferenced: true }
               - name: ExpenseClaim
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -204,6 +206,7 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertAKeepReferenceOutlivesItsTarget();
 
         assertAFieldFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow();
+        assertARelationFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow();
 
         assertACreateAndADeleteOfItsTargetNeverBothWin();
     }
@@ -357,7 +360,25 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                 "'Ceiling' cannot change while other records reference this ExpenseCategory");
     }
 
-    private void assertUpdated(String url, String body, String property, String expected) {
+    /**
+     * #8194 on a to-one - a bank account's currency, a product's type: a category's owner, a
+     * cross-model relation, is re-pickable while no claim uses the category and fixed once one does;
+     * the same id still saves.
+     */
+    private void assertARelationFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow() {
+        int ann = create(employees, "{\"Name\":\"Ann\"}");
+        int ben = create(employees, "{\"Name\":\"Ben\"}");
+        int tools = create(categories, "{\"Name\":\"Tools\",\"Owner\":" + ann + "}");
+        String toolsUrl = categories + "/" + tools;
+        assertUpdated(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools\",\"Owner\":" + ben + "}", "Owner", ben);
+
+        create(claims, "{\"Employee\":" + ann + ",\"Category\":" + tools + ",\"Amount\":1}");
+        assertUpdateRefused(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools\",\"Owner\":" + ann + "}", null,
+                "'Owner' cannot change while other records reference this ExpenseCategory");
+        assertUpdated(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools & parts\",\"Owner\":" + ben + "}", "Name", "Tools & parts");
+    }
+
+    private void assertUpdated(String url, String body, String property, Object expected) {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body(body)
                                                  .when()

@@ -121,6 +121,57 @@ class FixedAfterCreateIntentTest {
                 """, "is a manyToMany so it cannot declare [fixedAfterCreate]");
     }
 
+    /**
+     * A to-one fixed while other records reference the row (#8194) - a bank account's currency, a
+     * product's type: the same two-scalar shape as the field key, same-model and cross-model.
+     */
+    @Test
+    void aRelationFixedWhenReferencedCarriesTheFlagAndTheDefaultTextOfItsRefusal() {
+        Map<String, Object> project = projectProperty("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedWhenReferenced: true }
+                """);
+        assertEquals("true", project.get("fixedWhenReferenced"));
+        assertEquals("'Project' cannot change while other records reference this Timesheet", project.get("fixedWhenReferencedMessage"));
+        assertFalse(project.containsKey("fixedAfterCreate"));
+
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: employees, project: employees }
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: oneToOne, to: Employee, model: employees, fixedWhenReferenced: true }
+                """;
+        Map<String, Object> employee =
+                propertyByName(entity(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets")), "Employee");
+        assertEquals("'Employee' cannot change while other records reference this Timesheet", employee.get("fixedWhenReferencedMessage"));
+    }
+
+    @Test
+    void aRelationFixedWhenReferencedIsRefusedWhereNoUserRePicksIt() {
+        assertIssue("""
+                  - { name: Projects, kind: oneToMany, to: Project, fixedWhenReferenced: true }
+                """, "declares fixedWhenReferenced but only a manyToOne/oneToOne relation has an FK a user picks");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, composition: true, fixedWhenReferenced: true }
+                """, "is a composition parent (preset by the layout) so it cannot declare fixedWhenReferenced");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedWhenReferenced: true, calculatedActionOnUpdate: custom.KeepProject }
+                """, "declares both fixedWhenReferenced and calculatedActionOnUpdate");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedAfterCreate: true, fixedWhenReferenced: true }
+                """, "relation [Project] declares both fixedAfterCreate and fixedWhenReferenced");
+        assertIssue("""
+                  - { name: Projects, kind: subset, to: Project, fixedWhenReferenced: true }
+                """, "is a subset relation so it cannot declare [fixedWhenReferenced]");
+        assertIssue("""
+                  - { name: Projects, kind: manyToMany, to: Project, fixedWhenReferenced: true }
+                """, "is a manyToMany so it cannot declare [fixedWhenReferenced]");
+    }
+
     /** A customer whose code is set on create and fixed afterwards (#8363). */
     private static final String CUSTOMER = """
             name: customers
