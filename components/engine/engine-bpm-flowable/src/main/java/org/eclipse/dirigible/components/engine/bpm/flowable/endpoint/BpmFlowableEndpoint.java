@@ -381,7 +381,12 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     @PostMapping(value = "/bpm-processes/tasks/{id}")
     public ResponseEntity<String> executeTaskAction(@PathVariable("id") String id, @RequestBody TaskActionData actionData) {
         verifyCurrentUserHasPermissionForTask(id);
+        // The same race as the Inbox's (issue #8104): a request losing it to another one acting on the
+        // task is answered 409.
+        return TaskActionConflict.unlessTaskGone(id, bpmService, () -> performTaskAction(id, actionData));
+    }
 
+    private ResponseEntity<String> performTaskAction(String id, TaskActionData actionData) {
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
             bpmService.claimTask(id, UserFacade.getName());

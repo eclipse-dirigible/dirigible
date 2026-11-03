@@ -264,7 +264,12 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @PostMapping(value = "/tasks/{id}")
     public ResponseEntity<String> executeTaskAction(@PathVariable("id") String taskId, @RequestBody TaskActionData actionData) {
         verifyCurrentUserHasPermissionForTask(taskId);
+        // A second request acting on the task at the same moment (a double click) loses the race inside
+        // the engine: answered 409, not the engine's optimistic-lock failure (issue #8104).
+        return TaskActionConflict.unlessTaskGone(taskId, bpmService, () -> performTaskAction(taskId, actionData));
+    }
 
+    private ResponseEntity<String> performTaskAction(String taskId, TaskActionData actionData) {
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
             bpmService.claimTask(taskId, claimantFor(taskId));

@@ -24,8 +24,14 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -42,7 +48,9 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import io.restassured.http.ContentType;
 
 /**
- * Listing the Inbox while its tasks are being completed never fails the list (issue #7575).
+ * Listing the Inbox while its tasks are being completed never fails the list (issue #7575), and a
+ * completion losing the race against another completion of the same task is a 409, not a 500 (issue
+ * #8104).
  *
  * <p>
  * The list is one task query followed by per-task reads, so a task another session completes in
@@ -64,6 +72,8 @@ class BpmInboxConcurrentCompletionIT extends IntegrationTest {
     private static final String BPMN_REGISTRY_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/process.bpmn";
     private static final String GROUP_TASKS = "/services/inbox/tasks?type=groups";
     private static final int INSTANCES = 40;
+    private static final int DOUBLE_CLICKED_TASKS = 10;
+    private static final int CLICKS_PER_TASK = 4;
     private static final long ASSERTION_TIMEOUT_SECONDS = 60;
 
     @Autowired
@@ -143,6 +153,72 @@ class BpmInboxConcurrentCompletionIT extends IntegrationTest {
                                                .filter(status -> status != 200)
                                                .toList(),
                 "no list call may fail because a listed task was completed meanwhile (of " + listingStatuses.size() + " calls)");
+    }
+
+    /**
+     * The double click: several COMPLETE calls on one task at the same moment. One of them completes
+     * it; the others either lose the race inside the engine - answered 409 "This task has already been
+     * completed" rather than Flowable's optimistic-lock failure as a 500 (issue #8104) - or arrive
+     * after the task left the caller's inbox, which the permission check answers 403 as before.
+     */
+    @Test
+    void concurrent_completions_of_one_task_complete_it_once_and_answer_the_rest_409() throws Exception {
+        repository.createResource(BPMN_REGISTRY_PATH, BPMN.getBytes(StandardCharsets.UTF_8), false, "application/xml", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+        for (int i = 0; i < DOUBLE_CLICKED_TASKS; i++) {
+            startProcess(i);
+        }
+        List<String> taskIds = new ArrayList<>();
+        restAssuredExecutor.execute(() -> taskIds.addAll(given().when()
+                                                                .get(GROUP_TASKS)
+                                                                .then()
+                                                                .statusCode(200)
+                                                                .body("findAll { it.processDefinitionId.startsWith('" + PROCESS_KEY
+                                                                        + ":') }", hasSize(DOUBLE_CLICKED_TASKS))
+                                                                .extract()
+                                                                .<List<String>>path("findAll { it.processDefinitionId.startsWith('"
+                                                                        + PROCESS_KEY + ":') }.id")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        ExecutorService clicks = Executors.newFixedThreadPool(CLICKS_PER_TASK);
+        try {
+            for (String taskId : taskIds) {
+                CountDownLatch together = new CountDownLatch(1);
+                List<CompletableFuture<Integer>> answers = new ArrayList<>();
+                for (int click = 0; click < CLICKS_PER_TASK; click++) {
+                    answers.add(CompletableFuture.supplyAsync(() -> {
+                        awaitQuietly(together);
+                        return send(HttpRequest.newBuilder(uri("/services/inbox/tasks/" + taskId))
+                                               .header("Content-Type", "application/json")
+                                               .POST(HttpRequest.BodyPublishers.ofString("{\"action\":\"COMPLETE\"}")));
+                    }, clicks));
+                }
+                together.countDown();
+                List<Integer> statuses = new ArrayList<>();
+                for (CompletableFuture<Integer> answer : answers) {
+                    statuses.add(answer.get(ASSERTION_TIMEOUT_SECONDS, TimeUnit.SECONDS));
+                }
+                Map<Integer, Long> counts = statuses.stream()
+                                                    .collect(Collectors.groupingBy(status -> status, Collectors.counting()));
+                assertEquals(1L, counts.getOrDefault(200, 0L), "exactly one completion of task " + taskId + " wins: " + statuses);
+                assertTrue(Set.of(200, 403, 409)
+                              .containsAll(counts.keySet()),
+                        "a losing completion of task " + taskId + " is a 409 (or a 403 once the task left the inbox), never a 500: "
+                                + statuses);
+            }
+        } finally {
+            clicks.shutdownNow();
+        }
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(ASSERTION_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread()
+                  .interrupt();
+            throw new IllegalStateException("Interrupted while waiting to click", ex);
+        }
     }
 
     private void startProcess(int index) {
