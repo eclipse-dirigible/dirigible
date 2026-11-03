@@ -25,6 +25,13 @@
     </div>
   </div>
 
+  <!-- The way back to the page the report was opened from - a dashboard tile, most often (#8430). The
+       report's own action row lives inside the iframe and cannot reach the shell's router. -->
+  <div x-show="$store.reports.selected && $store.reports.returnTo" class="hbox items-center px-4 pt-4">
+    <button x-h-button data-variant="outline" @click="$store.reports.goBack()">
+      <svg role="presentation" x-h-lucide data-lucide="arrow-left"></svg><span x-text="T('application-core:shell.reports.back', 'Back')"></span>
+    </button>
+  </div>
   <!-- The selected report, embedded (it renders its own header inside the iframe). -->
   <template x-if="$store.reports.selected">
     <iframe :src="$store.reports.selected.url" title="Report" class="flex-1" style="width:100%; border:0;"></iframe>
