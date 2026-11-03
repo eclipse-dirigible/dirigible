@@ -25,6 +25,7 @@ import org.flowable.task.api.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -281,6 +282,7 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             String unoffered = unofferedAction(taskId, actionData.getData());
             if (unoffered != null) {
                 return ResponseEntity.badRequest()
+                                     .contentType(MediaType.TEXT_PLAIN)
                                      .body(unoffered);
             }
             try {
@@ -298,10 +300,12 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                 // reason from the default error payload, and the task form reads the body.
                 logger.debug("Completion of task [{}] was rejected: {}", taskId, rejection, ex);
                 return ResponseEntity.badRequest()
+                                     .contentType(MediaType.TEXT_PLAIN)
                                      .body(rejection);
             }
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
         return ResponseEntity.ok()

@@ -11,10 +11,12 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 
 import java.util.function.Supplier;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.engine.bpm.flowable.service.BpmService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -59,8 +61,10 @@ final class TaskActionConflict {
             if (bpmService.isTaskActive(taskId)) {
                 throw ex;
             }
-            LOGGER.debug("Task [{}] was completed by another request while this one acted on it - answering 409", taskId, ex);
+            LOGGER.debug("Task [{}] was completed by another request while this one acted on it - answering 409",
+                    LogSanitizer.sanitize(taskId), ex);
             return ResponseEntity.status(HttpStatus.CONFLICT)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body(ALREADY_COMPLETED);
         }
     }

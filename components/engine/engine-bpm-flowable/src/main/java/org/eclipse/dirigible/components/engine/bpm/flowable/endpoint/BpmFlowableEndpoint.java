@@ -55,6 +55,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -398,6 +399,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             bpmService.completeTask(id, actionData.getData());
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
         return ResponseEntity.ok()
@@ -494,6 +496,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             return retryJob(id);
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
     }
