@@ -85,6 +85,14 @@ public class ${className}Posting implements MessageHandler {
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
 #end
+#if($guardProperty != "")
+        // The event is this posting's moment only when it is the move INTO ${guardValue}. post() also takes
+        // the later statuses the posting holds in (#8243) - the reopen sweep needs them - but a later
+        // move is not the moment, and re-deriving on it would rewrite a post only the amend path owns.
+        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+            return;
+        }
+#end
         post(source);
     }
 
@@ -97,7 +105,11 @@ public class ${className}Posting implements MessageHandler {
      */
     public void post(gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
 #if($guardProperty != "")
-        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+        // Only a ${sourceEntity} standing where this posting holds (#8243): status ${guardValue}, or a later
+        // live status it can only have reached through it. A draft, a cancelled or a voided one is never
+        // posted here, whoever offers it.
+        if (source == null || !java.util.List.of("${heldStatusValues}".split(","))
+                                              .contains(String.valueOf(source.${guardProperty}))) {
             return;
         }
 #else

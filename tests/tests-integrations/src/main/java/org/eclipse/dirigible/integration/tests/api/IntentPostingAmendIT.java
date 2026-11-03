@@ -62,6 +62,12 @@ import ch.qos.logback.classic.Level;
  * <li>the rewrite stops once the created document has left the status the posting created it in -
  * somebody has acted on it, so the divergence is reported and left to a correcting entry.
  * </ol>
+ *
+ * <p>
+ * The same posting, walked through a closed fiscal period (#7703, #8243): what the period refused
+ * is posted when it reopens - a red storno whose original was posted while the period was still
+ * open, and a document that moved on in its flow while the period was closed - and nothing the
+ * posting does not hold is: a document sent back to draft, or voided before it was ever posted.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentPostingAmendIT extends IntegrationTest {
@@ -73,6 +79,7 @@ class IntentPostingAmendIT extends IntegrationTest {
     private static final String DOCS = API + "/doc/DocController";
     private static final String ENTRIES = API + "/entry/EntryController";
     private static final String LINES = API + "/entry/EntryLineController";
+    private static final String PERIODS = API + "/fiscalperiod/FiscalPeriodController";
     private static final String TRANSITIONS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/";
     private static final long TIMEOUT_SECONDS = 90;
     /** The posting handler runs off the source's {@code -transitioned} topic, after the commit. */
@@ -89,6 +96,23 @@ class IntentPostingAmendIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 100 }
 
+              - name: PeriodStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              # The lock on the created document: a post dated inside a CLOSED period waits for it to
+              # reopen (#7703).
+              - name: FiscalPeriod
+                period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+
               # The source. Issue posts it, Reject sends it back for the edit, Issue posts it
               # again - the documented amend path, and the one that raises the moment twice.
               - name: Doc
@@ -102,12 +126,14 @@ class IntentPostingAmendIT extends IntegrationTest {
               # The created document. Its OWN status is what bounds the rewrite: while it still
               # holds the init: the posting created it with, it is the posting's to correct.
               - name: Entry
+                immutableInPeriod: { period: FiscalPeriod, date: date }
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: date, type: date }
                 relations:
                   - { name: Status, kind: manyToOne, to: DocStatus, function: EntityStatus, init: 1 }
                   - { name: Doc,    kind: manyToOne, to: Doc }
+                  - { name: Storno, kind: manyToOne, to: Entry }
 
               - name: EntryLine
                 fields:
@@ -120,8 +146,12 @@ class IntentPostingAmendIT extends IntegrationTest {
             transitions:
               - { name: IssueDoc,  forEntity: Doc,   from: [1], setStatus: 2, label: Issue }
               - { name: RejectDoc, forEntity: Doc,   from: [2], setStatus: 1, label: Reject }
+              - { name: SendDoc,   forEntity: Doc,   from: [2], setStatus: 3, label: Send }
+              - { name: VoidDoc,   forEntity: Doc,   from: [2, 3], setStatus: 4, label: Void }
               # What "somebody has acted on the entry" is, in this fixture: the accountant posts it.
               - { name: PostEntry, forEntity: Entry, from: [1], setStatus: 2, label: Post }
+              - { name: ClosePeriod,  forEntity: FiscalPeriod, from: [1], setStatus: 2, label: Close }
+              - { name: ReopenPeriod, forEntity: FiscalPeriod, from: [2], setStatus: 1, label: Reopen }
 
             postings:
               - name: docPosting
@@ -132,13 +162,26 @@ class IntentPostingAmendIT extends IntegrationTest {
                 items:
                   - { debit: "Amount" }
                   - { credit: "Amount" }
+              - name: docStorno
+                event: { onTransition: Doc, when: "Status == 4" }
+                reverses: docPosting
+                storno: Storno
 
             seeds:
+              # The stages are what tell the reopen sweep a SENT document still holds its post and a
+              # Draft or Voided one does not (#8243).
               - name: doc-statuses
                 entity: DocStatus
                 rows:
-                  - { id: 1, name: Draft }
-                  - { id: 2, name: Issued }
+                  - { id: 1, name: Draft,  stage: draft }
+                  - { id: 2, name: Issued, stage: live }
+                  - { id: 3, name: Sent,   stage: live }
+                  - { id: 4, name: Voided, stage: void }
+              - name: period-statuses
+                entity: PeriodStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: CLOSED }
             """;
 
     @Autowired
@@ -159,7 +202,7 @@ class IntentPostingAmendIT extends IntegrationTest {
 
     @BeforeEach
     void attachLogsAsserter() {
-        postingLogs = new LogsAsserter("app.gen.events", Level.ERROR);
+        postingLogs = new LogsAsserter("app.gen.events", Level.INFO);
     }
 
     @Test
@@ -224,6 +267,63 @@ class IntentPostingAmendIT extends IntegrationTest {
     }
 
     /**
+     * #8243, the two documents the reopen sweep (#7703) used to leave unposted for good: a red storno,
+     * because the sweep skipped every source carrying ANY entry - always true of a reversal, whose
+     * original is the very entry it reverses - and a document that moved on in its flow while the
+     * period was closed, because the sweep offered only the status the posting fires on. Each walk
+     * waits for the refusal before it moves on: a handler that ran only after the reopen would post on
+     * the event and prove nothing about the sweep.
+     */
+    @Test
+    void a_reopened_period_posts_the_storno_and_the_document_that_moved_on_it_had_refused() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int period = create(PERIODS, "{\"StartDate\":\"2025-07-01\",\"EndDate\":\"2025-07-31\",\"Status\":1}");
+        // Posted while the period is open; its storno is the one the closed period refuses.
+        int voided = create(DOCS, "{\"Date\":\"2025-07-10\",\"Amount\":300}");
+        transition("IssueDoc", voided);
+        int original = onlyEntryOf(voided);
+        awaitLines(original, 300.0f);
+
+        transition("ClosePeriod", period);
+        transition("VoidDoc", voided);
+        awaitRefusal(voided);
+        // Issued into the closed month, then sent before it reopens.
+        int sent = create(DOCS, "{\"Date\":\"2025-07-11\",\"Amount\":100}");
+        transition("IssueDoc", sent);
+        awaitRefusal(sent);
+        transition("SendDoc", sent);
+        // Neither of these holds a post any more: one went back to draft (its next issue posts it), the
+        // other was voided before anything was posted, so there is nothing to book and nothing to reverse.
+        int redrafted = create(DOCS, "{\"Date\":\"2025-07-12\",\"Amount\":50}");
+        transition("IssueDoc", redrafted);
+        awaitRefusal(redrafted);
+        transition("RejectDoc", redrafted);
+        int withdrawn = create(DOCS, "{\"Date\":\"2025-07-13\",\"Amount\":70}");
+        transition("IssueDoc", withdrawn);
+        awaitRefusal(withdrawn);
+        transition("VoidDoc", withdrawn);
+
+        transition("ReopenPeriod", period);
+
+        // The storno, naming the original: the same lines negated on the same sides.
+        awaitLines(stornoOf(voided, original), -300.0f);
+        // The document that moved on, posted with what it says.
+        awaitLines(onlyEntryOf(sent), 100.0f);
+        // The sweep reports what it posted once it is done, so its count is the fence: it offered the
+        // one document the posting holds, and the other two are left unposted.
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(POSTING_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> postingLogs.containsMessage(
+                          "Posting docPosting: FiscalPeriod [" + period + "] reopened - posted [1] Doc document(s)", Level.INFO));
+        assertUnposted(redrafted);
+        assertUnposted(withdrawn);
+    }
+
+    /**
      * The single entry the source carries, asserting there is exactly one.
      *
      * <p>
@@ -244,6 +344,38 @@ class IntentPostingAmendIT extends IntegrationTest {
                                                            .getInt(ofDoc + "[0].Id")),
                 POSTING_TIMEOUT_SECONDS);
         return entry.get();
+    }
+
+    /** The red storno of the document's original entry, asserting there is exactly one. */
+    private int stornoOf(int doc, int original) {
+        String storno = "findAll { it.Doc == " + doc + " && it.Storno == " + original + " }";
+        AtomicInteger entry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> entry.set(given().when()
+                                                           .get(ENTRIES)
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body(storno, hasSize(1))
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getInt(storno + "[0].Id")),
+                POSTING_TIMEOUT_SECONDS);
+        return entry.get();
+    }
+
+    private void assertUnposted(int doc) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ENTRIES)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Doc == " + doc + " }", hasSize(0)));
+    }
+
+    /** The posting said it left the document for the closed period to reopen. */
+    private void awaitRefusal(int doc) {
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(POSTING_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> postingLogs.containsMessage("Doc [" + doc + "] stays unposted until it reopens", Level.WARN));
     }
 
     /**
@@ -271,15 +403,18 @@ class IntentPostingAmendIT extends IntegrationTest {
                   .toList();
     }
 
-    /** The balanced pair the posting derives: one debit line and one credit line, both the amount. */
+    /**
+     * The balanced pair the posting derives: one debit line and one credit line, both the amount. The
+     * amount is parenthesised so a storno's negative one reads as a number, not as a subtraction.
+     */
     private void awaitLines(int entry, float amount) {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(LINES + "?Entry=" + entry)
                                                  .then()
                                                  .statusCode(200)
                                                  .body("", hasSize(2))
-                                                 .body("findAll { it.Debit == " + amount + " }.size()", equalTo(1))
-                                                 .body("findAll { it.Credit == " + amount + " }.size()", equalTo(1)),
+                                                 .body("findAll { it.Debit == (" + amount + ") }.size()", equalTo(1))
+                                                 .body("findAll { it.Credit == (" + amount + ") }.size()", equalTo(1)),
                 POSTING_TIMEOUT_SECONDS);
     }
 

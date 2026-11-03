@@ -2867,6 +2867,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("sourceKeyField", sourceKeyField);
             e.put("guardProperty", guardProperty);
             e.put("guardValue", guardValue);
+            e.put("heldStatusValues", heldStatusValues(guardProperty, guardValue, alias == null ? byName.get(sourceEntity) : null, model));
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
@@ -3498,6 +3499,45 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         e.put("periodClosedValues", closedStatusIds(period.getClosedWhen()));
         e.put("periodDateProperty", dateProperty);
         e.put("periodSourceDateProperty", sourceCopyOf(headerAssignments, dateProperty));
+    }
+
+    /**
+     * The statuses a status-guarded posting HOLDS in (issue #8243), comma-joined: the one its event
+     * fires on, then - when that status is classified {@code stage: live} in a nomenclature seeded in
+     * this model - every {@code live} status seeded after it.
+     *
+     * <p>
+     * The event fires on the transition INTO the guard status, so a document that moved on while its
+     * period was closed (issued, then sent and paid) stood in a later status when the period reopened,
+     * and a sweep keyed on the guard status never offered it again. A posting that fires when a
+     * document becomes live is meant to stand while it stays live, and a later live status is one the
+     * document reached THROUGH the guard status - seed order is the flow order, as for the status
+     * stepper. Nothing else is held: a draft (never issued, or sent back - its next arrival posts it),
+     * a cancelled or a void one (the reversal's to answer for), a live status seeded before the guard
+     * (a posting on PAID does not book an invoice that is only ISSUED), and every status of a
+     * nomenclature nobody classified or that is seeded in another model - nothing there says what the
+     * status means, so the guard status alone is held.
+     *
+     * @param guardProperty the guarded source property, empty when the posting has no guard
+     * @param guardValue the seed id the event guard names, empty when the posting has no guard
+     * @param source the source entity, {@code null} for a cross-model source
+     * @param model the intent
+     * @return the held seed ids, comma-joined, the guard status first
+     */
+    private static String heldStatusValues(String guardProperty, String guardValue, EntityIntent source, IntentModel model) {
+        RelationIntent status = LifecycleStages.statusRelation(source);
+        if (guardValue.isEmpty() || status == null || status.isCrossModel()
+                || !guardProperty.equals(IntentNaming.pascalCase(status.getName()))) {
+            return guardValue;
+        }
+        List<Integer> live = LifecycleStages.stagesOf(model, status.getTo())
+                                            .getOrDefault(LifecycleStages.LIVE, List.of());
+        int guard = live.indexOf(Integer.valueOf(guardValue));
+        return guard < 0 ? guardValue
+                : String.join(",", live.subList(guard, live.size())
+                                       .stream()
+                                       .map(String::valueOf)
+                                       .toList());
     }
 
     /** The seeded ids a {@code closedWhen} expression names, in authored order. */

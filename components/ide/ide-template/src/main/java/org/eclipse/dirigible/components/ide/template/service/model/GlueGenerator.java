@@ -1221,6 +1221,9 @@ class GlueGenerator {
             context.put(key, strOr(item, key, ""));
         }
         context.put("periodRegisterJavaPerspective", sanitize(item, "periodRegisterPerspective"));
+        // The statuses the posting holds in (#8243). A .glue written before it holds the guard status
+        // alone - exactly what that shape's handler and sweep tested.
+        context.put("heldStatusValues", strOr(item, "heldStatusValues", strOr(item, "guardValue", "")));
         // The derived line rows, each cell and each row guard rendered from the reading the glue
         // carries (issue #7425); the classifier ternaries the handler null-guards up front are the
         // very cells that carry one, collected here rather than shipped twice.
