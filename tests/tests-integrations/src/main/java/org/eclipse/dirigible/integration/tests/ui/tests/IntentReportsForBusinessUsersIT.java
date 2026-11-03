@@ -35,6 +35,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 
 /**
  * A generated application's Reports section and dashboard tiles for a user who holds only the
@@ -112,10 +113,7 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
 
     @Test
     void a_report_is_listed_and_its_tile_shown_to_exactly_the_users_its_permissions_grant() {
-        writeProjectFile("app.intent", INTENT_YAML);
-        generateProject();
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
+        generateAndPublish();
 
         // Neither user holds a platform role: the report's permissions alone decide what they read.
         securityUtil.createUserInDefaultTenant("viewer", PASSWORD, "Viewer");
@@ -171,6 +169,67 @@ class IntentReportsForBusinessUsersIT extends UserInterfaceIntegrationTest {
         IDE admin = openApp(null);
         assertEquals(List.of("InvoiceTally"), reportNames());
         admin.close();
+    }
+
+    /**
+     * A report opened from a dashboard tile offers a Back to the dashboard, in the generated
+     * application and in the application shell; one opened by a deep link has nowhere to go back to
+     * (#8430).
+     */
+    @Test
+    void a_report_opened_from_a_dashboard_tile_goes_back_to_the_dashboard() {
+        generateAndPublish();
+
+        IDE admin = openApp(null);
+        openTileAndGoBack("#/");
+
+        openShell(admin, "#/dashboard");
+        openTileAndGoBack("#/dashboard");
+
+        // Only the fragment differs from the page already open, so the browser stays on it: reload to
+        // land on the report the way a bookmark or a pasted link does.
+        openShell(admin, "#/reports/InvoiceTally");
+        Selenide.refresh();
+        waitForReports();
+        Selenide.$("iframe[title='Report']")
+                .shouldBe(Condition.visible);
+        assertFalse(backButton().is(Condition.visible), "a report opened by a deep link offers no Back");
+        admin.close();
+    }
+
+    /** Opens the report from its KPI tile, then returns with the Reports page's Back. */
+    private static void openTileAndGoBack(String dashboardHash) {
+        Selenide.$$("[x-h-card]")
+                .findBy(Condition.text("Invoices on file"))
+                .shouldBe(Condition.visible)
+                .click();
+        Selenide.$("iframe[title='Report']")
+                .shouldBe(Condition.visible);
+        backButton().shouldBe(Condition.visible)
+                    .click();
+        for (int i = 0; i < 40 && !dashboardHash.equals(currentHash()); i++) {
+            Selenide.sleep(250);
+        }
+        assertEquals(dashboardHash, currentHash(), "Back returns to the dashboard the report was opened from");
+        Selenide.$$("[x-h-card]")
+                .findBy(Condition.text("Invoices on file"))
+                .shouldBe(Condition.visible);
+    }
+
+    private static String currentHash() {
+        return Selenide.executeJavaScript("return window.location.hash;");
+    }
+
+    private static SelenideElement backButton() {
+        return Selenide.$$("button")
+                       .findBy(Condition.exactText("Back"));
+    }
+
+    private void generateAndPublish() {
+        writeProjectFile("app.intent", INTENT_YAML);
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     /** Opens the generated application signed in as the user (the administrator for null). */

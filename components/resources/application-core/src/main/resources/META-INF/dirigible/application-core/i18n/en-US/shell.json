@@ -132,7 +132,8 @@
     },
     "reports": {
       "select": "Select a report",
-      "selectHint": "Choose a report from the sidebar to view it here."
+      "selectHint": "Choose a report from the sidebar to view it here.",
+      "back": "Back"
     },
     "report": {
       "rows": "{{count}} rows",

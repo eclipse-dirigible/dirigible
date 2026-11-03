@@ -57,8 +57,37 @@ document.addEventListener('alpine:init', () => {
     loaded: false,
     widgetData: {}, // KPI widget value cache, keyed by report name: { loaded, value | rows | forbidden | error }
     widgetsWanted: false, // a dashboard asked for the widget values before discovery finished
+    returnTo: null, // the shell route the Reports page was entered from - its Back button's target (#8430)
 
-    init() { this.load(); },
+    init() {
+      this._trackReturnRoute();
+      this.load();
+    },
+
+    // Remembers the route the user was on when they entered the Reports page (a dashboard tile, a
+    // hosted app, the Inbox), so the page can offer a way back to it (#8430). Switching between
+    // reports keeps the original route; a deep link straight to /reports has none, and the page shows
+    // no Back. Every shell routes by hash; Pinecone pushes the state itself (no hashchange), so the
+    // route is read from the address bar on its pinecone:end and on the browser's own Back/Forward.
+    _trackReturnRoute() {
+      const route = () => (window.location.hash || '').replace(/^#/, '') || '/';
+      const isReports = r => { const path = r.split('?')[0]; return path === '/reports' || path.indexOf('/reports/') === 0; };
+      let current = route();
+      const follow = () => {
+        const next = route();
+        if (next === current) return;
+        if (isReports(next) && !isReports(current)) this.returnTo = current;
+        current = next;
+      };
+      document.addEventListener('pinecone:end', follow);
+      window.addEventListener('popstate', follow);
+    },
+
+    // The Reports page's Back: the route it was entered from, through the shell's router so the
+    // shell's own route handling (the hosted app, the dashboard's widget refresh) runs as for a click.
+    goBack() {
+      if (this.returnTo) window.PineconeRouter.navigate(this.returnTo);
+    },
 
     async load() {
       try {
