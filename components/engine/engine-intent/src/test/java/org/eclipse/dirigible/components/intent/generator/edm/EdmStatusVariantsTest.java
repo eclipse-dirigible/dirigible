@@ -88,6 +88,24 @@ class EdmStatusVariantsTest {
         assertFalse(property(yaml, "Status").containsKey("widgetStatusVariants"));
     }
 
+    /**
+     * #8243: the classification itself travels on the property too. The seeds are this model's, so a
+     * model that books a Shipment from another one learns here which later statuses still hold the post
+     * an earlier one raised - and reads it back into the shape the owner's seeds give.
+     */
+    @Test
+    void theStagesTravelToAnotherModelAndReadBack() {
+        String stages = (String) property(YAML, "Status").get("statusStages");
+
+        assertEquals("draft:1;live:3;cancelled:4;void:5", stages);
+        assertEquals(Map.of("draft", List.of(1), "live", List.of(3), "cancelled", List.of(4), "void", List.of(5)),
+                CrossModelSupport.statusStages(stages));
+        assertTrue(CrossModelSupport.statusStages("")
+                                    .isEmpty(),
+                "an owner generated before the attribute existed classifies nothing");
+        assertFalse(property(YAML.replaceAll(",\\s+stage: \\w+", ""), "Status").containsKey("statusStages"));
+    }
+
     /** A cross-model nomenclature is seeded in its owner model - nothing here says what it means. */
     @Test
     void aCrossModelStatusEmitsNothing() {

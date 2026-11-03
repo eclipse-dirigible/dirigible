@@ -2809,6 +2809,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String sourcePerspective;
             String sourceKeyField = "Id";
             String sourceGenFolder;
+            // The source's status property and the stage: classification of its nomenclature, read off
+            // the owner's .model for a cross-model source - what tells the posting which later statuses
+            // still hold its post (#8243).
+            String sourceStatusProperty = null;
+            Map<String, List<Integer>> sourceStages = Map.of();
             if (alias != null) {
                 UsesIntent uses = findUses(model, String.valueOf(alias));
                 if (uses == null) {
@@ -2820,6 +2825,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, sourceEntity);
                 sourcePerspective = info.perspectiveName();
                 sourceKeyField = info.keyField();
+                sourceStatusProperty = info.statusProperty();
+                sourceStages = info.statusStages();
             } else {
                 sourceProject = ""; // resolved to the own project name at template time
                 sourceGenFolder = "";
@@ -2827,6 +2834,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 EntityIntent local = byName.get(sourceEntity);
                 if (local != null) {
                     sourceKeyField = IntentEntities.keyFieldName(local);
+                }
+                RelationIntent status = LifecycleStages.statusRelation(local);
+                if (status != null && !status.isCrossModel()) {
+                    sourceStatusProperty = IntentNaming.pascalCase(status.getName());
+                    sourceStages = LifecycleStages.stagesOf(model, status.getTo());
                 }
             }
             // The guard: "<Property> == <seed id>", evaluated against the RE-LOADED source.
@@ -2867,7 +2879,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("sourceKeyField", sourceKeyField);
             e.put("guardProperty", guardProperty);
             e.put("guardValue", guardValue);
-            e.put("heldStatusValues", heldStatusValues(guardProperty, guardValue, alias == null ? byName.get(sourceEntity) : null, model));
+            e.put("heldStatusValues", heldStatusValues(guardProperty, guardValue, sourceStatusProperty,
+                    sourceStages.getOrDefault(LifecycleStages.LIVE, List.of())));
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
@@ -3503,8 +3516,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The statuses a status-guarded posting HOLDS in (issue #8243), comma-joined: the one its event
-     * fires on, then - when that status is classified {@code stage: live} in a nomenclature seeded in
-     * this model - every {@code live} status seeded after it.
+     * fires on, then - when that status is classified {@code stage: live} - every {@code live} status
+     * seeded after it.
      *
      * <p>
      * The event fires on the transition INTO the guard status, so a document that moved on while its
@@ -3515,23 +3528,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * stepper. Nothing else is held: a draft (never issued, or sent back - its next arrival posts it),
      * a cancelled or a void one (the reversal's to answer for), a live status seeded before the guard
      * (a posting on PAID does not book an invoice that is only ISSUED), and every status of a
-     * nomenclature nobody classified or that is seeded in another model - nothing there says what the
-     * status means, so the guard status alone is held.
+     * nomenclature nobody classified - nothing there says what the status means, so the guard status
+     * alone is held. The classification is the source model's own: its seeds for a local source, its
+     * {@code .model} for a cross-model one.
      *
      * @param guardProperty the guarded source property, empty when the posting has no guard
      * @param guardValue the seed id the event guard names, empty when the posting has no guard
-     * @param source the source entity, {@code null} for a cross-model source
-     * @param model the intent
+     * @param statusProperty the source's status property, {@code null} when it has none
+     * @param live the source nomenclature's {@code live} seed ids in seed order, empty when
+     *        unclassified
      * @return the held seed ids, comma-joined, the guard status first
      */
-    private static String heldStatusValues(String guardProperty, String guardValue, EntityIntent source, IntentModel model) {
-        RelationIntent status = LifecycleStages.statusRelation(source);
-        if (guardValue.isEmpty() || status == null || status.isCrossModel()
-                || !guardProperty.equals(IntentNaming.pascalCase(status.getName()))) {
+    private static String heldStatusValues(String guardProperty, String guardValue, String statusProperty, List<Integer> live) {
+        if (guardValue.isEmpty() || !guardProperty.equals(statusProperty)) {
             return guardValue;
         }
-        List<Integer> live = LifecycleStages.stagesOf(model, status.getTo())
-                                            .getOrDefault(LifecycleStages.LIVE, List.of());
         int guard = live.indexOf(Integer.valueOf(guardValue));
         return guard < 0 ? guardValue
                 : String.join(",", live.subList(guard, live.size())
