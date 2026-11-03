@@ -113,6 +113,7 @@ class DateRangeFilterHarmoniaIT extends UserInterfaceIntegrationTest {
         browser.openPath(APP + "/Voucher");
         assertEquals("lastMonthEnd,monthEnd,monthStart,nextMonthStart|", poll(state -> state.endsWith("|")),
                 "the unfiltered list must show every voucher");
+        assertNoErrorWhileRenderingEmptyFilters();
 
         String dateRange = applyThisMonth("DocDate");
         assertTrue(dateRange.startsWith("monthEnd,monthStart|") && dateRange.contains(" - "),
@@ -131,6 +132,26 @@ class DateRangeFilterHarmoniaIT extends UserInterfaceIntegrationTest {
         String openEnded = poll(state -> state.startsWith("monthEnd,monthStart,nextMonthStart|"));
         assertTrue(openEnded.startsWith("monthEnd,monthStart,nextMonthStart|From "),
                 "a range with only From must be open towards the future and say so in its chip: " + openEnded);
+    }
+
+    /**
+     * #8402: the Filter menu prints each column's value with an {@code x-text} that Alpine evaluates
+     * even while {@code x-show} hides it, so a date column without a filter must print nothing rather
+     * than throw on the missing range. Re-rendering the menu over empty filters must raise no error.
+     */
+    private void assertNoErrorWhileRenderingEmptyFilters() {
+        Selenide.executeJavaScript(
+                "window.__filterErrors = [];" + " window.addEventListener('error', e => window.__filterErrors.push(String(e.message)));"
+                        + PAGE + ".columnFilters = {}; " + PAGE + ".filterOpen = true;");
+        Selenide.sleep(POLL_INTERVAL_MILLIS * 4);
+        List<String> errors = Selenide.executeJavaScript("return window.__filterErrors;");
+        assertEquals(List.of(), errors, "rendering the Filter menu over empty filters must raise no page error");
+        assertEquals("",
+                Selenide.executeJavaScript(
+                        "var page = " + PAGE + "; return page.filterValueText(page.filterColumns.find(c => c.name === 'DocDate'));"),
+                "a date column without a range must print no value");
+        Selenide.executeJavaScript(PAGE + ".closeFilterMenu();");
+        Selenide.sleep(POLL_INTERVAL_MILLIS);
     }
 
     /**
