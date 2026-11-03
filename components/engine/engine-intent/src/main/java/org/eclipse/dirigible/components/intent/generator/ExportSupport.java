@@ -654,7 +654,7 @@ public final class ExportSupport {
         entry.put("loads", loadList);
         entry.put("fileNameReading", fileNameReading(export));
         if (gates.covers(export.getName())) {
-            entry.put("roles", gates.appendRead(gates.readRoles(export.getName())));
+            entry.put("roles", gates.appendRead(export.getName(), gates.readRoles(export.getName())));
         }
         return entry;
     }

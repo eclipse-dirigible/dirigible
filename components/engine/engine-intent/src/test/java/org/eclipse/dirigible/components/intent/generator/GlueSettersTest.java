@@ -45,6 +45,11 @@ import org.junit.jupiter.api.Test;
  * entry per member, in the authored order, each with the keys its single-member setter would carry,
  * so the template writes them in one {@code updateProperties}; a one-key map is that key's
  * single-member setter.
+ *
+ * <p>
+ * ...and a status a roll-up holds - dirigible #7869: a status setter of a capacity roll-up's parent
+ * carries the statuses that roll-up owns and the column it restores from, so the template writes
+ * the step's status there while the row is settled - for the trigger record and one hop alike.
  */
 class GlueSettersTest {
 
@@ -61,6 +66,8 @@ class GlueSettersTest {
                         fields:
                           - { name: id, type: long, primaryKey: true, generated: true }
                           - { name: label, type: string }
+                          - { name: price, type: decimal }
+                          - { name: charged, type: decimal }
                         relations:
                           - { name: Status, kind: manyToOne, to: ProvisioningStatus, function: EntityStatus, init: 1 }
                       - name: TenantApplication
@@ -70,9 +77,23 @@ class GlueSettersTest {
                           - { name: state, type: string }
                           - { name: provisionedAt, type: timestamp }
                           - { name: provisionedOn, type: date }
+                          - { name: fee, type: decimal }
+                          - { name: paid, type: decimal }
                         relations:
                           - { name: Status, kind: manyToOne, to: ProvisioningStatus, function: EntityStatus, init: 1 }
                           - { name: plan, kind: manyToOne, to: Plan }
+                      - name: Charge
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                          - { name: amount, type: decimal }
+                        relations:
+                          - { name: application, kind: manyToOne, to: TenantApplication }
+                          - { name: plan, kind: manyToOne, to: Plan }
+                    rollups:
+                      - { name: appPaid, entity: Charge, via: application, field: paid, op: sum, of: amount,
+                          capacity: fee, status: Status, statusWhenFull: 5, statusWhenPartial: 4 }
+                      - { name: planCharged, entity: Charge, via: plan, field: charged, op: sum, of: amount,
+                          capacity: price, status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
                     processes:
                       - name: TenantProvisioning
                         trigger: { onCreate: TenantApplication }
@@ -259,6 +280,35 @@ class GlueSettersTest {
         set.remove("className");
 
         assertEquals(single, set);
+    }
+
+    @Test
+    void aStatusSetterOfARollupParentCarriesTheStatusesTheRollupHolds() {
+        for (String className : List.of("TenantProvisioningMarkFailed", "TenantProvisioningRestart")) {
+            Map<String, Object> setter = setter(className);
+            assertEquals("Status", setter.get("rollupStatus"), "the status the roll-up drives: " + setter);
+            assertEquals("DisplacedStatus", setter.get("rollupDisplacedStatus"), "the column the roll-up restores from: " + setter);
+            assertEquals("5, 4", setter.get("rollupOwnedStatuses"), "statusWhenFull, statusWhenPartial: " + setter);
+        }
+    }
+
+    @Test
+    void aOneHopStatusSetterCarriesTheTargetsRollupStatuses() {
+        for (String className : List.of("TenantProvisioningActivatePlan", "TenantProvisioningOpenPlan")) {
+            assertEquals("7, 6", setter(className).get("rollupOwnedStatuses"),
+                    "the written row is the Plan, so its roll-up decides: " + setter(className));
+        }
+    }
+
+    /** A setter that writes no roll-up's status gains no key, so its delegate renders unchanged. */
+    @Test
+    void aSetterOfAnotherMemberCarriesNoRollupKeys() {
+        for (String className : List.of("TenantProvisioningMarkDone", "TenantProvisioningLabelPlan", "TenantProvisioningResetFailure")) {
+            Map<String, Object> setter = setter(className);
+            for (String key : List.of("rollupStatus", "rollupDisplacedStatus", "rollupOwnedStatuses")) {
+                assertFalse(setter.containsKey(key), "a setter of another member must stay exactly as before: " + setter);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")

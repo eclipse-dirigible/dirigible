@@ -185,6 +185,40 @@ class PermissionGatesTest {
         assertTrue(access.contains("\"Owner\""), "a constraint must not refuse a caller the controller behind it admits: " + access);
     }
 
+    @Test
+    void anExclusiveGrantKeepsTheExtraRolesOffEveryGateItNames() {
+        String yaml =
+                YAML.replace("{ role: SalesViewer, can: [Order:read] }", "{ role: SalesViewer, can: [Order:read, OrderTotals:read] }") + """
+                          - { role: Payroll, can: [Customer:write, OrderTotals:read], exclusive: true }
+                        reports:
+                          - name: OrderTotals
+                            source: Order
+                            dimensions: [id]
+                            measures: ["sum(total)"]
+                        """;
+        PermissionSupport.Gates gates = PermissionSupport.gates(IntentParser.parse(yaml),
+                settings(Map.of("extraRoles", List.of("Owner"), "extraRolesReadOnly", List.of("Auditor"))));
+
+        assertEquals("Payroll", gates.writeGate("sales", "Customer", "Customer"));
+        assertEquals("Payroll", gates.readGate("sales", "Customer", "Customer"));
+        assertEquals("SalesViewer,Payroll", gates.appendRead("OrderTotals", gates.readRoles("OrderTotals")));
+        assertEquals("SalesAdmin,Owner", gates.writeGate("sales", "Order", "Order"), "a resource no exclusive grant names keeps them");
+        String access = written(yaml, settings(Map.of("generate", true, "extraRoles", List.of("Owner"))), "/sales.access");
+        for (var constraint : com.google.gson.JsonParser.parseString(access)
+                                                        .getAsJsonObject()
+                                                        .getAsJsonArray("constraints")) {
+            String path = constraint.getAsJsonObject()
+                                    .get("path")
+                                    .getAsString();
+            if (path.contains("/Customer")) {
+                assertEquals("[\"Payroll\"]", constraint.getAsJsonObject()
+                                                        .get("roles")
+                                                        .toString(),
+                        path);
+            }
+        }
+    }
+
     /** The written {@code .access} document, or null when the pass wrote none. */
     private static String access(boolean optIn) {
         return written(YAML, settings(optIn), "/sales.access");

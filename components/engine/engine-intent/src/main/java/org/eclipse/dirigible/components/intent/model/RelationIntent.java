@@ -254,6 +254,14 @@ public class RelationIntent {
      * accepted and changes nothing.
      */
     private boolean fixedAfterCreate;
+    /**
+     * Fixed while other records reference this one ({@code fixedWhenReferenced: true}, dirigible #8194
+     * - the relation twin of the field key): the FK stays re-pickable while nothing references the
+     * record, and from the first reference on a user update through the generated controllers that
+     * changes it is answered 409 under {@code checks.<Entity>_fixedWhenReferenced_<Relation>}. Valid
+     * where {@link #fixedAfterCreate} is.
+     */
+    private boolean fixedWhenReferenced;
 
     public String getName() {
         return name;
@@ -532,6 +540,14 @@ public class RelationIntent {
 
     public void setFixedAfterCreate(boolean fixedAfterCreate) {
         this.fixedAfterCreate = fixedAfterCreate;
+    }
+
+    public boolean isFixedWhenReferenced() {
+        return fixedWhenReferenced;
+    }
+
+    public void setFixedWhenReferenced(boolean fixedWhenReferenced) {
+        this.fixedWhenReferenced = fixedWhenReferenced;
     }
 
     /**

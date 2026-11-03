@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
@@ -53,7 +54,9 @@ import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 // Jackson 2 ON PURPOSE (#7790): Flowable's BpmnJsonConverter takes and returns
 // com.fasterxml.jackson.databind nodes, so the model this class exchanges with it must be 2.x. The
@@ -87,15 +90,21 @@ public class BpmService {
     /** The bpm provider flowable. */
     private final BpmProviderFlowable bpmProviderFlowable;
 
+    /** The guards telling whether the record a process runs for is gone, none where nobody knows. */
+    private final ObjectProvider<ProcessRecordGuard> recordGuards;
+
     /**
      * Instantiates a new bpm service.
      *
      * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      * @param bpmProviderFlowable the bpm provider flowable
+     * @param recordGuards the guards telling whether the record a process runs for is gone
      */
-    public BpmService(ObjectProvider<UserWorkspaces> workspaces, BpmProviderFlowable bpmProviderFlowable) {
+    public BpmService(ObjectProvider<UserWorkspaces> workspaces, BpmProviderFlowable bpmProviderFlowable,
+            ObjectProvider<ProcessRecordGuard> recordGuards) {
         this.workspaces = workspaces;
         this.bpmProviderFlowable = bpmProviderFlowable;
+        this.recordGuards = recordGuards;
     }
 
     /**
@@ -523,6 +532,7 @@ public class BpmService {
     }
 
     public void claimTask(String taskId, String userId) {
+        refuseSeparated(taskId);
         bpmProviderFlowable.getTaskService()
                            .claimTask(taskId, userId);
     }
@@ -543,6 +553,40 @@ public class BpmService {
     }
 
     /**
+     * Retires the task's process when the record it runs for has been deleted (issue #8108). A delete
+     * cancels the record's process through the generated abort-on-delete listener, which runs after the
+     * delete has committed; a task completed before that listener got to it - or one whose listener
+     * lost a race - drove the flow's steps over a row that no longer exists, and handed its next task
+     * out for it. So a completion asks first: when a {@link ProcessRecordGuard} confirms the record is
+     * gone, the process is cancelled here and the task must not be completed.
+     *
+     * @param taskId the task about to be completed
+     * @return true when the task's record is gone and its process was cancelled
+     */
+    public boolean retireIfRecordGone(String taskId) {
+        Optional<BpmProviderFlowable.TaskRecord> record = bpmProviderFlowable.getTaskRecord(taskId);
+        if (record.isEmpty()) {
+            return false;
+        }
+        BpmProviderFlowable.TaskRecord taskRecord = record.get();
+        boolean gone = recordGuards.orderedStream()
+                                   .anyMatch(guard -> guard.isRecordGone(taskRecord.processDefinitionKey(), taskRecord.recordId()));
+        if (!gone) {
+            return false;
+        }
+        LOGGER.warn("Task [{}] belongs to process instance [{}] of [{}], whose record [{}] has been deleted - cancelling the instance",
+                taskId, taskRecord.processInstanceId(), taskRecord.processDefinitionKey(), LogSanitizer.sanitize(taskRecord.recordId()));
+        try {
+            bpmProviderFlowable.deleteProcess(taskRecord.processInstanceId(),
+                    "The record [" + taskRecord.recordId() + "] this " + taskRecord.processDefinitionKey() + " ran for was deleted");
+        } catch (IllegalArgumentException alreadyEnded) {
+            // The abort-on-delete listener retired it meanwhile - which is the outcome wanted.
+            LOGGER.debug("Process instance [{}] had already ended", taskRecord.processInstanceId(), alreadyEnded);
+        }
+        return true;
+    }
+
+    /**
      * Completes the task with the variables its completion may write. A {@code __}-prefixed variable is
      * the platform's own (the locators the Inbox presents the task's record by) and is never taken. A
      * task that declares what it writes ({@link BpmProviderFlowable#getTaskWrites}) takes only those
@@ -550,12 +594,32 @@ public class BpmService {
      * variable, so a completion carrying another record's key wrote the process's changes to that
      * record, and a field its form does not offer was planted for a later step (issue #8094).
      *
+     * <p>
+     * The completion records who completed the task ({@link BpmProviderFlowable#COMPLETED_BY_PREFIX}),
+     * and is refused when the task is separated from one this user completed (issue #8111).
+     *
      * @param taskId the task id
      * @param variables the completion's variables, as the caller sent them
      */
     public void completeTask(String taskId, Map<String, Object> variables) {
+        refuseSeparated(taskId);
+        Map<String, Object> writable = writableVariables(taskId, variables);
+        String key = bpmProviderFlowable.getTaskDefinitionKey(taskId);
+        String user = UserFacade.getName();
+        if (key != null && user != null) {
+            writable = writable == null ? new HashMap<>() : writable;
+            writable.put(BpmProviderFlowable.COMPLETED_BY_PREFIX + key, user);
+        }
         bpmProviderFlowable.getTaskService()
-                           .completeTask(taskId, writableVariables(taskId, variables));
+                           .completeTask(taskId, writable);
+    }
+
+    /** A 403 carrying the task's own message when the current user may not act on it (issue #8111). */
+    private void refuseSeparated(String taskId) {
+        String refusal = bpmProviderFlowable.getSeparationRefusal(taskId, UserFacade.getName());
+        if (refusal != null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, refusal);
+        }
     }
 
     private Map<String, Object> writableVariables(String taskId, Map<String, Object> variables) {

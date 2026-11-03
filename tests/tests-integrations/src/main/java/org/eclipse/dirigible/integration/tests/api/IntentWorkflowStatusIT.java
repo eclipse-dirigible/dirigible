@@ -13,6 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
@@ -48,6 +49,13 @@ import org.springframework.test.annotation.DirtiesContext;
  * wrong: the jump is refused, the flow's own write of the very same column still lands, an ordinary
  * edit that carries the status back unchanged still saves, and an edit that omits it does not erase
  * it.
+ *
+ * <p>
+ * The flow shares the column with a roll-up (dirigible #7869): once payments settle the invoice,
+ * Paid is the roll-up's, and an approval completed after the money arrived used to write Approved
+ * over it for good - nothing put Paid back, since the roll-up moves the status only when its sum
+ * moves. The flow's status now waits in the column the roll-up restores from, and comes back when
+ * the money goes.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentWorkflowStatusIT extends IntegrationTest {
@@ -57,6 +65,7 @@ class IntentWorkflowStatusIT extends IntegrationTest {
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String INVOICES = API + "/invoice/InvoiceController";
+    private static final String PAYMENTS = API + "/invoice/InvoicePaymentController";
     private static final String TASKS = "/services/inbox/tasks";
     private static final String REFUSAL = "'Status' changes through the workflow, not a direct edit";
     private static final String APPROVER_REQUIRED = "An approved invoice names its approver";
@@ -80,6 +89,8 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                   - { name: id,       type: integer, primaryKey: true, generated: true }
                   - { name: note,     type: string, length: 200 }
                   - { name: approver, type: string, length: 100 }
+                  - { name: total,    type: decimal, precision: 18, scale: 2 }
+                  - { name: paid,     type: decimal, precision: 18, scale: 2 }
                 relations:
                   - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
                 checks:
@@ -87,6 +98,18 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                   # so the rule is gated on it and enforced where the step writes - the repository -
                   # and the step runs in the completing transaction so the refusal reaches the approver.
                   - { kind: requiredWhen, field: approver, when: "Status == Approved", message: "An approved invoice names its approver" }
+
+              - name: InvoicePayment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                relations:
+                  - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
+            rollups:
+              # The money settles the invoice: Partial and Paid are the roll-up's while its sum holds them.
+              - { name: invoicePaid, entity: InvoicePayment, via: Invoice, field: paid, op: sum, of: amount,
+                  capacity: total, status: Status, statusWhenFull: 4, statusWhenPartial: 3 }
 
             processes:
               - name: InvoiceApproval
@@ -105,6 +128,8 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Draft }
                   - { id: 2, name: Approved }
+                  - { id: 3, name: Partial }
+                  - { id: 4, name: Paid }
             """;
 
     @Autowired
@@ -160,6 +185,31 @@ class IntentWorkflowStatusIT extends IntegrationTest {
         read(invoice).body("Approver", equalTo("Ann"));
     }
 
+    @Test
+    void a_flow_status_written_while_the_roll_up_holds_the_status_waits_under_it_until_the_money_goes() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // Paid in full before anyone approves - the normal order for a customer paying by transfer.
+        int invoice = create("{\"Note\":\"prepaid\",\"Total\":100}");
+        int payment = create(PAYMENTS, "{\"Invoice\":" + invoice + ",\"Amount\":100}");
+        awaitStatus(invoice, 4, 1);
+
+        // The approval completes after the money arrived: Paid stays, and Approved is recorded as what
+        // the invoice holds once it is no longer settled. Before #7869 this read Approved with 100 paid.
+        complete(taskFor(invoice), "{\"action\":\"approve\",\"Approver\":\"Ann\"}");
+        awaitStatus(invoice, 4, 2);
+        read(invoice).body("Paid", equalTo(100.0F));
+
+        // The payment goes: the roll-up lets go and restores the approval, not the Draft it found.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(PAYMENTS + "/" + payment)
+                                                 .then()
+                                                 .statusCode(200));
+        awaitStatus(invoice, 2, null);
+    }
+
     private void put(int invoice, String body, int expectedStatus, String expectedMessage) {
         restAssuredExecutor.execute(() -> {
             var response = given().contentType("application/json")
@@ -202,6 +252,16 @@ class IntentWorkflowStatusIT extends IntegrationTest {
                 PROCESS_TIMEOUT_SECONDS);
     }
 
+    private void awaitStatus(int invoice, int status, Integer displaced) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(INVOICES + "/" + invoice)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(status))
+                                                 .body("DisplacedStatus", displaced == null ? nullValue() : equalTo(displaced)),
+                PROCESS_TIMEOUT_SECONDS);
+    }
+
     private void complete(String task, String data) {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"action\":\"COMPLETE\",\"data\":" + data + "}")
@@ -235,11 +295,15 @@ class IntentWorkflowStatusIT extends IntegrationTest {
     }
 
     private int create(String body) {
+        return create(INVOICES, body);
+    }
+
+    private int create(String controller, String body) {
         AtomicInteger id = new AtomicInteger();
         restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
                                                         .body(body)
                                                         .when()
-                                                        .post(INVOICES)
+                                                        .post(controller)
                                                         .then()
                                                         .statusCode(200)
                                                         .extract()

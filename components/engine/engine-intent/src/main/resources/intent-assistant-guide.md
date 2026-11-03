@@ -228,6 +228,17 @@ not as an apology.
   `translatable: false`, as for any key). Accepted beside `calculatedActionOnCreate` (a create-time
   default), `defaultValue`, `unique`, `pattern`, `format` and `normalize`. Do not reach for
   `readOnly:` (never caller-written, not even on create) or `immutableWhen` (locks the whole record).
+- **`fixedWhenReferenced: true` on a FIELD or a plain `manyToOne`/`oneToOne` = editable until another
+  record references the row, fixed from then on** (#8194) - the update twin of the delete `restrict`: a currency's code, an IBAN, a
+  product's type that documents already print. While nothing references the row it is an ordinary
+  field; once a record references it through a to-one - in this model or another, under any
+  `whenTargetDeleted` rule but `keep` - a user update that changes it is answered 409 under
+  `checks.<Entity>_fixedWhenReferenced_<Field>`. The same value passes (a `normalize:` field compared
+  normalized, a `decimal` by value), an omitted value keeps the stored one, and system writers are
+  unaffected. Nothing is declared on the referencing side. Refused wherever `fixedAfterCreate` on a
+  field or relation is (the primary key, a calculated or derived field, a composition parent, an
+  `EntityStatus`, a collection, ...) and beside `fixedAfterCreate`, which already fixes it outright.
+  On a relation the FK is compared by id: `CompanyBankAccount.Currency`, `Product.Type`.
 - **`whenTargetDeleted: restrict | nullify | cascade | keep` on a plain (non-composition) `manyToOne`/
   `oneToOne` = what deleting the record it points at does to the records pointing at it** (#7547).
   - `restrict` is the DEFAULT, also when the key is absent: the delete is refused with a 409 naming the
@@ -960,6 +971,12 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   entry in place, and once the entry has left its `init:` status the divergence is logged, as for an
   amended re-issue. The edit never writes a FIRST post - a source the create skipped (no rule row,
   a false `when`) stays on the unposted worklist. Nothing to declare.
+  **A rejected or reversed entry is history (#7959).** The post a source carries is its LIVE entry:
+  one whose status seed row is classified `stage: cancelled` or `stage: void` (the accountant rejected
+  it), a `reversals:` twin, and an entry whose `backLink` names a twin standing in the reversal's
+  `when:` status are not it. So once every entry of a source is one of those, its next edit (or
+  re-issue) drafts a NEW entry from what it says now. Classify the created document's status seeds
+  with `stage:` - without it a rejected entry cannot be told from a posted one.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
@@ -1901,6 +1918,14 @@ dangling segment fails Generate, not the running process.
 the same process set is visible), and when it resolves to nobody - a null hop, a deleted record, a
 blank identity - the task is created unassigned and the fallback group can still claim it. That is
 what stops an unresolvable path from minting a task nobody can see.
+
+**Nobody approves their own work.** A user task whose form offers `approve` cannot be claimed or
+completed by whoever completed another user task of the same process instance - the submitter gets a
+403 "You cannot approve your own <record>". Name the steps yourself with `separateFrom: submit` (or a
+list; `separateFrom: []` turns the default off). The deployment's `.settings` `access.extraRoles`
+(a multitenant app's `Owner` / `User` - every tenant member) are never a task's candidates unless the
+step says `extraRoles: true`, so route a submit task with `assignee: personal` and an approval with a
+relation walk rather than a role nobody in the tenant holds.
 
 **Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
 Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
@@ -3605,7 +3630,10 @@ allow-list, so if no role may write a covered entity, nothing may. `Resource` is
 report for a gate-bearing token, and may be a process or a form for a business action like
 `Loan:approve` - such an action maps to no generated gate and is reported as an advisory, so enforce
 it in a process guard or a hand-written `custom/*.access`. An entity no token names keeps the
-convention gates unchanged, so partial coverage is fine.
+convention gates unchanged, so partial coverage is fine. `exclusive: true` on an entry keeps the
+deployment's `.settings` `access.extraRoles` off every gate of the resources it names - for HR and
+payroll data the gate is then exactly the roles listed here:
+`- { role: HR, can: [Employee:write], exclusive: true }`.
 
 ### seeds - initial data
 
@@ -5338,6 +5366,8 @@ or a seeded name.
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
 | relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409. A `composition: true` relation is fixed this way by default (#8306) |
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
+| field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
+| relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |
@@ -5388,6 +5418,7 @@ or a seeded name.
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
 - "the user picks it when creating the record and it must never move afterwards" (a timesheet's project-month, an order's customer) -> the relation's `fixedAfterCreate: true`
 - "the code is entered when the record is created and must never change afterwards" (a customer code, an external reference, a file-name key) -> the field's `fixedAfterCreate: true` (not `readOnly:`, not `immutableWhen`)
+- "once other records use it, its code / IBAN / type must not change any more" (a currency's code, a bank account's currency, a product's type) -> the field's or the to-one's `fixedWhenReferenced: true` (not `fixedAfterCreate`, which fixes it before anything uses it)
 - "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)
 - "retry the flaky external call, and record the failure on the record instead of an incident" -> **processes** (`delegate:` serviceTask with `retry:` + `onError:`, the failure message via `{error}`)
 - "if the mail cannot go out, retry it and then record why - don't leave the process stuck" -> **processes** (the `notify:` serviceTask takes the same `retry:` + `onError:`; a fan-out send instead uses `outcome:` + `onNotifyFailed`)

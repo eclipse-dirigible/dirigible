@@ -182,16 +182,17 @@ public final class IntentParser {
      * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
      * keys.
      */
-    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND =
-            Map.of("userTask", Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next"), "serviceTask",
-                    Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler",
-                            "notify", "next", "retry", "onError", "produces", "uses"),
-                    "script",
-                    Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler",
-                            "notify", "next"),
-                    "decision", Set.of("if", "then", "else", "next"), "wait",
-                    Set.of("after", "onCreate", "onUpdate", "onTransition", "via", "when", "next"), "parallel", Set.of("branches", "next"),
-                    "end", Set.of("next"));
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next", "separateFrom", "extraRoles"),
+            "serviceTask",
+            Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler", "notify",
+                    "next", "retry", "onError", "produces", "uses"),
+            "script",
+            Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler", "notify",
+                    "next"),
+            "decision", Set.of("if", "then", "else", "next"), "wait",
+            Set.of("after", "onCreate", "onUpdate", "onTransition", "via", "when", "next"), "parallel", Set.of("branches", "next"), "end",
+            Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
     private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
                                                                         .stream()
@@ -2253,6 +2254,7 @@ public final class IntentParser {
             } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
             }
+            refuseRequiredRollupTarget(counter, name, "field", issues);
             if (latest) {
                 // latest copies the child `of` value from the row with the greatest `by` date onto the
                 // parent field; `of`+`by` required, `by` must be date/timestamp, and the parent field
@@ -2294,6 +2296,9 @@ public final class IntentParser {
                 }
                 requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", via.getTo(), issues);
                 requireNumericParentField(parent, rollup.getBalance(), name, "balance", via.getTo(), issues);
+                if (!isBlank(rollup.getCapacity()) && parent != null) {
+                    refuseRequiredRollupTarget(fieldByName(parent, rollup.getBalance()), name, "balance", issues);
+                }
                 if (rollup.getStatus() != null && !rollup.getStatus()
                                                          .isBlank()
                         && (parent == null || toOneRelationByName(parent, rollup.getStatus()) == null)) {
@@ -2354,6 +2359,7 @@ public final class IntentParser {
         } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
             issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
         }
+        refuseRequiredRollupTarget(counter, name, "field", issues);
         if (sum && isBlank(rollup.getOf())) {
             issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
         }
@@ -2369,6 +2375,9 @@ public final class IntentParser {
         if (sum) {
             requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", rollup.getParent(), issues);
             requireNumericParentField(parent, rollup.getBalance(), name, "balance", rollup.getParent(), issues);
+            if (!isBlank(rollup.getCapacity())) {
+                refuseRequiredRollupTarget(fieldByName(parent, rollup.getBalance()), name, "balance", issues);
+            }
             if (!isBlank(rollup.getStatus()) && toOneRelationByName(parent, rollup.getStatus()) == null) {
                 issues.add("rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + rollup.getParent()
                         + "]");
@@ -2691,6 +2700,20 @@ public final class IntentParser {
         FieldIntent f = parent == null ? null : fieldByName(parent, field);
         if (f == null || !NUMERIC_TYPES.contains(f.getType())) {
             issues.add("rollup [" + rollup + "] " + role + " [" + field + "] must be a numeric field of [" + parentName + "]");
+        }
+    }
+
+    /**
+     * A roll-up target is derived, so it is read-only (#8442): a REST create drops it and the first
+     * child event writes it. Declared {@code required} with no server-side source (a
+     * {@code defaultValue}, a {@code calculatedOnCreate}), it would refuse every create of its parent,
+     * which cannot supply it.
+     */
+    private static void refuseRequiredRollupTarget(FieldIntent target, String rollup, String role, List<String> issues) {
+        if (target != null && target.isRequired() && !hasServerSideSource(target)) {
+            issues.add("rollup [" + rollup + "] " + role + " [" + target.getName() + "] is required, but the roll-up writes it"
+                    + " only once a child exists and a create cannot supply it - give it a defaultValue (e.g. 0) or a"
+                    + " calculatedOnCreate, or drop `required`");
         }
     }
 
@@ -5097,7 +5120,14 @@ public final class IntentParser {
                     validateVisibleTo(entity, field, declaredRoles, issues);
                 }
                 if (field.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, field, issues);
+                    validateFixedField(entity, field, "fixedAfterCreate", issues);
+                }
+                if (field.isFixedWhenReferenced()) {
+                    validateFixedField(entity, field, "fixedWhenReferenced", issues);
+                    if (field.isFixedAfterCreate()) {
+                        issues.add("entity [" + name + "] field [" + field.getName() + "] declares both fixedAfterCreate and"
+                                + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
             }
             if (idCount > 1) {
@@ -5235,7 +5265,15 @@ public final class IntentParser {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
                 if (relation.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, relation, issues);
+                    validateFixedRelation(entity, relation, "fixedAfterCreate", issues);
+                }
+                if (relation.isFixedWhenReferenced()) {
+                    validateFixedRelation(entity, relation, "fixedWhenReferenced", issues);
+                    if (relation.isFixedAfterCreate()) {
+                        issues.add(
+                                "entity [" + entity.getName() + "] relation [" + relation.getName() + "] declares both fixedAfterCreate and"
+                                        + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
                 if (relation.isPersonal()) {
                     personalCount++;
@@ -5427,6 +5465,9 @@ public final class IntentParser {
         }
         if (relation.isFixedAfterCreate()) {
             unsupported.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            unsupported.add("fixedWhenReferenced");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6167,24 +6208,30 @@ public final class IntentParser {
      * so it needs a single FK a user picks: a to-one relation that is not an EntityStatus badge (moved
      * by its workflow by design) and not recomputed by a {@code calculatedActionOnUpdate} (which owns
      * the value on every update already). On a composition parent it is accepted and redundant: a
-     * composition is fixed after create by default (dirigible #8306).
+     * composition is fixed after create by default (dirigible #8306). {@code fixedWhenReferenced: true}
+     * (dirigible #8194) fixes the FK once another record references this one, so it needs the same, and
+     * is refused on a composition parent, which that default already fixes more strictly.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+    private static void validateFixedRelation(EntityIntent entity, RelationIntent relation, String key, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
         boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
         if (!toOne) {
-            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            issues.add(subject + " declares " + key + " but only a manyToOne/oneToOne relation has an FK a user picks");
             return;
         }
+        if (relation.isComposition() && !"fixedAfterCreate".equals(key)) {
+            issues.add(subject + " is a composition parent, which is fixed after create already (#8306), so it cannot declare " + key);
+        }
         if (relation.isEntityStatus()) {
-            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare " + key);
         }
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
-            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+            issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
         }
     }
@@ -6199,14 +6246,17 @@ public final class IntentParser {
      * daylight-saving fold do not survive the round trip) and a translatable string of a
      * {@code multilingual} entity (the read overlay hands back a translation, not the base column). A
      * create-time default ({@code calculatedActionOnCreate}, #6696) stays caller-editable and may be
-     * fixed.
+     * fixed. {@code fixedWhenReferenced: true} (dirigible #8194) fixes the value once another record
+     * references this one; the controllers compare the payload with the stored row the same way, so it
+     * is refused in the same places - a calculated field above all, which no user update changes.
      *
      * @param entity the entity declaring the field
      * @param field the field
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, FieldIntent field, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares fixedAfterCreate but ";
+    private static void validateFixedField(EntityIntent entity, FieldIntent field, String key, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares " + key + " but ";
         String type = field.getType() == null ? "string"
                 : field.getType()
                        .toLowerCase(Locale.ROOT);
@@ -8719,6 +8769,43 @@ public final class IntentParser {
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
+            validateTaskSeparation(process, issues);
+        }
+    }
+
+    /**
+     * A user task's {@code separateFrom} names the user tasks of the same process whose completer may
+     * not complete it (a name or a list, {@code []} for none), and {@code extraRoles: true} lets the
+     * deployment's {@code access.extraRoles} take it (issue #8111). A name that is not another user
+     * task would separate the task from nothing, so it is refused rather than dropped.
+     */
+    private static void validateTaskSeparation(ProcessIntent process, List<String> issues) {
+        Set<String> userTasks = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if ((step.getKind() == null || "userTask".equals(step.getKind())) && step.getName() != null) {
+                userTasks.add(step.getName());
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (step.getArgs() == null || !userTasks.contains(step.getName())) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+            Object extraRoles = step.getArgs()
+                                    .get("extraRoles");
+            if (extraRoles != null && !(extraRoles instanceof Boolean)) {
+                issues.add(subject + " extraRoles must be true or false");
+            }
+            Object separateFrom = step.getArgs()
+                                      .get("separateFrom");
+            List<?> names = separateFrom instanceof List<?> list ? list : separateFrom == null ? List.of() : List.of(separateFrom);
+            for (Object name : names) {
+                String other = String.valueOf(name)
+                                     .trim();
+                if (other.equals(step.getName()) || !userTasks.contains(other)) {
+                    issues.add(subject + " separateFrom names [" + other + "], which is not another user task of the process");
+                }
+            }
         }
     }
 

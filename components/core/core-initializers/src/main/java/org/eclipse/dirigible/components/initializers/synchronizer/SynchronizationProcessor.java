@@ -475,8 +475,8 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             // waits for it - so the deferred cleanup happens promptly.
             boolean registryChangedDuringPass =
                     registryMutationTracker.isMutating() || registryMutationTracker.completedMutations() != mutationsBeforePass;
-            // The same walk takes the census of what stays registered (#7533), keyed so that a service
-            // shared by two synchronizers counts its artefacts once.
+            // The same walk collects what stays registered for the census (#7533), keyed so that a
+            // service shared by two synchronizers counts its artefacts once.
             Map<String, Artefact> remaining = new HashMap<>();
             // The artefacts still in a failed state after this pass - surfaced in the Problems view below.
             List<Artefact> failedArtefacts = new ArrayList<>();
@@ -513,8 +513,6 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             // problem is cleared. One reconcile over the authoritative failed set, skipped where the
             // Problems store is not on the classpath.
             problemReporter.ifAvailable(reporter -> reporter.reconcileSynchronizationProblems(failedArtefacts));
-            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
-                                                                             .recordArtefacts(ArtefactCensus.of(remaining.values()));
             logger.trace("Cleaning up removed artefacts done.");
 
             // finishing
@@ -522,6 +520,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                 synchronizer.finishing();
             }
             logger.trace("Finalization step done.");
+
+            // The census is taken AFTER finishing, from a fresh read: a synchronizer may settle its
+            // artefacts' lifecycles there - the client-Java batch compile marks the sources it could not
+            // compile or wire FAILED in finishing() - and a census of the instances read before it
+            // reported them as healthy until some later pass re-counted (#8239).
+            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                             .recordArtefacts(takeCensus(remaining.keySet()));
 
             // report results
             getErrors().forEach(errMsg -> {
@@ -561,6 +566,26 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
                                                                              .passCompleted(getErrors().size());
         }
+    }
+
+    /**
+     * The census of the registered artefacts as the synchronizers' services hold them now.
+     *
+     * @param registeredKeys the keys of the artefacts that stay registered after the cleanup
+     * @return the census
+     */
+    private ArtefactCensus takeCensus(Set<String> registeredKeys) {
+        Map<String, Artefact> registered = new HashMap<>();
+        for (Synchronizer synchronizer : synchronizers) {
+            List<? extends Artefact> held = synchronizer.getService()
+                                                        .getAll();
+            for (Artefact artefact : held) {
+                if (synchronizer.isAccepted(artefact.getType()) && registeredKeys.contains(artefact.getKey())) {
+                    registered.put(artefact.getKey(), artefact);
+                }
+            }
+        }
+        return ArtefactCensus.of(registered.values());
     }
 
     /**
