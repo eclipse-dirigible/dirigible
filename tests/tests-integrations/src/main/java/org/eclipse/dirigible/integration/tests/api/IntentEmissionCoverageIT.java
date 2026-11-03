@@ -4117,6 +4117,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String unitHeader = unitManageView.substring(unitManageView.indexOf("<thead"), unitManageView.indexOf("</thead>"));
         assertTrue(unitHeader.contains("', 'Unit Price')") && !unitHeader.contains("', 'UnitPrice')"),
                 "the list header must default to the property's label, not its name: " + unitHeader);
+        // #8294: the app-test manifest names that column by the same label, or the generic list flow
+        // looks for a "UnitPrice" header the page does not render.
+        assertTrue(contentOf("emission.test").matches("(?s).*\"name\": \"UnitPrice\",\\s*\"label\": \"Unit Price\".*"),
+                "the manifest must carry each field's label as the list header renders it");
         assertFalse(unitManageView.contains("cycleSort('PackPrice')"), "a property list: leaves out must not be a list column");
         assertTrue(
                 unitManageList.indexOf("{ name: 'UnitPrice'") >= 0
