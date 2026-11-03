@@ -101,7 +101,7 @@ class BpmServiceCompleteTaskTest {
 
         BpmProviderFlowable bpmProvider =
                 new BpmProviderFlowable(mock(IRepository.class), tenantContext(), mock(FlowableArtefactsValidator.class), engine);
-        bpmService = new BpmService(mock(ObjectProvider.class), bpmProvider);
+        bpmService = new BpmService(mock(ObjectProvider.class), bpmProvider, mock(ObjectProvider.class));
     }
 
     @AfterAll

@@ -49,4 +49,17 @@ public interface ProcessTrigger {
      *         condition does not hold for the record, or when the start fails
      */
     String restart(String id);
+
+    /**
+     * Whether the record still exists. Asked before a task of the process is completed: a task whose
+     * record has been deleted is refused and its process retired, instead of driving the flow's steps
+     * over a row that no longer exists (issue #8108). A trigger that cannot tell answers true, which
+     * leaves its tasks to be completed as before.
+     *
+     * @param id the record's primary key, as text
+     * @return false only when the record is confirmed gone
+     */
+    default boolean recordExists(String id) {
+        return true;
+    }
 }

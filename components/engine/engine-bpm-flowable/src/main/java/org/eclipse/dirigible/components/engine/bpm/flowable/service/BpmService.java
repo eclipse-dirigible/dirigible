@@ -87,15 +87,21 @@ public class BpmService {
     /** The bpm provider flowable. */
     private final BpmProviderFlowable bpmProviderFlowable;
 
+    /** The guards telling whether the record a process runs for is gone, none where nobody knows. */
+    private final ObjectProvider<ProcessRecordGuard> recordGuards;
+
     /**
      * Instantiates a new bpm service.
      *
      * @param workspaces the workspaces of the IDE, absent where the IDE is not deployed
      * @param bpmProviderFlowable the bpm provider flowable
+     * @param recordGuards the guards telling whether the record a process runs for is gone
      */
-    public BpmService(ObjectProvider<UserWorkspaces> workspaces, BpmProviderFlowable bpmProviderFlowable) {
+    public BpmService(ObjectProvider<UserWorkspaces> workspaces, BpmProviderFlowable bpmProviderFlowable,
+            ObjectProvider<ProcessRecordGuard> recordGuards) {
         this.workspaces = workspaces;
         this.bpmProviderFlowable = bpmProviderFlowable;
+        this.recordGuards = recordGuards;
     }
 
     /**
@@ -540,6 +546,40 @@ public class BpmService {
      */
     public List<String> getTaskActions(String taskId) {
         return bpmProviderFlowable.getTaskActions(taskId);
+    }
+
+    /**
+     * Retires the task's process when the record it runs for has been deleted (issue #8108). A delete
+     * cancels the record's process through the generated abort-on-delete listener, which runs after the
+     * delete has committed; a task completed before that listener got to it - or one whose listener
+     * lost a race - drove the flow's steps over a row that no longer exists, and handed its next task
+     * out for it. So a completion asks first: when a {@link ProcessRecordGuard} confirms the record is
+     * gone, the process is cancelled here and the task must not be completed.
+     *
+     * @param taskId the task about to be completed
+     * @return true when the task's record is gone and its process was cancelled
+     */
+    public boolean retireIfRecordGone(String taskId) {
+        Optional<BpmProviderFlowable.TaskRecord> record = bpmProviderFlowable.getTaskRecord(taskId);
+        if (record.isEmpty()) {
+            return false;
+        }
+        BpmProviderFlowable.TaskRecord taskRecord = record.get();
+        boolean gone = recordGuards.orderedStream()
+                                   .anyMatch(guard -> guard.isRecordGone(taskRecord.processDefinitionKey(), taskRecord.recordId()));
+        if (!gone) {
+            return false;
+        }
+        LOGGER.warn("Task [{}] belongs to process instance [{}] of [{}], whose record [{}] has been deleted - cancelling the instance",
+                taskId, taskRecord.processInstanceId(), taskRecord.processDefinitionKey(), LogSanitizer.sanitize(taskRecord.recordId()));
+        try {
+            bpmProviderFlowable.deleteProcess(taskRecord.processInstanceId(),
+                    "The record [" + taskRecord.recordId() + "] this " + taskRecord.processDefinitionKey() + " ran for was deleted");
+        } catch (IllegalArgumentException alreadyEnded) {
+            // The abort-on-delete listener retired it meanwhile - which is the outcome wanted.
+            LOGGER.debug("Process instance [{}] had already ended", taskRecord.processInstanceId(), alreadyEnded);
+        }
+        return true;
     }
 
     /**

@@ -144,6 +144,16 @@ public class ${process}Trigger implements MessageHandler, ProcessTrigger {
     }
 
     /**
+     * Whether the ${entity} still exists - the platform asks before a task of this process is
+     * completed, and refuses the task (and retires the process) when its record has been deleted, so
+     * no step runs over a row that is gone (dirigible #8108).
+     */
+    @Override
+    public boolean recordExists(String id) {
+        return repository.findById(${keyParse}) != null;
+    }
+
+    /**
      * Starts the process for the record and stamps the instance on it - the one path the record event
      * and an operator's restart share, so neither can carry a variable the other lacks. Returns the
      * started instance id, or null when the start failed (the platform logged why; nothing is stamped,
