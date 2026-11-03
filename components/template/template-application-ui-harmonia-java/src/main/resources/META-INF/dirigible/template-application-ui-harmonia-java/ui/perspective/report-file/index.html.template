@@ -7,6 +7,67 @@
   applies the saved choice - or the OS scheme in `auto` mode - itself, in sync with the shell that
   embeds it.
 -->
+## The editor for one column's filter, emitted in the Filter menu's second step and again in every
+## chip's own popover - the same control either place, over the same filterDraft (the manage list's
+## filterValueEditor, #7390). $dismiss is what the host needs done before the value is applied: the
+## Filter menu closes itself through closeFilterMenu(), while a chip owns its popover's open flag.
+## Only the text and number inputs apply on Enter: a date input's Enter would run before the picker
+## has taken the typed day, so a date is applied with the Apply button.
+#macro(reportFilterEditor $dismiss)
+            <template x-if="editedFilterColumn && editedFilterColumn.kind === 'date'">
+              <div class="vbox gap-3">
+                <div class="hbox flex-wrap gap-1">
+                  <template x-for="preset in datePresets" :key="preset.key">
+                    <button x-h-button data-variant="outline" data-size="sm" @click="applyDatePreset(preset.key)"
+                            x-text="T('application-core:shell.list.' + preset.key, preset.label)"></button>
+                  </template>
+                </div>
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateFrom', 'From')"></span>
+                  <div x-h-date-picker>
+                    <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateFrom', 'From')" />
+                    <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
+                    <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.from"></div>
+                  </div>
+                </div>
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.list.dateTo', 'To')"></span>
+                  <div x-h-date-picker>
+                    <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="T('application-core:shell.list.dateTo', 'To')" />
+                    <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
+                    <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filterDraft.to"></div>
+                  </div>
+                </div>
+              </div>
+            </template>
+            <!-- A number filters by a range, either end left empty for an open one. -->
+            <template x-if="editedFilterColumn && editedFilterColumn.kind === 'number'">
+              <div class="vbox gap-3">
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.report.minimum', 'Minimum')"></span>
+                  <div x-h-input-number><input type="number" step="any" :aria-label="T('application-core:shell.report.minimum', 'Minimum')"
+                                               x-model.number="filterDraft.min" @keydown.enter="${dismiss}applyFilterDraft()" /></div>
+                </div>
+                <div class="vbox gap-1">
+                  <span class="text-xs text-muted-foreground" x-text="T('application-core:shell.report.maximum', 'Maximum')"></span>
+                  <div x-h-input-number><input type="number" step="any" :aria-label="T('application-core:shell.report.maximum', 'Maximum')"
+                                               x-model.number="filterDraft.max" @keydown.enter="${dismiss}applyFilterDraft()" /></div>
+                </div>
+              </div>
+            </template>
+            <template x-if="editedFilterColumn && editedFilterColumn.kind === 'boolean'">
+              <select x-model="filterDraft.equals" class="w-full text-sm rounded-md border border-border px-2 py-1"
+                      :aria-label="editedFilterColumn.key">
+                <option value="" x-text="T('application-core:shell.report.all', 'All')"></option>
+                <option value="true" x-text="T('application-core:shell.report.true', 'Yes')"></option>
+                <option value="false" x-text="T('application-core:shell.report.false', 'No')"></option>
+              </select>
+            </template>
+            <template x-if="editedFilterColumn && editedFilterColumn.kind === 'text'">
+              <input x-h-input type="text" class="w-full" x-model="filterDraft.contains" @keydown.enter="${dismiss}applyFilterDraft()"
+                     :aria-label="editedFilterColumn.key" :placeholder="T('application-core:shell.report.contains', 'contains...')" />
+            </template>
+#end
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -35,10 +96,54 @@
         <!-- A report with a period names the window its rows cover (#8506): "Sales (Last 30 days)". -->
         <h1 class="truncate text-xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName) + (periodText ? ' (' + periodText + ')' : '')"></h1>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="T('application-core:shell.report.rows', '{{count}} rows', { count: count })"></span>
-        <button x-h-button data-variant="outline" :data-toggled="showFilters" :aria-expanded="showFilters ? 'true' : 'false'" aria-controls="report-filters" @click="showFilters = !showFilters">
-          <svg role="presentation" x-h-lucide data-lucide="filter"></svg><span x-text="T('application-core:shell.report.filters', 'Filters')"></span>
-          <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
-        </button>
+        <!-- The per-column filters live in this menu, the manage list's (#7390): step one lists the
+             report's columns, step two edits the one picked, and Apply writes it into `filters` and
+             runs the one query that implies. The conditions (a date or number range, a boolean, a
+             text contains - see conditions()) are applied server-side, so paging, count, export and
+             print all reflect them. overflow-visible lets the date picker's popup overhang the
+             panel, which Harmonia's no-scroll body would otherwise clip. -->
+        <div class="relative inline-flex">
+          <button x-h-button data-variant="outline" x-h-popover-trigger.chevron="filterOpen" :data-toggled="filterOpen">
+            <svg role="presentation" x-h-lucide data-lucide="list-filter"></svg>
+            <span x-text="T('application-core:shell.report.filter', 'Filter')"></span>
+            <svg role="presentation" x-h-lucide data-lucide="chevron-down"></svg>
+          </button>
+          <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
+            <!-- Step one: which column to filter by. A column already filtered shows its value, so the
+                 same entry is how that filter is changed. -->
+            <div class="vbox p-1" x-show="!filterEditing">
+              <span x-h-text.muted class="px-2 pt-1 pb-2 text-sm" x-text="T('application-core:shell.report.addFilter', 'Add filter')"></span>
+              <template x-for="col in reportColumns" :key="col.key">
+                <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="openFilterEditor(col.key)">
+                  <span class="vbox min-w-0 flex-1 items-start">
+                    <span class="truncate" x-text="col.key"></span>
+                    <span class="truncate text-xs text-muted-foreground" x-show="filterHasValue(col)" x-text="filterValueText(col)"></span>
+                  </span>
+                </button>
+              </template>
+            </div>
+            <!-- Step two: the value. -->
+            <div class="vbox" x-show="filterEditing" x-cloak>
+              <div x-h-toolbar data-variant="transparent" data-size="sm">
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="backToFilterMenu()"
+                        :aria-label="T('application-core:shell.report.back', 'Back')">
+                  <svg role="presentation" x-h-lucide data-lucide="chevron-left"></svg>
+                </button>
+                <span x-h-toolbar-title class="truncate" x-text="editedFilterColumn ? editedFilterColumn.key : ''"></span>
+              </div>
+              <div class="p-3">
+#reportFilterEditor("")
+              </div>
+              <div x-h-toolbar.footer data-size="sm">
+                <div x-h-toolbar-spacer></div>
+                <button x-h-button data-variant="outline" data-size="sm" @click="closeFilterMenu()"
+                        x-text="T('application-core:shell.report.cancel', 'Cancel')"></button>
+                <button x-h-button data-variant="primary" data-size="sm" @click="applyFilterDraft()"
+                        x-text="T('application-core:shell.report.apply', 'Apply')"></button>
+              </div>
+            </div>
+          </div>
+        </div>
         <!-- A re-read is in flight: the rows on screen stay (see load(quiet)), this only signals it. -->
         <span x-show="reloading" x-h-spinner aria-hidden="true"></span>
         <div class="flex-1"></div>
@@ -131,60 +236,42 @@
         <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
       </div>
 
-      <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
-           boolean -> select, text -> contains. Applied server-side (the query is wrapped with the
-           conditions), so pagination, count and export all reflect them. -->
-      <div id="report-filters" x-show="showFilters && !preview" x-h-card>
-        <div x-h-card-content class="vbox gap-3">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
-            <template x-for="(col, ci) in reportColumns" :key="col.key">
-              <div class="vbox gap-1">
-                <label x-h-label :for="'report-filter-' + ci" x-text="col.key"></label>
-                <template x-if="col.kind === 'date'">
-                  <div class="hbox gap-1 items-center">
-                    <div x-h-date-picker>
-                      <input type="text" :id="'report-filter-' + ci" :placeholder="HarmoniaFormat.dateHint()" :aria-label="col.key + ' ' + T('application-core:shell.list.dateFrom', 'From')" @keydown.enter="applyFilters()" />
-                      <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
-                      <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].from"></div>
-                    </div>
-                    <span x-h-text.muted>&ndash;</span>
-                    <div x-h-date-picker>
-                      <input type="text" :placeholder="HarmoniaFormat.dateHint()" :aria-label="col.key + ' ' + T('application-core:shell.list.dateTo', 'To')" @keydown.enter="applyFilters()" />
-                      <button x-h-date-picker-trigger :aria-label="T('application-core:shell.report.chooseDate', 'Choose date')"></button>
-                      <div x-h-date-picker-popup="HarmoniaFormat.pickerConfig()" x-model="filters[col.key].to"></div>
-                    </div>
-                  </div>
-                </template>
-                <template x-if="col.kind === 'number'">
-                  <div class="hbox gap-1 items-center">
-                    <div x-h-input-number><input type="number" step="any" :id="'report-filter-' + ci" :placeholder="T('application-core:shell.report.min', 'min')" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
-                    <span x-h-text.muted>&ndash;</span>
-                    <div x-h-input-number><input type="number" step="any" :aria-label="col.key + ' ' + T('application-core:shell.report.max', 'max')" :placeholder="T('application-core:shell.report.max', 'max')" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
-                  </div>
-                </template>
-                <template x-if="col.kind === 'boolean'">
-                  <div x-h-select>
-                    <input x-h-select-input :id="'report-filter-' + ci" x-model="filters[col.key].equals" :placeholder="T('application-core:shell.report.any', 'any')" />
-                    <div x-h-select-content>
-                      <div x-h-select-list>
-                        <div x-h-select-option="T('application-core:shell.report.any', 'any')" data-value=""></div>
-                        <div x-h-select-option="T('application-core:shell.report.yes', 'yes')" data-value="true"></div>
-                        <div x-h-select-option="T('application-core:shell.report.no', 'no')" data-value="false"></div>
-                      </div>
-                    </div>
-                  </div>
-                </template>
-                <template x-if="col.kind === 'text'">
-                  <input x-h-input type="text" :id="'report-filter-' + ci" :placeholder="T('application-core:shell.report.contains', 'contains...')" x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
-                </template>
+      <!-- The filters in force, the manage list's chips (#7390). A chip names its column and prints
+           its value; its body opens the same editor the Filter menu's second step shows, and its x
+           drops that one filter and re-queries. The shape is the documented one - trigger, close,
+           then the popover, all inside the chip, which is what x-h-popover resolves against. The
+           trigger carries BOTH a bound state and an @click, which hands Harmonia's popover over to
+           full manual control, so this toggles `open` itself and restores the outside-click
+           dismissal. relative z-20: x-h-chip carries transform-gpu, a stacking context the popover
+           cannot escape, and the table's sticky header would otherwise paint over the open panel. -->
+      <div x-show="!preview && activeFilterChips.length" class="hbox items-center gap-2 flex-wrap">
+        <span class="text-xs font-medium text-muted-foreground" x-text="T('application-core:shell.report.activeFilters', 'Active filters')"></span>
+        <template x-for="chip in activeFilterChips" :key="chip.key">
+          <div x-h-chip data-variant="information" class="relative z-20" x-data="{ open: false }" @click.outside="open = false">
+            <button x-h-chip-button x-h-popover-trigger="open" @click="open = !open; open && openFilterEditor(chip.key)">
+              <span class="text-muted-foreground" x-text="chip.key + ':'"></span>
+              <span class="truncate" style="max-width: 14rem" x-text="chip.text"></span>
+            </button>
+            <button x-h-chip-close :aria-label="T('application-core:shell.report.removeFilter', 'Remove {{name}} filter', { name: chip.key })"
+                    @click="removeFilter(chip.key)"></button>
+            <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
+              <div class="p-3">
+#reportFilterEditor("open = false; ")
               </div>
-            </template>
+              <div x-h-toolbar.footer data-size="sm">
+                <button x-h-button data-variant="transparent" data-size="sm" @click="open = false; removeFilter(chip.key)"
+                        x-text="T('application-core:shell.report.remove', 'Remove')"></button>
+                <div x-h-toolbar-spacer></div>
+                <button x-h-button data-variant="outline" data-size="sm" @click="open = false; backToFilterMenu()"
+                        x-text="T('application-core:shell.report.cancel', 'Cancel')"></button>
+                <button x-h-button data-variant="primary" data-size="sm" @click="open = false; applyFilterDraft()"
+                        x-text="T('application-core:shell.report.apply', 'Apply')"></button>
+              </div>
+            </div>
           </div>
-          <div class="hbox gap-2">
-            <button x-h-button data-variant="primary" @click="applyFilters()"><svg role="presentation" x-h-lucide data-lucide="check"></svg><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
-            <button x-h-button data-variant="outline" @click="clearFilters()"><svg role="presentation" x-h-lucide data-lucide="x"></svg><span x-text="T('application-core:shell.report.clear', 'Clear')"></span></button>
-          </div>
-        </div>
+        </template>
+        <button x-h-button data-variant="transparent" data-size="sm" @click="clearFilters()"
+                x-text="T('application-core:shell.report.clearFilters', 'Clear filters')"></button>
       </div>
 
       <!-- An Export or Print that failed: the rows on screen are still good, so the failure is said
