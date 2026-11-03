@@ -6008,6 +6008,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("sum", equalTo(0)));
+        // The report page's text filter ("contains", #8431) matches a part of the value whatever its
+        // case - a plain LIKE is case-sensitive on PostgreSQL, so "iec" missed "Piece" there - and a
+        // typed wildcard matches only itself.
+        restAssuredExecutor.execute(() -> given().header("Accept-Language", "de")
+                                                 .contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Unit\",\"operator\":\"CONTAINS\",\"value\":\"iEC\"}]}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].Unit", equalTo("Piece")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Unit\",\"operator\":\"CONTAINS\",\"value\":\"%\"}]}")
+                                                 .when()
+                                                 .post(REPORT_API + "/ClaimsByUnitController/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(0)));
 
         // kind: statement, end to end (#6938): the published .view artifact was provisioned by the
         // ViewsSynchronizer AFTER the tables it reads, and the thin repository query joins it - so

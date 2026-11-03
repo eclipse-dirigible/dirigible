@@ -92,7 +92,7 @@
 
     <!-- The per-column filters live in this menu rather than in a row inside the table: step one
          lists the columns, step two edits the one picked, and Apply writes it into columnFilters and
-         runs the single query that implies. The conditions themselves (LIKE on a string, EQ on a
+         runs the single query that implies. The conditions themselves (CONTAINS on a string, EQ on a
          number, FK or date - see buildConditions) are unchanged. overflow-visible lets the date
          picker's popup overhang the panel, which Harmonia's no-scroll body would otherwise clip. -->
     <div class="relative inline-flex">

@@ -4725,8 +4725,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left'"),
                 "the joined dimension should be a left-aligned text column");
         assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
-        assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
-                "the page should build range and contains conditions");
+        assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'CONTAINS'"),
+                "the page should build range and case-insensitive contains conditions");
+        assertTrue(repository.contains("LIKE :\").append(marker).append(\" ESCAPE '!'\")"),
+                "the report repository should apply CONTAINS as a lower-cased, escaped LIKE (#8431)");
         String view = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/index.html");
         assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
                 "the report view should carry the filter panel and toolbar toggle");

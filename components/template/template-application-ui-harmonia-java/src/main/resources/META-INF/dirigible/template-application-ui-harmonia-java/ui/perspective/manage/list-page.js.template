@@ -40,7 +40,8 @@ document.addEventListener('alpine:init', () => {
     pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
-    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> a
+    // Per-column filter row (server-side, POST /search). string -> CONTAINS (case-insensitive, #8431),
+    // number/fk -> EQ, date -> a
     // { from, to } range of whole days, either end open (#8131; `instant` marks a timestamp column),
     // boolean -> EQ with a real true/false picked from Yes/No (a LIKE '%true%' reaches the controller as
     // Boolean.valueOf("%true%") = false and matches nothing, issue #7720).
@@ -556,15 +557,15 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Per-column server-side filter row ------------------------------------------------------
-    // Build POST /search conditions from the non-empty column filters (string -> LIKE, a date range ->
-    // GTE / LT, else EQ).
+    // Build POST /search conditions from the non-empty column filters (string -> a case-insensitive
+    // CONTAINS (#8431), a date range -> GTE / LT, else EQ).
     buildConditions() {
       const conds = [];
       for (const col of this.filterColumns) {
         const raw = this.columnFilters[col.name];
         if (!this.filterHasValue(col, raw)) continue;
         if (col.type === 'string') {
-          conds.push({ propertyName: col.name, operator: 'LIKE', value: '%' + String(raw).trim() + '%' });
+          conds.push({ propertyName: col.name, operator: 'CONTAINS', value: String(raw).trim() });
         } else if (col.type === 'fk' && Array.isArray(raw)) {
           // Several keys share the label a link named (#8374): every one of them. An empty list filters
           // to nothing, which filterMatchesNothing answers without a query.

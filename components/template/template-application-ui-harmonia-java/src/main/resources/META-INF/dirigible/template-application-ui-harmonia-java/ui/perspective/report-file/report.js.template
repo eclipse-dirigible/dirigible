@@ -151,7 +151,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     // The active per-column conditions in the controller's shape: [{ column, operator, value }].
-    // Ranges become GTE/LTE pairs, text becomes a LIKE with wildcards, boolean an EQ.
+    // Ranges become GTE/LTE pairs, text a case-insensitive CONTAINS (#8431), boolean an EQ.
     conditions() {
       const conditions = [];
       for (const col of this.reportColumns) {
@@ -166,7 +166,7 @@ document.addEventListener('alpine:init', () => {
         } else if (col.kind === 'boolean') {
           if (f.equals !== '') conditions.push({ column: col.key, operator: 'EQ', value: f.equals === 'true' });
         } else if (f.contains) {
-          conditions.push({ column: col.key, operator: 'LIKE', value: '%' + f.contains + '%' });
+          conditions.push({ column: col.key, operator: 'CONTAINS', value: f.contains });
         }
       }
       return conditions;
