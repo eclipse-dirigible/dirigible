@@ -1766,6 +1766,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("fixedAfterCreateMessage",
                     "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change once the " + entityName + " is created");
         }
+        // Fixed while referenced (#8194): the same two-scalar shape - the controllers refuse a changed
+        // value with a 409 under checks.<Entity>_fixedWhenReferenced_<Field> once another record
+        // references the row.
+        if (field.isFixedWhenReferenced()) {
+            p.put("fixedWhenReferenced", "true");
+            p.put("fixedWhenReferencedMessage",
+                    "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change while other records reference this " + entityName);
+        }
         // A uuid field is platform-generated: the generated repository assigns a random UUID on create
         // when the value is empty (no hand-written calculatedActionOnCreate needed). The author can
         // still seed/import an explicit value - it is only filled when blank.

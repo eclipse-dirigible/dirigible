@@ -5097,7 +5097,14 @@ public final class IntentParser {
                     validateVisibleTo(entity, field, declaredRoles, issues);
                 }
                 if (field.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, field, issues);
+                    validateFixedField(entity, field, "fixedAfterCreate", issues);
+                }
+                if (field.isFixedWhenReferenced()) {
+                    validateFixedField(entity, field, "fixedWhenReferenced", issues);
+                    if (field.isFixedAfterCreate()) {
+                        issues.add("entity [" + name + "] field [" + field.getName() + "] declares both fixedAfterCreate and"
+                                + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
             }
             if (idCount > 1) {
@@ -6201,14 +6208,17 @@ public final class IntentParser {
      * daylight-saving fold do not survive the round trip) and a translatable string of a
      * {@code multilingual} entity (the read overlay hands back a translation, not the base column). A
      * create-time default ({@code calculatedActionOnCreate}, #6696) stays caller-editable and may be
-     * fixed.
+     * fixed. {@code fixedWhenReferenced: true} (dirigible #8194) fixes the value once another record
+     * references this one; the controllers compare the payload with the stored row the same way, so it
+     * is refused in the same places - a calculated field above all, which no user update changes.
      *
      * @param entity the entity declaring the field
      * @param field the field
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, FieldIntent field, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares fixedAfterCreate but ";
+    private static void validateFixedField(EntityIntent entity, FieldIntent field, String key, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares " + key + " but ";
         String type = field.getType() == null ? "string"
                 : field.getType()
                        .toLowerCase(Locale.ROOT);

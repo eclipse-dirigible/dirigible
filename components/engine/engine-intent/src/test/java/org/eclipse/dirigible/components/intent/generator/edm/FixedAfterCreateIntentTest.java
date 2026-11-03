@@ -288,6 +288,41 @@ class FixedAfterCreateIntentTest {
         assertEquals("true", propertyByName(customer, "Code").get("fixedAfterCreate"));
     }
 
+    /**
+     * A field fixed while other records reference the row (#8194): the same two-scalar shape, with its
+     * own refusal text, and editable on the forms (only a referenced row refuses the change).
+     */
+    @Test
+    void aFieldFixedWhenReferencedCarriesTheFlagAndTheDefaultTextOfItsRefusal() {
+        Map<String, Object> customer = customer(withField("""
+                  - { name: code, type: string, length: 20, fixedWhenReferenced: true }
+                """));
+        Map<String, Object> code = propertyByName(customer, "Code");
+        assertEquals("true", code.get("fixedWhenReferenced"));
+        assertEquals("'Code' cannot change while other records reference this Customer", code.get("fixedWhenReferencedMessage"));
+        assertFalse(code.containsKey("fixedAfterCreate"));
+        assertFalse(code.containsKey("isReadOnlyProperty"));
+        assertFalse(propertyByName(customer, "Name").containsKey("fixedWhenReferenced"));
+    }
+
+    @Test
+    void aFieldFixedWhenReferencedIsRefusedOnTheKeyAndOnACalculatedField() {
+        assertFieldIssue("""
+                  - { name: key, type: integer, primaryKey: true, generated: true, fixedWhenReferenced: true }
+                """, "field [key] declares fixedWhenReferenced but the platform assigns a primary key or a generated field");
+        assertFieldIssue("""
+                  - { name: upper, type: string, calculatedOnCreate: "entity.Name", fixedWhenReferenced: true }
+                """,
+                "field [upper] declares fixedWhenReferenced but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: kept, type: string, calculatedActionOnUpdate: custom.Keep, fixedWhenReferenced: true }
+                """,
+                "field [kept] declares fixedWhenReferenced but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: code, type: string, length: 20, fixedAfterCreate: true, fixedWhenReferenced: true }
+                """, "field [code] declares both fixedAfterCreate and fixedWhenReferenced");
+    }
+
     private static String withField(String field) {
         return CUSTOMER + field.indent(4);
     }

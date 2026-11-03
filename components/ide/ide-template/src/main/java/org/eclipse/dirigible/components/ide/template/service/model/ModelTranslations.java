@@ -139,20 +139,28 @@ final class ModelTranslations {
     }
 
     /**
-     * The catalog key of a {@code fixedAfterCreate} property's refusal - a to-one relation (issue
-     * #7903) or a field (#8363).
+     * The flags that fix a property, each with its default-language refusal in {@code <flag>Message}.
+     */
+    static final List<String> FIXED_FLAGS = List.of("fixedAfterCreate", "fixedWhenReferenced");
+
+    /**
+     * The catalog key of a fixed property's refusal: {@code fixedAfterCreate} - a to-one relation
+     * (issue #7903) or a field (#8363) - under {@code <Entity>_fixed_<Property>}, and
+     * {@code fixedWhenReferenced} (#8194) under {@code <Entity>_fixedWhenReferenced_<Property>}.
      *
      * @param entity the entity
      * @param property the fixed property (a field, or a relation's FK)
+     * @param flag one of {@link #FIXED_FLAGS}
      * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
-     *         property is not fixed after create or carries no message
+     *         property does not carry the flag or carries no message
      */
-    static String fixedMessageKey(Map<String, Object> entity, Map<String, Object> property) {
-        String message = str(property, "fixedAfterCreateMessage");
-        if (!ModelValues.isTrue(property, "fixedAfterCreate") || message == null || message.isBlank()) {
+    static String fixedMessageKey(Map<String, Object> entity, Map<String, Object> property, String flag) {
+        String message = str(property, flag + "Message");
+        if (!ModelValues.isTrue(property, flag) || message == null || message.isBlank()) {
             return null;
         }
-        return str(entity, "name") + "_fixed_" + str(property, "name");
+        String infix = "fixedAfterCreate".equals(flag) ? "_fixed_" : "_" + flag + "_";
+        return str(entity, "name") + infix + str(property, "name");
     }
 
     /**
@@ -345,9 +353,11 @@ final class ModelTranslations {
                 }
             }
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
-                String fixedKey = fixedMessageKey(entity, property);
-                if (fixedKey != null) {
-                    messages.put(fixedKey, property.get("fixedAfterCreateMessage"));
+                for (String flag : FIXED_FLAGS) {
+                    String fixedKey = fixedMessageKey(entity, property, flag);
+                    if (fixedKey != null) {
+                        messages.put(fixedKey, property.get(flag + "Message"));
+                    }
                 }
                 String pickable = str(property, "widgetPickable");
                 if (pickable == null || !pickable.contains("\"messageKey\"")) {
