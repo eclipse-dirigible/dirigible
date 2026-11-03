@@ -388,15 +388,26 @@ class ModelGenerationIT extends IntegrationTest {
             return List.of("[" + CATALOG + "] rendered no ItemListPage.js for its LIST entity: " + rendered.keySet());
         }
         List<String> problems = new ArrayList<>();
-        String ascending = sortOrder(page, "asc");
+        String categoryRows = "[{ Id: 10, Category: 1 }, { Id: 11, Category: 2 }, { Id: 12, Category: 3 }]";
+        String ascending = sortOrder(page, "Category", categoryRows, "asc");
         if (!"12,11,10".equals(ascending)) {
             problems.add("[" + CATALOG + "] sorting the Category column ascending must order the rows by the label the cell shows"
                     + " (Books, garden, Tools -> 12,11,10), got " + ascending);
         }
-        String descending = sortOrder(page, "desc");
+        String descending = sortOrder(page, "Category", categoryRows, "desc");
         if (!"10,11,12".equals(descending)) {
             problems.add(
                     "[" + CATALOG + "] sorting the Category column descending must reverse the label order (10,11,12), got " + descending);
+        }
+        // A date column a controller serialised as LocalDate arrays (dirigible #8433) compared as the
+        // strings "2025,10,6", so the 6th of a month sorted after the 16th and July after December.
+        String chronological = sortOrder(page, "Released",
+                "[{ Id: 1, Released: [2025,10,16] }, { Id: 2, Released: [2025,10,6] }, { Id: 3, Released: [2025,12,6] },"
+                        + " { Id: 4, Released: [2025,7,16] }]",
+                "asc");
+        if (!"4,2,1,3".equals(chronological)) {
+            problems.add("[" + CATALOG + "] sorting a column of LocalDate arrays ascending must order the rows chronologically"
+                    + " (2025-07-16, 2025-10-06, 2025-10-16, 2025-12-06 -> 4,2,1,3), got " + chronological);
         }
         return problems;
     }
@@ -439,14 +450,17 @@ class ModelGenerationIT extends IntegrationTest {
     }
 
     /**
-     * Sorts three Item rows by their Category relation on the rendered list page.
+     * Sorts Item rows by one column on the rendered list page, with the Category relation's labels
+     * loaded.
      *
      * @param page the rendered ItemListPage.js
+     * @param column the property sorted by
+     * @param rows the rows, as a JavaScript array literal
      * @param direction {@code asc} or {@code desc}
      * @return the rows' ids, comma-joined, in the order the page lists them
      * @throws IOException when the shipped basePage.js is missing
      */
-    private static String sortOrder(String page, String direction) throws IOException {
+    private static String sortOrder(String page, String column, String rows, String direction) throws IOException {
         String basePage;
         try (InputStream in = ModelGenerationIT.class.getResourceAsStream(BASE_PAGE)) {
             if (in == null) {
@@ -467,9 +481,8 @@ class ModelGenerationIT extends IntegrationTest {
             context.eval("js", page);
             return context.eval("js",
                     "(() => { const page = pages['ItemListPage']();"
-                            + " page.lookups = { Category: { 1: 'Tools', 2: 'garden', 3: 'Books' } };"
-                            + " page.items = [{ Id: 10, Category: 1 }, { Id: 11, Category: 2 }, { Id: 12, Category: 3 }];"
-                            + " page.sortColumn = 'Category'; page.sortDirection = '" + direction + "';"
+                            + " page.lookups = { Category: { 1: 'Tools', 2: 'garden', 3: 'Books' } };" + " page.items = " + rows + ";"
+                            + " page.sortColumn = '" + column + "'; page.sortDirection = '" + direction + "';"
                             + " return page.sortedItems.map(row => row.Id).join(','); })()")
                           .asString();
         }
