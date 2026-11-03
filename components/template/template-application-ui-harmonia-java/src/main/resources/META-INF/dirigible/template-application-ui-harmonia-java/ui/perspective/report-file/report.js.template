@@ -480,10 +480,7 @@ document.addEventListener('alpine:init', () => {
     // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07"; a boolean
     // dimension reads as Yes/No, never as the raw true/false.
     axisLabel(v, meta) {
-      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) {
-        const yes = v === true || v === 'true' || v === 1;
-        return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
-      }
+      if (typeof v === 'boolean' || (meta && meta.kind === 'boolean' && v != null && v !== '')) return this.yesNo(v);
       const n = Number(v);
       if (Number.isInteger(n) && n >= 190001 && n <= 999912 && (n % 100) >= 1 && (n % 100) <= 12) {
         return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0');
@@ -532,7 +529,15 @@ document.addEventListener('alpine:init', () => {
       // hash-style DecimalFormat literal, because two hashes start a Velocity line comment and
       // swallow the rest of the line (unterminated string in the generated file).
       if (meta && meta.kind === 'number') return this.displayNumber(v, '0');
+      if (meta && meta.kind === 'boolean' && v != null && v !== '') return this.yesNo(v);
       return v;
+    },
+
+    // A boolean as the page prints it - Yes / No, never the raw true/false - in a cell, an axis label
+    // or a legend entry. Some databases answer a boolean column as 1 / 0.
+    yesNo(v) {
+      const yes = v === true || v === 'true' || v === 1 || v === '1';
+      return yes ? T('application-core:shell.report.true', 'Yes') : T('application-core:shell.report.false', 'No');
     },
 
     // The stamp's time, in the instance's date-time format - the Inbox's and the lists' stamp.
