@@ -39,6 +39,8 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
 import org.flowable.bpmn.model.UserTask;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
+import org.flowable.common.engine.api.FlowableOptimisticLockingException;
 import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
@@ -84,6 +86,17 @@ public class BpmProviderFlowable implements BpmProvider {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
+
+    /**
+     * The process variable a generated trigger seeds with the key of the record the process runs for.
+     */
+    static final String RECORD_ID_VARIABLE = "__entityId";
+
+    /** How often a process delete that lost the optimistic lock is attempted in all (issue #8108). */
+    static final int DELETE_PROCESS_ATTEMPTS = 10;
+
+    /** The pause before the second delete attempt; every further attempt waits that much longer. */
+    static final long DELETE_PROCESS_RETRY_PAUSE_MILLIS = 50;
 
     /** The repository. */
     private final IRepository repository;
@@ -324,7 +337,12 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
-     * Delete process.
+     * Deletes (cancels) a running process instance.
+     * <p>
+     * A delete that loses the optimistic lock to a transaction moving the instance on - a task being
+     * completed at the same moment - is retried against the instance's new state until it is gone
+     * (issue #8108). Without that, the one attempt failed, the completion committed, and the next task
+     * was handed out for a record whose delete was supposed to have retired the flow.
      *
      * @param processInstanceId the processInstanceId
      * @param reason the reason
@@ -337,12 +355,45 @@ public class BpmProviderFlowable implements BpmProvider {
         // the only trace the instance ever leaves (#7598).
         LOGGER.info("Deleting process instance [{}] of definition [{}] in tenant [{}], reason [{}]", processInstanceId,
                 instance == null ? null : instance.getProcessDefinitionKey(), instance == null ? null : instance.getTenantId(), reason);
+        for (int attempt = 1;; attempt++) {
+            try {
+                processEngine.getRuntimeService()
+                             .deleteProcessInstance(processInstanceId, reason);
+                LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
+                return;
+            } catch (FlowableOptimisticLockingException e) {
+                if (getProcessInstance(processInstanceId) == null) {
+                    LOGGER.info("Process instance [{}] ended while it was being deleted, reason [{}]", processInstanceId, reason, e);
+                    return;
+                }
+                if (attempt == DELETE_PROCESS_ATTEMPTS || !pauseBeforeDeleteRetry(attempt)) {
+                    LOGGER.error("Failed to delete process with processInstanceId [{}] in {} attempts, reason [{}]", processInstanceId,
+                            attempt, reason, e);
+                    return;
+                }
+                LOGGER.debug("Process instance [{}] was moved on by another transaction while it was being deleted - retrying",
+                        processInstanceId, e);
+            } catch (Exception e) {
+                LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Waits a little longer on every attempt, so the transaction that won the lock can commit.
+     *
+     * @param attempt the attempt that just failed
+     * @return false when the thread was interrupted - no further attempt is made
+     */
+    private static boolean pauseBeforeDeleteRetry(int attempt) {
         try {
-            processEngine.getRuntimeService()
-                         .deleteProcessInstance(processInstanceId, reason);
-            LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
-        } catch (Exception e) {
-            LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+            Thread.sleep(DELETE_PROCESS_RETRY_PAUSE_MILLIS * attempt);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread()
+                  .interrupt();
+            return false;
         }
     }
 
@@ -479,6 +530,50 @@ public class BpmProviderFlowable implements BpmProvider {
                       .filter(value -> value != null && !value.isBlank())
                       .findFirst()
                       .map(catalog -> new ProcessLabelKeys(catalog, catalog + "." + process.getId()));
+    }
+
+    /**
+     * The record a task's process runs for, as the process carries it (issue #8108): the instance, its
+     * definition key and the record key a generated trigger seeds into {@value #RECORD_ID_VARIABLE}.
+     *
+     * @param taskId the task id
+     * @return the record, or empty when the task does not exist (any more) or its process carries no
+     *         record key
+     */
+    public Optional<TaskRecord> getTaskRecord(String taskId) {
+        Task task = processEngine.getTaskService()
+                                 .createTaskQuery()
+                                 .taskTenantId(getTenantId())
+                                 .taskId(taskId)
+                                 .singleResult();
+        if (task == null || task.getProcessInstanceId() == null) {
+            return Optional.empty();
+        }
+        Object recordId;
+        try {
+            recordId = processEngine.getRuntimeService()
+                                    .getVariable(task.getProcessInstanceId(), RECORD_ID_VARIABLE);
+        } catch (FlowableObjectNotFoundException ex) {
+            LOGGER.debug("The process instance of task [{}] ended before its record was read", taskId, ex);
+            return Optional.empty();
+        }
+        if (recordId == null) {
+            return Optional.empty();
+        }
+        String processDefinitionKey = processEngine.getRepositoryService()
+                                                   .getProcessDefinition(task.getProcessDefinitionId())
+                                                   .getKey();
+        return Optional.of(new TaskRecord(task.getProcessInstanceId(), processDefinitionKey, String.valueOf(recordId)));
+    }
+
+    /**
+     * The record a task's process runs for.
+     *
+     * @param processInstanceId the task's process instance
+     * @param processDefinitionKey the key of that instance's process definition
+     * @param recordId the record's key, as text
+     */
+    public record TaskRecord(String processInstanceId, String processDefinitionKey, String recordId) {
     }
 
     /**

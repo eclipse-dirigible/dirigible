@@ -237,6 +237,9 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                              .body(page);
     }
 
+    /** The answer to completing a task whose record has been deleted (issue #8108). */
+    static final String RECORD_GONE = "The record this task is about no longer exists";
+
     /** The response header carrying the number of tasks the whole inbox holds, on a paged listing. */
     public static final String TOTAL_COUNT_HEADER = "X-Total-Count";
 
@@ -273,6 +276,12 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             bpmService.unclaimTask(taskId);
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
+            if (bpmService.retireIfRecordGone(taskId)) {
+                // The record this task is about was deleted: its steps would run over a row that no
+                // longer exists, so the task is refused and its process retired (issue #8108).
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                     .body(RECORD_GONE);
+            }
             String unoffered = unofferedAction(taskId, actionData.getData());
             if (unoffered != null) {
                 return ResponseEntity.badRequest()
