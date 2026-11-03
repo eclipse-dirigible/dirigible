@@ -249,7 +249,9 @@ public class RelationIntent {
      * 409 whose message is translatable under {@code checks.<Entity>_fixed_<Relation>}. A payload that
      * omits the relation keeps the stored value. System writes (roll-ups, workflow steps, generates)
      * reach the repository directly and are unaffected. Valid on a {@code manyToOne}/{@code oneToOne}
-     * that is not a composition parent, not an EntityStatus and not recomputed on update.
+     * that is not an EntityStatus and not recomputed on update. A composition parent is fixed after
+     * create without it (dirigible #8306, see {@link #isFixedOnceCreated()}), so on a composition it is
+     * accepted and changes nothing.
      */
     private boolean fixedAfterCreate;
 
@@ -530,6 +532,16 @@ public class RelationIntent {
 
     public void setFixedAfterCreate(boolean fixedAfterCreate) {
         this.fixedAfterCreate = fixedAfterCreate;
+    }
+
+    /**
+     * Whether this relation's FK is fixed once the record exists: an explicit {@code fixedAfterCreate}
+     * (dirigible #7903), or a composition parent (#8306) - a detail line belongs to the master it was
+     * created on, and a PUT naming another master would move the line and its amounts to that master.
+     * Moving a line is a delete plus a create on the other master.
+     */
+    public boolean isFixedOnceCreated() {
+        return fixedAfterCreate || composition;
     }
 
     /** Whether this relation's FK is computed (has a create or update action). */

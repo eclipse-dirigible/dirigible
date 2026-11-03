@@ -6164,9 +6164,10 @@ public final class IntentParser {
 
     /**
      * {@code fixedAfterCreate: true} (dirigible #7903) fixes a user-picked FK once the record exists,
-     * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
-     * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
-     * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     * so it needs a single FK a user picks: a to-one relation that is not an EntityStatus badge (moved
+     * by its workflow by design) and not recomputed by a {@code calculatedActionOnUpdate} (which owns
+     * the value on every update already). On a composition parent it is accepted and redundant: a
+     * composition is fixed after create by default (dirigible #8306).
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
@@ -6178,9 +6179,6 @@ public final class IntentParser {
         if (!toOne) {
             issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
             return;
-        }
-        if (relation.isComposition()) {
-            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
         }
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
