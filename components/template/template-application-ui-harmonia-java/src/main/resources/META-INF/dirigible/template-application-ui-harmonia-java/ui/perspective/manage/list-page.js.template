@@ -915,11 +915,16 @@ document.addEventListener('alpine:init', () => {
       if (col.documentNumber) return String(window.HarmoniaFormat.documentNumber(v));
       return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
     },
-    exportCsv() {
-      this.exportRowsCsv(this.sortedItems, this.exportColumns, (r, c) => this.exportCell(r, c), '${name}.csv');
+    // Export / Print take a scope (#8434): 'all' (the default) is the full filtered and sorted set,
+    // 'page' is what the table shows right now - the current page, or the expanded tree in tree mode.
+    exportScopeRows(scope) {
+      return scope === 'page' ? this.visibleRows.map(r => r.row) : this.sortedItems;
     },
-    printList() {
-      this.printRows(this.sortedItems, this.exportColumns, (r, c) => this.exportCell(r, c),
+    exportCsv(scope) {
+      this.exportRowsCsv(this.exportScopeRows(scope), this.exportColumns, (r, c) => this.exportCell(r, c), '${name}.csv');
+    },
+    printList(scope) {
+      this.printRows(this.exportScopeRows(scope), this.exportColumns, (r, c) => this.exportCell(r, c),
         window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}');
     },
 

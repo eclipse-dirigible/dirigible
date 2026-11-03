@@ -49,13 +49,22 @@
     <button x-h-button data-variant="outline" data-size="sm" @click="refresh()">
       <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span>
     </button>
-    <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
-    <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
+    <!-- Export the rows as CSV / print them (Save as PDF via the browser dialog), each with a choice
+         of scope (#8434): all filtered records (first, the default) or only the current page. -->
+    <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" x-h-menu-trigger.dropdown>
       <svg role="presentation" x-h-lucide data-lucide="download"></svg><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
     </button>
-    <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="printList()">
+    <ul x-h-menu data-align="bottom-end">
+      <li x-h-menu-item @click="exportCsv('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+      <li x-h-menu-item @click="exportCsv('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
+    </ul>
+    <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" x-h-menu-trigger.dropdown>
       <svg role="presentation" x-h-lucide data-lucide="printer"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
     </button>
+    <ul x-h-menu data-align="bottom-end">
+      <li x-h-menu-item @click="printList('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+      <li x-h-menu-item @click="printList('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
+    </ul>
     <!-- Developer-contributed page actions for this view (customActions extension point). -->
     <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
       <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action)">

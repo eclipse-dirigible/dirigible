@@ -4738,8 +4738,11 @@ class IntentEngineIT extends IntegrationTest {
                 view.contains("x-model=\"view\"") && view.contains("x-h-button-group-radio=\"'chart'\"")
                         && view.contains("x-h-button-group-radio=\"'table'\""),
                 "the chart report should switch views through one button group");
-        assertTrue(view.contains("x-h-menu-trigger.dropdown") && view.contains("@click=\"exportCsv()\"")
-                && view.contains("@click=\"printReport()\""), "Export and Print should sit in the More actions menu");
+        assertTrue(
+                view.contains("x-h-menu-trigger.dropdown") && view.contains("@click=\"exportCsv('all')\"")
+                        && view.contains("@click=\"exportCsv('page')\"") && view.contains("@click=\"printReport('all')\"")
+                        && view.contains("@click=\"printReport('page')\""),
+                "Export and Print should sit in the More actions menu, each with an All records / Current page choice (#8434)");
         assertTrue(view.contains("@click=\"refresh()\"") && view.contains("updatedTime()"),
                 "the report should carry the Refresh with its Updated stamp");
         assertTrue(page.contains("conditions.length ? 'no-results' : 'empty'"),

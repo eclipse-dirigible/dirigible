@@ -204,14 +204,23 @@
       <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
     </button>
     <ul x-h-menu data-align="bottom-end">
-      <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
-      <li x-h-menu-item :aria-disabled="sortedItems.length === 0" @click="exportCsv()">
+      <!-- Export the rows as CSV / print them (Save as PDF via the browser dialog), each with a choice
+           of scope (#8434): all filtered records (first, the default) or only the current page. -->
+      <li x-h-menu-sub :aria-disabled="sortedItems.length === 0">
         <svg role="presentation" x-h-lucide data-lucide="download"></svg>
         <span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
+        <ul x-h-menu.sub>
+          <li x-h-menu-item @click="exportCsv('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+          <li x-h-menu-item @click="exportCsv('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
+        </ul>
       </li>
-      <li x-h-menu-item :aria-disabled="sortedItems.length === 0" @click="printList()">
+      <li x-h-menu-sub :aria-disabled="sortedItems.length === 0">
         <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
         <span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+        <ul x-h-menu.sub>
+          <li x-h-menu-item @click="printList('all')" x-text="T('$projectName:${tprefix}.defaults.allRecords', 'All records')"></li>
+          <li x-h-menu-item @click="printList('page')" x-text="T('$projectName:${tprefix}.defaults.currentPage', 'Current page')"></li>
+        </ul>
       </li>
       <!-- Developer-contributed page actions for this view (customActions extension point). -->
       <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">

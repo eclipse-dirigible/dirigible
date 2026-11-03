@@ -142,6 +142,8 @@
       "refresh": "Refresh",
       "export": "Export",
       "print": "Print",
+      "allRecords": "All records",
+      "currentPage": "Current page",
       "apply": "Apply",
       "clear": "Clear",
       "noData": "No data",

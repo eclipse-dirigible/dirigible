@@ -66,14 +66,23 @@
           <svg role="presentation" x-h-lucide data-lucide="ellipsis"></svg>
         </button>
         <ul x-h-menu data-align="bottom-end">
-          <!-- Both take the FULL filtered result, not the page on screen. -->
-          <li x-h-menu-item :aria-disabled="state !== 'default'" @click="exportCsv()">
+          <!-- Each takes a scope (#8434): the FULL filtered result (first, the default) or only the
+               page of rows on screen. -->
+          <li x-h-menu-sub :aria-disabled="state !== 'default'">
             <svg role="presentation" x-h-lucide data-lucide="download"></svg>
             <span x-text="T('application-core:shell.report.export', 'Export')"></span>
+            <ul x-h-menu.sub>
+              <li x-h-menu-item @click="exportCsv('all')" x-text="T('application-core:shell.report.allRecords', 'All records')"></li>
+              <li x-h-menu-item @click="exportCsv('page')" x-text="T('application-core:shell.report.currentPage', 'Current page')"></li>
+            </ul>
           </li>
-          <li x-h-menu-item :aria-disabled="state !== 'default'" @click="printReport()">
+          <li x-h-menu-sub :aria-disabled="state !== 'default'">
             <svg role="presentation" x-h-lucide data-lucide="printer"></svg>
             <span x-text="T('application-core:shell.report.print', 'Print')"></span>
+            <ul x-h-menu.sub>
+              <li x-h-menu-item @click="printReport('all')" x-text="T('application-core:shell.report.allRecords', 'All records')"></li>
+              <li x-h-menu-item @click="printReport('page')" x-text="T('application-core:shell.report.currentPage', 'Current page')"></li>
+            </ul>
           </li>
         </ul>
       </div>

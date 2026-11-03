@@ -131,6 +131,8 @@
       "showing": "{{from}}-{{to}} от {{total}} {{name}}",
       "print": "Печат",
       "export": "Експорт",
+      "allRecords": "Всички записи",
+      "currentPage": "Текущата страница",
       "reset": "Изчисти",
       "create": "Създай",
       "edit": "Редактирай",

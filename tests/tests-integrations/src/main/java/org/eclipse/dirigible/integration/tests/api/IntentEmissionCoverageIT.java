@@ -4109,9 +4109,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // column metadata + toolbar actions wired to the shared basePage CSV/print helpers, with
         // cells resolved like the table (FK labels, formatted dates - never raw ids).
         String unitManageList = contentOf("gen/emission/js/components/pages/Settings/UnitManageListPage.js");
-        assertTrue(unitManageList.contains("exportRowsCsv(this.sortedItems"),
+        assertTrue(
+                unitManageList.contains("exportRowsCsv(this.exportScopeRows(scope)")
+                        && unitManageList.contains("scope === 'page' ? this.visibleRows.map(r => r.row) : this.sortedItems"),
                 "the manage list must export its filtered+sorted rows as CSV");
-        assertTrue(unitManageList.contains("printRows(this.sortedItems"), "the manage list must print its filtered+sorted rows");
+        assertTrue(unitManageList.contains("printRows(this.exportScopeRows(scope)"),
+                "the manage list must print its filtered+sorted rows or the page on screen (#8434)");
         String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
         // list: [unitPrice, name] (#7614) is the list's exact column set and order - the header, the
         // filter and the export columns all follow it - while the form keeps its own order.
@@ -4135,8 +4138,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 unitForm.indexOf("id=\"f_PackPrice\"") >= 0
                         && unitForm.indexOf("id=\"f_PackPrice\"") < unitForm.indexOf("id=\"f_UnitPrice\""),
                 "list: must not reorder or trim the form");
-        assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
-                "the manage list toolbar must carry the Export and Print actions");
+        assertTrue(
+                unitManageView.contains("defaults.export") && unitManageView.contains("printList('all')")
+                        && unitManageView.contains("printList('page')") && unitManageView.contains("exportCsv('page')")
+                        && unitManageView.contains("defaults.currentPage") && unitManageView.contains("x-h-menu.sub"),
+                "the manage list toolbar must carry Export and Print, each with an All records / Current page choice (#8434)");
         // The per-column filters live in the Filter menu (#7491), not in a row inside the table: the
         // value is edited as a draft and applied once, so the list queries per applied filter rather
         // than per keystroke - and no filter control sits in the table's header any more.
@@ -4166,10 +4172,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 channelManageView.contains("editedFilterColumn.type === 'boolean'")
                         && channelManageView.contains("<option value=\"false\""),
                 "a boolean filter must be a Yes/No choice rather than a text box (#7720)");
-        assertTrue(campaignListPage.contains("exportRowsCsv(this.sortedItems"),
+        assertTrue(campaignListPage.contains("exportRowsCsv(this.exportScopeRows(scope)"),
                 "the master's list must export its filtered+sorted rows as CSV");
-        assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList()"),
-                "the master's list must carry the Export and Print actions");
+        assertTrue(campaignListView.contains("defaults.export") && campaignListView.contains("printList('all')")
+                && campaignListView.contains("printList('page')"), "the master's list must carry the Export and Print actions");
 
         // The detail side panel's field pairs must stack into one column until the pane is wide enough
         // (lg:) and each cell must shrink+wrap its value, so an email/phone value cannot overflow its
