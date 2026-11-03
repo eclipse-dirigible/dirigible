@@ -201,9 +201,10 @@ public class ${className}Generate {
         // as the period's billing, and is missing exactly what it was for, with no way back but an
         // administrator (dirigible #7069). Reads inside the block see the block's own writes, so the
         // status the flip below wrote is what the rest of the block - and its announcement's payload -
-        // reads.
+        // reads. Everything the block writes it builds from what it reads inside it, so a unit the
+        // database rolled back to break a deadlock is run once more instead of answering 409 (#8341).
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
-                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
     #if($hasRefusals)
             // The refusals below read the original, and the back-link this unit writes is what the
             // first of them reads - so the original is locked BEFORE it is read, for the length of the

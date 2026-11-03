@@ -533,8 +533,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // this create names until it commits (#8252): a delete of one of them either waits for the
         // insert and then counts it, or has deleted the row the check waits for and refuses this create
         // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
-        // the number is drawn, so a refused create spends none.
-        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        // the number is drawn, so a refused create spends none. A unit the database rolled back to
+        // break a deadlock is run once more (#8341): on H2 the share lock is exclusive, so a write and
+        // a derived write naming the same rows in another order deadlock although neither changed
+        // anything the other read.
+        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, null);
             return insert(entity);
         });
@@ -756,7 +759,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasReferenceChecks)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
         });
@@ -769,7 +772,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasReferenceChecks)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
         });
@@ -861,7 +864,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #if($hasReferenceChecks)
         // The reference check and the write are ONE transaction - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity);
         });
@@ -874,7 +877,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
 #if($hasReferenceChecks)
         // The reference check and the write are ONE transaction - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity);
         });
