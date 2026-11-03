@@ -215,6 +215,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> exportLedgers = ExportSupport.ledgerEntities(model);
         Set<String> normalisingLedgers = ExportSupport.normalisingLedgers(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
+        Map<String, Set<String>> rollupTargets = rollupTargetProperties(model, byName);
         // The status ids a button or a workflow step moves each entity to - what an ungated, status-
         // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
         // generator reads it through.
@@ -586,6 +587,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 Map<String, Object> property = propertyMap(name, field);
+                // A roll-up target is derived whether or not the author wrote readOnly (#8442): the flag
+                // is what keeps it out of a REST create and preserves it on a full-row update, while the
+                // roll-up handler writes it through the targeted updateDerived.
+                if (rollupTargets.getOrDefault(name, Set.of())
+                                 .contains(IntentNaming.pascalCase(field.getName()))) {
+                    property.put("isReadOnlyProperty", "true");
+                }
                 // A scalar field with dependsOn is auto-populated from the trigger's target record
                 // (no filterBy - there is no option list to narrow).
                 putDependsOn(property, entity, field.getDependsOn(), null, null, byName, usesByAlias, context);
@@ -1984,15 +1992,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!"sum".equals(rollup.getOp()) || !notBlank(rollup.getCapacity()) || !notBlank(rollup.getStatus())) {
                 continue;
             }
-            String parentName;
-            if (rollup.isCrossModelChild()) {
-                parentName = rollup.getParent();
-            } else {
-                EntityIntent child = byName.get(rollup.getEntity());
-                RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-                parentName = via == null || notBlank(via.getModel()) ? null : via.getTo();
-            }
-            if (parentName == null || !byName.containsKey(parentName)) {
+            String parentName = localRollupParent(rollup, byName);
+            if (parentName == null) {
                 continue; // the parser already reported the bad reference
             }
             List<String> statuses = byParent.computeIfAbsent(parentName, ignored -> new ArrayList<>());
@@ -2002,6 +2003,48 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return byParent;
+    }
+
+    /**
+     * The fields of each LOCAL parent that a roll-up writes, by parent entity name (#8442): its
+     * {@code field:} (every op) and, for a capacity sum, its {@code balance:} - the columns the roll-up
+     * handler's {@code updateDerived} maintains. They are derived, so they are read-only whether or not
+     * the author declared {@code readOnly: true}; a cross-model parent's fields belong to the model
+     * that owns it.
+     */
+    private static Map<String, Set<String>> rollupTargetProperties(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byParent = new LinkedHashMap<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            String parentName = localRollupParent(rollup, byName);
+            if (parentName == null) {
+                continue; // a cross-model parent, or a bad reference the parser already reported
+            }
+            Set<String> targets = byParent.computeIfAbsent(parentName, ignored -> new LinkedHashSet<>());
+            if (notBlank(rollup.getField())) {
+                targets.add(IntentNaming.pascalCase(rollup.getField()));
+            }
+            if ("sum".equals(rollup.getOp()) && notBlank(rollup.getCapacity()) && notBlank(rollup.getBalance())) {
+                targets.add(IntentNaming.pascalCase(rollup.getBalance()));
+            }
+        }
+        return byParent;
+    }
+
+    /**
+     * The roll-up's parent when this model owns it: the target of the child's {@code via} relation, or
+     * the {@code parent:} a cross-model child names. Null for a parent in another model and for a
+     * reference that does not resolve.
+     */
+    private static String localRollupParent(RollupIntent rollup, Map<String, EntityIntent> byName) {
+        String parentName;
+        if (rollup.isCrossModelChild()) {
+            parentName = rollup.getParent();
+        } else {
+            EntityIntent child = byName.get(rollup.getEntity());
+            RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+            parentName = via == null || notBlank(via.getModel()) ? null : via.getTo();
+        }
+        return parentName != null && byName.containsKey(parentName) ? parentName : null;
     }
 
     /**
