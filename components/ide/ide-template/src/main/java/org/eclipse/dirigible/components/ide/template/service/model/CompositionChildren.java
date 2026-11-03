@@ -63,6 +63,8 @@ final class CompositionChildren {
             owned.put("fkProperty", fkProperty);
             owned.put("childLabel", strOr(child, "entityLabel", str(child, "name")));
             owned.put("refuse", refusesMasterDelete(child) ? "true" : "false");
+            // Whether a row of the child refuses its own delete, so the cascade must ask it first (#8114).
+            owned.put("deleteRefusals", isTrue(child, "hasDeleteRefusals") ? "true" : "false");
             if (!(master.get("compositionChildren") instanceof List)) {
                 master.put("compositionChildren", new ArrayList<>());
             }

@@ -89,6 +89,7 @@ final class ModelParameterProcessor {
             // Before the master-lock pass: a child inherits its master's period guard along with the
             // status one, so the master's own must be resolved first.
             resolvePeriodLock(entities, parameters);
+            markDeleteRefusals(entities);
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
             resolveDocumentItemsScope(entities);
@@ -1519,6 +1520,19 @@ final class ModelParameterProcessor {
             level.put("period", master.get("periodLock"));
         }
         return level;
+    }
+
+    /**
+     * Flags an entity whose own delete meets a refusal - its lock, or a {@code checks: forbidWhen} over
+     * the delete - so its generated repository carries {@code requireDeleteAllowed} and a cascade that
+     * deletes its rows asks that first (#8114). The flag covers exactly the refusals the method holds.
+     */
+    private static void markDeleteRefusals(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            if (locks(entity) || !asMaps(entity.get("deleteChecks")).isEmpty()) {
+                entity.put("hasDeleteRefusals", Boolean.TRUE);
+            }
+        }
     }
 
     /** Whether the entity declares a lock of its own: append-only, a status scope or a period. */
