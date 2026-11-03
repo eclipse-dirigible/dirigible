@@ -19,6 +19,8 @@ import java.util.UUID;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.api.messaging.MessagingFacade;
+import org.eclipse.dirigible.components.api.security.UserFacade;
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
 import org.hibernate.Session;
 import org.slf4j.Logger;
@@ -41,6 +43,11 @@ import org.springframework.stereotype.Component;
  * {@code EventOutboxRelayJob} retries it until the broker takes it. Delivery is therefore
  * at-least-once: an entry published just before the node died is republished by the relay, because
  * "sent" is only known once the row is gone.
+ *
+ * <p>
+ * Each entry also records the user whose action raised it, and both deliveries - the in-process one
+ * and the relay's - publish it with that user as the message's originating user, so whatever a
+ * listener writes in reaction is attributed to that user (#8228).
  */
 @Component
 public class EventOutbox implements org.eclipse.dirigible.components.api.messaging.DurableMessagePublisher {
@@ -72,11 +79,12 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         if (events == null || events.isEmpty()) {
             return Batch.EMPTY;
         }
+        String user = originatingUser();
         List<PendingEvent> pending = new ArrayList<>(events.size());
         for (DomainEvent event : events) {
             pending.add(new PendingEvent(UUID.randomUUID()
                                              .toString(),
-                    event.topic(), event.payload(), 0));
+                    event.topic(), event.payload(), 0, user));
         }
         // The relay leaves the entry alone until the grace period is out: the dispatch that follows this
         // transaction's commit is the fast path and owns the first attempt.
@@ -105,7 +113,7 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
     public void publishToTopic(String topic, String payload) {
         PendingEvent event = new PendingEvent(UUID.randomUUID()
                                                   .toString(),
-                topic, payload, 0);
+                topic, payload, 0, originatingUser());
         try {
             prepare();
             store.insert(event, nextAttemptAt());
@@ -173,7 +181,12 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
      */
     private boolean deliver(PendingEvent event) {
         try {
-            MessagingFacade.sendToTopic(event.topic(), event.payload());
+            // Bound from the entry, not from the delivering thread: the relay runs on a job thread with
+            // no user, and the producer stamps whatever is bound here onto the message.
+            OriginatingUser.callAs(event.user(), () -> {
+                MessagingFacade.sendToTopic(event.topic(), event.payload());
+                return null;
+            });
         } catch (RuntimeException ex) {
             String message = "Failed to publish outbox entry [{}] on topic [{}] ([{}] failed attempts so far); "
                     + "it stays in the outbox and the relay keeps trying.";
@@ -193,6 +206,19 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
             LOGGER.warn("Published outbox entry [{}] but failed to clear it; it may be delivered again.", event.id(), ex);
         }
         return true;
+    }
+
+    /**
+     * The user an event recorded now is attributed to: the request's user, or - for a write a handler
+     * makes in reaction to an event - the user whose action raised that one, so a chain of reactions
+     * keeps naming the person who started it. {@code null} when no user is known (a job, a boot-time
+     * seed); the handlers then run as any other background work does.
+     *
+     * @return the user, or {@code null}
+     */
+    private static String originatingUser() {
+        return UserFacade.findName()
+                         .orElse(null);
     }
 
     /**

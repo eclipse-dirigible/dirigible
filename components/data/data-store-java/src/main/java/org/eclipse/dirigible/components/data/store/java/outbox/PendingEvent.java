@@ -18,6 +18,9 @@ package org.eclipse.dirigible.components.data.store.java.outbox;
  * @param payload the message body
  * @param attempts how many delivery attempts the row has already survived; doubles as the
  *        optimistic lock the relay claims a row with
+ * @param user the user whose action raised the event, or {@code null} when none was known (a job, a
+ *        boot-time seed): the handlers' writes are attributed to it, see
+ *        {@link org.eclipse.dirigible.components.base.context.OriginatingUser}
  */
-record PendingEvent(String id, String topic, String payload, int attempts) {
+record PendingEvent(String id, String topic, String payload, int attempts, String user) {
 }

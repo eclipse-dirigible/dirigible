@@ -9,10 +9,17 @@
  */
 package org.eclipse.dirigible.components.listeners.service;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -104,6 +111,34 @@ class AsynchronousMessageListenerTest {
     @Test
     void testOnMessageWithUnsupportedMessage() {
         assertThrows(IllegalStateException.class, () -> asyncMessageListener.onMessage(bytesMessage));
+    }
+
+
+    /**
+     * The handler runs with the user the producer stamped bound, and the pooled broker thread does not
+     * keep it afterwards (#8228).
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void theHandlerRunsWithTheOriginatingUser() throws JMSException {
+        when(tenantPropertyManager.getCurrentTenantId(textMessage)).thenReturn(TENANT_ID);
+        when(textMessage.getObjectProperty(OriginatingUserProperty.PROPERTY_NAME)).thenReturn("alice");
+        when(listenerDescriptor.getHandlerPath()).thenReturn(HANDLER);
+        when(textMessage.getText()).thenReturn(MESSAGE);
+        AtomicReference<String> seen = new AtomicReference<>();
+        doAnswer(invocation -> {
+            seen.set(OriginatingUser.get()
+                                    .orElse(null));
+            return null;
+        }).when(scriptExecutor)
+          .onMessage(any(), any());
+
+        asyncMessageListener.onMessage(textMessage);
+
+        assertEquals("alice", seen.get());
+        assertTrue(OriginatingUser.get()
+                                  .isEmpty());
     }
 
 }

@@ -10,12 +10,14 @@
 package org.eclipse.dirigible.components.listeners.service;
 
 import jakarta.jms.*;
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -130,6 +132,67 @@ class MessageProducerTest {
         verify(jsmProducer).send(txtMessage);
         verify(tenantPropertyManager).setDefaultTenant(txtMessage);
         verify(tenantPropertyManager, never()).setCurrentTenant(txtMessage);
+    }
+
+
+    /**
+     * The user whose write raised the event travels with it, so the handler's writes are attributed to
+     * that user rather than to the guest fallback of a thread without a request (#8228).
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void aTenantMessageCarriesTheOriginatingUser() throws JMSException {
+        when(destinationNameManager.toTenantName(TOPIC)).thenReturn(TENANT_TOPIC);
+        when(session.createTopic(TENANT_TOPIC)).thenReturn(topic);
+        when(session.createProducer(topic)).thenReturn(jsmProducer);
+        when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
+
+        OriginatingUser.callAs("alice", () -> {
+            producer.sendMessageToTopic(TOPIC, MESSAGE);
+            return null;
+        });
+
+        verify(txtMessage).setStringProperty(OriginatingUserProperty.PROPERTY_NAME, "alice");
+        verify(jsmProducer).send(txtMessage);
+    }
+
+    /**
+     * Without an originating user nothing is stamped - the handler runs as it always did.
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void aMessageSentWithoutAnOriginatingUserCarriesNone() throws JMSException {
+        when(destinationNameManager.toTenantName(TOPIC)).thenReturn(TENANT_TOPIC);
+        when(session.createTopic(TENANT_TOPIC)).thenReturn(topic);
+        when(session.createProducer(topic)).thenReturn(jsmProducer);
+        when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
+
+        producer.sendMessageToTopic(TOPIC, MESSAGE);
+
+        verify(txtMessage, never()).setStringProperty(anyString(), anyString());
+    }
+
+    /**
+     * A user is a name in this deployment's tenant; a global destination reaches consumers that never
+     * heard of it, so it does not travel there.
+     *
+     * @throws JMSException the JMS exception
+     */
+    @Test
+    void aGlobalDestinationCarriesNoOriginatingUser() throws JMSException {
+        when(destinationNameManager.toTenantName(GLOBAL_QUEUE)).thenReturn(GLOBAL_QUEUE_NAME);
+        when(session.createQueue(GLOBAL_QUEUE_NAME)).thenReturn(queue);
+        when(session.createProducer(queue)).thenReturn(jsmProducer);
+        when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
+
+        OriginatingUser.callAs("alice", () -> {
+            producer.sendMessageToQueue(GLOBAL_QUEUE, MESSAGE);
+            return null;
+        });
+
+        verify(txtMessage, never()).setStringProperty(anyString(), anyString());
     }
 
 }
