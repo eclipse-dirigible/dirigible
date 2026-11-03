@@ -3368,7 +3368,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         security.put("generateDefaultRoles", authoredRead != null ? "false" : "true");
         String project = context.getProjectName();
         String prefix = project == null || project.isEmpty() ? IntentNaming.baseName(context) : project;
-        security.put("roleRead", gates.appendRead(authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly"));
+        security.put("roleRead",
+                gates.appendRead(reportName, authoredRead != null ? authoredRead : prefix + ".Report." + reportName + "ReadOnly"));
         return security;
     }
 

@@ -1305,18 +1305,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("perspectiveNavId", "");
         entity.put("perspectiveRole", "");
         entity.put("generateReport", "false");
-        String conventionRead = projectName + "." + rolePerspective + "." + name + "ReadOnly";
         // A composition child is managed under its master, so it is gated by the master's grants when
         // it carries none of its own - otherwise granting write on a document would not extend to its
         // line items and the generated app would refuse the very edits the grant describes.
         String gateName = gates.covers(name) ? name : rolePerspective;
-        boolean covered = gates.covers(gateName);
-        String authoredRead = covered ? gates.readRoles(gateName) : null;
-        entity.put("generateDefaultRoles", covered ? "false" : "true");
+        entity.put("generateDefaultRoles", gates.covers(gateName) ? "false" : "true");
         // The deployment's extra roles (.settings access.extraRoles) are appended AFTER the gate's own
         // roles and never suppress them: a convention gate keeps its roles declared (the template layer
         // declares a gate's first role), so assignments made in the Security perspective keep working.
-        entity.put("roleRead", gates.appendRead(authoredRead != null ? authoredRead : conventionRead));
+        // An `exclusive` grant takes none of them (#8112).
+        entity.put("roleRead", gates.readGate(projectName, rolePerspective, name));
         entity.put("roleWrite", gates.writeGate(projectName, rolePerspective, name));
         return entity;
     }

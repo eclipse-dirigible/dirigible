@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessDefinitionData;
@@ -53,7 +54,9 @@ import org.flowable.variable.api.persistence.entity.VariableInstance;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 // Jackson 2 ON PURPOSE (#7790): Flowable's BpmnJsonConverter takes and returns
 // com.fasterxml.jackson.databind nodes, so the model this class exchanges with it must be 2.x. The
@@ -523,6 +526,7 @@ public class BpmService {
     }
 
     public void claimTask(String taskId, String userId) {
+        refuseSeparated(taskId);
         bpmProviderFlowable.getTaskService()
                            .claimTask(taskId, userId);
     }
@@ -550,12 +554,32 @@ public class BpmService {
      * variable, so a completion carrying another record's key wrote the process's changes to that
      * record, and a field its form does not offer was planted for a later step (issue #8094).
      *
+     * <p>
+     * The completion records who completed the task ({@link BpmProviderFlowable#COMPLETED_BY_PREFIX}),
+     * and is refused when the task is separated from one this user completed (issue #8111).
+     *
      * @param taskId the task id
      * @param variables the completion's variables, as the caller sent them
      */
     public void completeTask(String taskId, Map<String, Object> variables) {
+        refuseSeparated(taskId);
+        Map<String, Object> writable = writableVariables(taskId, variables);
+        String key = bpmProviderFlowable.getTaskDefinitionKey(taskId);
+        String user = UserFacade.getName();
+        if (key != null && user != null) {
+            writable = writable == null ? new HashMap<>() : writable;
+            writable.put(BpmProviderFlowable.COMPLETED_BY_PREFIX + key, user);
+        }
         bpmProviderFlowable.getTaskService()
-                           .completeTask(taskId, writableVariables(taskId, variables));
+                           .completeTask(taskId, writable);
+    }
+
+    /** A 403 carrying the task's own message when the current user may not act on it (issue #8111). */
+    private void refuseSeparated(String taskId) {
+        String refusal = bpmProviderFlowable.getSeparationRefusal(taskId, UserFacade.getName());
+        if (refusal != null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, refusal);
+        }
     }
 
     private Map<String, Object> writableVariables(String taskId, Map<String, Object> variables) {

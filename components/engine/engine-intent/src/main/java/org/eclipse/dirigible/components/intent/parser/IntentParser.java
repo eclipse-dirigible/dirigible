@@ -182,16 +182,17 @@ public final class IntentParser {
      * the service task's actions - {@code ServiceTaskHandlerGenerator} scaffolds both from the same
      * keys.
      */
-    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND =
-            Map.of("userTask", Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next"), "serviceTask",
-                    Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler",
-                            "notify", "next", "retry", "onError", "produces", "uses"),
-                    "script",
-                    Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler",
-                            "notify", "next"),
-                    "decision", Set.of("if", "then", "else", "next"), "wait",
-                    Set.of("after", "onCreate", "onUpdate", "onTransition", "via", "when", "next"), "parallel", Set.of("branches", "next"),
-                    "end", Set.of("next"));
+    private static final Map<String, Set<String>> STEP_ARGS_BY_KIND = Map.of("userTask",
+            Set.of("assignee", "form", "timeout", "expire", "setRelationField", "set", "value", "next", "separateFrom", "extraRoles"),
+            "serviceTask",
+            Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler", "notify",
+                    "next", "retry", "onError", "produces", "uses"),
+            "script",
+            Set.of("setField", "clearField", "setRelationField", "set", "value", "call", "delegate", "fields", "javaHandler", "notify",
+                    "next"),
+            "decision", Set.of("if", "then", "else", "next"), "wait",
+            Set.of("after", "onCreate", "onUpdate", "onTransition", "via", "when", "next"), "parallel", Set.of("branches", "next"), "end",
+            Set.of("next"));
     /** Every arg the DSL knows, on any kind - anything else is a typo, not a misplacement. */
     private static final Set<String> KNOWN_STEP_ARGS = STEP_ARGS_BY_KIND.values()
                                                                         .stream()
@@ -8721,6 +8722,43 @@ public final class IntentParser {
             validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
             validateTaskAssigneePaths(process, triggerEntity, byName, model, issues);
+            validateTaskSeparation(process, issues);
+        }
+    }
+
+    /**
+     * A user task's {@code separateFrom} names the user tasks of the same process whose completer may
+     * not complete it (a name or a list, {@code []} for none), and {@code extraRoles: true} lets the
+     * deployment's {@code access.extraRoles} take it (issue #8111). A name that is not another user
+     * task would separate the task from nothing, so it is refused rather than dropped.
+     */
+    private static void validateTaskSeparation(ProcessIntent process, List<String> issues) {
+        Set<String> userTasks = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if ((step.getKind() == null || "userTask".equals(step.getKind())) && step.getName() != null) {
+                userTasks.add(step.getName());
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (step.getArgs() == null || !userTasks.contains(step.getName())) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] step [" + step.getName() + "]";
+            Object extraRoles = step.getArgs()
+                                    .get("extraRoles");
+            if (extraRoles != null && !(extraRoles instanceof Boolean)) {
+                issues.add(subject + " extraRoles must be true or false");
+            }
+            Object separateFrom = step.getArgs()
+                                      .get("separateFrom");
+            List<?> names = separateFrom instanceof List<?> list ? list : separateFrom == null ? List.of() : List.of(separateFrom);
+            for (Object name : names) {
+                String other = String.valueOf(name)
+                                     .trim();
+                if (other.equals(step.getName()) || !userTasks.contains(other)) {
+                    issues.add(subject + " separateFrom names [" + other + "], which is not another user task of the process");
+                }
+            }
         }
     }
 
