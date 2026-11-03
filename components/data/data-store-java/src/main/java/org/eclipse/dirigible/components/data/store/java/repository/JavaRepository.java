@@ -528,6 +528,29 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Whether another record references this one through a to-one relation, of this model or another
+     * (intent {@code fixedWhenReferenced: true}, dirigible #8194). Asks the same
+     * {@link TargetDeleteRule} contributions a delete asks - only the referencing side knows that it
+     * references this entity. A read-then-act check like every reference check the platform generates:
+     * a reference inserted between this lookup and the caller's write is not seen.
+     *
+     * @param id the primary key of the record
+     * @return {@code true} when some record references it
+     */
+    public boolean isReferenced(Object id) {
+        if (id == null) {
+            return false;
+        }
+        String target = entityClass.getName();
+        for (TargetDeleteRule rule : deleteRules()) {
+            if (rule.references(target, id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Every contributed delete rule. Outside a running platform there is no bean container, so no
      * contribution either.
      */

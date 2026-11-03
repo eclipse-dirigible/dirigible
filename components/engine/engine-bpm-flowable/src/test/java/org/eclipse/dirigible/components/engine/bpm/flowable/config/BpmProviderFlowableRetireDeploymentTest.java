@@ -173,6 +173,22 @@ class BpmProviderFlowableRetireDeploymentTest {
     }
 
     @Test
+    void anInstanceIsCompletedOnlyWhenItsFlowRanToTheEnd() {
+        Deployment deployment = provider.deployProcess(DEPLOYMENT_KEY, "approval.bpmn20.xml", PROCESS_XML);
+        ProcessInstance completed = start();
+        assertFalse(provider.isProcessInstanceCompleted(completed.getId()), "still running");
+        complete(completed);
+        assertTrue(provider.isProcessInstanceCompleted(completed.getId()), "ran to its end event");
+
+        ProcessInstance cancelled = start();
+        engine.getRuntimeService()
+              .deleteProcessInstance(cancelled.getId(), "cancelled by an operator");
+        assertFalse(provider.isProcessInstanceCompleted(cancelled.getId()), "cancelled: its work was never done");
+        assertFalse(provider.isProcessInstanceCompleted("no-such-instance"), "what the engine never had");
+        provider.retireDeployment(deployment.getId());
+    }
+
+    @Test
     void withoutHistoryAFinishedInstanceCannotBeToldFromALostOneSoTheStampIsTrusted() {
         Deployment deployment = providerWithoutHistory.deployProcess(DEPLOYMENT_KEY, "approval.bpmn20.xml", PROCESS_XML);
         ProcessInstance instance = engineWithoutHistory.getRuntimeService()
@@ -187,6 +203,7 @@ class BpmProviderFlowableRetireDeploymentTest {
         assertNull(providerWithoutHistory.getProcessInstance(instance.getId()), "not running any more");
         assertEquals(HistoryLevel.NONE, providerWithoutHistory.getHistoryLevel());
         assertTrue(providerWithoutHistory.isProcessInstanceKnown(instance.getId()), "no history to consult: assumed finished");
+        assertTrue(providerWithoutHistory.isProcessInstanceCompleted(instance.getId()), "and assumed completed, so no restart re-runs it");
         providerWithoutHistory.retireDeployment(deployment.getId());
     }
 

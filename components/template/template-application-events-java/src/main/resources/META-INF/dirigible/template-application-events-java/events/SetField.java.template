@@ -57,6 +57,12 @@ import gen.${javaGenFolderName}.data.${javaTargetPerspective}.${targetEntity}Rep
  * "-transitioned" published is the ${targetEntity}'s. A ${entity} whose ${via} is empty is logged and
  * left alone.
 #end
+#if($rollupDisplacedStatus && $rollupDisplacedStatus != "")
+ * <p>
+ * While a roll-up holds ${rollupStatus} (one of [${rollupOwnedStatuses}]: the row is settled), the
+ * status is written to ${rollupDisplacedStatus} instead - the status the roll-up restores when its sum
+ * returns to zero.
+#end
  */
 public class ${className} implements JavaDelegate {
 #if($via && $via != "")
@@ -95,6 +101,22 @@ public class ${className} implements JavaDelegate {
 #set($writtenEntity = $entity)
 #set($writtenPerspective = $perspective)
 #end
+#if($rollupDisplacedStatus && $rollupDisplacedStatus != "")
+#set($heldByRollup = true)
+        // ${rollupStatus} is the roll-up's while the row is settled (#7869): its sum moved it to one of
+        // [${rollupOwnedStatuses}] and keeps the status it displaced in ${rollupDisplacedStatus}, to restore
+        // once the sum is back at zero. This step's status is the one the row would hold if it were not
+        // settled, so it goes there. Written over ${rollupStatus}, it took the status from the roll-up for
+        // good: a paid document read unpaid again, and only a later change of the sum could put it back.
+        ${writtenEntity}Entity current = ${writeRepository}.findOne(${writeKey})
+                                           .orElse(null);
+        String statusColumn = current != null && java.util.Arrays.asList(${rollupOwnedStatuses})
+                                                                  .contains(current.${rollupStatus})
+                ? "${rollupDisplacedStatus}"
+                : "${rollupStatus}";
+#else
+#set($heldByRollup = false)
+#end
 #if($assignments)
 #if($readsErrorMessage)
         // The {error} value: the failure message the resilience conversion published just before it
@@ -104,11 +126,19 @@ public class ${className} implements JavaDelegate {
         // One change, one statement: every member below is written by the same updateProperties.
         java.util.Map<String, Object> values = new java.util.LinkedHashMap<>();
 #foreach($assignment in $assignments)
+#if($heldByRollup && $assignment.field == $rollupStatus)
+        values.put(statusColumn, ${assignment.expression});
+#else
         values.put("${assignment.field}", ${assignment.expression});
+#end
 #end
         int updated = ${writeRepository}.updateProperties(${writeKey}, values);
 #elseif($relation == "true")
+#if($heldByRollup)
+        int updated = ${writeRepository}.updateProperty(${writeKey}, statusColumn, ${value});
+#else
         int updated = ${writeRepository}.updateProperty(${writeKey}, "${field}", ${value});
+#end
 #elseif($clear == "true")
         // clearField: the erasure twin of setField - the column goes back to empty, so a re-driven
         // instance that now succeeds does not leave the previous failure's explanation standing.

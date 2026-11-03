@@ -53,6 +53,21 @@ public final class UnitOfWork {
     }
 
     /**
+     * Runs the given work as one transaction and returns its result, running it once more when the
+     * database rolled it back to break a deadlock - see
+     * {@link JavaEntityStore#inUnitOfWorkRetryingDeadlock(Supplier)}. Only for work that is safe to run
+     * again: it builds what it writes from its arguments and from what it reads inside the block.
+     *
+     * @param <T> the result type
+     * @param work the writes to perform together
+     * @return whatever the work returned
+     */
+    public static <T> T callRetryingDeadlock(Supplier<T> work) {
+        return BeanProvider.getBean(JavaEntityStore.class)
+                           .inUnitOfWorkRetryingDeadlock(work);
+    }
+
+    /**
      * Runs the given work as one transaction.
      *
      * @param work the writes to perform together

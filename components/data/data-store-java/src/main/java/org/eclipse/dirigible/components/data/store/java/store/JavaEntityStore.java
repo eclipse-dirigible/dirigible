@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.data.store.java.store;
 
 import java.lang.reflect.Field;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -158,6 +160,66 @@ public class JavaEntityStore implements WriteTransaction {
         UnitOfWork unit = UNIT_OF_WORK.get();
         return unit == null ? Optional.empty() : Optional.of(unit.session.doReturningWork(work::run));
     }
+
+    /**
+     * Runs the block as {@link #inUnitOfWork(Supplier)} does, and runs it ONCE MORE when the database
+     * rolled the unit back to break a deadlock (dirigible #8341).
+     *
+     * <p>
+     * A deadlock is not a conflict over data: two transactions each wait for a row the other holds, and
+     * the database rolls one of them back so that the other can go on. Nothing the victim wrote
+     * survives and nothing it read was wrong, so the remedy every database prescribes is to run the
+     * transaction again - by then the other one has committed. The reference check share-locks the rows
+     * a write names (dirigible #8252), and H2 has no shared row lock: its share lock is the exclusive
+     * {@code FOR UPDATE}, so two writes naming the same records in a different order - a payment naming
+     * its invoice and then its customer, and the posting of the previous payment naming the customer
+     * and then the invoice - deadlock, and the caller was told its record had been changed by another
+     * write when nothing had changed it. A second deadlock, and every other conflict, still reaches the
+     * caller as the {@link ConcurrentWriteException}.
+     *
+     * <p>
+     * The block must be safe to run again: whatever it writes it builds from its own arguments and what
+     * it reads inside the block, and the writes it makes outside the transaction (a history row) are
+     * records of an attempt; a document number drawn inside it came back with the rollback (#8113) and
+     * is drawn again. Joining a unit that is already open runs the block once, as
+     * {@link #inUnitOfWork(Supplier)} does - the outermost unit owns the transaction, and only its
+     * owner can repeat it.
+     *
+     * @param <R> the block's result type
+     * @param work the block to run
+     * @return whatever the block returned
+     */
+    public <R> R inUnitOfWorkRetryingDeadlock(Supplier<R> work) {
+        if (isInUnitOfWork()) {
+            return work.get();
+        }
+        try {
+            return inUnitOfWork(work);
+        } catch (ConcurrentWriteException conflict) {
+            if (!isDeadlockVictim(conflict)) {
+                throw conflict;
+            }
+            LOGGER.debug("A unit of work was rolled back to break a deadlock - running it once more", conflict);
+            return inUnitOfWork(work);
+        }
+    }
+
+    /**
+     * Whether the database rolled the transaction back to break a deadlock: SQLSTATE {@code 40001} (H2,
+     * and the standard's serialization failure, which MySQL and SQL Server report a deadlock as) or
+     * PostgreSQL's {@code 40P01}. A lock-wait timeout is not one: it ends a wait that may have been for
+     * a long-running writer, and repeating it would double the caller's wait.
+     */
+    private static boolean isDeadlockVictim(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof SQLException sql && DEADLOCK_SQL_STATES.contains(sql.getSQLState())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static final Set<String> DEADLOCK_SQL_STATES = Set.of("40001", "40P01");
 
     /**
      * Whether the current thread runs inside a unit of work - see {@link #inUnitOfWork(Supplier)}.

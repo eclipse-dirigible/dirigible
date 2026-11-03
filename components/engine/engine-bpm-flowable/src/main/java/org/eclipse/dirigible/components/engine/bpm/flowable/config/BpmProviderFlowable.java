@@ -39,6 +39,8 @@ import org.eclipse.dirigible.repository.api.IResource;
 import org.flowable.bpmn.model.BpmnModel;
 import org.flowable.bpmn.model.Process;
 import org.flowable.bpmn.model.UserTask;
+import org.flowable.common.engine.api.FlowableObjectNotFoundException;
+import org.flowable.common.engine.api.FlowableOptimisticLockingException;
 import org.flowable.common.engine.impl.history.HistoryLevel;
 import org.flowable.engine.ManagementService;
 import org.flowable.engine.ProcessEngine;
@@ -81,9 +83,30 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final String TASK_ACTIONS_PROPERTY = "taskActions";
     /** The user-task property listing the variables a completion may write besides its action. */
     private static final String TASK_WRITES_PROPERTY = "taskWrites";
+    /** The user-task property listing the tasks of the same instance whose completer it keeps out. */
+    private static final String TASK_SEPARATE_FROM_PROPERTY = "taskSeparateFrom";
+    /** The user-task property carrying what the user it keeps out is told. */
+    private static final String TASK_SEPARATION_MESSAGE_PROPERTY = "taskSeparationMessage";
+
+    /**
+     * The process variable a completion through {@code BpmService} records its user in, followed by the
+     * completed task's definition key - what {@link #getSeparationRefusal} reads (issue #8111).
+     */
+    public static final String COMPLETED_BY_PREFIX = "__completedBy_";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
+
+    /**
+     * The process variable a generated trigger seeds with the key of the record the process runs for.
+     */
+    static final String RECORD_ID_VARIABLE = "__entityId";
+
+    /** How often a process delete that lost the optimistic lock is attempted in all (issue #8108). */
+    static final int DELETE_PROCESS_ATTEMPTS = 10;
+
+    /** The pause before the second delete attempt; every further attempt waits that much longer. */
+    static final long DELETE_PROCESS_RETRY_PAUSE_MILLIS = 50;
 
     /** The repository. */
     private final IRepository repository;
@@ -324,7 +347,12 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
-     * Delete process.
+     * Deletes (cancels) a running process instance.
+     * <p>
+     * A delete that loses the optimistic lock to a transaction moving the instance on - a task being
+     * completed at the same moment - is retried against the instance's new state until it is gone
+     * (issue #8108). Without that, the one attempt failed, the completion committed, and the next task
+     * was handed out for a record whose delete was supposed to have retired the flow.
      *
      * @param processInstanceId the processInstanceId
      * @param reason the reason
@@ -337,12 +365,45 @@ public class BpmProviderFlowable implements BpmProvider {
         // the only trace the instance ever leaves (#7598).
         LOGGER.info("Deleting process instance [{}] of definition [{}] in tenant [{}], reason [{}]", processInstanceId,
                 instance == null ? null : instance.getProcessDefinitionKey(), instance == null ? null : instance.getTenantId(), reason);
+        for (int attempt = 1;; attempt++) {
+            try {
+                processEngine.getRuntimeService()
+                             .deleteProcessInstance(processInstanceId, reason);
+                LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
+                return;
+            } catch (FlowableOptimisticLockingException e) {
+                if (getProcessInstance(processInstanceId) == null) {
+                    LOGGER.info("Process instance [{}] ended while it was being deleted, reason [{}]", processInstanceId, reason, e);
+                    return;
+                }
+                if (attempt == DELETE_PROCESS_ATTEMPTS || !pauseBeforeDeleteRetry(attempt)) {
+                    LOGGER.error("Failed to delete process with processInstanceId [{}] in {} attempts, reason [{}]", processInstanceId,
+                            attempt, reason, e);
+                    return;
+                }
+                LOGGER.debug("Process instance [{}] was moved on by another transaction while it was being deleted - retrying",
+                        processInstanceId, e);
+            } catch (Exception e) {
+                LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Waits a little longer on every attempt, so the transaction that won the lock can commit.
+     *
+     * @param attempt the attempt that just failed
+     * @return false when the thread was interrupted - no further attempt is made
+     */
+    private static boolean pauseBeforeDeleteRetry(int attempt) {
         try {
-            processEngine.getRuntimeService()
-                         .deleteProcessInstance(processInstanceId, reason);
-            LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
-        } catch (Exception e) {
-            LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+            Thread.sleep(DELETE_PROCESS_RETRY_PAUSE_MILLIS * attempt);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread()
+                  .interrupt();
+            return false;
         }
     }
 
@@ -482,6 +543,50 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
+     * The record a task's process runs for, as the process carries it (issue #8108): the instance, its
+     * definition key and the record key a generated trigger seeds into {@value #RECORD_ID_VARIABLE}.
+     *
+     * @param taskId the task id
+     * @return the record, or empty when the task does not exist (any more) or its process carries no
+     *         record key
+     */
+    public Optional<TaskRecord> getTaskRecord(String taskId) {
+        Task task = processEngine.getTaskService()
+                                 .createTaskQuery()
+                                 .taskTenantId(getTenantId())
+                                 .taskId(taskId)
+                                 .singleResult();
+        if (task == null || task.getProcessInstanceId() == null) {
+            return Optional.empty();
+        }
+        Object recordId;
+        try {
+            recordId = processEngine.getRuntimeService()
+                                    .getVariable(task.getProcessInstanceId(), RECORD_ID_VARIABLE);
+        } catch (FlowableObjectNotFoundException ex) {
+            LOGGER.debug("The process instance of task [{}] ended before its record was read", taskId, ex);
+            return Optional.empty();
+        }
+        if (recordId == null) {
+            return Optional.empty();
+        }
+        String processDefinitionKey = processEngine.getRepositoryService()
+                                                   .getProcessDefinition(task.getProcessDefinitionId())
+                                                   .getKey();
+        return Optional.of(new TaskRecord(task.getProcessInstanceId(), processDefinitionKey, String.valueOf(recordId)));
+    }
+
+    /**
+     * The record a task's process runs for.
+     *
+     * @param processInstanceId the task's process instance
+     * @param processDefinitionKey the key of that instance's process definition
+     * @param recordId the record's key, as text
+     */
+    public record TaskRecord(String processInstanceId, String processDefinitionKey, String recordId) {
+    }
+
+    /**
      * Whether the task is still active in the current tenant - i.e. neither completed nor deleted.
      *
      * @param taskId the task id
@@ -530,17 +635,68 @@ public class BpmProviderFlowable implements BpmProvider {
         return getTaskProperty(taskId, TASK_WRITES_PROPERTY);
     }
 
+    /**
+     * Why the user may not claim or complete the task, or null when they may: its user task declares
+     * {@code taskSeparateFrom} - the tasks of the same instance whose completer it keeps out, so a
+     * document's submitter never approves it - and the user completed one of them (issue #8111).
+     *
+     * @param taskId the task id
+     * @param user the user about to act on it
+     * @return the task's {@code taskSeparationMessage}, or null
+     */
+    public String getSeparationRefusal(String taskId, String user) {
+        Task task = findTask(taskId);
+        UserTask userTask = userTaskOf(task);
+        List<String> separateFrom = property(userTask, TASK_SEPARATE_FROM_PROPERTY).map(BpmProviderFlowable::items)
+                                                                                   .orElse(List.of());
+        if (user == null || separateFrom.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> completers = processEngine.getRuntimeService()
+                                                      .getVariables(task.getProcessInstanceId(), separateFrom.stream()
+                                                                                                             .map(key -> COMPLETED_BY_PREFIX
+                                                                                                                     + key)
+                                                                                                             .toList());
+        if (!completers.containsValue(user)) {
+            return null;
+        }
+        return property(userTask, TASK_SEPARATION_MESSAGE_PROPERTY).orElse("You cannot complete a task separated from one you completed");
+    }
+
+    /**
+     * The task's definition key - its user task's id in the process.
+     *
+     * @param taskId the task id
+     * @return the key, or null when the current tenant has no such task
+     */
+    public String getTaskDefinitionKey(String taskId) {
+        Task task = findTask(taskId);
+        return task == null ? null : task.getTaskDefinitionKey();
+    }
+
     /** The comma-separated list a user task's named property declares, empty when it has none. */
     private Optional<List<String>> getTaskProperty(String taskId, String name) {
-        Task task = processEngine.getTaskService()
-                                 .createTaskQuery()
-                                 .taskTenantId(getTenantId())
-                                 .taskId(taskId)
-                                 .singleResult();
+        return property(userTaskOf(findTask(taskId)), name).map(BpmProviderFlowable::items);
+    }
+
+    private Task findTask(String taskId) {
+        return processEngine.getTaskService()
+                            .createTaskQuery()
+                            .taskTenantId(getTenantId())
+                            .taskId(taskId)
+                            .singleResult();
+    }
+
+    /** The task's user task in its deployment-cached BPMN model, or null. */
+    private UserTask userTaskOf(Task task) {
         BpmnModel bpmnModel = task == null ? null
                 : processEngine.getRepositoryService()
                                .getBpmnModel(task.getProcessDefinitionId());
-        if (bpmnModel == null || !(bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask)) {
+        return bpmnModel != null && bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask ? userTask : null;
+    }
+
+    private static Optional<String> property(UserTask userTask, String name) {
+        if (userTask == null) {
             return Optional.empty();
         }
         return userTask.getExtensionElements()
@@ -549,11 +705,14 @@ public class BpmProviderFlowable implements BpmProvider {
                        .filter(element -> name.equals(element.getAttributeValue(null, "name")))
                        .map(element -> element.getAttributeValue(null, "value"))
                        .filter(Objects::nonNull)
-                       .findFirst()
-                       .map(value -> Arrays.stream(value.split(","))
-                                           .map(String::trim)
-                                           .filter(item -> !item.isEmpty())
-                                           .toList());
+                       .findFirst();
+    }
+
+    private static List<String> items(String value) {
+        return Arrays.stream(value.split(","))
+                     .map(String::trim)
+                     .filter(item -> !item.isEmpty())
+                     .toList();
     }
 
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {
@@ -872,6 +1031,37 @@ public class BpmProviderFlowable implements BpmProvider {
                             .processInstanceId(processInstanceId)
                             .processInstanceTenantId(getTenantId())
                             .count() > 0;
+    }
+
+    /**
+     * Whether the instance ran to its end - finished by the flow itself (an end event, a terminate end
+     * event), not cancelled. The read behind a restart refusal: a fresh instance for a record whose
+     * flow already completed re-runs every step over a record in its final status (#8189), while a
+     * cancelled instance - a stuck or dead-lettered one an operator cleared - is the restart's purpose.
+     * An instance that ended before Flowable recorded the state has none, and then only a cancel left a
+     * delete reason behind. With the history level at {@code none} an instance that is not running is
+     * assumed completed, as {@link #isProcessInstanceKnown(String)} trusts the stamp.
+     *
+     * @param processInstanceId the instance id
+     * @return true when the instance completed
+     */
+    public boolean isProcessInstanceCompleted(String processInstanceId) {
+        if (getProcessInstance(processInstanceId) != null) {
+            return false;
+        }
+        if (getHistoryLevel() == HistoryLevel.NONE) {
+            return true;
+        }
+        HistoricProcessInstance ended = processEngine.getHistoryService()
+                                                     .createHistoricProcessInstanceQuery()
+                                                     .processInstanceId(processInstanceId)
+                                                     .processInstanceTenantId(getTenantId())
+                                                     .finished()
+                                                     .singleResult();
+        if (ended == null) {
+            return false;
+        }
+        return ended.getState() != null ? "completed".equals(ended.getState()) : ended.getDeleteReason() == null;
     }
 
     /**

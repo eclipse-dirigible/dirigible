@@ -258,10 +258,26 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
 
     @Override
     public void finishing() {
-        if (!dirty.compareAndSet(true, false)) {
-            return;
+        if (dirty.compareAndSet(true, false)) {
+            rebuildAll();
         }
-        rebuildAll();
+        reportFailures();
+    }
+
+    /**
+     * Reports every client source still FAILED - by this pass's rebuild or an earlier one - as an error
+     * of the pass, so the readiness the pass completes with is degraded by it (#8239). Its lifecycle is
+     * settled here, outside the per-artefact phases whose errors the orchestrator collects itself; and
+     * a FAILED file whose source has not changed is not rebuilt on a later pass, yet it still does not
+     * run, exactly as an artefact of another type that a later pass retries in vain.
+     */
+    private void reportFailures() {
+        for (JavaFile file : javaFileService.getAll()) {
+            if (ArtefactLifecycle.FAILED == file.getLifecycle()) {
+                callback.addError(String.format("Failed client Java source with key [%s], location [%s], type [%s], error [%s]",
+                        file.getKey(), file.getLocation(), file.getType(), file.getError()));
+            }
+        }
     }
 
     /**

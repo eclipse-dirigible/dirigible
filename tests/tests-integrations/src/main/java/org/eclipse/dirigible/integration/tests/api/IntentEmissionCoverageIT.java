@@ -3851,8 +3851,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         && billLineRepository.contains("new BillRepository().recalculate(documentBefore)"),
                 "a line moved between documents must resum both: " + billLineRepository);
         // The event-suppressed system write is the third targeted-ish path: it suppresses the event,
-        // not the arithmetic.
-        String updateWithoutEvent = billLineRepository.substring(billLineRepository.indexOf("public BillLineEntity updateWithoutEvent"));
+        // not the arithmetic. The write and its resum are one unit (#8096), so the body is the in-unit one.
+        assertTrue(billLineRepository.contains("UnitOfWork.call(() -> updateWithoutEventInUnit(entity))"),
+                "updateWithoutEvent must resum the master in the line's own unit: " + billLineRepository);
+        String updateWithoutEvent =
+                billLineRepository.substring(billLineRepository.indexOf("private BillLineEntity updateWithoutEventInUnit"));
         assertTrue(updateWithoutEvent.substring(0, updateWithoutEvent.indexOf("\n    }"))
                                      .contains("new BillRepository().recalculate("),
                 "updateWithoutEvent must keep the master's totals in step: " + billLineRepository);
@@ -3893,11 +3896,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "so does the fund guard, refusing in the authored words (#7542): " + pledgePaymentRepository);
         // WHICH rows the fund's capacity counts (#7542): the filter narrows the re-sum, and the row being
         // written is tested the same way - a row the filter excludes changes no sum, so cancelling an
-        // allocation is never refused by the ceiling the cancellation frees.
-        assertEquals(2, countOf(pledgePaymentRepository, "findAll(Criteria.create().eq(\"Fund\", entity.Fund).ne(\"Status\", 2))"),
+        // allocation is never refused by the ceiling the cancellation frees. The fit guard (#8096) projects
+        // the fund's total over the same rows, so the filter appears once more per path for it.
+        assertEquals(2,
+                countOf(pledgePaymentRepository, "guardRow : findAll(Criteria.create().eq(\"Fund\", entity.Fund).ne(\"Status\", 2))"),
                 "the fund re-sum must count only the rows the roll-up counts: " + pledgePaymentRepository);
-        assertEquals(2, countOf(pledgePaymentRepository, "!(entity.Status != null && entity.Status.longValue() == 2L)"),
-                "a cancelled allocation must not be guarded at all: " + pledgePaymentRepository);
+        assertEquals(2, countOf(pledgePaymentRepository, "fitRow : findAll(Criteria.create().eq(\"Fund\", entity.Fund).ne(\"Status\", 2))"),
+                "the fund total's fit must be projected over the rows the roll-up counts (#8096): " + pledgePaymentRepository);
+        assertEquals(4, countOf(pledgePaymentRepository, "!(entity.Status != null && entity.Status.longValue() == 2L)"),
+                "a cancelled allocation must not be guarded at all - capacity and fit alike: " + pledgePaymentRepository);
         // ...and the asynchronous recompute reads the SAME clauses, which is what keeps the stored
         // balance and the enforced ceiling from disagreeing.
         assertTrue(
