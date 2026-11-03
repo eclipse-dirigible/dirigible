@@ -2253,6 +2253,7 @@ public final class IntentParser {
             } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
             }
+            refuseRequiredRollupTarget(counter, name, "field", issues);
             if (latest) {
                 // latest copies the child `of` value from the row with the greatest `by` date onto the
                 // parent field; `of`+`by` required, `by` must be date/timestamp, and the parent field
@@ -2294,6 +2295,9 @@ public final class IntentParser {
                 }
                 requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", via.getTo(), issues);
                 requireNumericParentField(parent, rollup.getBalance(), name, "balance", via.getTo(), issues);
+                if (!isBlank(rollup.getCapacity()) && parent != null) {
+                    refuseRequiredRollupTarget(fieldByName(parent, rollup.getBalance()), name, "balance", issues);
+                }
                 if (rollup.getStatus() != null && !rollup.getStatus()
                                                          .isBlank()
                         && (parent == null || toOneRelationByName(parent, rollup.getStatus()) == null)) {
@@ -2354,6 +2358,7 @@ public final class IntentParser {
         } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
             issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
         }
+        refuseRequiredRollupTarget(counter, name, "field", issues);
         if (sum && isBlank(rollup.getOf())) {
             issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
         }
@@ -2369,6 +2374,9 @@ public final class IntentParser {
         if (sum) {
             requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", rollup.getParent(), issues);
             requireNumericParentField(parent, rollup.getBalance(), name, "balance", rollup.getParent(), issues);
+            if (!isBlank(rollup.getCapacity())) {
+                refuseRequiredRollupTarget(fieldByName(parent, rollup.getBalance()), name, "balance", issues);
+            }
             if (!isBlank(rollup.getStatus()) && toOneRelationByName(parent, rollup.getStatus()) == null) {
                 issues.add("rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + rollup.getParent()
                         + "]");
@@ -2691,6 +2699,20 @@ public final class IntentParser {
         FieldIntent f = parent == null ? null : fieldByName(parent, field);
         if (f == null || !NUMERIC_TYPES.contains(f.getType())) {
             issues.add("rollup [" + rollup + "] " + role + " [" + field + "] must be a numeric field of [" + parentName + "]");
+        }
+    }
+
+    /**
+     * A roll-up target is derived, so it is read-only (#8442): a REST create drops it and the first
+     * child event writes it. Declared {@code required} with no server-side source (a
+     * {@code defaultValue}, a {@code calculatedOnCreate}), it would refuse every create of its parent,
+     * which cannot supply it.
+     */
+    private static void refuseRequiredRollupTarget(FieldIntent target, String rollup, String role, List<String> issues) {
+        if (target != null && target.isRequired() && !hasServerSideSource(target)) {
+            issues.add("rollup [" + rollup + "] " + role + " [" + target.getName() + "] is required, but the roll-up writes it"
+                    + " only once a child exists and a create cannot supply it - give it a defaultValue (e.g. 0) or a"
+                    + " calculatedOnCreate, or drop `required`");
         }
     }
 
