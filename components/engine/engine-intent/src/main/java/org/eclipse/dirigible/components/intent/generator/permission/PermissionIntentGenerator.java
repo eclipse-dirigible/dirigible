@@ -172,7 +172,7 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             if (readRoles == null) {
                 continue;
             }
-            List<String> roles = gates.appendRead(readRoles);
+            List<String> roles = gates.appendRead(gateName, readRoles);
             String perspective = IntentEntities.resolvePerspective(name, compositionParents, model);
             constraints.add(constraint("/services/java/" + project + "/gen/" + module + "/api/" + IntentNaming.javaIdentifier(perspective)
                     + "/" + name + "Controller/**", roles));
@@ -187,8 +187,8 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
                                       .containsKey(name)) {
                 continue;
             }
-            List<String> roles = gates.appendRead(gates.read()
-                                                       .get(name));
+            List<String> roles = gates.appendRead(name, gates.read()
+                                                             .get(name));
             constraints.add(constraint(IntentNaming.reportControllerUrl(project, name) + "/**", roles));
             constraints.add(constraint(IntentNaming.reportPageFolderUrl(project, name) + "/**", roles));
         }

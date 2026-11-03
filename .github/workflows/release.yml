@@ -26,11 +26,30 @@ permissions:
   id-token: write
 
 jobs:
+  # A version is released once (#8421). A fresh dispatch of a version Maven Central already has is
+  # refused before anything is built or pushed: it would push the Docker images and the GitHub
+  # release assets again, built from whatever master is by then. A release that stopped half-way
+  # is completed by "Re-run failed jobs" on its own run instead (same commit, run_attempt > 1),
+  # and the publishing steps below skip what an earlier attempt already published.
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Refuse a version that is already released
+        if: github.run_attempt == 1
+        env:
+          VERSION: ${{ github.event.inputs.releaseVersion }}
+        run: |
+          if curl -sfI -o /dev/null "https://repo1.maven.org/maven2/org/eclipse/dirigible/dirigible-parent/${VERSION}/dirigible-parent-${VERSION}.pom"; then
+            echo "::error::${VERSION} is already on Maven Central - release a new version, or complete the run that released it with Re-run failed jobs"
+            exit 1
+          fi
+
   # The release under test booted on a deployment the PREVIOUS release wrote (#7641) - every other
   # IT boots on an empty database. UpgradeFromPreviousReleaseIT runs tests/UPGRADE_FROM as its
   # published image on a PostgreSQL of its own (Testcontainers), so the job needs Docker but no
   # database service, and it is the only selector of the `upgrade` tag the api shard excludes.
   upgrade-test:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -94,6 +113,7 @@ jobs:
   # release-artifacts commits the file with the development version, so the nightly measures the
   # next release's changes against this one's numbers.
   perf-baseline:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -338,11 +358,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          registry-url: 'https://registry.npmjs.org'
-
-      # Ensure npm 11.5.1 or later is installed
-      - name: Update npm
-        run: npm install -g npm@11.11.1
 
       - name: Install TypeScript and esbuild
         run: npm install -g typescript@5.9.3 esbuild
@@ -360,11 +375,19 @@ jobs:
       - name: Build Dirigible
         run: mvn clean install -Dmaven.javadoc.skip=false
 
+      # Central refuses a version it already has. When an earlier attempt of this run deployed it
+      # and a later step failed, a re-run skips the deploy and goes on (#8421). A deployment Central
+      # is still publishing is not on repo1 yet: re-run once the version is there.
       - name: Publish packages to Maven Central
         run: |
+          if curl -sfI -o /dev/null "https://repo1.maven.org/maven2/org/eclipse/dirigible/dirigible-parent/${VERSION}/dirigible-parent-${VERSION}.pom"; then
+            echo "::notice::${VERSION} is already on Maven Central - deploy skipped"
+            exit 0
+          fi
           mvn javadoc:jar
           mvn deploy -P release -DskipTests -Dmaven.test.skip=true
         env:
+          VERSION: ${{ github.event.inputs.releaseVersion }}
           MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASS_PHRASE }}
@@ -394,83 +417,24 @@ jobs:
 
       #---------------Publish to Maven Central-----------------#
 
-      #--------------- Publish dirigible jar to NPM -----------------#
-
-      - name: (@dirigiblelabs/dirigible) Set the new package version
-        working-directory: ./npm/dirigible
-        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
-
-      - name: (@dirigiblelabs/dirigible) Publish the package to npm
-        working-directory: ./npm/dirigible
-        run: npm publish --access public
-
-      #--------------- Publish dirigible jar to NPM -----------------#
-
-      #--------------- Publish dirigible-cli to NPM -----------------#
-
-      - name: (@dirigiblelabs/dirigible-cli) Set the new package version
-        working-directory: ./npm/dirigible-cli
-        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
-
-      - name: (@dirigiblelabs/dirigible-cli) Set the new dependency version
-        working-directory: ./npm/dirigible-cli
-        run: npm pkg set dependencies.@dirigiblelabs/dirigible=${{ github.event.inputs.releaseVersion }}
-
-      # The jar is not bundled: postinstall.js downloads it from Maven Central, where the deploy
-      # above has published it (#7771).
-      - name: (@dirigiblelabs/dirigible-cli) Publish the package to npm
-        working-directory: ./npm/dirigible-cli
-        run: npm publish --access public
-
-      #--------------- Publish dirigible-cli to NPM -----------------#
-
-      #--------------- Publish aerokit/sdk to NPM -----------------#
-
-      # The Playwright test runner (npm/test) is published as @aerokit/test below. It still ships as
-      # the @aerokit/sdk `./test` subpath too, so harnesses that import `@aerokit/sdk/test` keep
-      # resolving until @aerokit/sdk is deprecated after a release that ships both (#8053). The copy
-      # is release-runner-local only (the jar was built before this step), and the nested
-      # package.json marks the subtree ESM (the sdk root has no "type").
-      - name: (@aerokit/sdk) Bundle the test runner as the ./test subpath
-        run: |
-          mkdir -p ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test
-          cp -R ./npm/test/src/. ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/
-          printf '{\n  "type": "module"\n}\n' > ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/package.json
-
-      - name: (@aerokit/sdk) Set the new package version
-        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
-        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
-
-      - name: (@aerokit/sdk) Publish the package to npm
-        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
-        run: npm publish --access public
-
-      #--------------- Publish aerokit/sdk to NPM -----------------#
-
-      #--------------- Publish aerokit/test to NPM -----------------#
-
-      - name: (@aerokit/test) Set the new package version
-        working-directory: ./npm/test
-        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
-
-      - name: (@aerokit/test) Publish the package to npm
-        working-directory: ./npm/test
-        run: npm publish --access public
-
-      #--------------- Publish aerokit/test to NPM -----------------#
-
       # The release branch carries exactly what was released, and the tag is made from it (see
       # github-release). Master takes the two version commits as they are when it has not moved
       # since the release started. When something was merged meanwhile, that push is rejected, and
       # the development commit is made again on top of the current master instead (#8065):
       # versions:set on master's own tree, so a module added meanwhile gets the snapshot version
       # too, plus the upgrade and performance baselines of this release. The release commit then
-      # stays on the release branch and its tag only. The files the npm steps changed were only
-      # needed to publish, hence the forced checkout.
+      # stays on the release branch and its tag only. A re-run keeps the release branch an earlier
+      # attempt pushed, since that is what was released, and continues from it (#8421).
       - name: "Git: Push Changes"
         run: |
-          git checkout -B ${{ github.event.inputs.releaseVersion }}
-          git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
+          if git ls-remote --exit-code --heads origin ${{ github.event.inputs.releaseVersion }} > /dev/null; then
+            echo "::notice::the release branch ${{ github.event.inputs.releaseVersion }} was pushed by an earlier attempt - kept"
+            git fetch origin ${{ github.event.inputs.releaseVersion }}
+            git checkout -f -B ${{ github.event.inputs.releaseVersion }} FETCH_HEAD
+          else
+            git checkout -B ${{ github.event.inputs.releaseVersion }}
+            git push --set-upstream origin ${{ github.event.inputs.releaseVersion }}
+          fi
           git checkout -B master
           if git push --set-upstream origin master; then
             exit 0
@@ -499,6 +463,100 @@ jobs:
         with:
           name: application-all
           path: application-all.zip
+
+  # npm publishing is a job of its own (#8421). A package npm does not take - a transient
+  # transparency-log error (15.13.0), a trusted publisher it does not accept (15.3.0) - fails this
+  # job only: the release branch, the tag, the GitHub release and Helm do not wait for it, and
+  # "Re-run failed jobs" repeats only this job. A package already on npm is skipped and a failed
+  # publish is retried, so the other packages go out either way. No Maven build is needed: the
+  # sdk's dist is built by the script the api-modules-javascript build runs. It follows
+  # release-artifacts because the cli's postinstall downloads the jar from Maven Central (#7771).
+  release-npm:
+    needs: release-artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install NodeJS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          registry-url: 'https://registry.npmjs.org'
+
+      # Ensure npm 11.5.1 or later is installed
+      - name: Update npm
+        run: npm install -g npm@11.11.1
+
+      - name: Install TypeScript and esbuild
+        run: npm install -g typescript@5.9.3 esbuild
+
+      - name: (@aerokit/sdk) Build the dist
+        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
+        run: bash build-source.sh
+
+      - name: (@dirigiblelabs/dirigible) Set the new package version
+        working-directory: ./npm/dirigible
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: (@dirigiblelabs/dirigible-cli) Set the new package version
+        working-directory: ./npm/dirigible-cli
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      # The jar is not bundled: postinstall.js downloads it from Maven Central, where the deploy
+      # of release-artifacts has published it (#7771).
+      - name: (@dirigiblelabs/dirigible-cli) Set the new dependency version
+        working-directory: ./npm/dirigible-cli
+        run: npm pkg set dependencies.@dirigiblelabs/dirigible=${{ github.event.inputs.releaseVersion }}
+
+      # The Playwright test runner (npm/test) is published as @aerokit/test below. It still ships as
+      # the @aerokit/sdk `./test` subpath too, so harnesses that import `@aerokit/sdk/test` keep
+      # resolving until @aerokit/sdk is deprecated after a release that ships both (#8053). The copy
+      # is runner-local only, and the nested package.json marks the subtree ESM (the sdk root has
+      # no "type").
+      - name: (@aerokit/sdk) Bundle the test runner as the ./test subpath
+        run: |
+          mkdir -p ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test
+          cp -R ./npm/test/src/. ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/
+          printf '{\n  "type": "module"\n}\n' > ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/package.json
+
+      - name: (@aerokit/sdk) Set the new package version
+        working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: (@aerokit/test) Set the new package version
+        working-directory: ./npm/test
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: Publish the packages to npm
+        env:
+          VERSION: ${{ github.event.inputs.releaseVersion }}
+        run: |
+          published() {
+            npm view "$1@${VERSION}" version > /dev/null 2>&1
+          }
+          publish() {
+            local name attempt
+            name=$(node -p "require('./$1/package.json').name")
+            if published "$name"; then
+              echo "::notice::$name@${VERSION} is already on npm - skipped"
+              return 0
+            fi
+            for attempt in 1 2 3; do
+              (cd "$1" && npm publish --access public) && return 0
+              # npm can report an error for a publish the registry has recorded
+              published "$name" && return 0
+              echo "::warning::$name@${VERSION}: publish attempt ${attempt} of 3 failed"
+              [ "$attempt" -lt 3 ] && sleep $((attempt * 30))
+            done
+            echo "::error::$name@${VERSION} was not published"
+            return 1
+          }
+          failed=0
+          publish npm/dirigible || failed=1
+          publish npm/dirigible-cli || failed=1
+          publish components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules || failed=1
+          publish npm/test || failed=1
+          exit $failed
 
   sast-docker-scout-scan:
     if: ${{ inputs.code-scans }}

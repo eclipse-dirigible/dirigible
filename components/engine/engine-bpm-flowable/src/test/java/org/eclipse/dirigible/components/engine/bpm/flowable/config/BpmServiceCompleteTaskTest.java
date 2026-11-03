@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +29,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * What a task completion may write into its process, against a REAL Flowable engine (in-memory)
@@ -42,6 +45,32 @@ class BpmServiceCompleteTaskTest {
 
     private static final String DECLARING_PROCESS = "declaring";
     private static final String HAND_AUTHORED_PROCESS = "hand-authored";
+    private static final String SEPARATED_PROCESS = "separated";
+
+    /** The user {@code UserFacade} names outside a request - who every completion here is made by. */
+    private static final String USER = "guest";
+
+    /** An approval its submitter may not give (issue #8111). */
+    private static final String SEPARATED_PROCESS_XML =
+            """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:flowable="http://flowable.org/bpmn" targetNamespace="http://www.flowable.org/processdef">
+                      <process id="separated" name="Separated" isExecutable="true">
+                        <startEvent id="start"></startEvent>
+                        <userTask id="submit" name="Submit"></userTask>
+                        <userTask id="approve" name="Approve">
+                          <extensionElements>
+                            <flowable:property name="taskSeparateFrom" value="submit"></flowable:property>
+                            <flowable:property name="taskSeparationMessage" value="You cannot approve your own claim"></flowable:property>
+                          </extensionElements>
+                        </userTask>
+                        <endEvent id="end"></endEvent>
+                        <sequenceFlow id="flow_start_submit" sourceRef="start" targetRef="submit"></sequenceFlow>
+                        <sequenceFlow id="flow_submit_approve" sourceRef="submit" targetRef="approve"></sequenceFlow>
+                        <sequenceFlow id="flow_approve_end" sourceRef="approve" targetRef="end"></sequenceFlow>
+                      </process>
+                    </definitions>
+                    """;
 
     /** Two tasks: the first may write nothing but its action, the second its editable Solution. */
     private static final String DECLARING_PROCESS_XML =
@@ -98,10 +127,11 @@ class BpmServiceCompleteTaskTest {
 
         deploy(DECLARING_PROCESS, DECLARING_PROCESS_XML);
         deploy(HAND_AUTHORED_PROCESS, HAND_AUTHORED_PROCESS_XML);
+        deploy(SEPARATED_PROCESS, SEPARATED_PROCESS_XML);
 
         BpmProviderFlowable bpmProvider =
                 new BpmProviderFlowable(mock(IRepository.class), tenantContext(), mock(FlowableArtefactsValidator.class), engine);
-        bpmService = new BpmService(mock(ObjectProvider.class), bpmProvider);
+        bpmService = new BpmService(mock(ObjectProvider.class), bpmProvider, mock(ObjectProvider.class));
     }
 
     @AfterAll
@@ -159,6 +189,36 @@ class BpmServiceCompleteTaskTest {
                                       .processInstanceId(instance.getId())
                                       .singleResult()
                                       .getTaskDefinitionKey());
+    }
+
+    @Test
+    void whoeverCompletedTheSubmissionMayNeitherClaimNorCompleteTheApproval() {
+        ProcessInstance instance = start(SEPARATED_PROCESS, Map.of());
+        bpmService.completeTask(taskOf(instance), completion(Map.of("__completedBy_submit", "someone else")));
+        assertEquals(USER, variablesOf(instance).get("__completedBy_submit"), "the completion records its own user, never a sent one");
+        String approve = taskOf(instance);
+
+        ResponseStatusException completion = assertThrows(ResponseStatusException.class, () -> bpmService.completeTask(approve, null));
+        ResponseStatusException claim = assertThrows(ResponseStatusException.class, () -> bpmService.claimTask(approve, USER));
+
+        assertEquals(HttpStatus.FORBIDDEN, completion.getStatusCode());
+        assertEquals("You cannot approve your own claim", completion.getReason());
+        assertEquals(HttpStatus.FORBIDDEN, claim.getStatusCode());
+        assertEquals(approve, taskOf(instance), "the approval stays open for someone else");
+    }
+
+    @Test
+    void anotherUsersSubmissionLeavesTheApprovalOpen() {
+        ProcessInstance instance = start(SEPARATED_PROCESS, Map.of());
+        engine.getTaskService()
+              .complete(taskOf(instance), Map.of("__completedBy_submit", "requester"));
+
+        bpmService.completeTask(taskOf(instance), null);
+
+        assertEquals(0, engine.getRuntimeService()
+                              .createProcessInstanceQuery()
+                              .processInstanceId(instance.getId())
+                              .count());
     }
 
     /** A mutable map, as Jackson hands the endpoint a completion's data. */

@@ -92,6 +92,47 @@ class GluePostingsFollowSourceTest {
         assertEquals("Storno", follower.get("stornoFilterProperty"));
     }
 
+    /**
+     * "The" post is the live one (#7959): an entry whose status is classified cancelled, a
+     * {@code reversals:} twin, and an entry its twin reversed once that twin is booked are history.
+     */
+    @Test
+    void aRejectedOrReversedEntryIsNotTheSourcesPost() {
+        assertEquals("", GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(YAML))
+                                            .get(1)
+                                            .get("deadEntryCondition"),
+                "an entry with no status and no reversal is never retired");
+        String yaml = YAML.replace("  - name: Entry\n",
+                "  - name: EntryStatus\n    kind: setting\n    fields:\n"
+                        + "      - { name: id, type: integer, primaryKey: true, generated: true }\n      - { name: name, type: string }\n"
+                        + "  - name: Entry\n")
+                          .replace("      - { name: Storno, kind: manyToOne, to: Entry }\n",
+                                  "      - { name: Storno, kind: manyToOne, to: Entry }\n"
+                                          + "      - { name: ReversedBy, kind: manyToOne, to: Entry }\n"
+                                          + "      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }\n")
+                + """
+                        reversals:
+                          - { name: reverseEntry, forEntity: Entry, when: "Status == POSTED", link: Storno, backLink: ReversedBy, negate: [debit] }
+                        seeds:
+                          - name: entry-statuses
+                            entity: EntryStatus
+                            rows:
+                              - { id: 1, name: DRAFT, stage: draft }
+                              - { id: 2, name: POSTED, stage: live }
+                              - { id: 3, name: CANCELLED, stage: cancelled }
+                        """;
+        List<Map<String, Object>> postings = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml));
+        String expected =
+                "(candidate.Status != null && (candidate.Status == 3)) || (candidate.Storno != null) || (candidate.ReversedBy != null"
+                        + " && java.util.Optional.ofNullable(targetRepository.findById(candidate.ReversedBy)).map(twin -> twin.Status)"
+                        + ".filter(twinStatus -> twinStatus == 2).isPresent())";
+        assertEquals(expected, postings.get(0)
+                                       .get("deadEntryCondition"));
+        assertEquals(expected, postings.get(1)
+                                       .get("deadEntryCondition"),
+                "the follower retires the same entries");
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void aDeleteReversalMirrorsTheOriginalsStoredLines() {

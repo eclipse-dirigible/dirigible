@@ -390,6 +390,11 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             bpmService.unclaimTask(id);
         } else if (COMPLETE.getActionName()
                            .equals(actionData.getAction())) {
+            if (bpmService.retireIfRecordGone(id)) {
+                // The same refusal as the Inbox's (issue #8108).
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                     .body(BpmInboxEndpoint.RECORD_GONE);
+            }
             bpmService.completeTask(id, actionData.getData());
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)

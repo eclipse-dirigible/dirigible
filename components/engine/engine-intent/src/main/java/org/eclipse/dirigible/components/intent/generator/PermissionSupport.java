@@ -82,9 +82,11 @@ public final class PermissionSupport {
      *        {@code access.extraRoles} + {@code access.extraRolesReadOnly})
      * @param extraWrite the deployment's roles every write gate admits besides its own
      *        ({@code .settings} {@code access.extraRoles})
+     * @param exclusive the resources an {@code exclusive: true} permission binds: their gates are the
+     *        module's roles only, the deployment's extras never appended (issue #8112)
      */
     public record Gates(Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories,
-            List<String> extraRead, List<String> extraWrite) {
+            List<String> extraRead, List<String> extraWrite, Set<String> exclusive) {
 
         /** Whether any {@code can:} token named this resource, i.e. whether it has authored gates. */
         public boolean covers(String resource) {
@@ -103,34 +105,39 @@ public final class PermissionSupport {
 
         /**
          * A read gate as the generated surfaces check it: the given comma-separated roles followed by the
-         * deployment's extra read roles. The gate's own roles stay FIRST - the template layer declares a
-         * gate's first role as its default role, and the extras are declared in {@code <intent>.roles}.
+         * deployment's extra read roles - none for an {@link #exclusive} resource. The gate's own roles
+         * stay FIRST - the template layer declares a gate's first role as its default role, and the extras
+         * are declared in {@code <intent>.roles}.
          *
+         * @param resource the resource whose gate this is (the one its authored roles are bound to)
          * @param gate the gate's own comma-separated roles (authored or convention)
          * @return the gate with the extras appended, without repeats
          */
-        public String appendRead(String gate) {
-            return String.join(",", appendRead(List.of(gate.split(","))));
+        public String appendRead(String resource, String gate) {
+            return String.join(",", appendRead(resource, List.of(gate.split(","))));
         }
 
         /**
-         * A write gate as the generated surfaces check it - see {@link #appendRead(String)}.
+         * A write gate as the generated surfaces check it - see {@link #appendRead(String, String)}.
          *
+         * @param resource the resource whose gate this is (the one its authored roles are bound to)
          * @param gate the gate's own comma-separated roles (authored or convention)
          * @return the gate with the extras appended, without repeats
          */
-        public String appendWrite(String gate) {
-            return String.join(",", append(List.of(gate.split(",")), extraWrite));
+        public String appendWrite(String resource, String gate) {
+            return String.join(",", append(List.of(gate.split(",")), exclusive.contains(resource) ? List.of() : extraWrite));
         }
 
         /**
-         * The given read roles followed by the deployment's extra read roles.
+         * The given read roles followed by the deployment's extra read roles - none for an
+         * {@link #exclusive} resource.
          *
+         * @param resource the resource whose gate this is (the one its authored roles are bound to)
          * @param roles the gate's own roles
          * @return the roles with the extras appended, without repeats
          */
-        public List<String> appendRead(Collection<String> roles) {
-            return append(roles, extraRead);
+        public List<String> appendRead(String resource, Collection<String> roles) {
+            return append(roles, exclusive.contains(resource) ? List.of() : extraRead);
         }
 
         /** Every extra role the deployment appends to some gate - what {@code <intent>.roles} declares. */
@@ -144,8 +151,9 @@ public final class PermissionSupport {
          * The write gate of an entity as every generated surface checks it: the roles a {@code can:} token
          * authors for the entity (or, for a composition child without its own, for its composition root),
          * else the convention role {@code <project>.<root>.<Entity>FullAccess} - and the deployment's extra
-         * write roles after either. The entity's REST controller and anything else that writes its rows on
-         * a user's behalf (a file import's upload) must agree on it.
+         * write roles after either, unless that grant is {@code exclusive}. The entity's REST controller
+         * and anything else that writes its rows on a user's behalf (a file import's upload) must agree on
+         * it.
          *
          * @param projectName the project the convention role is prefixed with
          * @param rolePerspective the entity's composition root (the entity itself when it is one)
@@ -155,14 +163,15 @@ public final class PermissionSupport {
         public String writeGate(String projectName, String rolePerspective, String entity) {
             String gateName = covers(entity) ? entity : rolePerspective;
             String authored = covers(gateName) ? writeRoles(gateName) : null;
-            return appendWrite(authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "FullAccess");
+            return appendWrite(gateName, authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "FullAccess");
         }
 
         /**
          * The read gate of an entity as the EDM emits it ({@code roleRead}): the roles a {@code can:} token
          * grants read on the entity (or, for a composition child without its own, on its composition root),
          * else the convention role {@code <project>.<root>.<Entity>ReadOnly} - and the deployment's extra
-         * read roles after either. The generated controller admits the write gate on a read as well.
+         * read roles after either, unless that grant is {@code exclusive}. The generated controller admits
+         * the write gate on a read as well.
          *
          * @param projectName the project the convention role is prefixed with
          * @param rolePerspective the entity's composition root (the entity itself when it is one)
@@ -172,7 +181,7 @@ public final class PermissionSupport {
         public String readGate(String projectName, String rolePerspective, String entity) {
             String gateName = covers(entity) ? entity : rolePerspective;
             String authored = covers(gateName) ? readRoles(gateName) : null;
-            return appendRead(authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "ReadOnly");
+            return appendRead(gateName, authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "ReadOnly");
         }
 
         private static List<String> append(Collection<String> roles, List<String> extras) {
@@ -214,30 +223,35 @@ public final class PermissionSupport {
         Set<String> gateBearing = gateBearingResources(model);
         Set<String> declared = declaredResources(model);
         Set<String> actionBound = actionBoundTokens(model);
+        Set<String> exclusive = new LinkedHashSet<>();
         for (PermissionIntent permission : model.getPermissions()) {
             String role = permission.getRole();
             if (role == null || role.isBlank()) {
                 continue;
             }
             for (String token : permission.getCan()) {
-                bind(role.trim(), token, gateBearing, declared, actionBound, read, write, issues, advisories);
+                String bound = bind(role.trim(), token, gateBearing, declared, actionBound, read, write, issues, advisories);
+                if (bound != null && permission.isExclusive()) {
+                    exclusive.add(bound);
+                }
             }
         }
         List<String> extraWrite = settings == null ? List.of() : settings.extraRoles();
         List<String> extraRead = settings == null ? List.of() : Gates.append(extraWrite, settings.extraRolesReadOnly());
         return new Gates(Collections.unmodifiableMap(read), Collections.unmodifiableMap(write), Collections.unmodifiableList(issues),
-                Collections.unmodifiableList(advisories), extraRead, extraWrite);
+                Collections.unmodifiableList(advisories), extraRead, extraWrite, Collections.unmodifiableSet(exclusive));
     }
 
-    private static void bind(String role, String token, Set<String> gateBearing, Set<String> declared, Set<String> actionBound,
+    /** Binds one token into the gates; returns the resource it bound, or null when it bound none. */
+    private static String bind(String role, String token, Set<String> gateBearing, Set<String> declared, Set<String> actionBound,
             Map<String, Set<String>> read, Map<String, Set<String>> write, List<String> issues, List<String> advisories) {
         if (token == null || token.isBlank()) {
-            return;
+            return null;
         }
         int colon = token.indexOf(':');
         if (colon < 0) {
             // The parser refuses a malformed token, so generation only ever sees `Resource:action`.
-            return;
+            return null;
         }
         String resource = token.substring(0, colon)
                                .trim();
@@ -248,24 +262,24 @@ public final class PermissionSupport {
             issues.add("permission [" + role + "] can [" + token + "] names resource [" + resource
                     + "], which the intent does not declare - it gates nothing (a resource owned by another model is"
                     + " gated where it is declared)");
-            return;
+            return null;
         }
         boolean readable = READ_ACTIONS.contains(action) || ALL_ACTIONS.contains(action);
         boolean writable = WRITE_ACTIONS.contains(action) || ALL_ACTIONS.contains(action);
         if (!readable && !writable) {
             if (actionBound.contains(token.trim())) {
                 // The gate of a call action's button (issue #8090): enforced where the button is offered.
-                return;
+                return null;
             }
             advisories.add("permission [" + role + "] can [" + token + "] names action [" + action
                     + "], which maps to no generated gate (the generated surfaces gate read and write) - enforce it in a process guard"
                     + " or a hand-written custom/*.access");
-            return;
+            return null;
         }
         if (!gateBearing.contains(resource)) {
             advisories.add("permission [" + role + "] can [" + token + "] names [" + resource
                     + "], which publishes no generated read/write gate - only entities, reports and exports do");
-            return;
+            return null;
         }
         if (writable) {
             write.computeIfAbsent(resource, key -> new LinkedHashSet<>())
@@ -276,6 +290,7 @@ public final class PermissionSupport {
         // read gate names authored roles.
         read.computeIfAbsent(resource, key -> new LinkedHashSet<>())
             .add(role);
+        return resource;
     }
 
     /**

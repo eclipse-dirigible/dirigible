@@ -45,8 +45,22 @@ public interface ProcessTrigger {
      * @param id the record's primary key, as text
      * @return the started process-instance id
      * @throws IllegalArgumentException when no such record exists
-     * @throws IllegalStateException when the stamped instance is still running, when the trigger's
+     * @throws IllegalStateException when the stamped instance is still running or has completed (a
+     *         restart would run the flow again over a record it already finished), when the trigger's
      *         condition does not hold for the record, or when the start fails
      */
     String restart(String id);
+
+    /**
+     * Whether the record still exists. Asked before a task of the process is completed: a task whose
+     * record has been deleted is refused and its process retired, instead of driving the flow's steps
+     * over a row that no longer exists (issue #8108). A trigger that cannot tell answers true, which
+     * leaves its tasks to be completed as before.
+     *
+     * @param id the record's primary key, as text
+     * @return false only when the record is confirmed gone
+     */
+    default boolean recordExists(String id) {
+        return true;
+    }
 }

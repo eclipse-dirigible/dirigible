@@ -272,4 +272,32 @@ class PrintFeederSupportTest {
         assertEquals("Viewer,Clerk,Owner,Auditor", feeders.get(0)
                                                           .get("readRoles"));
     }
+
+    /**
+     * An exclusive grant keeps the deployment's extra roles off the print, as off the controller
+     * (#8112).
+     */
+    @Test
+    void anExclusiveGrantKeepsTheExtraRolesOffTheFeeder() {
+        IntentModel local = IntentParser.parse("""
+                name: payroll
+                entities:
+                  - name: Salary
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: SalaryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Salary, kind: manyToOne, to: Salary, composition: true, required: true }
+                permissions:
+                  - { role: Payroll, can: [Salary:write], exclusive: true }
+                """);
+        IntentSettings settings =
+                IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
+        List<Map<String, Object>> feeders = PrintFeederSupport.buildPrintFeeders(local, IntentEntities.byName(local),
+                IntentEntities.compositionParents(local), settings, TestContexts.context(local));
+        assertEquals("Payroll", feeders.get(0)
+                                       .get("readRoles"));
+    }
 }

@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.nio.charset.StandardCharsets;
@@ -25,6 +27,7 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
 import org.junit.jupiter.api.AfterEach;
@@ -42,7 +45,10 @@ import io.restassured.response.Response;
 
 /**
  * {@code .settings} {@code access.extraRoles} admits the deployment's roles at every generated gate
- * without displacing the convention roles - dirigible #7652.
+ * without displacing the convention roles - dirigible #7652 - except where the module says
+ * otherwise: an {@code exclusive: true} grant keeps them off its resource's gates (#8112), and a
+ * user task takes them only with {@code extraRoles: true}, never letting its submitter approve
+ * (#8111).
  *
  * <p>
  * A multitenant application runs a tenant member's request under the fixed application role
@@ -67,6 +73,10 @@ class IntentExtraRolesIT extends IntegrationTest {
     private static final String SETTINGS_PATH = PROJECT_PATH + "/" + PROJECT + ".settings";
     private static final String TICKETS = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/ticket/TicketController";
     private static final String REPORT = "/services/java/" + PROJECT + "/gen/tickettotals/api/reports/TicketTotalsController";
+    private static final String SALARIES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/salary/SalaryController";
+    private static final String SALARY_PRINT = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/SalaryPrintFeeder/";
+    private static final String LEAVES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/leaverequest/LeaveRequestController";
+    private static final String TASKS = "/services/inbox/tasks";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String PASSWORD = "extra-roles-it-password";
@@ -75,6 +85,11 @@ class IntentExtraRolesIT extends IntegrationTest {
     private static final String REPORT_READER = "report-reader";
     private static final String AUDITOR = "auditor-holder";
     private static final String STRANGER = "no-role-holder";
+    private static final String REQUESTER = "leave-requester";
+    private static final String COLLEAGUE = "tenant-colleague";
+    private static final String PAYROLL = "payroll-holder";
+    /** The other test's Owner is a user of the same context, so this one needs a name of its own. */
+    private static final String TENANT_OWNER = "tenant-owner";
 
     private static final String INTENT_YAML = """
             name: extraroles
@@ -86,12 +101,41 @@ class IntentExtraRolesIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: title,  type: string, required: true, length: 100 }
                   - { name: points, type: integer }
+              - name: Salary
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: integer }
+              - name: SalaryItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: integer }
+                relations:
+                  - { name: Salary, kind: manyToOne, to: Salary, composition: true, required: true }
+              - name: LeaveRequest
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: days, type: integer }
 
             reports:
               - name: TicketTotals
                 source: Ticket
                 dimensions: [title]
                 measures: ["sum(points)"]
+
+            processes:
+              - name: LeaveApproval
+                trigger: { onCreate: LeaveRequest }
+                steps:
+                  - { name: submit,  kind: userTask, args: { assignee: employee, form: SubmitLeave } }
+                  - { name: approve, kind: userTask, args: { assignee: manager, form: ApproveLeave, extraRoles: true } }
+
+            forms:
+              - { name: SubmitLeave,  forEntity: LeaveRequest, fields: [days], actions: [submit] }
+              - { name: ApproveLeave, forEntity: LeaveRequest, fields: [days], actions: [approve] }
+
+            permissions:
+              - { role: Employee, can: [LeaveRequest:write] }
+              - { role: Payroll,  can: [Salary:write], exclusive: true }
             """;
 
     @Autowired
@@ -108,14 +152,7 @@ class IntentExtraRolesIT extends IntegrationTest {
 
     @Test
     void every_gate_admits_the_extra_roles_and_the_convention_roles_keep_working() {
-        writeIntent();
-        // The first Generate scaffolds the developer-owned .settings; the deployment then adds its roles
-        // to it, as a developer would, and the second Generate binds them.
-        generateProject();
-        addExtraRolesToSettings();
-        generateProject();
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
+        generateAndPublish();
 
         securityUtil.createUserInDefaultTenant(OWNER, PASSWORD, "Owner");
         securityUtil.createUserInDefaultTenant(WRITER, PASSWORD, PROJECT + ".Ticket.TicketFullAccess");
@@ -149,6 +186,120 @@ class IntentExtraRolesIT extends IntegrationTest {
                                                  .put(TICKETS + "/" + id));
         assertStatus(STRANGER, 403, () -> given().delete(TICKETS + "/" + id));
         assertStatus(STRANGER, 403, () -> given().get(REPORT));
+    }
+
+    /**
+     * A tenant {@code User} - the role every tenant member holds - is refused what the module keeps
+     * from it: an {@code exclusive} entity (#8112), the submit task of somebody else's request, and the
+     * approval of their own (#8111).
+     */
+    @Test
+    void the_module_keeps_a_tenant_user_off_an_exclusive_entity_and_off_their_own_approval() {
+        generateAndPublish();
+        securityUtil.createUserInDefaultTenant(TENANT_OWNER, PASSWORD, "Owner");
+        securityUtil.createUserInDefaultTenant(COLLEAGUE, PASSWORD, "User");
+        securityUtil.createUserInDefaultTenant(REQUESTER, PASSWORD, "User");
+        securityUtil.assignRoleToUser(REQUESTER, DirigibleTestTenant.createDefaultTenant()
+                                                                    .getId(),
+                "Employee");
+        securityUtil.createUserInDefaultTenant(PAYROLL, PASSWORD, "Payroll");
+
+        // An exclusive grant: the gates are the module's roles only, read and write alike.
+        String salary = "{\"Amount\":1000}";
+        assertStatus(COLLEAGUE, 403, () -> given().contentType("application/json")
+                                                  .body(salary)
+                                                  .post(SALARIES));
+        assertStatus(TENANT_OWNER, 403, () -> given().contentType("application/json")
+                                                     .body(salary)
+                                                     .post(SALARIES));
+        assertStatus(COLLEAGUE, 403, () -> given().get(SALARIES));
+        AtomicInteger payslip = new AtomicInteger();
+        restAssuredExecutor.execute(() -> payslip.set(given().contentType("application/json")
+                                                             .body(salary)
+                                                             .when()
+                                                             .post(SALARIES)
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")),
+                PAYROLL, PASSWORD, TIMEOUT_SECONDS);
+        // Its print demands the same read gate (#7921), so the deployment's role is refused there too.
+        assertStatus(TENANT_OWNER, 403, () -> given().get(SALARY_PRINT + payslip.get()));
+        assertStatus(PAYROLL, 200, () -> given().get(SALARY_PRINT + payslip.get()));
+
+        // The submit task names a role: the deployment's tenant roles are not its candidates, so a
+        // colleague cannot submit somebody else's request.
+        int leave = createLeave();
+        String submit = taskFor(leave, "Submit");
+        // A completion is attempted ONCE: a retried 200 would have completed the task, and the retry would
+        // then be refused for a task that is gone.
+        restAssuredExecutor.execute(() -> complete(submit, "submit").then()
+                                                                    .statusCode(403),
+                "localhost", COLLEAGUE, PASSWORD);
+        restAssuredExecutor.execute(() -> complete(submit, "submit").then()
+                                                                    .statusCode(200),
+                "localhost", REQUESTER, PASSWORD);
+
+        // The approval opts in to them - and still refuses the one who submitted.
+        String approve = taskFor(leave, "Approve");
+        restAssuredExecutor.execute(() -> complete(approve, "approve").then()
+                                                                      .statusCode(403)
+                                                                      .body(containsString("You cannot approve your own leave request")),
+                "localhost", REQUESTER, PASSWORD);
+        restAssuredExecutor.execute(() -> complete(approve, "approve").then()
+                                                                      .statusCode(200),
+                "localhost", COLLEAGUE, PASSWORD);
+    }
+
+    private int createLeave() {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body("{\"Days\":3}")
+                                                        .when()
+                                                        .post(LEAVES)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")),
+                REQUESTER, PASSWORD, TIMEOUT_SECONDS);
+        return id.get();
+    }
+
+    /**
+     * The open task of this request's instance with the given name, as the administrator's Inbox lists
+     * it.
+     */
+    private String taskFor(int leave, String name) {
+        String match = "find { it.processInstanceBusinessKey == '" + leave + "' && it.name == '" + name + "' }";
+        AtomicReference<String> task = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> task.set(given().when()
+                                                          .get(TASKS + "?type=groups")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .body(match, notNullValue())
+                                                          .extract()
+                                                          .path(match + ".id")),
+                TIMEOUT_SECONDS);
+        return task.get();
+    }
+
+    /** Completes the task with the one action its form offers. */
+    private static Response complete(String task, String action) {
+        return given().contentType("application/json")
+                      .body("{\"action\":\"COMPLETE\",\"data\":{\"action\":\"" + action + "\"}}")
+                      .post(TASKS + "/" + task);
+    }
+
+    /** Generate twice around the deployment's .settings edit, then publish. */
+    private void generateAndPublish() {
+        writeIntent();
+        // The first Generate scaffolds the developer-owned .settings; the deployment then adds its roles
+        // to it, as a developer would, and the second Generate binds them.
+        generateProject();
+        addExtraRolesToSettings();
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     /** List, create, update and delete of the generated entity, all as the given holder. */
@@ -190,6 +341,11 @@ class IntentExtraRolesIT extends IntegrationTest {
         access.add("extraRoles", roles("Owner", "User"));
         access.add("extraRolesReadOnly", roles("Auditor"));
         settings.add("access", access);
+        // What a multitenant deployment lists so its tenant members can take tasks at all - and what made
+        // every one of them a candidate for every task before #8111.
+        JsonObject userTasks = new JsonObject();
+        userTasks.add("candidateGroupsExtra", roles("ADMINISTRATOR", "Owner", "User"));
+        settings.add("userTasks", userTasks);
         Gson gson = new GsonBuilder().setPrettyPrinting()
                                      .create();
         settingsFile.setContent(gson.toJson(settings)

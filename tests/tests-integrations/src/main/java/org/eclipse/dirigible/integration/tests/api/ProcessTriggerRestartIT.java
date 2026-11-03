@@ -35,9 +35,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * generated trigger distrusts a stamp naming an instance that is neither running nor in the history
  * and starts a new one on the next qualifying event; and for the records no event will touch again,
  * {@code POST /services/bpm/bpm-processes/restart} re-runs the trigger - refused while the stamped
- * instance is still running, starting and re-stamping once it is not. The intent is generated,
- * published and compiled as a developer's would be, so the trigger under test is the real generated
- * one.
+ * instance is still running or once it has completed (#8189), starting and re-stamping once it was
+ * cancelled. The intent is generated, published and compiled as a developer's would be, so the
+ * trigger under test is the real generated one.
  */
 class ProcessTriggerRestartIT extends IntegrationTest {
 
@@ -112,9 +112,8 @@ class ProcessTriggerRestartIT extends IntegrationTest {
                                                  .post(RESTART_URL + "?process=" + PROCESS + "&id=" + id)
                                                  .then()
                                                  .statusCode(409)
-                                                 .body("message",
-                                                         equalTo("Ticket [" + id + "] still has its " + PROCESS + " instance [" + second
-                                                                 + "] running - complete or cancel it before restarting")),
+                                                 .body("message", equalTo("Ticket [" + id + "] still has its " + PROCESS + " instance ["
+                                                         + second + "] running - cancel it before restarting")),
                 ASSERTION_TIMEOUT_SECONDS);
 
         // Cancelled (and so in the history): no event will touch the record again, the restart
@@ -140,6 +139,25 @@ class ProcessTriggerRestartIT extends IntegrationTest {
                                      .processInstanceId(third)
                                      .count(),
                 "the restarted instance runs");
+
+        // Completed: the flow already moved the record to the status it ends in, and a restart would
+        // run every step again over it - a posted entry rejected, a paid run paid twice (#8189).
+        processEngine.getTaskService()
+                     .complete(processEngine.getTaskService()
+                                            .createTaskQuery()
+                                            .processInstanceId(third)
+                                            .singleResult()
+                                            .getId());
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(RESTART_URL + "?process=" + PROCESS + "&id=" + id)
+                                                 .then()
+                                                 .statusCode(409)
+                                                 .body("message",
+                                                         equalTo("Ticket [" + id + "] already completed its " + PROCESS + " instance ["
+                                                                 + third
+                                                                 + "] - a restart would run the flow again over the finished record")),
+                ASSERTION_TIMEOUT_SECONDS);
+        assertEquals(third, processIdOf(id), "a refused restart leaves the stamp alone");
 
         // The two misses an operator can make.
         restAssuredExecutor.execute(() -> given().when()

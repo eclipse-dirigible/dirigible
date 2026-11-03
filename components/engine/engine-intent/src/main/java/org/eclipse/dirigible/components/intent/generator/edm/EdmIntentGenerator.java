@@ -215,6 +215,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> exportLedgers = ExportSupport.ledgerEntities(model);
         Set<String> normalisingLedgers = ExportSupport.normalisingLedgers(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
+        Map<String, Set<String>> rollupTargets = rollupTargetProperties(model, byName);
         // The status ids a button or a workflow step moves each entity to - what an ungated, status-
         // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
         // generator reads it through.
@@ -586,6 +587,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 Map<String, Object> property = propertyMap(name, field);
+                // A roll-up target is derived whether or not the author wrote readOnly (#8442): the flag
+                // is what keeps it out of a REST create and preserves it on a full-row update, while the
+                // roll-up handler writes it through the targeted updateDerived.
+                if (rollupTargets.getOrDefault(name, Set.of())
+                                 .contains(IntentNaming.pascalCase(field.getName()))) {
+                    property.put("isReadOnlyProperty", "true");
+                }
                 // A scalar field with dependsOn is auto-populated from the trigger's target record
                 // (no filterBy - there is no option list to narrow).
                 putDependsOn(property, entity, field.getDependsOn(), null, null, byName, usesByAlias, context);
@@ -1025,6 +1033,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * payment's amount - so every capacity-bearing roll-up naming the entity contributes a guard and
      * the value is a list. Capping it at one silently generated the roll-up while dropping its declared
      * guard, leaving the model reading as guarded and the runtime unguarded (#7448).
+     *
+     * <p>
+     * Every sum roll-up onto a LOCAL parent also stamps a fit guard ({@code fitField}, no capacity):
+     * the asynchronous recompute writes the sum into the parent's column, and a sum the column cannot
+     * hold killed that handler for good while every child write answered 200 (#8096). The child's
+     * repository re-sums synchronously and asks the parent's {@code requireFits} before it stores
+     * anything. A foreign parent's column is bounded by its owner's repository, so it gets none.
      */
     private static Map<String, List<Map<String, Object>>> buildRollupGuards(IntentGenerationContext context, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, Map<String, UsesIntent> usesByAlias) {
@@ -1036,15 +1051,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (rollup.isCrossModelChild()) {
                 continue;
             }
-            if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
-                                                                                       .isBlank()
-                    || rollup.getOf() == null || rollup.getOf()
-                                                       .isBlank()) {
+            if (!"sum".equals(rollup.getOp()) || rollup.getOf() == null || rollup.getOf()
+                                                                                 .isBlank()) {
                 continue;
             }
+            boolean withCapacity = notBlank(rollup.getCapacity());
             EntityIntent child = byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-            if (via == null) {
+            if (via == null || (!withCapacity && notBlank(via.getModel()))) {
                 continue;
             }
             // A cross-model PARENT carries the guard just the same (#7410): the check is a READ of the
@@ -1077,6 +1091,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 parentEntity = parent.getName();
                 parentPerspective = IntentEntities.resolvePerspective(parent.getName(), compositionParents, model);
             }
+            List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
+            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
+            if (parentGenFolder.isEmpty()) {
+                Map<String, Object> fit = new LinkedHashMap<>();
+                fit.put("parentEntity", parentEntity);
+                fit.put("parentPerspective", parentPerspective);
+                fit.put("parentGenFolder", "");
+                fit.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
+                fit.put("fitField", IntentNaming.pascalCase(rollup.getField()));
+                fit.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+                fit.put("childIdField", "Id");
+                if (!filter.isEmpty()) {
+                    fit.put("filter", filter);
+                }
+                if (!forChild.contains(fit)) {
+                    forChild.add(fit);
+                }
+            }
+            if (!withCapacity) {
+                continue;
+            }
             Map<String, Object> guard = new LinkedHashMap<>();
             guard.put("parentEntity", parentEntity);
             guard.put("parentPerspective", parentPerspective);
@@ -1091,7 +1126,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // stored balance and the enforced ceiling are one authored definition - the guard re-sums
             // synchronously from the child's own store, and a row the filter excludes must be excluded
             // from that sum too, or the two disagree by exactly the rows the author retired.
-            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
             if (!filter.isEmpty()) {
                 guard.put("filter", filter);
             }
@@ -1111,7 +1145,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Two roll-ups may name the same relation and capacity column (a sum and a count of the same
             // allocation, say). The guard they describe is one and the same check, so it is emitted once -
             // twice would refuse nothing extra and only duplicate the parent's import.
-            List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
             if (!forChild.contains(guard)) {
                 forChild.add(guard);
             }
@@ -1313,6 +1346,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // The deployment's extra roles (.settings access.extraRoles) are appended AFTER the gate's own
         // roles and never suppress them: a convention gate keeps its roles declared (the template layer
         // declares a gate's first role), so assignments made in the Security perspective keep working.
+        // An `exclusive` grant takes none of them (#8112).
         entity.put("roleRead", gates.readGate(projectName, rolePerspective, name));
         entity.put("roleWrite", gates.writeGate(projectName, rolePerspective, name));
         return entity;
@@ -1756,12 +1790,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("isReadOnlyProperty", "true");
         }
         // Set on create, fixed afterwards (#8363): the same two scalars as a fixed to-one relation
-        // (#7903, putFixedAfterCreate) - the controllers refuse a changed value with a 409 under
+        // (#7903, putFixedRelation) - the controllers refuse a changed value with a 409 under
         // checks.<Entity>_fixed_<Field>, the forms render the input read-only on edit.
         if (field.isFixedAfterCreate()) {
             p.put("fixedAfterCreate", "true");
             p.put("fixedAfterCreateMessage",
                     "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change once the " + entityName + " is created");
+        }
+        // Fixed while referenced (#8194): the same two-scalar shape - the controllers refuse a changed
+        // value with a 409 under checks.<Entity>_fixedWhenReferenced_<Field> once another record
+        // references the row.
+        if (field.isFixedWhenReferenced()) {
+            p.put("fixedWhenReferenced", "true");
+            p.put("fixedWhenReferencedMessage",
+                    "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change while other records reference this " + entityName);
         }
         // A uuid field is platform-generated: the generated repository assigns a random UUID on create
         // when the value is empty (no hand-written calculatedActionOnCreate needed). The author can
@@ -1981,15 +2023,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (!"sum".equals(rollup.getOp()) || !notBlank(rollup.getCapacity()) || !notBlank(rollup.getStatus())) {
                 continue;
             }
-            String parentName;
-            if (rollup.isCrossModelChild()) {
-                parentName = rollup.getParent();
-            } else {
-                EntityIntent child = byName.get(rollup.getEntity());
-                RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-                parentName = via == null || notBlank(via.getModel()) ? null : via.getTo();
-            }
-            if (parentName == null || !byName.containsKey(parentName)) {
+            String parentName = localRollupParent(rollup, byName);
+            if (parentName == null) {
                 continue; // the parser already reported the bad reference
             }
             List<String> statuses = byParent.computeIfAbsent(parentName, ignored -> new ArrayList<>());
@@ -1999,6 +2034,48 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return byParent;
+    }
+
+    /**
+     * The fields of each LOCAL parent that a roll-up writes, by parent entity name (#8442): its
+     * {@code field:} (every op) and, for a capacity sum, its {@code balance:} - the columns the roll-up
+     * handler's {@code updateDerived} maintains. They are derived, so they are read-only whether or not
+     * the author declared {@code readOnly: true}; a cross-model parent's fields belong to the model
+     * that owns it.
+     */
+    private static Map<String, Set<String>> rollupTargetProperties(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, Set<String>> byParent = new LinkedHashMap<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            String parentName = localRollupParent(rollup, byName);
+            if (parentName == null) {
+                continue; // a cross-model parent, or a bad reference the parser already reported
+            }
+            Set<String> targets = byParent.computeIfAbsent(parentName, ignored -> new LinkedHashSet<>());
+            if (notBlank(rollup.getField())) {
+                targets.add(IntentNaming.pascalCase(rollup.getField()));
+            }
+            if ("sum".equals(rollup.getOp()) && notBlank(rollup.getCapacity()) && notBlank(rollup.getBalance())) {
+                targets.add(IntentNaming.pascalCase(rollup.getBalance()));
+            }
+        }
+        return byParent;
+    }
+
+    /**
+     * The roll-up's parent when this model owns it: the target of the child's {@code via} relation, or
+     * the {@code parent:} a cross-model child names. Null for a parent in another model and for a
+     * reference that does not resolve.
+     */
+    private static String localRollupParent(RollupIntent rollup, Map<String, EntityIntent> byName) {
+        String parentName;
+        if (rollup.isCrossModelChild()) {
+            parentName = rollup.getParent();
+        } else {
+            EntityIntent child = byName.get(rollup.getEntity());
+            RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+            parentName = via == null || notBlank(via.getModel()) ? null : via.getTo();
+        }
+        return parentName != null && byName.containsKey(parentName) ? parentName : null;
     }
 
     /**
@@ -2133,7 +2210,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
-        putFixedAfterCreate(p, ownerEntity, relation);
+        putFixedRelation(p, ownerEntity, relation);
         putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
@@ -2242,7 +2319,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                    .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
-        putFixedAfterCreate(p, ownerEntity, relation);
+        putFixedRelation(p, ownerEntity, relation);
         putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
     }
@@ -2252,15 +2329,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * which the REST controllers refuse a changed value of on update and the forms render read-only on
      * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
      * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
-     * catalog translates it like any check message. Nothing is emitted for an ordinary relation.
+     * catalog translates it like any check message. A {@code fixedWhenReferenced: true} relation
+     * (#8194) is emitted the same way as {@code fixedWhenReferenced} +
+     * {@code fixedWhenReferencedMessage}, under {@code checks.<Entity>_fixedWhenReferenced_<Relation>},
+     * as the field key is. Nothing is emitted for an ordinary relation.
      */
-    private static void putFixedAfterCreate(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
-        if (!relation.isFixedAfterCreate()) {
-            return;
+    private static void putFixedRelation(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
+        String name = IntentNaming.pascalCase(relation.getName());
+        if (relation.isFixedAfterCreate()) {
+            p.put("fixedAfterCreate", "true");
+            p.put("fixedAfterCreateMessage", "'" + name + "' cannot change once the " + ownerEntity + " is created");
         }
-        p.put("fixedAfterCreate", "true");
-        p.put("fixedAfterCreateMessage",
-                "'" + IntentNaming.pascalCase(relation.getName()) + "' cannot change once the " + ownerEntity + " is created");
+        if (relation.isFixedWhenReferenced()) {
+            p.put("fixedWhenReferenced", "true");
+            p.put("fixedWhenReferencedMessage", "'" + name + "' cannot change while other records reference this " + ownerEntity);
+        }
     }
 
     /**

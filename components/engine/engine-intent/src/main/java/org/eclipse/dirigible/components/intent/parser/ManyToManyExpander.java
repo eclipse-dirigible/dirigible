@@ -205,6 +205,9 @@ final class ManyToManyExpander {
         if (relation.isFixedAfterCreate()) {
             unsupported.add("fixedAfterCreate");
         }
+        if (relation.isFixedWhenReferenced()) {
+            unsupported.add("fixedWhenReferenced");
+        }
         return unsupported;
     }
 
