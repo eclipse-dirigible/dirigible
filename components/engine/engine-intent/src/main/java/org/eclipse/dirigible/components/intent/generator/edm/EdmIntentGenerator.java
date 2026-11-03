@@ -1025,6 +1025,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * payment's amount - so every capacity-bearing roll-up naming the entity contributes a guard and
      * the value is a list. Capping it at one silently generated the roll-up while dropping its declared
      * guard, leaving the model reading as guarded and the runtime unguarded (#7448).
+     *
+     * <p>
+     * Every sum roll-up onto a LOCAL parent also stamps a fit guard ({@code fitField}, no capacity):
+     * the asynchronous recompute writes the sum into the parent's column, and a sum the column cannot
+     * hold killed that handler for good while every child write answered 200 (#8096). The child's
+     * repository re-sums synchronously and asks the parent's {@code requireFits} before it stores
+     * anything. A foreign parent's column is bounded by its owner's repository, so it gets none.
      */
     private static Map<String, List<Map<String, Object>>> buildRollupGuards(IntentGenerationContext context, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, Map<String, UsesIntent> usesByAlias) {
@@ -1036,15 +1043,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (rollup.isCrossModelChild()) {
                 continue;
             }
-            if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
-                                                                                       .isBlank()
-                    || rollup.getOf() == null || rollup.getOf()
-                                                       .isBlank()) {
+            if (!"sum".equals(rollup.getOp()) || rollup.getOf() == null || rollup.getOf()
+                                                                                 .isBlank()) {
                 continue;
             }
+            boolean withCapacity = notBlank(rollup.getCapacity());
             EntityIntent child = byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
-            if (via == null) {
+            if (via == null || (!withCapacity && notBlank(via.getModel()))) {
                 continue;
             }
             // A cross-model PARENT carries the guard just the same (#7410): the check is a READ of the
@@ -1077,6 +1083,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 parentEntity = parent.getName();
                 parentPerspective = IntentEntities.resolvePerspective(parent.getName(), compositionParents, model);
             }
+            List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
+            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
+            if (parentGenFolder.isEmpty()) {
+                Map<String, Object> fit = new LinkedHashMap<>();
+                fit.put("parentEntity", parentEntity);
+                fit.put("parentPerspective", parentPerspective);
+                fit.put("parentGenFolder", "");
+                fit.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
+                fit.put("fitField", IntentNaming.pascalCase(rollup.getField()));
+                fit.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+                fit.put("childIdField", "Id");
+                if (!filter.isEmpty()) {
+                    fit.put("filter", filter);
+                }
+                if (!forChild.contains(fit)) {
+                    forChild.add(fit);
+                }
+            }
+            if (!withCapacity) {
+                continue;
+            }
             Map<String, Object> guard = new LinkedHashMap<>();
             guard.put("parentEntity", parentEntity);
             guard.put("parentPerspective", parentPerspective);
@@ -1091,7 +1118,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // stored balance and the enforced ceiling are one authored definition - the guard re-sums
             // synchronously from the child's own store, and a row the filter excludes must be excluded
             // from that sum too, or the two disagree by exactly the rows the author retired.
-            List<Map<String, Object>> filter = ScheduleSupport.conditions(rollup.getWhere());
             if (!filter.isEmpty()) {
                 guard.put("filter", filter);
             }
@@ -1111,7 +1137,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Two roll-ups may name the same relation and capacity column (a sum and a count of the same
             // allocation, say). The guard they describe is one and the same check, so it is emitted once -
             // twice would refuse nothing extra and only duplicate the parent's import.
-            List<Map<String, Object>> forChild = guards.computeIfAbsent(rollup.getEntity(), ignored -> new ArrayList<>());
             if (!forChild.contains(guard)) {
                 forChild.add(guard);
             }

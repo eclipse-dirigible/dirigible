@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 class EdmRollupGuardTest {
 
     @SuppressWarnings("unchecked")
-    private static List<Map<String, Object>> guardsOf(String yaml, String childEntity) {
+    private static List<Map<String, Object>> allGuardsOf(String yaml, String childEntity) {
         Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "test");
         List<Map<String, Object>> entities = (List<Map<String, Object>>) ((Map<String, Object>) json.get("model")).get("entities");
         for (Map<String, Object> entity : entities) {
@@ -39,6 +39,18 @@ class EdmRollupGuardTest {
             }
         }
         return null;
+    }
+
+    /** The capacity guards - the fit guards every local sum roll-up adds (#8096) left out. */
+    private static List<Map<String, Object>> guardsOf(String yaml, String childEntity) {
+        List<Map<String, Object>> guards = allGuardsOf(yaml, childEntity);
+        if (guards == null) {
+            return null;
+        }
+        List<Map<String, Object>> capacity = guards.stream()
+                                                   .filter(guard -> guard.get("capacityField") != null)
+                                                   .toList();
+        return capacity.isEmpty() ? null : capacity;
     }
 
     /** The single guard of a child that carries exactly one. */
@@ -272,6 +284,32 @@ class EdmRollupGuardTest {
         assertEquals("3", ((Map<?, ?>) filter.get(0)
                                              .get("value")).get("text"),
                 "the CANCELLED name resolves to its seed id like every other status site");
+    }
+
+    /**
+     * #8096: every sum roll-up onto a local parent - capacity or not - stamps a fit guard naming the
+     * parent column the total lands in, carrying the roll-up's own filter; a foreign parent's column is
+     * its owner's to bound, so a sum onto one stamps none.
+     */
+    @Test
+    void aSumOntoALocalParentStampsAFitGuardWithItsFilter() {
+        List<Map<String, Object>> fits = allGuardsOf(FILTERED.substring(0, FILTERED.indexOf("    capacity: ceiling"))
+                + FILTERED.substring(FILTERED.indexOf("    where:"), FILTERED.indexOf("    guardAt:")), "CallOff");
+        assertNotNull(fits, "a sum roll-up onto a local parent must stamp a fit guard");
+        assertEquals(1, fits.size(), "the fit guard alone - no capacity was declared: " + fits);
+        Map<String, Object> fit = fits.get(0);
+        assertEquals("Committed", fit.get("fitField"));
+        assertEquals("Contract", fit.get("parentEntity"));
+        assertEquals("", fit.get("parentGenFolder"));
+        assertEquals("Contract", fit.get("fkProperty"));
+        assertEquals("Total", fit.get("ofField"));
+        assertNull(fit.get("capacityField"));
+        assertNull(fit.get("guardStatusProperty"), "a total must fit whatever the status - the recompute runs on every write");
+        assertNotNull(fit.get("filter"), "the rows the roll-up sums are the rows the fit is projected over");
+
+        assertEquals(2, allGuardsOf(LOCAL, "SalesInvoicePayment").size(), "a capacity roll-up keeps its guard and gains the fit");
+        assertNull(allGuardsOf(CROSS_MODEL_PARENT.replace(", capacity: amount, balance: unapplied", ""), "SalesInvoiceCustomerPayment"),
+                "a foreign parent is bounded by its owner");
     }
 
     /** A roll-up declaring neither key is byte-identical: no filter, no gate, no message. */

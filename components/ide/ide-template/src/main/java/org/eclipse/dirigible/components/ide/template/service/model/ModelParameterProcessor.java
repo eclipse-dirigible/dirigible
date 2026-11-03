@@ -620,6 +620,27 @@ final class ModelParameterProcessor {
     }
 
     /**
+     * Hands every bounded derived column (#8096) the arguments of its refusal - the catalog key the
+     * en-US catalog writes it under and the default-language text - for the repository's
+     * {@code requireFits}. Run by {@code ModelGenerator} once it has marked the columns, which is after
+     * {@link #process}.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    static void resolveOverflowChecks(Map<String, Object> entity, Map<String, Object> parameters) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String messageKey = ModelTranslations.overflowMessageKey(entity, property);
+            if (messageKey != null) {
+                String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+                property.put("overflowMessageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+                        + JavaLiterals.escape(ModelTranslations.overflowMessage(entity, property)) + "\"");
+                entity.put("hasOverflowChecks", Boolean.TRUE);
+            }
+        }
+    }
+
+    /**
      * Normalizes the seeded status names a lifecycle refusal quotes into the escaped entries the
      * generated repository builds its lookup map from.
      *
@@ -2603,7 +2624,7 @@ final class ModelParameterProcessor {
      * @param name the property name, may be null
      * @return the property, or null
      */
-    private static Map<String, Object> findProperty(Map<String, Object> entity, String name) {
+    static Map<String, Object> findProperty(Map<String, Object> entity, String name) {
         if (name == null) {
             return null;
         }

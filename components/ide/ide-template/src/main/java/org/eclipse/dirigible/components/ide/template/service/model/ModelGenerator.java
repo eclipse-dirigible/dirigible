@@ -132,6 +132,10 @@ class ModelGenerator {
         List<Map<String, Object>> entities = asMaps(model.get("entities"));
         annotateDocumentModels(entities);
         annotateGuardedRollups(entities);
+        // After both: they mark the bounded totals (#8096).
+        for (Map<String, Object> entity : entities) {
+            ModelParameterProcessor.resolveOverflowChecks(entity, parameters);
+        }
         applyDefaultEntityLabels(entities);
         // After the labels: a refusal message names the child by the label the UI shows.
         CompositionChildren.annotate(entities);
@@ -627,18 +631,51 @@ class ModelGenerator {
             // these columns - or the FK itself, which moves the line between documents.
             documentItem.put("fields", new ArrayList<>(fields));
             child.put("documentItem", documentItem);
+            // Every column a line's write resums - the totals and the expressions derived from them - is
+            // bounded before the header is written, so a total its column cannot hold refuses the line
+            // with a message instead of failing the statement (#8096).
+            for (Map<String, Object> property : asMaps(master.get("properties"))) {
+                boolean total = "true".equals(property.get("aggregate")) && childFieldNames.contains(str(property, "name"));
+                boolean derived = ModelValues.isTrue(property, "isCalculatedProperty")
+                        && truthy(property, "calculatedPropertyExpressionUpdate") && !truthy(property, "calculatedActionOnUpdate");
+                if (total || derived) {
+                    markOverflowChecked(property);
+                }
+            }
         }
+    }
+
+    /**
+     * Marks a decimal column a derived write fills - a document total, a roll-up target - so its
+     * repository renders the bound check ({@code requireFits}) and its catalog the refusal (#8096). A
+     * column with no declared precision is left to the database.
+     *
+     * @param property the property, may be null
+     * @return whether the property is now marked
+     */
+    private static boolean markOverflowChecked(Map<String, Object> property) {
+        if (property == null || !"DECIMAL".equalsIgnoreCase(str(property, "dataType")) || !truthy(property, "dataPrecision")
+                || !truthy(property, "dataScale")) {
+            return false;
+        }
+        property.put("overflowChecked", "true");
+        return true;
     }
 
     /**
      * Sanitizes the parent perspective of every capacity guard into the package segment the repository
      * imports the parent from - and, for a guard whose parent is owned by ANOTHER model, that model's
      * alias into the gen folder its generated code lives under. An entity carries one guard per
-     * capacity-bearing roll-up, so a junction guarded on both its parents carries two (#7448).
+     * capacity-bearing roll-up, so a junction guarded on both its parents carries two (#7448). The
+     * parent column a fit guard bounds is marked for its own repository's {@code requireFits} (#8096).
      *
      * @param entities the entities
      */
     private static void annotateGuardedRollups(List<Map<String, Object>> entities) {
+        Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
+        for (Map<String, Object> entity : entities) {
+            byName.put(str(entity, "name"), entity);
+        }
         for (Map<String, Object> entity : entities) {
             List<Map<String, Object>> rollupGuards = asMaps(entity.get("rollupGuards"));
             if (rollupGuards.isEmpty()) {
@@ -658,6 +695,12 @@ class ModelGenerator {
                 }
                 if (truthy(rollupGuard, "parentGenFolder")) {
                     rollupGuard.put("parentGenFolder", NamingHelper.sanitizeJavaIdentifier(str(rollupGuard, "parentGenFolder")));
+                }
+                Map<String, Object> fitParent = byName.get(str(rollupGuard, "parentEntity"));
+                if (truthy(rollupGuard, "fitField") && (fitParent == null
+                        || !markOverflowChecked(ModelParameterProcessor.findProperty(fitParent, str(rollupGuard, "fitField"))))) {
+                    // No bound to check against: the parent's repository renders no requireFits to call.
+                    rollupGuard.remove("fitField");
                 }
             }
         }
