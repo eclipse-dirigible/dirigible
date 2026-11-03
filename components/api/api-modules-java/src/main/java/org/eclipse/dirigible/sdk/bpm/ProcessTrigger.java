@@ -45,7 +45,8 @@ public interface ProcessTrigger {
      * @param id the record's primary key, as text
      * @return the started process-instance id
      * @throws IllegalArgumentException when no such record exists
-     * @throws IllegalStateException when the stamped instance is still running, when the trigger's
+     * @throws IllegalStateException when the stamped instance is still running or has completed (a
+     *         restart would run the flow again over a record it already finished), when the trigger's
      *         condition does not hold for the record, or when the start fails
      */
     String restart(String id);

@@ -34,9 +34,10 @@ import jakarta.annotation.security.RolesAllowed;
  * the client bean implementing {@link ProcessTrigger} for the process and calls its
  * {@link ProcessTrigger#restart(String)}: the same variables and the same stamping the create path
  * performs, so the two cannot drift. It is refused while the stamped instance is still running - a
- * restart then would be a duplicate approval, not a repair. Lives under the monitoring surface of
- * {@code /services/bpm/bpm-processes/**} (operator, developer, administrator), next to the retry
- * and skip actions.
+ * restart then would be a duplicate approval, not a repair - and once it has completed, since the
+ * flow then already moved the record to its final status (#8189). Lives under the monitoring
+ * surface of {@code /services/bpm/bpm-processes/**} (operator, developer, administrator), next to
+ * the retry and skip actions.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_BPM + "/bpm-processes")

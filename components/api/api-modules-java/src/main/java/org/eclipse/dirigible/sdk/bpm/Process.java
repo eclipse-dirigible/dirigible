@@ -98,6 +98,21 @@ public final class Process {
         return BpmFacade.isProcessKnown(processInstanceId);
     }
 
+    /**
+     * Whether the instance ran to its end - finished by the flow itself, not cancelled. The read a
+     * restart asks before starting a record's process again: a flow that completed has already moved
+     * its record to the status it ends in, and a fresh instance would run every step again over it,
+     * while a cancelled instance (a stuck or dead-lettered one an operator cleared) left the work
+     * undone. A blank, unknown, running or cancelled id is {@code false}. With the history level
+     * configured to {@code none} an instance that is not running counts as completed.
+     *
+     * @param processInstanceId the instance to look up
+     * @return true when the instance completed
+     */
+    public static boolean isCompleted(String processInstanceId) {
+        return BpmFacade.isProcessCompleted(processInstanceId);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.getVariable(processInstanceId, variableName);
     }
