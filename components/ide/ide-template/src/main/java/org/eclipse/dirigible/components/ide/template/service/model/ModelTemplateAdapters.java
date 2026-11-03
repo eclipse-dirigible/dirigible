@@ -12,9 +12,11 @@ package org.eclipse.dirigible.components.ide.template.service.model;
 import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMap;
 import static org.eclipse.dirigible.components.ide.template.service.model.ModelValues.asMaps;
@@ -321,6 +323,7 @@ final class ModelTemplateAdapters {
             queryJavaLines.add(JavaScriptJson.compact(line));
         }
         model.put("queryJavaLines", queryJavaLines);
+        model.put("orderByJavaLiteral", JavaLiterals.escape(outerOrderBy(model)));
         if (!parameters.containsKey("extensionPoint")) {
             parameters.put("extensionPoint", parameters.get("projectName"));
         }
@@ -332,6 +335,37 @@ final class ModelTemplateAdapters {
         parameters.put("javaPerspectiveName", NamingHelper.sanitizeJavaIdentifier(str(parameters, "perspectiveName")));
         parameters.put("roles", reportRoles(model));
         return new PreparedModel(model, false);
+    }
+
+    /**
+     * The report's row order re-spelt over its OUTPUT columns, for the generated repository to re-apply
+     * when it wraps the query in the per-column filters ({@code SELECT * FROM (QUERY) AS "REPORT_DATA"
+     * WHERE ...}): an ORDER BY inside a derived table does not order the rows the outer SELECT returns,
+     * so a filtered page or dashboard tile would lose it (dirigible #8435). Only an ordering whose
+     * every term is a quoted output alias can be re-spelt outside; any other (a hand-edited ordering by
+     * a table column) leaves the outer query unordered, as before.
+     *
+     * @param model the parsed report model
+     * @return the ORDER BY terms ({@code "Month" ASC, "Total" DESC}), or empty for none
+     */
+    private static String outerOrderBy(Map<String, Object> model) {
+        Set<String> aliases = new HashSet<>();
+        for (Map<String, Object> column : asMaps(model.get("columns"))) {
+            aliases.add(strOr(column, "alias", ""));
+        }
+        List<String> terms = new ArrayList<>();
+        for (Map<String, Object> ordering : asMaps(model.get("orderings"))) {
+            String column = strOr(ordering, "column", "").trim();
+            String direction = strOr(ordering, "direction", "ASC").trim()
+                                                                  .toUpperCase(java.util.Locale.ROOT);
+            if (column.length() < 3 || !column.startsWith("\"") || !column.endsWith("\"")
+                    || !aliases.contains(column.substring(1, column.length() - 1))
+                    || !("ASC".equals(direction) || "DESC".equals(direction))) {
+                return "";
+            }
+            terms.add(column + " " + direction);
+        }
+        return String.join(", ", terms);
     }
 
     /**

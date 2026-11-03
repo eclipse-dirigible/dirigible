@@ -2065,6 +2065,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         account: LedgerAccount
                         columns: [LedgerAccount.code]
                         correspondence: LedgerAccount.code
+                      # orderBy + a relative-period filter (#8435): the debit turnover per account, largest
+                      # first, over a window spelt in moments - the seeded vouchers (2026-02) fall inside
+                      # it on any run date, so the figures are fixed while the moment SQL really runs.
+                      - name: DebitByAccount
+                        source: CashVoucherLine
+                        dimensions: [LedgerAccount.code]
+                        measures: ["sum(debit)"]
+                        filter: "debit > 0 and CashVoucher.bookedOn >= START_OF_YEAR-P100Y and CashVoucher.bookedOn < CURRENT_DATE+P1D"
+                        orderBy: [{ field: "sum(debit)", dir: desc }]
 
                     seeds:
                       - name: people
@@ -6062,6 +6071,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(-40.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(0.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
+
+        // orderBy + relative moments, end to end (#8435). The debit turnover per account is 1050 (5030),
+        // 400 (5010), 200 (2040) and 120 (4010): the report answers it largest first. The per-column
+        // filter wraps the query in a derived table, which does not keep an inner ORDER BY - the
+        // repository re-applies it outside - and the dashboard list tile's $limit then takes a real
+        // top N rather than any N rows.
+        String debitByAccount = "/services/java/" + PROJECT + "/gen/debitbyaccount/api/reports/DebitByAccountController";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(debitByAccount)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(1050.0F, 400.0F, 200.0F, 120.0F)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Sum Debit\",\"operator\":\"GT\",\"value\":150}],\"$limit\":2}")
+                                                 .when()
+                                                 .post(debitByAccount + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(1050.0F, 400.0F)));
 
         // kind: ledger, end to end (#7887): the card of the GROUP 50 over [2026-02-06, 2026-12-31].
         // Before the window the desk took +300 and the bank -120, so the card opens at 180; the five

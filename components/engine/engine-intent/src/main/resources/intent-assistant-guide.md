@@ -516,6 +516,19 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
   The field may be an own `date`/`timestamp` or a one-hop `relation.field`; thresholds must ascend and be positive.
   Prefer equal-digit thresholds - the bucket is a text label and sorts lexicographically.
+- `orderBy:` (on a report) - **the order of the report's rows**: `orderBy: [{ field: "sum(quantity)", dir: desc }]`
+  names one of the report's own `dimensions` / `measures` exactly as written, `dir` is `asc` (the default) or `desc`,
+  and `orderBy: product.name` is the one-term shorthand. A dashboard `kind: list` tile takes the FIRST rows, so a
+  "top 5" tile needs a descending `orderBy` over its measure. Absent, a report with a `month(x)` / `year(x)` dimension
+  is chronological (ascending); any other report comes back in no particular order - give a document list (overdue
+  invoices, open orders) `orderBy` over its date and a by-product list `orderBy` over the name. Not on
+  `kind: statement` / `kind: ledger`, which carry their own order.
+- relative moments in a report `filter:` - **a period without a parameter**: `CURRENT_DATE`, the period starts
+  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with one signed ISO-8601 date period -
+  `filter: "issuedOn >= START_OF_YEAR"` (year to date), `"issuedOn >= CURRENT_DATE-P30D"` (the last 30 days),
+  `"issuedOn >= START_OF_YEAR-P1Y and issuedOn < START_OF_YEAR"` (last year). Years, months, weeks and days only
+  (`PT1H` is refused). Say the period in the report's label or description ("Sales by product, year to date") -
+  the rows do not show it.
 - `aging:` (on a report) - **aged receivables / payables**: one row per dimension (the counterparty), one
   COLUMN per bucket of days past due, summing each open document's open amount as of a report date:
   `aging: { due: due, amount: "total - paid", buckets: [30, 60, 90], date: issuedOn }` yields `Not Yet Due` /
