@@ -437,7 +437,13 @@ public class ${className}Generate {
             new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().updateProperties(sourceId,
                     java.util.Map.of("${backLinkProperty}", saved.${toPk}));
     #end
-            return saved;
+            // Answer the ${toEntity} as this unit leaves it, not as it was first inserted: every line saved
+            // above re-sums the header's aggregates through a targeted write, and a link row's roll-ups
+            // land on the rows they total the same way, so the instance save() returned still carries
+            // the zero totals it was inserted with before any line existed. The run answered exactly that
+            // while a GET right after it showed the summed document (dirigible #8236). The re-read goes
+            // through this unit's session, which a targeted write leaves without a stale copy of the row.
+            return new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().findById(saved.${toPk});
         });
         return result;
     }

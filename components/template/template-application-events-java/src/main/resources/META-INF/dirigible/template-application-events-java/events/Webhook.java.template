@@ -306,7 +306,10 @@ public class ${className}Webhook {
                 new gen.${javaGenFolderName}.data.${collection.javaChildPerspective}.${collection.childEntity}Repository().save(child);
             }
 #end
-            return parent;
+            // Answer the record as this unit leaves it: a child row's save re-sums the parent's aggregates
+            // through a targeted write, so the instance save() returned still carries what it was
+            // inserted with before any child existed (dirigible #8236).
+            return new ${entity}Repository().findById(parent.${collections.get(0).masterKey});
         });
 #else
         ${entity}Entity saved = new ${entity}Repository().save(entity);
