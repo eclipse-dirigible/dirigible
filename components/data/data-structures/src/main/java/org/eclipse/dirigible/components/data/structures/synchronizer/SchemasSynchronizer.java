@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.data.structures.service.TableService;
 import org.eclipse.dirigible.components.data.structures.service.ViewService;
 import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaCreateProcessor;
 import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaPassConnection;
+import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableAlterProcessor;
 import org.eclipse.dirigible.components.data.structures.synchronizer.schema.SchemaUpdateProcessor;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
@@ -622,9 +623,17 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                             || ArtefactLifecycle.FAILED.equals(schema.getLifecycle())) {
                         executeSchemaDrop(connection, schema);
                         callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
-                        break;
                     }
+                    break;
                 case START:
+                    // a declared unique key the alter could not add is attempted again (#8317)
+                    if (ArtefactLifecycle.CREATED.equals(schema.getLifecycle())
+                            || ArtefactLifecycle.UPDATED.equals(schema.getLifecycle())) {
+                        for (Table table : schema.getTables()) {
+                            TableAlterProcessor.retryUniqueConstraints(connection.get(), table);
+                        }
+                    }
+                    break;
                 case STOP:
             }
 
