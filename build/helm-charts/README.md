@@ -12,7 +12,7 @@ Some of the key features are:
 Add Dirigible Helm repo:
 
 ```console
-$ helm repo add dirigible https://eclipse.github.io/dirigible
+$ helm repo add dirigible https://eclipse-dirigible.github.io/dirigible
 ```
 
 Update repo:
@@ -71,7 +71,7 @@ Resources:
 1. Build Helm Index:
 
     ```
-    helm repo index charts/ --url https://eclipse.github.io/dirigible/charts
+    helm repo index charts/ --url https://eclipse-dirigible.github.io/dirigible/charts
     ```
 
 1. Move the `charts/index.yaml` to the root folder:

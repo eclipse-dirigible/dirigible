@@ -814,11 +814,11 @@ jobs:
             
             #### Helm:
             
-            To install Eclipse Dirigible with Helm go to the [Setup with Helm](https://www.dirigible.io/help/setup/helm/) page.
+            To install Eclipse Dirigible with Helm go to the [Setup with Helm](https://www.dirigible.io/help/get-started/installation/kubernetes) page.
             All Helm charts, with detailed explanation, setup and configurations, can be found [here](https://artifacthub.io/packages/search?org=dirigiblelabs).
             
             ```
-            helm repo add dirigible https://eclipse.github.io/dirigible
+            helm repo add dirigible https://eclipse-dirigible.github.io/dirigible
             helm repo update
             helm install dirigible dirigible/dirigible --version ${{ github.event.inputs.releaseVersion }}
             ```
@@ -880,7 +880,7 @@ jobs:
           helm package dirigible
           
           cd ..
-          helm repo index helm-charts/ --url https://eclipse.github.io/dirigible/charts
+          helm repo index helm-charts/ --url https://eclipse-dirigible.github.io/dirigible/charts
           
           cp helm-charts/index.yaml ../.
           cp helm-charts/dirigible-${{ github.event.inputs.releaseVersion }}.tgz ../charts/
