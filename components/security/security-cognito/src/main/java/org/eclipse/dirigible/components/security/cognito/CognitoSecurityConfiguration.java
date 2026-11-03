@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceS
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.ResourceServerJwtSupport;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantAwareAuthoritiesMapper;
 import org.eclipse.dirigible.components.security.oauth2.tenant.TenantGroupsClaim;
+import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -31,6 +32,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.util.StringUtils;
@@ -71,14 +73,15 @@ public class CognitoSecurityConfiguration {
      * Filter chain.
      *
      * @param http the http
+     * @param tenantContextInitFilter the tenant context init filter
      * @return the security filter chain
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
-            CognitoLogoutSuccessHandler cognitoLogoutSuccessHandler, OAuth2AuthorizedClientService authorizedClientService,
-            ClientRegistrationRepository clientRegistrationRepository, GrantedAuthoritiesMapper userAuthoritiesMapper,
-            ResourceServerJwtSupport resourceServerJwtSupport) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator, CognitoLogoutSuccessHandler cognitoLogoutSuccessHandler,
+            OAuth2AuthorizedClientService authorizedClientService, ClientRegistrationRepository clientRegistrationRepository,
+            GrantedAuthoritiesMapper userAuthoritiesMapper, ResourceServerJwtSupport resourceServerJwtSupport) throws Exception {
         String loginPage = DirigibleConfig.SECURITY_LOGIN_PAGE.getStringValue();
         // both oauth2Client and oauth2Login register an authorization-request redirect filter, and
         // the client one runs first - the resolver must be set on both for the hints to pass through
@@ -93,6 +96,11 @@ public class CognitoSecurityConfiguration {
             // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
             // sets the frame options
             .csrf(csrf -> csrf.disable())
+            // the tenant scope is opened inside the chain, ahead of authentication, as on the other
+            // profiles: left to the servlet filter Spring Boot registers for the component, it ran after
+            // the whole chain and re-opened a bearer request in the default tenant once the tenant
+            // selection had entered the one the request named (#8458)
+            .addFilterBefore(tenantContextInitFilter, OAuth2LoginAuthenticationFilter.class)
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper), AuthorizationFilter.class)
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(bearerEntryPoint, new ProgrammaticRequestMatcher()))
             .oauth2Client(oauth2Client -> oauth2Client.authorizationCodeGrant(
