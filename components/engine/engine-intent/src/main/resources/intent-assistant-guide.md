@@ -1903,6 +1903,14 @@ the same process set is visible), and when it resolves to nobody - a null hop, a
 blank identity - the task is created unassigned and the fallback group can still claim it. That is
 what stops an unresolvable path from minting a task nobody can see.
 
+**Nobody approves their own work.** A user task whose form offers `approve` cannot be claimed or
+completed by whoever completed another user task of the same process instance - the submitter gets a
+403 "You cannot approve your own <record>". Name the steps yourself with `separateFrom: submit` (or a
+list; `separateFrom: []` turns the default off). The deployment's `.settings` `access.extraRoles`
+(a multitenant app's `Owner` / `User` - every tenant member) are never a task's candidates unless the
+step says `extraRoles: true`, so route a submit task with `assignee: personal` and an approval with a
+relation walk rather than a role nobody in the tenant holds.
+
 **Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
 Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
 tests it. Continue on approve, branch to a cancel-and-end on reject - or loop the reject branch back to
@@ -3606,7 +3614,10 @@ allow-list, so if no role may write a covered entity, nothing may. `Resource` is
 report for a gate-bearing token, and may be a process or a form for a business action like
 `Loan:approve` - such an action maps to no generated gate and is reported as an advisory, so enforce
 it in a process guard or a hand-written `custom/*.access`. An entity no token names keeps the
-convention gates unchanged, so partial coverage is fine.
+convention gates unchanged, so partial coverage is fine. `exclusive: true` on an entry keeps the
+deployment's `.settings` `access.extraRoles` off every gate of the resources it names - for HR and
+payroll data the gate is then exactly the roles listed here:
+`- { role: HR, can: [Employee:write], exclusive: true }`.
 
 ### seeds - initial data
 

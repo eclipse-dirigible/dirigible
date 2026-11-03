@@ -83,6 +83,16 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final String TASK_ACTIONS_PROPERTY = "taskActions";
     /** The user-task property listing the variables a completion may write besides its action. */
     private static final String TASK_WRITES_PROPERTY = "taskWrites";
+    /** The user-task property listing the tasks of the same instance whose completer it keeps out. */
+    private static final String TASK_SEPARATE_FROM_PROPERTY = "taskSeparateFrom";
+    /** The user-task property carrying what the user it keeps out is told. */
+    private static final String TASK_SEPARATION_MESSAGE_PROPERTY = "taskSeparationMessage";
+
+    /**
+     * The process variable a completion through {@code BpmService} records its user in, followed by the
+     * completed task's definition key - what {@link #getSeparationRefusal} reads (issue #8111).
+     */
+    public static final String COMPLETED_BY_PREFIX = "__completedBy_";
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(BpmProviderFlowable.class);
@@ -625,17 +635,68 @@ public class BpmProviderFlowable implements BpmProvider {
         return getTaskProperty(taskId, TASK_WRITES_PROPERTY);
     }
 
+    /**
+     * Why the user may not claim or complete the task, or null when they may: its user task declares
+     * {@code taskSeparateFrom} - the tasks of the same instance whose completer it keeps out, so a
+     * document's submitter never approves it - and the user completed one of them (issue #8111).
+     *
+     * @param taskId the task id
+     * @param user the user about to act on it
+     * @return the task's {@code taskSeparationMessage}, or null
+     */
+    public String getSeparationRefusal(String taskId, String user) {
+        Task task = findTask(taskId);
+        UserTask userTask = userTaskOf(task);
+        List<String> separateFrom = property(userTask, TASK_SEPARATE_FROM_PROPERTY).map(BpmProviderFlowable::items)
+                                                                                   .orElse(List.of());
+        if (user == null || separateFrom.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> completers = processEngine.getRuntimeService()
+                                                      .getVariables(task.getProcessInstanceId(), separateFrom.stream()
+                                                                                                             .map(key -> COMPLETED_BY_PREFIX
+                                                                                                                     + key)
+                                                                                                             .toList());
+        if (!completers.containsValue(user)) {
+            return null;
+        }
+        return property(userTask, TASK_SEPARATION_MESSAGE_PROPERTY).orElse("You cannot complete a task separated from one you completed");
+    }
+
+    /**
+     * The task's definition key - its user task's id in the process.
+     *
+     * @param taskId the task id
+     * @return the key, or null when the current tenant has no such task
+     */
+    public String getTaskDefinitionKey(String taskId) {
+        Task task = findTask(taskId);
+        return task == null ? null : task.getTaskDefinitionKey();
+    }
+
     /** The comma-separated list a user task's named property declares, empty when it has none. */
     private Optional<List<String>> getTaskProperty(String taskId, String name) {
-        Task task = processEngine.getTaskService()
-                                 .createTaskQuery()
-                                 .taskTenantId(getTenantId())
-                                 .taskId(taskId)
-                                 .singleResult();
+        return property(userTaskOf(findTask(taskId)), name).map(BpmProviderFlowable::items);
+    }
+
+    private Task findTask(String taskId) {
+        return processEngine.getTaskService()
+                            .createTaskQuery()
+                            .taskTenantId(getTenantId())
+                            .taskId(taskId)
+                            .singleResult();
+    }
+
+    /** The task's user task in its deployment-cached BPMN model, or null. */
+    private UserTask userTaskOf(Task task) {
         BpmnModel bpmnModel = task == null ? null
                 : processEngine.getRepositoryService()
                                .getBpmnModel(task.getProcessDefinitionId());
-        if (bpmnModel == null || !(bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask)) {
+        return bpmnModel != null && bpmnModel.getFlowElement(task.getTaskDefinitionKey()) instanceof UserTask userTask ? userTask : null;
+    }
+
+    private static Optional<String> property(UserTask userTask, String name) {
+        if (userTask == null) {
             return Optional.empty();
         }
         return userTask.getExtensionElements()
@@ -644,11 +705,14 @@ public class BpmProviderFlowable implements BpmProvider {
                        .filter(element -> name.equals(element.getAttributeValue(null, "name")))
                        .map(element -> element.getAttributeValue(null, "value"))
                        .filter(Objects::nonNull)
-                       .findFirst()
-                       .map(value -> Arrays.stream(value.split(","))
-                                           .map(String::trim)
-                                           .filter(item -> !item.isEmpty())
-                                           .toList());
+                       .findFirst();
+    }
+
+    private static List<String> items(String value) {
+        return Arrays.stream(value.split(","))
+                     .map(String::trim)
+                     .filter(item -> !item.isEmpty())
+                     .toList();
     }
 
     public ProcessDefinition getProcessDefinitionByKey(String processDefinitionKey) {

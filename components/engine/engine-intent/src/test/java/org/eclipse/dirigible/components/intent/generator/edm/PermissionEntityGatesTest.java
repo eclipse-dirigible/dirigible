@@ -126,6 +126,24 @@ class PermissionEntityGatesTest {
         assertEquals("Owner,SalesViewer,User,Auditor", order.get("roleRead"));
     }
 
+    /**
+     * An {@code exclusive: true} grant keeps the deployment's extras off the gates of what it names
+     * (issue #8112): any tenant member could rewrite a colleague's pay-relevant record otherwise.
+     */
+    @Test
+    void anExclusiveGrantTakesNoExtraRolesAndNeitherDoItsCompositionChildren() {
+        String yaml = YAML.replace("{ role: SalesAdmin,  can: [Order:read, Order:create, Order:delete] }",
+                "{ role: SalesAdmin,  can: [Order:read, Order:create, Order:delete], exclusive: true }");
+        Map<String, Object> order = entity(yaml, "Order", EXTRA_ROLES);
+        assertEquals("SalesAdmin,SalesViewer", order.get("roleRead"));
+        assertEquals("SalesAdmin", order.get("roleWrite"));
+        Map<String, Object> item = entity(yaml, "OrderItem", EXTRA_ROLES);
+        assertEquals("SalesAdmin,SalesViewer", item.get("roleRead"), "a composition child is gated as its master is");
+        assertEquals("SalesAdmin", item.get("roleWrite"));
+        Map<String, Object> customer = entity(yaml, "Customer", EXTRA_ROLES);
+        assertEquals("sales.Customer.CustomerFullAccess,Owner,User", customer.get("roleWrite"), "a resource it does not name keeps them");
+    }
+
     private static final IntentSettings EXTRA_ROLES =
             IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\", \" User \", \"\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
 
