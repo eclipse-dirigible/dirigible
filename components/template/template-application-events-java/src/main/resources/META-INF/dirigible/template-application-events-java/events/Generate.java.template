@@ -1,4 +1,8 @@
 package gen.events.${javaGenFolderName};
+## A create-from writing a value a person typed (`prompt:`) or a link row holds those rows to their
+## controller's validation (#7819). A reversal has neither, so its negated twin is not refused by a
+## sign check the original passed.
+#set($validatesRows = $hasPrompt || $hasLink)
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #if(!$eventOnly)
@@ -337,6 +341,16 @@ public class ${className}Generate {
             }
     #end
     #end
+    #if($validatesRows)
+            // The ${toEntity}'s own ungated row checks (`compare`, `agree`, `forbidWhen`, `requiredWhen`)
+            // and its required / length / pattern rules - the validate its REST controller runs, read on
+            // the record as the save will store it (dirigible #7819). Its repository enforces only the
+            // status-gated checks, so a typed `prompt:` value its controller refuses - a payment of 0 or
+            // -10 - was saved here. Held BEFORE anything below is written, so a refused run flips no
+            // source status and spends no document number.
+            gen.${toGenFolder}.api.${toJavaPerspective}.${toEntity}Controller.validate(
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().calculatedForCreate(target));
+    #end
     #if($sourceStatusValue != "")
             // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation status
             // (e.g. a proforma flips to INVOICED). It runs BEFORE the target is saved, and that ordering is the
@@ -427,6 +441,12 @@ public class ${className}Generate {
     #foreach($a in $linkAssignments)
             link.${a.linkProp} = saved.${a.targetProp};
     #end
+            // The link row's own row checks too, as its controller runs them (dirigible #7819) - its
+            // repository holds only the capacity guard and the status-gated checks. A refusal throws
+            // inside the unit, so the ${toEntity} saved above is taken back with it; either refusal reaches
+            // the caller as the 400 the controller would have answered.
+            gen.${fromGenFolder}.api.${linkJavaPerspective}.${linkEntity}Controller.validate(
+                    new gen.${fromGenFolder}.data.${linkJavaPerspective}.${linkEntity}Repository().calculatedForCreate(link));
             new gen.${fromGenFolder}.data.${linkJavaPerspective}.${linkEntity}Repository().save(link);
     #end
     #if($hasBackLink)

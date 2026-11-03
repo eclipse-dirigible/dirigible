@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -89,6 +90,10 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
                   - { name: Customer, kind: manyToOne, to: Customer }
 
               - name: Payment
+                # Ungated row checks, emitted into the controllers only (#7819). The payment refuses 0 but
+                # not a negative amount, so a negative one reaches the allocation and proves ITS check too.
+                checks:
+                  - { kind: compare, field: amount, op: ne, value: 0, message: "A payment amount cannot be zero" }
                 fields:
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: date,      type: date }
@@ -99,6 +104,8 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
                   - { name: Customer, kind: manyToOne, to: Customer }
 
               - name: InvoicePayment
+                checks:
+                  - { kind: compare, field: amount, op: ge, value: 0, message: "An allocation cannot be negative" }
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
@@ -190,6 +197,45 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
                 TIMEOUT_SECONDS);
         assertEquals(paymentsBefore, count(PAYMENTS), "a refused allocation must take the payment back with it");
         assertAllocations(over, List.of());
+    }
+
+    /**
+     * The ungated row checks of the payment and of the allocation hold for a create-from as they do for
+     * their REST controllers (#7819): both rows were written through their repositories only, so a
+     * payment of 0 or -10 was saved and allocated, the invoice's paid amount dropping with it.
+     */
+    @Test
+    void a_value_the_payment_or_the_allocation_check_refuses_is_a_400_that_writes_nothing() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int customer = create(CUSTOMERS, "{\"Name\":\"checked\"}");
+        int invoice = create(INVOICES, invoiceBody("2026-10-01", "C-1", 70, customer));
+        int paymentsBefore = count(PAYMENTS);
+
+        // The payment's own check: refused before anything is written.
+        assertRefused(invoice, "0", "A payment amount cannot be zero");
+        // The payment accepts -10; the allocation's check refuses it, and the payment saved before it in
+        // the same unit is taken back.
+        assertRefused(invoice, "-10", "An allocation cannot be negative");
+
+        assertEquals(paymentsBefore, count(PAYMENTS), "a refused create-from must leave no payment behind");
+        assertAllocations(invoice, List.of());
+        // A valid amount still goes through.
+        int recorded = recordPayment(invoice, "{\"values\":{\"Amount\":20}}");
+        assertAllocations(invoice, List.of(Map.of(recorded, "20")));
+    }
+
+    private void assertRefused(int invoice, String amount, String message) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + invoice + ",\"values\":{\"Amount\":" + amount + "}}")
+                                                 .when()
+                                                 .post(RECORD_PAYMENT)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(message)),
+                TIMEOUT_SECONDS);
     }
 
     /**
