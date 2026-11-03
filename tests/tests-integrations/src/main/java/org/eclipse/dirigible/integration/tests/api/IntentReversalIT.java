@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -34,12 +35,17 @@ import org.eclipse.dirigible.components.initializers.synchronizer.Synchronizatio
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
+import org.awaitility.Awaitility;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
+
+import ch.qos.logback.classic.Level;
 
 /**
  * A {@code reversals:} action (issue #7886) reverses a posted journal entry at runtime, through the
@@ -47,6 +53,10 @@ import org.springframework.test.annotation.DirtiesContext;
  * line on its own side, links the two both ways past the original's {@code immutableWhen}, nets the
  * pair to zero, and refuses a second reversal, the reversal of a reversal, a draft, and a twin
  * dated into a CLOSED period.
+ *
+ * <p>
+ * An entry an {@code onCreate} posting drafted for a payment, once rejected or reversed, is history
+ * (#7959): the payment's next edit drafts a new entry from what it says now.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentReversalIT extends IntegrationTest {
@@ -60,6 +70,7 @@ class IntentReversalIT extends IntegrationTest {
     private static final String POST = EVENTS + "/PostEntryTransition/run";
     private static final String ENTRIES = API + "/entry/EntryController";
     private static final String LINES = API + "/entry/EntryItemController";
+    private static final String PAYMENTS = API + "/payment/PaymentController";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String INTENT_YAML = """
@@ -89,6 +100,12 @@ class IntentReversalIT extends IntegrationTest {
                 relations:
                   - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
 
+              - name: Payment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+
               - name: Entry
                 immutableWhen: "Status == POSTED"
                 immutableInPeriod: { period: FiscalPeriod, date: date }
@@ -100,6 +117,7 @@ class IntentReversalIT extends IntegrationTest {
                   - { name: Status,     kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                   - { name: Storno,     kind: manyToOne, to: Entry }
                   - { name: ReversedBy, kind: manyToOne, to: Entry }
+                  - { name: Payment,    kind: manyToOne, to: Payment }
 
               - name: EntryItem
                 fields:
@@ -115,8 +133,9 @@ class IntentReversalIT extends IntegrationTest {
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
-                  - { id: 1, name: DRAFT }
-                  - { id: 2, name: POSTED }
+                  - { id: 1, name: DRAFT,     stage: draft }
+                  - { id: 2, name: POSTED,    stage: live }
+                  - { id: 3, name: CANCELLED, stage: cancelled }
               - name: period-statuses
                 entity: PeriodStatus
                 rows:
@@ -128,6 +147,21 @@ class IntentReversalIT extends IntegrationTest {
                 forEntity: Entry
                 from: [DRAFT]
                 setStatus: POSTED
+              # The accountant rejects a draft the posting made.
+              - name: RejectEntry
+                forEntity: Entry
+                from: [DRAFT]
+                setStatus: CANCELLED
+
+            postings:
+              - name: paymentPosting
+                event: { onCreate: Payment }
+                creates: Entry
+                backReference: Payment
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
 
             reversals:
               - name: reverseEntry
@@ -151,6 +185,14 @@ class IntentReversalIT extends IntegrationTest {
 
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
+
+    /** The generated handlers log through the client SDK, under {@code app.}; attached per test. */
+    private LogsAsserter postingLogs;
+
+    @BeforeEach
+    void attachLogsAsserter() {
+        postingLogs = new LogsAsserter("app.gen.events", Level.ERROR);
+    }
 
     @Test
     void a_posted_entry_is_reversed_by_its_negated_twin_linked_both_ways() {
@@ -246,6 +288,120 @@ class IntentReversalIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Storno", not(hasItem(another))),
+                TIMEOUT_SECONDS);
+        // Reopened: the methods share the database, and the other one books into this month.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + period + ",\"Name\":\"" + month + "\",\"StartDate\":\"" + month.atDay(1)
+                                                         + "\",\"EndDate\":\"" + month.atEndOfMonth() + "\",\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/fiscalperiod/FiscalPeriodController/" + period)
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
+    /**
+     * The payment's entry is the LIVE one (#7959): an edit after the accountant rejected it, or after a
+     * posted twin reversed it, drafts a new entry from the edited figures; rejections accumulate, and a
+     * live draft is rewritten in place. A posted entry nobody reversed is still left alone.
+     */
+    @Test
+    void an_edit_redrafts_the_entry_a_rejection_or_a_posted_reversal_retired() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+        String today = LocalDate.now()
+                                .toString();
+
+        // Rejected, edited: a new draft. Rejected again, edited again: another. The live draft is then
+        // rewritten by the next edit, never duplicated.
+        int payment = create(PAYMENTS, "{\"Date\":\"" + today + "\",\"Amount\":10}");
+        transition("RejectEntry", draftOf(payment, 10.0f));
+        updatePayment(payment, today, 12);
+        transition("RejectEntry", draftOf(payment, 12.0f));
+        updatePayment(payment, today, 13);
+        int live = draftOf(payment, 13.0f);
+        updatePayment(payment, today, 14);
+        awaitLines(live, 14.0f);
+        assertEquals(3, entriesOf(payment).size(), "one entry per rejection round, and the live draft rewritten in place");
+
+        // Posted, reversed by a twin that is posted too (the twin carries the payment's back-reference),
+        // edited: a new draft.
+        int reversed = create(PAYMENTS, "{\"Date\":\"" + today + "\",\"Amount\":20}");
+        int original = draftOf(reversed, 20.0f);
+        post(original);
+        post(reverse(original));
+        updatePayment(reversed, today, 25);
+        draftOf(reversed, 25.0f);
+
+        // Posted and not reversed, edited: reported, not redrafted.
+        int posted = create(PAYMENTS, "{\"Date\":\"" + today + "\",\"Amount\":30}");
+        int entry = draftOf(posted, 30.0f);
+        post(entry);
+        updatePayment(posted, today, 35);
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> postingLogs.containsMessage("Payment [" + posted + "] changed after Entry [" + entry + "]", Level.ERROR));
+        assertEquals(List.of(entry), entriesOf(posted));
+        awaitLines(entry, 30.0f);
+    }
+
+    /** The payment's one DRAFT entry, once its lines carry {@code amount} on both sides. */
+    private int draftOf(int payment, float amount) {
+        String drafts = "findAll { it.Payment == " + payment + " && it.Status == 1 }";
+        AtomicInteger entry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> entry.set(given().when()
+                                                           .get(ENTRIES + "?$limit=1000")
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body(drafts, hasSize(1))
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getInt(drafts + "[0].Id")),
+                TIMEOUT_SECONDS);
+        awaitLines(entry.get(), amount);
+        return entry.get();
+    }
+
+    private List<Integer> entriesOf(int payment) {
+        AtomicReference<List<Integer>> entries = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> entries.set(given().when()
+                                                             .get(ENTRIES + "?$limit=1000")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath()
+                                                             .getList("findAll { it.Payment == " + payment + " }.Id", Integer.class)));
+        return entries.get();
+    }
+
+    private void awaitLines(int entry, float amount) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(LINES + "?Entry=" + entry)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("", hasSize(2))
+                                                 .body("findAll { it.Debit == (" + amount + ") }.size()", equalTo(1))
+                                                 .body("findAll { it.Credit == (" + amount + ") }.size()", equalTo(1)),
+                TIMEOUT_SECONDS);
+    }
+
+    private void updatePayment(int payment, String date, int amount) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + payment + ",\"Date\":\"" + date + "\",\"Amount\":" + amount + "}")
+                                                 .when()
+                                                 .put(PAYMENTS + "/" + payment)
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
+    private void transition(String name, int entry) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + entry + "}")
+                                                 .when()
+                                                 .post(EVENTS + "/" + name + "Transition/run")
+                                                 .then()
+                                                 .statusCode(200),
                 TIMEOUT_SECONDS);
     }
 

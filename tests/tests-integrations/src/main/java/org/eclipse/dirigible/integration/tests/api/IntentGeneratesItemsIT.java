@@ -24,6 +24,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.restassured.path.json.JsonPath;
+
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -174,6 +176,12 @@ class IntentGeneratesItemsIT extends IntegrationTest {
                             .matcher(generated.get());
         assertTrue(id.find(), "the create-from should answer the created invoice, got: " + generated.get());
         int invoice = Integer.parseInt(id.group(1));
+        // The run answers the header as its unit committed it - the summed totals a GET right after
+        // it shows - not the instance first inserted with zero totals before any line existed (issue
+        // #8236): a caller using the response saw an invoice of 0.00.
+        JsonPath answered = JsonPath.from(generated.get());
+        assertEquals(35.0f, answered.getFloat("Net"), "the create-from should answer the summed Net, got: " + generated.get());
+        assertEquals(35.0f, answered.getFloat("Payable"), "the create-from should answer the derived Payable, got: " + generated.get());
 
         // The lines were copied correctly...
         restAssuredExecutor.execute(() -> given().when()

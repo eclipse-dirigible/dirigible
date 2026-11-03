@@ -44,7 +44,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   with the insert's figures. An edit re-derives the post exactly as above - rewritten while the
  *   ${targetEntity} still holds the status it was created in, logged once someone has acted on it -
  *   and a source with NO post is left alone: the first post is the create handler's, and two handlers
- *   each finding nothing posted for a create and an edit committed together would post twice.
+ *   each finding nothing posted for a create and an edit committed together would post twice. A source
+ *   whose every post was rejected or reversed (#7959) is posted afresh: nobody else will post it again.
 #end
 #if($mirrorsOriginal)
  * - DELETED SOURCE (#7634): the source no longer exists, so it is read off the -deleted payload (the
@@ -215,6 +216,11 @@ public class ${className}Posting implements MessageHandler {
                 new java.util.ArrayList<>();
         for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity candidate : relatedTargets) {
             if (candidate.${stornoProperty} == null) {
+#if($deadEntryCondition != "")
+                if (dead(candidate, targetRepository)) {
+                    continue; // rejected, or already reversed - not an entry left to reverse (#7959)
+                }
+#end
                 original = candidate;
             } else {
                 existingTargets.add(candidate);
@@ -223,6 +229,11 @@ public class ${className}Posting implements MessageHandler {
         if (original == null) {
             return; // nothing was posted for this source - nothing to reverse
         }
+        // Only a storno of THIS original is this handler's own: a source whose earlier entry was
+        // rejected or reversed carries one entry per round, and a storno of an earlier one says nothing
+        // about the live one (#7959).
+        Object originalKey = original.${targetPk};
+        existingTargets.removeIf(storno -> !java.util.Objects.equals(storno.${stornoProperty}, originalKey));
 #if($mirrorsOriginal)
         // The storno of a deleted source: the original's own lines, every amount negated (same side).
         for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity originalItem :
@@ -249,7 +260,15 @@ public class ${className}Posting implements MessageHandler {
         }
 #else
         java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
-                relatedTargets;
+                new java.util.ArrayList<>(relatedTargets);
+#end
+#if($stornoProperty == "" && $deadEntryCondition != "")
+        // Only a LIVE document is this source's post (#7959): one the accountant rejected, a reversal
+        // twin, or one a booked twin reversed stays on file as history. With none live left, the source
+        // is posted afresh from what it says now.
+        boolean superseded = existingTargets.removeIf(candidate -> dead(candidate, targetRepository));
+#elseif($followsSource)
+        boolean superseded = false; // nothing here can retire a posted ${targetEntity}
 #end
 #if($hoistsHeaderValues)
         // The header values, evaluated ONCE. The comparison below and the assignment further down must
@@ -334,15 +353,18 @@ public class ${className}Posting implements MessageHandler {
 #end
         } else {
 #if($followsSource)
-            return; // nothing posted for this source yet - the first post is the create handler's
-#else
+            if (!superseded) {
+                return; // nothing posted for this source yet - the first post is the create handler's
+            }
+            // Every post so far was rejected or reversed (#7959): the create handler will not run again,
+            // so this edit drafts the corrected source's entry.
+#end
             target = new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
             target.${backRefProperty} = source.${sourceKeyField};
 #if($stornoProperty != "")
             target.${stornoProperty} = original.${targetPk};
 #end
             currentItems = java.util.List.of();
-#end
         }
 #foreach($a in $headerAssignments)
         target.${a.targetProp} = ${a.value};
@@ -380,6 +402,64 @@ public class ${className}Posting implements MessageHandler {
             }
         });
     }
+#if($periodRegisterEntity != "" && !$followsSource)
+
+    /**
+     * Whether this posting already stands for the ${sourceEntity} (#8243) - asked by the period-reopen
+     * sweep, which re-runs only what is due and never rewrites a post that exists. It counts exactly the
+     * documents post() counts as its own:
+#if($stornoProperty != "")
+     * a storno of each LIVE original; with no live original there is nothing to reverse, so nothing is
+     * due.
+#else
+     * a ${targetEntity} back-referencing the source that is not a reversal's storno and is still LIVE.
+     * A rejected or reversed one is history (#7959), so a source left with only those is due again -
+     * post() drafts it afresh - exactly as its next posting moment would.
+#end
+     *
+     * @param source the ${sourceEntity} the sweep offers
+     * @return whether nothing is due for it
+     */
+    boolean posted(gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source) {
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository targetRepository =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository();
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
+                targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
+#if($stornoProperty != "")
+        for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity original : relatedTargets) {
+            if (original.${stornoProperty} != null) {
+                continue; // a storno, not an original
+            }
+#if($deadEntryCondition != "")
+            if (dead(original, targetRepository)) {
+                continue; // rejected or reversed - nothing left to reverse (#7959)
+            }
+#end
+            Object originalKey = original.${targetPk};
+            if (relatedTargets.stream()
+                              .noneMatch(storno -> java.util.Objects.equals(storno.${stornoProperty}, originalKey))) {
+                return false; // a live original this posting has not reversed yet
+            }
+        }
+        return true;
+#else
+        for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity candidate : relatedTargets) {
+#if($stornoFilterProperty != "")
+            if (candidate.${stornoFilterProperty} != null) {
+                continue; // the reversal sibling's storno, not this posting's document
+            }
+#end
+#if($deadEntryCondition != "")
+            if (dead(candidate, targetRepository)) {
+                continue; // rejected or reversed - history (#7959)
+            }
+#end
+            return true;
+        }
+        return false;
+#end
+    }
+#end
 
     /**
      * Whether a stored item row still carries what the source derives for it now - compared over the
@@ -402,6 +482,17 @@ public class ${className}Posting implements MessageHandler {
 #end
                 true;
     }
+#if($deadEntryCondition != "")
+
+    /**
+     * Whether a ${targetEntity} the back-reference finds no longer stands for its ${sourceEntity}
+     * (#7959): rejected, a reversal twin, or reversed by a booked twin.
+     */
+    private static boolean dead(gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity candidate,
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository targetRepository) {
+        return ${deadEntryCondition};
+    }
+#end
 #if($comparesAgainstDefaults)
 
     /**

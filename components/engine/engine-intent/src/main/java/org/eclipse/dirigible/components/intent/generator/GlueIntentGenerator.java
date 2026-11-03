@@ -2892,6 +2892,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // that has moved on is reported and left alone (unwinding a posted entry is a
             // correcting entry's job - `reverses:` - not a silent overwrite).
             e.put("amendableGuard", amendableGuard(creates));
+            // "The" post is the LIVE one (#7959): an entry the accountant rejected or one a booked twin
+            // reversed stays on file, and the source's next edit or re-issue drafts a new entry.
+            e.put("deadEntryCondition", deadEntryCondition(creates, model));
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
@@ -3175,6 +3178,57 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             return "";
         }
         return "target." + property + " != null && target." + property + " == " + init.trim();
+    }
+
+    /**
+     * The Java condition under which a document the back-reference finds no longer stands for its
+     * source (#7959), evaluated against the local {@code candidate} with {@code targetRepository} in
+     * scope: one the accountant rejected (its status classified {@code stage: cancelled} or
+     * {@code void}), a {@code reversals:} twin (its link set - it reverses another entry, it is not the
+     * source's own), or one reversed by a BOOKED twin (its back-link names a twin standing in the
+     * status the reversal is offered from). Such a document is history: the source it was posted for is
+     * released, and its next edit or re-issue posts afresh.
+     *
+     * @param creates the created (target) entity
+     * @param model the model, for the status seeds and the reversals of the target
+     * @return the condition, or the empty string when nothing can retire a posted document
+     */
+    private static String deadEntryCondition(EntityIntent creates, IntentModel model) {
+        List<String> terms = new ArrayList<>();
+        RelationIntent status = LifecycleStages.statusRelation(creates);
+        String statusProperty = status == null ? null : IntentNaming.pascalCase(status.getName());
+        if (status != null && status.getTo() != null && !status.isCrossModel()) {
+            Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+            List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+            retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+            if (!retired.isEmpty()) {
+                terms.add("candidate." + statusProperty + " != null && (" + retiredCondition("candidate", statusProperty, retired) + ")");
+            }
+        }
+        for (GeneratesIntent g : model.getGenerates()) {
+            if (!g.isReversal() || !creates.getName()
+                                           .equals(g.getTo())) {
+                continue;
+            }
+            ReversalIntent reversal = g.getReversal();
+            terms.add("candidate." + IntentNaming.pascalCase(reversal.getLink()) + " != null");
+            if (reversal.getBackLink() == null || reversal.getBackLink()
+                                                          .isBlank()
+                    || statusProperty == null || g.getFromStatus() == null || g.getFromStatus()
+                                                                               .isEmpty()) {
+                continue; // no back-link, or no status that says the twin is booked
+            }
+            String backLink = "candidate." + IntentNaming.pascalCase(reversal.getBackLink());
+            String booked = String.join(" || ", g.getFromStatus()
+                                                 .stream()
+                                                 .map(id -> "twinStatus == " + id)
+                                                 .toList());
+            terms.add(backLink + " != null && java.util.Optional.ofNullable(targetRepository.findById(" + backLink + ")).map(twin -> twin."
+                    + statusProperty + ").filter(twinStatus -> " + booked + ").isPresent()");
+        }
+        return String.join(" || ", terms.stream()
+                                        .map(term -> "(" + term + ")")
+                                        .toList());
     }
 
     /**
@@ -6071,6 +6125,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildSetters(IntentModel model, IntentSettings settings) {
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         List<Map<String, Object>> setters = new ArrayList<>();
         for (Setter setter : SetFieldSupport.setters(model)) {
             if (!settings.shouldGenerate("setters", setter.className())) {
@@ -6109,9 +6164,65 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("targetPerspective", setter.targetPerspective());
                 entry.put("targetKeyAccessor", setter.targetKeyAccessor());
             }
+            // A status a capacity roll-up holds while the row is settled (#7869): the setter then writes
+            // the column the roll-up restores from instead, so it needs the statuses that mean "held".
+            // Emitted only when used, so every other setter's descriptor stays byte-identical.
+            for (SetFieldSupport.Assignment assignment : setter.assignments()) {
+                List<String> owned =
+                        assignment.relation() ? rollupOwnedStatuses(model, byName, setter.writtenEntity(), assignment.field()) : List.of();
+                if (!owned.isEmpty()) {
+                    entry.put("rollupStatus", assignment.field());
+                    entry.put("rollupDisplacedStatus", IntentNaming.displacedStatusProperty(assignment.field()));
+                    entry.put("rollupOwnedStatuses", String.join(", ", owned));
+                    break;
+                }
+            }
             setters.add(entry);
         }
         return setters;
+    }
+
+    /**
+     * The statuses capacity roll-ups set on one status relation of an entity - their
+     * {@code statusWhenFull} / {@code statusWhenPartial} seed ids, which the roll-up owns while its sum
+     * keeps the row there (#7016). Empty when no roll-up drives that relation. The parent is resolved
+     * as the EDM generator resolves the one it gives the displaced-status column: a cross-model child
+     * names it, a local child reaches it through a local {@code via}.
+     *
+     * @param model the whole intent
+     * @param byName the model's entities, by name
+     * @param entity the entity whose status is written
+     * @param statusProperty the PascalCase status relation property
+     * @return the owned seed ids, in declaration order, without duplicates
+     */
+    private static List<String> rollupOwnedStatuses(IntentModel model, Map<String, EntityIntent> byName, String entity,
+            String statusProperty) {
+        Set<String> owned = new LinkedHashSet<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
+                                                                                       .isBlank()
+                    || rollup.getStatus() == null || !statusProperty.equals(IntentNaming.pascalCase(rollup.getStatus()))) {
+                continue;
+            }
+            String parent;
+            if (rollup.isCrossModelChild()) {
+                parent = rollup.getParent();
+            } else {
+                EntityIntent child = byName.get(rollup.getEntity());
+                RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
+                parent = via == null || (via.getModel() != null && !via.getModel()
+                                                                       .isBlank()) ? null : via.getTo();
+            }
+            if (!entity.equals(parent)) {
+                continue;
+            }
+            for (Integer status : java.util.Arrays.asList(rollup.getStatusWhenFull(), rollup.getStatusWhenPartial())) {
+                if (status != null) {
+                    owned.add(status.toString());
+                }
+            }
+        }
+        return new ArrayList<>(owned);
     }
 
     /** The keys one member write carries - a single-member setter's, or one entry of a set: map's. */

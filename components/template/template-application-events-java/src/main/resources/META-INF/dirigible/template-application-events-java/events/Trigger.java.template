@@ -129,7 +129,14 @@ public class ${process}Trigger implements MessageHandler, ProcessTrigger {
         String stamped = ProcessStamps.idFor(entity.ProcessIds, "${process}");
         if (stamped != null && Process.isRunning(stamped)) {
             throw new IllegalStateException("${entity} [" + id + "] still has its ${process} instance [" + stamped
-                    + "] running - complete or cancel it before restarting");
+                    + "] running - cancel it before restarting");
+        }
+        // A flow that ran to its end has already moved the record to the status it ends in (POSTED,
+        // CANCELLED, ...). A fresh instance would run every step again over it - a posted entry
+        // rejected, a paid run paid twice (#8189). Only a cancelled or lost instance is restarted.
+        if (stamped != null && Process.isCompleted(stamped)) {
+            throw new IllegalStateException("${entity} [" + id + "] already completed its ${process} instance [" + stamped
+                    + "] - a restart would run the flow again over the finished record");
         }
 #if(${guardExpression} != "true")
         if (!(${guardExpression})) {
@@ -141,6 +148,16 @@ public class ${process}Trigger implements MessageHandler, ProcessTrigger {
             throw new IllegalStateException("Starting the ${process} process for ${entity} [" + id + "] failed - see the log");
         }
         return processId;
+    }
+
+    /**
+     * Whether the ${entity} still exists - the platform asks before a task of this process is
+     * completed, and refuses the task (and retires the process) when its record has been deleted, so
+     * no step runs over a row that is gone (dirigible #8108).
+     */
+    @Override
+    public boolean recordExists(String id) {
+        return repository.findById(${keyParse}) != null;
     }
 
     /**

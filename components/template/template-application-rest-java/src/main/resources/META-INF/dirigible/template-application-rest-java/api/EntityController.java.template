@@ -401,6 +401,9 @@ public class ${name}Controller {
 #if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
         applyFixedAfterCreate(id, entity);
 #end
+#if($fixedWhenReferencedProperties && $fixedWhenReferencedProperties.size() > 0)
+        applyFixedWhenReferenced(id, repository.findOne(id).orElse(null), entity);
+#end
 #if($masterLock)
         // Neither an edit inside a locked ${masterLock.entity} nor a move into one.
         repository.findOne(id).ifPresent(stored -> requireMasterMutable(stored.${masterLock.fkProperty}));
@@ -1097,6 +1100,47 @@ public class ${name}Controller {
         } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
 #end
             throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
+
+#end
+#if($fixedWhenReferencedProperties && $fixedWhenReferencedProperties.size() > 0)
+    // Fields fixed while referenced (intent `fixedWhenReferenced: true`, dirigible #8194): editable
+    // until another record references this one - through a to-one of this model or another, as the
+    // delete's rules see it (`isReferenced` asks the same TargetDeleteRule contributions) - and fixed
+    // from then on. On a referenced row an absent value is taken from the stored one and a value that
+    // DIFFERS is refused with a 409 in the reader's language, compared as it will be stored (normalized,
+    // a decimal by value). System writers reach the repository directly, so they are unaffected.
+    private void applyFixedWhenReferenced(Object id, ${name}Entity stored, ${name}Entity entity) {
+        if (stored == null) {
+            return;
+        }
+#set($referencedNormalized = false)
+#foreach($fixed in $fixedWhenReferencedProperties)
+#if($fixed.normalized)
+#set($referencedNormalized = true)
+#end
+#end
+#if($referencedNormalized)
+        ${name}Repository.normalize(entity);
+#end
+        Boolean referenced = null;
+#foreach($fixed in $fixedWhenReferencedProperties)
+#if($fixed.decimal)
+        if (entity.${fixed.name} == null ? stored.${fixed.name} != null
+                : stored.${fixed.name} == null || entity.${fixed.name}.compareTo(stored.${fixed.name}) != 0) {
+#else
+        if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+#end
+            if (referenced == null) {
+                referenced = repository.isReferenced(id);
+            }
+            if (referenced && entity.${fixed.name} == null) {
+                entity.${fixed.name} = stored.${fixed.name};
+            } else if (referenced) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+            }
         }
 #end
     }

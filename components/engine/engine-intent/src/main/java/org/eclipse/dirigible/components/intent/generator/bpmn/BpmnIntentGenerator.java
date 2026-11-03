@@ -218,9 +218,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // inserts, the resolvers of the nodes between) in with them.
         Map<String, Set<String>> gatedStepsByProcess = gatedSteps(setters, byName, statusTargets);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
-        // task, so an administrator can always claim a task in addition to the task's own role.
-        String candidateGroupsExtra = String.join(",", context.getSettings()
-                                                              .candidateGroupsExtra());
+        // task, so an administrator can always claim a task in addition to the task's own role - but
+        // never the deployment's access.extraRoles (a multitenant app's Owner / User, i.e. EVERY tenant
+        // member), which made every signed-in user a candidate for every task, the submitter included,
+        // unless the step opts in with `extraRoles: true` (#8111).
+        List<String> extraRoles = context.getSettings()
+                                         .extraRoles();
+        List<String> candidateGroupsExtra = context.getSettings()
+                                                   .candidateGroupsExtra()
+                                                   .stream()
+                                                   .filter(group -> !extraRoles.contains(group))
+                                                   .toList();
         Map<String, List<String>> completingActionsByForm = completingActionsByForm(model);
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
@@ -273,11 +281,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             String taskPrefix = process.getName() + "/";
             Map<String, String> writerByTask = stripProcessPrefix(writerByProcessTask, taskPrefix);
             Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
+            TaskAccess access = new TaskAccess(candidateGroupsExtra, extraRoles, userTaskNames(process), documentLabel(process));
+            reportUnclaimableTasks(context, process, rolesByLowerName, access);
             context.writeModelFile(fileName,
                     render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
-                            processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName),
-                            candidateGroupsExtra, writerByTask, setterByTask,
-                            IntentNaming.processTaskCatalog(context.getProjectName(), context),
+                            processFieldLoads, processTimerLoads, processStepEvents, ownFieldPascalCase(process, byName), access,
+                            writerByTask, setterByTask, IntentNaming.processTaskCatalog(context.getProjectName(), context),
                             synchronousByProcess.getOrDefault(process.getName(), Set.of()),
                             gatedStepsByProcess.getOrDefault(process.getName(), Set.of()), completingActionsByForm,
                             stripProcessPrefix(writesByProcessTask, taskPrefix)));
@@ -743,8 +752,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
             List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, List<StepEventSupport.Emitter> stepEvents,
-            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask,
-            Map<String, String> setterByTask, String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps,
+            Map<String, String> ownFieldPascalCase, TaskAccess access, Map<String, String> writerByTask, Map<String, String> setterByTask,
+            String taskLabelCatalog, Set<String> synchronousSetterNodes, Set<String> gatedSteps,
             Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
@@ -891,8 +900,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra, clearsByStep,
-                    synchronousNodes, completingActionsByForm, writesByTask);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, access, clearsByStep, synchronousNodes,
+                    completingActionsByForm, writesByTask);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -1353,14 +1362,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String processName, String eventsPackage, String candidateGroupsExtra, Map<String, List<String>> clearsByStep,
+            String processName, String eventsPackage, TaskAccess access, Map<String, List<String>> clearsByStep,
             Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
         List<String> writes = writesByTask.getOrDefault(step.getName(), List.of());
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm, writes);
+                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes);
                 break;
             case "serviceTask":
             case "script":
@@ -1381,7 +1390,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
                         LoggedValue.of(step.getName()));
-                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra, clears, completingActionsByForm, writes);
+                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes);
                 break;
         }
     }
@@ -1406,9 +1415,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes) {
+            TaskAccess access, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
+        String candidateGroupsExtra = String.join(",", access.candidateGroupsExtra(step));
         sb.append("    <userTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
@@ -1450,7 +1460,18 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append("\"");
         }
         List<String> actions = form == null ? List.of() : completingActionsByForm.getOrDefault(form, List.of());
+        List<String> separateFrom = access.separateFrom(step, actions);
         sb.append(">\n      <extensionElements>\n");
+        if (!separateFrom.isEmpty()) {
+            // Separation of duties (#8111): the platform refuses to let whoever completed one of these
+            // tasks of the same instance claim or complete this one - the submitter never approves.
+            sb.append("        <flowable:property name=\"taskSeparateFrom\" value=\"")
+              .append(escapeXmlAttribute(String.join(",", separateFrom)))
+              .append("\"></flowable:property>\n");
+            sb.append("        <flowable:property name=\"taskSeparationMessage\" value=\"")
+              .append(escapeXmlAttribute("You cannot approve your own " + access.document()))
+              .append("\"></flowable:property>\n");
+        }
         if (!actions.isEmpty()) {
             // The actions the form completes this task with. The inbox refuses a completion whose
             // `action` is not one of them before the task completes - a decision after it branches
@@ -1468,6 +1489,108 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\"></flowable:property>\n");
         appendClearVariableListeners(sb, clears);
         sb.append("      </extensionElements>\n    </userTask>\n");
+    }
+
+    /**
+     * What a process's user tasks admit besides their own assignee, and whom they keep out (#8111).
+     *
+     * @param candidateGroupsExtra {@code userTasks.candidateGroupsExtra} without the deployment's
+     *        {@code access.extraRoles} - appended to every task's candidate groups
+     * @param extraRoles the deployment's {@code access.extraRoles} - appended only to a step declaring
+     *        {@code extraRoles: true}
+     * @param userTasks the process's user tasks, by name
+     * @param document what the refusal calls the trigger record ({@code expense claim})
+     */
+    record TaskAccess(List<String> candidateGroupsExtra, List<String> extraRoles, List<String> userTasks, String document) {
+
+        /** The groups appended to the step's own candidate group. */
+        List<String> candidateGroupsExtra(StepIntent step) {
+            if (!optsIntoExtraRoles(step)) {
+                return candidateGroupsExtra;
+            }
+            List<String> groups = new ArrayList<>(candidateGroupsExtra);
+            groups.addAll(extraRoles);
+            return groups;
+        }
+
+        /**
+         * The user tasks whose completer may not complete this one: the authored {@code separateFrom} (a
+         * name or a list, {@code []} for none), else - for a task its form completes with {@code approve} -
+         * every other user task of the process.
+         */
+        List<String> separateFrom(StepIntent step, List<String> actions) {
+            Object declared = step.getArgs() == null ? null
+                    : step.getArgs()
+                          .get("separateFrom");
+            if (declared instanceof List<?> names) {
+                return names.stream()
+                            .map(name -> String.valueOf(name)
+                                               .trim())
+                            .toList();
+            }
+            if (declared != null) {
+                return List.of(declared.toString()
+                                       .trim());
+            }
+            if (actions.stream()
+                       .noneMatch("approve"::equalsIgnoreCase)) {
+                return List.of();
+            }
+            return userTasks.stream()
+                            .filter(name -> !name.equals(step.getName()))
+                            .toList();
+        }
+    }
+
+    private static boolean optsIntoExtraRoles(StepIntent step) {
+        return step.getArgs() != null && Boolean.TRUE.equals(step.getArgs()
+                                                                 .get("extraRoles"));
+    }
+
+    private static List<String> userTaskNames(ProcessIntent process) {
+        return process.getSteps()
+                      .stream()
+                      .filter(step -> isUserTask(step) && step.getName() != null)
+                      .map(StepIntent::getName)
+                      .toList();
+    }
+
+    /** The trigger record as a sentence names it ({@code ExpenseClaim} -> {@code expense claim}). */
+    private static String documentLabel(ProcessIntent process) {
+        String entity = TriggerSupport.triggerEntity(process);
+        return entity == null ? "record"
+                : IntentNaming.humanize(entity)
+                              .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * A role-literal task whose role the intent does not declare is claimable by no tenant member of a
+     * deployment with {@code access.extraRoles}, since those are not a user task's candidates (#8111) -
+     * say which assignee the task needs instead of leaving it to nobody without a sound.
+     */
+    private static void reportUnclaimableTasks(IntentGenerationContext context, ProcessIntent process, Map<String, String> rolesByLowerName,
+            TaskAccess access) {
+        if (access.extraRoles()
+                  .isEmpty()) {
+            return;
+        }
+        for (StepIntent step : process.getSteps()) {
+            Object assignee = step.getArgs() == null ? null
+                    : step.getArgs()
+                          .get("assignee");
+            if (!isUserTask(step) || !(assignee instanceof String role) || "personal".equals(role) || optsIntoExtraRoles(step)
+                    || rolesByLowerName.containsKey(role.toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            context.addAdvisory("process [" + process.getName() + "] step [" + step.getName() + "] assignee [" + role
+                    + "] names no declared role, and the deployment's access.extraRoles " + access.extraRoles()
+                    + " are not candidates of a user task - assign the record's owner with `assignee: personal`, a person the record"
+                    + " names with `assignee: { path: ..., fallback: ... }`, or let every tenant member take it with `extraRoles: true`");
+        }
+    }
+
+    private static boolean isUserTask(StepIntent step) {
+        return step.getKind() == null || "userTask".equals(step.getKind());
     }
 
     /**

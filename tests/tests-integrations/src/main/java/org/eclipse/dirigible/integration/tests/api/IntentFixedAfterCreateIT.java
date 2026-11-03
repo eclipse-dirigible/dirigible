@@ -65,6 +65,7 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
     private static final String MY_TIMESHEETS = API + "/timesheet/TimesheetMyController";
     private static final String EXPENSES = API + "/expense/ExpenseController";
     private static final String PARTNER_EXPENSES = API + "/expense/ExpensePartnerController";
+    private static final String APPROVALS = API + "/approval/ApprovalController";
     private static final String CATALOG_KEY = "Timesheet_fixed_Project";
     private static final String REFUSAL = "'Project' cannot change once the Timesheet is created";
     private static final String REFUSAL_BG = "Проектът не може да се смени след създаването на отчета";
@@ -100,6 +101,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   # Fields set on create and fixed afterwards (#8363): compared normalized, and by value.
                   - { name: reference, type: string, length: 20, normalize: upper, fixedAfterCreate: true }
                   - { name: rate,      type: decimal, fixedAfterCreate: true }
+                  # Fixed once an approval references the row (#8194).
+                  - { name: batch,     type: string, length: 20, fixedWhenReferenced: true }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true, fixedAfterCreate: true }
@@ -110,9 +113,18 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: note,      type: string, length: 200 }
                   - { name: reference, type: string, length: 20, normalize: upper, fixedAfterCreate: true }
+                  - { name: batch,     type: string, length: 20, fixedWhenReferenced: true }
                 relations:
                   - { name: Project,  kind: manyToOne, to: Project, required: true, fixedAfterCreate: true }
                   - { name: Employee, kind: manyToOne, to: Employee, required: true, partner: true }
+
+              # References a timesheet and an expense, which fixes their batch (#8194).
+              - name: Approval
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Timesheet, kind: manyToOne, to: Timesheet }
+                  - { name: Expense,   kind: manyToOne, to: Expense }
 
             processes:
               # A system writer of the fixed relation and field: the guard is the controllers', so these still land.
@@ -246,6 +258,18 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
         Object rate = stored.extract()
                             .path("Rate");
         assertEquals(0, new BigDecimal(String.valueOf(rate)).compareTo(new BigDecimal("100")), "Rate kept: " + rate);
+
+        // A field fixed while referenced (#8194), on the personal and the partner surface: editable
+        // until an approval references the row, a change refused from then on, the same value saved.
+        put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine\",\"Batch\":\"B-1\"}", null).statusCode(200);
+        create(APPROVALS, "{\"Timesheet\":" + timesheet + ",\"Expense\":" + expense + "}");
+        put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine\",\"Batch\":\"B-2\"}", null).statusCode(409)
+                                                                                    .body("message", equalTo(
+                                                                                            "'Batch' cannot change while other records reference this Timesheet"));
+        put(PARTNER_EXPENSES, expense, "{\"Note\":\"taxi\",\"Batch\":\"B-2\"}", null).statusCode(409)
+                                                                                     .body("message", equalTo(
+                                                                                             "'Batch' cannot change while other records reference this Expense"));
+        put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine again\",\"Batch\":\"B-1\"}", null).statusCode(200);
     }
 
     /**

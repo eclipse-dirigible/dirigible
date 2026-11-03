@@ -4263,8 +4263,9 @@ class IntentEngineIT extends IntegrationTest {
         // takes the header and the flip with it. Written as separate transactions, a create-from that
         // failed on a line left a header-only document behind whose source was already marked as
         // generated-from - and answered 500 while doing it.
-        assertTrue(generate.contains("UnitOfWork.call(() -> {"), "the create-from body must run as one unit of work");
-        int unit = generate.indexOf("UnitOfWork.call(() -> {");
+        // A unit the database rolled back to break a deadlock is run once more (#8341).
+        assertTrue(generate.contains("UnitOfWork.callRetryingDeadlock(() -> {"), "the create-from body must run as one unit of work");
+        int unit = generate.indexOf("UnitOfWork.callRetryingDeadlock(() -> {");
         assertTrue(unit < flip && unit < save, "the unit of work must open before the flip and the save");
         // ...and the announcement is recorded INSIDE it (#7160), which is what makes it atomic with the
         // flip. It still states a COMPLETED transition: a unit's events reach the broker only once the

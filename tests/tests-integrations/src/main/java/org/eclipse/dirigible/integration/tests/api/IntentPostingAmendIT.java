@@ -150,6 +150,8 @@ class IntentPostingAmendIT extends IntegrationTest {
               - { name: VoidDoc,   forEntity: Doc,   from: [2, 3], setStatus: 4, label: Void }
               # What "somebody has acted on the entry" is, in this fixture: the accountant posts it.
               - { name: PostEntry, forEntity: Entry, from: [1], setStatus: 2, label: Post }
+              # ...or rejects it, which makes it history (#7959).
+              - { name: RejectEntry, forEntity: Entry, from: [1], setStatus: 5, label: Reject }
               - { name: ClosePeriod,  forEntity: FiscalPeriod, from: [1], setStatus: 2, label: Close }
               - { name: ReopenPeriod, forEntity: FiscalPeriod, from: [2], setStatus: 1, label: Reopen }
 
@@ -177,6 +179,7 @@ class IntentPostingAmendIT extends IntegrationTest {
                   - { id: 2, name: Issued, stage: live }
                   - { id: 3, name: Sent,   stage: live }
                   - { id: 4, name: Voided, stage: void }
+                  - { id: 5, name: Rejected, stage: cancelled }
               - name: period-statuses
                 entity: PeriodStatus
                 rows:
@@ -286,6 +289,14 @@ class IntentPostingAmendIT extends IntegrationTest {
         transition("IssueDoc", voided);
         int original = onlyEntryOf(voided);
         awaitLines(original, 300.0f);
+        // Posted while the period is open, its entry rejected by the accountant (#7959) and the document
+        // sent back for the correction - its re-issue is the one the closed period refuses.
+        int reissued = create(DOCS, "{\"Date\":\"2025-07-14\",\"Amount\":80}");
+        transition("IssueDoc", reissued);
+        int rejected = onlyEntryOf(reissued);
+        awaitLines(rejected, 80.0f);
+        transition("RejectEntry", rejected);
+        transition("RejectDoc", reissued);
 
         transition("ClosePeriod", period);
         transition("VoidDoc", voided);
@@ -295,6 +306,8 @@ class IntentPostingAmendIT extends IntegrationTest {
         transition("IssueDoc", sent);
         awaitRefusal(sent);
         transition("SendDoc", sent);
+        transition("IssueDoc", reissued);
+        awaitRefusal(reissued);
         // Neither of these holds a post any more: one went back to draft (its next issue posts it), the
         // other was voided before anything was posted, so there is nothing to book and nothing to reverse.
         int redrafted = create(DOCS, "{\"Date\":\"2025-07-12\",\"Amount\":50}");
@@ -312,13 +325,17 @@ class IntentPostingAmendIT extends IntegrationTest {
         awaitLines(stornoOf(voided, original), -300.0f);
         // The document that moved on, posted with what it says.
         awaitLines(onlyEntryOf(sent), 100.0f);
+        // The re-issued document: its rejected entry is history, so it does not stand for the document
+        // and the sweep posts it afresh - as its re-issue would have in an open period.
+        awaitLines(entryOtherThan(reissued, rejected), 80.0f);
         // The sweep reports what it posted once it is done, so its count is the fence: it offered the
-        // one document the posting holds, and the other two are left unposted.
+        // two documents the posting holds and has no live entry for, and the other two are left
+        // unposted.
         Awaitility.await()
                   .pollInterval(1, TimeUnit.SECONDS)
                   .atMost(POSTING_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                   .until(() -> postingLogs.containsMessage(
-                          "Posting docPosting: FiscalPeriod [" + period + "] reopened - posted [1] Doc document(s)", Level.INFO));
+                          "Posting docPosting: FiscalPeriod [" + period + "] reopened - posted [2] Doc document(s)", Level.INFO));
         assertUnposted(redrafted);
         assertUnposted(withdrawn);
     }
@@ -342,6 +359,22 @@ class IntentPostingAmendIT extends IntegrationTest {
                                                            .extract()
                                                            .jsonPath()
                                                            .getInt(ofDoc + "[0].Id")),
+                POSTING_TIMEOUT_SECONDS);
+        return entry.get();
+    }
+
+    /** The single entry the document carries besides the given one. */
+    private int entryOtherThan(int doc, int other) {
+        String others = "findAll { it.Doc == " + doc + " && it.Id != " + other + " }";
+        AtomicInteger entry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> entry.set(given().when()
+                                                           .get(ENTRIES)
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body(others, hasSize(1))
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getInt(others + "[0].Id")),
                 POSTING_TIMEOUT_SECONDS);
         return entry.get();
     }

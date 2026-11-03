@@ -77,20 +77,13 @@ public class ${reopenClassName} implements MessageHandler {
         int reposted = 0;
         for (gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source :
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findAll(candidates)) {
-            // Already posted? The back-reference is the posting's own at-most-once key, so asking it
-            // here keeps the sweep off the documents that need nothing - and off rewriting a post that
-            // is already right. Asked of THIS posting's documents only (#8243): a reversal and the
-            // posting it reverses back-reference the same source and are told apart by the storno link,
-            // so "any entry of the source" - the original, always - would never let a storno through.
-            Criteria posted = Criteria.create()
-                                      .eq("${backRefProperty}", source.${sourceKeyField});
-#if($stornoProperty != "")
-            posted.isNotNull("${stornoProperty}");
-#elseif($stornoFilterProperty != "")
-            posted.isNull("${stornoFilterProperty}");
-#end
-            if (!new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository().findAll(posted)
-                                                                                                        .isEmpty()) {
+            // Already posted? Asked of the posting itself, so the sweep keeps off the documents that
+            // need nothing - and off rewriting a post that is already right - by the very documents
+            // post() counts as its own (#8243): a reversal and the posting it reverses back-reference
+            // the same source and are told apart by the storno link, so "any entry of the source" - the
+            // original, always - would never let a storno through; and a rejected or reversed entry is
+            // history (#7959), so it does not stand for the source either.
+            if (posting.posted(source)) {
                 continue;
             }
             try {
