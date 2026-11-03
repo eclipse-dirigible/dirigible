@@ -48,6 +48,24 @@ public interface TargetDeleteRule {
     void release(String targetEntity, Object targetId);
 
     /**
+     * Whether any of this contribution's records references the given record, whatever its relation
+     * does on a delete - {@code restrict}, {@code nullify} or {@code cascade} alike. A record's
+     * controllers ask it before they let a field that is fixed while the record is referenced change
+     * (intent {@code fixedWhenReferenced: true}, dirigible #8194).
+     *
+     * <p>
+     * The default answers from {@link #countRestricting(String, Object)}, so a contribution generated
+     * before this method existed still counts its restricting references.
+     *
+     * @param targetEntity the fully qualified class name of the entity being updated
+     * @param targetId the primary key of the record being updated
+     * @return {@code true} when a record of this contribution references it
+     */
+    default boolean references(String targetEntity, Object targetId) {
+        return countRestricting(targetEntity, targetId) > 0;
+    }
+
+    /**
      * How a refusal names the referencing records, as a person reading the page knows them.
      *
      * @return the referencing entity's label, e.g. {@code Expense Claim}

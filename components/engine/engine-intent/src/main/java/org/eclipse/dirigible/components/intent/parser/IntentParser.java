@@ -5120,7 +5120,14 @@ public final class IntentParser {
                     validateVisibleTo(entity, field, declaredRoles, issues);
                 }
                 if (field.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, field, issues);
+                    validateFixedField(entity, field, "fixedAfterCreate", issues);
+                }
+                if (field.isFixedWhenReferenced()) {
+                    validateFixedField(entity, field, "fixedWhenReferenced", issues);
+                    if (field.isFixedAfterCreate()) {
+                        issues.add("entity [" + name + "] field [" + field.getName() + "] declares both fixedAfterCreate and"
+                                + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
             }
             if (idCount > 1) {
@@ -5258,7 +5265,15 @@ public final class IntentParser {
                     validateRelationCalculatedAction(entity, relation, issues);
                 }
                 if (relation.isFixedAfterCreate()) {
-                    validateFixedAfterCreate(entity, relation, issues);
+                    validateFixedRelation(entity, relation, "fixedAfterCreate", issues);
+                }
+                if (relation.isFixedWhenReferenced()) {
+                    validateFixedRelation(entity, relation, "fixedWhenReferenced", issues);
+                    if (relation.isFixedAfterCreate()) {
+                        issues.add(
+                                "entity [" + entity.getName() + "] relation [" + relation.getName() + "] declares both fixedAfterCreate and"
+                                        + " fixedWhenReferenced - fixedAfterCreate already refuses every change after create; keep one");
+                    }
                 }
                 if (relation.isPersonal()) {
                     personalCount++;
@@ -5450,6 +5465,9 @@ public final class IntentParser {
         }
         if (relation.isFixedAfterCreate()) {
             unsupported.add("fixedAfterCreate");
+        }
+        if (relation.isFixedWhenReferenced()) {
+            unsupported.add("fixedWhenReferenced");
         }
         if (relation.getShow() != null && !relation.getShow()
                                                    .isEmpty()) {
@@ -6190,26 +6208,30 @@ public final class IntentParser {
      * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
      * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
      * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
+     * {@code fixedWhenReferenced: true} (dirigible #8194) fixes the FK once another record references
+     * this one, so it needs the same: a composition parent is preset by the layout and never re-picked
+     * anyway, a status is the workflow's to move, and an update recompute is a system write.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, RelationIntent relation, List<String> issues) {
+    private static void validateFixedRelation(EntityIntent entity, RelationIntent relation, String key, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
         boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
         if (!toOne) {
-            issues.add(subject + " declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
+            issues.add(subject + " declares " + key + " but only a manyToOne/oneToOne relation has an FK a user picks");
             return;
         }
         if (relation.isComposition()) {
-            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare " + key);
         }
         if (relation.isEntityStatus()) {
-            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare fixedAfterCreate");
+            issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare " + key);
         }
         if (!isBlank(relation.getCalculatedActionOnUpdate())) {
-            issues.add(subject + " declares both fixedAfterCreate and calculatedActionOnUpdate - the update action recomputes the"
+            issues.add(subject + " declares both " + key + " and calculatedActionOnUpdate - the update action recomputes the"
                     + " value on every update, so it cannot also be fixed; keep one");
         }
     }
@@ -6224,14 +6246,17 @@ public final class IntentParser {
      * daylight-saving fold do not survive the round trip) and a translatable string of a
      * {@code multilingual} entity (the read overlay hands back a translation, not the base column). A
      * create-time default ({@code calculatedActionOnCreate}, #6696) stays caller-editable and may be
-     * fixed.
+     * fixed. {@code fixedWhenReferenced: true} (dirigible #8194) fixes the value once another record
+     * references this one; the controllers compare the payload with the stored row the same way, so it
+     * is refused in the same places - a calculated field above all, which no user update changes.
      *
      * @param entity the entity declaring the field
      * @param field the field
+     * @param key the key being validated, {@code fixedAfterCreate} or {@code fixedWhenReferenced}
      * @param issues the issue list to add to
      */
-    private static void validateFixedAfterCreate(EntityIntent entity, FieldIntent field, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares fixedAfterCreate but ";
+    private static void validateFixedField(EntityIntent entity, FieldIntent field, String key, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] field [" + field.getName() + "] declares " + key + " but ";
         String type = field.getType() == null ? "string"
                 : field.getType()
                        .toLowerCase(Locale.ROOT);

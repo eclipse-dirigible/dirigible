@@ -1765,12 +1765,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("isReadOnlyProperty", "true");
         }
         // Set on create, fixed afterwards (#8363): the same two scalars as a fixed to-one relation
-        // (#7903, putFixedAfterCreate) - the controllers refuse a changed value with a 409 under
+        // (#7903, putFixedRelation) - the controllers refuse a changed value with a 409 under
         // checks.<Entity>_fixed_<Field>, the forms render the input read-only on edit.
         if (field.isFixedAfterCreate()) {
             p.put("fixedAfterCreate", "true");
             p.put("fixedAfterCreateMessage",
                     "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change once the " + entityName + " is created");
+        }
+        // Fixed while referenced (#8194): the same two-scalar shape - the controllers refuse a changed
+        // value with a 409 under checks.<Entity>_fixedWhenReferenced_<Field> once another record
+        // references the row.
+        if (field.isFixedWhenReferenced()) {
+            p.put("fixedWhenReferenced", "true");
+            p.put("fixedWhenReferencedMessage",
+                    "'" + IntentNaming.pascalCase(field.getName()) + "' cannot change while other records reference this " + entityName);
         }
         // A uuid field is platform-generated: the generated repository assigns a random UUID on create
         // when the value is empty (no hand-written calculatedActionOnCreate needed). The author can
@@ -2177,7 +2185,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetDropDownValue", labelFieldName(target));
         putDraftNumberLabel(p, labelIsDraftNumber(target));
         putCalculatedAction(p, relation);
-        putFixedAfterCreate(p, ownerEntity, relation);
+        putFixedRelation(p, ownerEntity, relation);
         putLookupColumns(p, relation, draftNumberProperties(target));
         return p;
     }
@@ -2286,7 +2294,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                    .contains(info.labelField()));
         putTargetDeleteRule(p, relation);
         putCalculatedAction(p, relation);
-        putFixedAfterCreate(p, ownerEntity, relation);
+        putFixedRelation(p, ownerEntity, relation);
         putLookupColumns(p, relation, info.draftNumberProperties());
         return p;
     }
@@ -2296,15 +2304,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * which the REST controllers refuse a changed value of on update and the forms render read-only on
      * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
      * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
-     * catalog translates it like any check message. Nothing is emitted for an ordinary relation.
+     * catalog translates it like any check message. A {@code fixedWhenReferenced: true} relation
+     * (#8194) is emitted the same way as {@code fixedWhenReferenced} +
+     * {@code fixedWhenReferencedMessage}, under {@code checks.<Entity>_fixedWhenReferenced_<Relation>},
+     * as the field key is. Nothing is emitted for an ordinary relation.
      */
-    private static void putFixedAfterCreate(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
-        if (!relation.isFixedAfterCreate()) {
-            return;
+    private static void putFixedRelation(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
+        String name = IntentNaming.pascalCase(relation.getName());
+        if (relation.isFixedAfterCreate()) {
+            p.put("fixedAfterCreate", "true");
+            p.put("fixedAfterCreateMessage", "'" + name + "' cannot change once the " + ownerEntity + " is created");
         }
-        p.put("fixedAfterCreate", "true");
-        p.put("fixedAfterCreateMessage",
-                "'" + IntentNaming.pascalCase(relation.getName()) + "' cannot change once the " + ownerEntity + " is created");
+        if (relation.isFixedWhenReferenced()) {
+            p.put("fixedWhenReferenced", "true");
+            p.put("fixedWhenReferencedMessage", "'" + name + "' cannot change while other records reference this " + ownerEntity);
+        }
     }
 
     /**

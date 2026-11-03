@@ -2104,6 +2104,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public String referencingLabel() {
         return "${entityLabel}";
     }
+
+    /**
+     * Whether a ${name} row references a record through any relation a delete rule covers - restrict,
+     * nullify or cascade alike. The record's controllers ask before they let a field it fixes while
+     * referenced change (intent {@code fixedWhenReferenced: true}, dirigible #8194).
+     */
+    @Override
+    public boolean references(String targetEntity, Object targetId) {
+#foreach($property in $properties)
+#if($property.whenTargetDeleted && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)
+                && count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId)) > 0) {
+            return true;
+        }
+#end
+#end
+        return false;
+    }
 #end
 #if($hasTargetAgreementRules)
 

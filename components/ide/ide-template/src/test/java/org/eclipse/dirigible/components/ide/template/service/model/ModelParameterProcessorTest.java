@@ -170,6 +170,40 @@ class ModelParameterProcessorTest {
         assertTrue(Boolean.TRUE.equals(timesheet.get("hasNormalize")), "the repository's normalize the controller calls is generated");
     }
 
+    /**
+     * A field fixed while referenced (#8194) is resolved like a fixed one, into its own list and under
+     * its own catalog key, so the controllers ask whether the row is referenced only for it.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfAFieldFixedWhenReferenced() {
+        Map<String, Object> code = property("Code", "VARCHAR");
+        code.put("fixedWhenReferenced", "true");
+        code.put("fixedWhenReferencedMessage", "'Code' cannot change while other records reference this Currency");
+        Map<String, Object> rounding = property("Rounding", "DECIMAL");
+        rounding.put("fixedWhenReferenced", "true");
+        rounding.put("fixedWhenReferencedMessage", "'Rounding' cannot change while other records reference this Currency");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"), code, rounding);
+        Map<String, Object> model = model(currency);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "currencies.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertTrue(((List<Map<String, Object>>) currency.get("fixedAfterCreateProperties")).isEmpty());
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) currency.get("fixedWhenReferencedProperties");
+        assertEquals(2, fixed.size());
+        assertEquals(
+                "\"bookstore:currencies-model.checks.Currency_fixedWhenReferenced_Code\", "
+                        + "\"'Code' cannot change while other records reference this Currency\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+        assertEquals(Boolean.TRUE, fixed.get(1)
+                                        .get("decimal"));
+        assertEquals("'Code' cannot change while other records reference this Currency", ModelTranslations.checkMessages(model)
+                                                                                                          .get("Currency_fixedWhenReferenced_Code"));
+    }
+
     @Test
     void coercesTheModelsStringFlagsToBooleans() {
         Map<String, Object> property = property("Id", "INTEGER");
