@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.security.oauth2;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
 import org.eclipse.dirigible.components.base.http.access.ProgrammaticRequestMatcher;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.BearerUnauthorizedEntryPoint;
+import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
+import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -43,12 +45,14 @@ public class OAuth2SecurityConfiguration {
      * Filter chain.
      *
      * @param http the http
+     * @param tenantContextInitFilter the tenant context init filter
      * @return the security filter chain
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
-            OAuth2AuthorizedClientService authorizedClientService) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator, OAuth2AuthorizedClientService authorizedClientService)
+            throws Exception {
         // registered ahead of the login and resource-server configurers, so it is the default of the
         // delegating entry point: a script that is not authenticated gets a 401 it can act on instead
         // of the redirect to the identity provider a browser navigation gets
@@ -59,6 +63,9 @@ public class OAuth2SecurityConfiguration {
             // no client sends a CSRF token - BrowserSecurityConfigurator refuses forged cross-site requests and
             // sets the frame options
             .csrf(csrf -> csrf.disable())
+            // the tenant scope is opened inside the chain, ahead of authentication, as on the other
+            // profiles - not by the servlet filter Spring Boot registers after the whole chain (#8458)
+            .addFilterBefore(tenantContextInitFilter, OAuth2LoginAuthenticationFilter.class)
             .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService), AuthorizationFilter.class)
             .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(bearerEntryPoint, new ProgrammaticRequestMatcher()))
             .oauth2Client(Customizer.withDefaults())
