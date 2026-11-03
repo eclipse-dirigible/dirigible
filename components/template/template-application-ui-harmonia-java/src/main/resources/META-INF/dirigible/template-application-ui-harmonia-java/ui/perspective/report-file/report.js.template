@@ -90,7 +90,10 @@ document.addEventListener('alpine:init', () => {
     // The Filter menu, the manage list's (#7390): step one picks a column, step two edits a copy of
     // its filter, and Apply writes the copy into `filters`. A chip edits the same copy.
     filterOpen: false,
-    filterEditing: null, // the key of the column being edited
+    // Which step the menu shows. The menu's own: a chip sets filterEditing but never this, and any
+    // open or close of the menu resets it, so the menu always opens on its column list.
+    filterMenuEditing: false,
+    filterEditing: null, // the key of the column being edited, from the menu or a chip
     // Always an object: every open editor (the menu's and each chip's) binds its fields, and Alpine
     // re-reads those bindings while a closing editor is still on the page.
     filterDraft: {},
@@ -151,6 +154,8 @@ document.addEventListener('alpine:init', () => {
         });
       }
       try { document.title = this.displayName; } catch (e) { /* no document */ }
+      // Closing the Filter menu - however it closes - resets it to its column list.
+      this.$watch('filterOpen', () => { this.filterMenuEditing = false; });
       this.load();
     },
 
@@ -331,7 +336,7 @@ document.addEventListener('alpine:init', () => {
       this.filterEditing = key;
       this.filterDraft = { ...(this.filters[key] || this.blankFilter()) };
     },
-    backToFilterMenu() { this.filterEditing = null; this.filterDraft = {}; },
+    backToFilterMenu() { this.filterMenuEditing = false; this.filterEditing = null; this.filterDraft = {}; },
     closeFilterMenu() { this.filterOpen = false; this.filterEditing = null; this.filterDraft = {}; },
     get editedFilterColumn() { return this.reportColumns.find(c => c.key === this.filterEditing) || null; },
 

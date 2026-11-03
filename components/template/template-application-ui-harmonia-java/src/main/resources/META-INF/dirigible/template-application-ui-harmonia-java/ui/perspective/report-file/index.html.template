@@ -111,10 +111,10 @@
           <div x-h-popover.no-scroll data-align="bottom-start" data-innerclicks="true" class="overflow-visible" style="min-width: 18rem">
             <!-- Step one: which column to filter by. A column already filtered shows its value, so the
                  same entry is how that filter is changed. -->
-            <div class="vbox p-1" x-show="!filterEditing">
+            <div class="vbox p-1" x-show="!filterMenuEditing">
               <span x-h-text.muted class="px-2 pt-1 pb-2 text-sm" x-text="T('application-core:shell.report.addFilter', 'Add filter')"></span>
               <template x-for="col in reportColumns" :key="col.key">
-                <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="openFilterEditor(col.key)">
+                <button x-h-button data-variant="transparent" class="h-auto justify-start py-2" @click="filterMenuEditing = true; openFilterEditor(col.key)">
                   <span class="vbox min-w-0 flex-1 items-start">
                     <span class="truncate" x-text="col.key"></span>
                     <span class="truncate text-xs text-muted-foreground" x-show="filterHasValue(col)" x-text="filterValueText(col)"></span>
@@ -123,7 +123,7 @@
               </template>
             </div>
             <!-- Step two: the value. -->
-            <div class="vbox" x-show="filterEditing" x-cloak>
+            <div class="vbox" x-show="filterMenuEditing" x-cloak>
               <div x-h-toolbar data-variant="transparent" data-size="sm">
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="backToFilterMenu()"
                         :aria-label="T('application-core:shell.report.back', 'Back')">
