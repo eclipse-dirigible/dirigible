@@ -92,12 +92,52 @@ class TimedWaitBpmnTest {
 
         assertTrue(bpmn.contains("  <message id=\"ExportArchiveAwaitApproval\" name=\"ExportArchiveAwaitApproval\"></message>\n"),
                 "the event wait's message definition must be unchanged:\n" + bpmn);
-        assertTrue(bpmn.contains("""
-                    <intermediateCatchEvent id="awaitApproval" name="Await Approval">
-                      <messageEventDefinition messageRef="ExportArchiveAwaitApproval"></messageEventDefinition>
-                    </intermediateCatchEvent>
-                """), "the event wait's catch event must be unchanged:\n" + bpmn);
+        assertTrue(
+                bpmn.contains(
+                        """
+                                    <intermediateCatchEvent id="awaitApproval" name="Await Approval">
+                                      <extensionElements>
+                                        <flowable:executionListener event="start" expression="${EarlyMessages.checkWhenArmed(execution)}"></flowable:executionListener>
+                                        <flowable:executionListener event="end" expression="${EarlyMessages.consumed(execution)}"></flowable:executionListener>
+                                      </extensionElements>
+                                      <messageEventDefinition messageRef="ExportArchiveAwaitApproval"></messageEventDefinition>
+                                    </intermediateCatchEvent>
+                                """),
+                "the event wait's catch event must subscribe to its message and consume one kept for it (#8106):\n" + bpmn);
+        assertFalse(bpmn.contains("<intermediateCatchEvent id=\"pause\" name=\"Pause\">\n      <extensionElements>"),
+                "a timed wait resumes on its timer - no message is ever kept for it:\n" + bpmn);
         assertFalse(bpmn.contains("ExportArchivePause"), "the timed wait must have no message:\n" + bpmn);
+    }
+
+    @Test
+    void aUserTaskDiscardsWhatWasKeptForALaterWaitOnlyWhereTheProcessHasAnEventWait() {
+        String userTask = """
+                name: archive
+                entities:
+                  - name: ArchiveRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                processes:
+                  - name: ExportArchive
+                    trigger: { onCreate: ArchiveRequest }
+                    steps:
+                      - { name: review, kind: userTask, args: { next: %s } }
+                      - { name: awaitUpdate, kind: wait, args: { onUpdate: ArchiveRequest, next: done } }
+                      - { name: pause, kind: wait, args: { after: PT10S, next: done } }
+                      - { name: done, kind: end }
+                """;
+        String discard = "<flowable:executionListener event=\"end\" expression=\"${EarlyMessages.discardAll(execution)}\">";
+
+        String withEventWait = bpmn(userTask.formatted("awaitUpdate"));
+        String review = withEventWait.substring(withEventWait.indexOf("<userTask id=\"review\""), withEventWait.indexOf("</userTask>"));
+        assertTrue(review.contains(discard),
+                "only an event arriving after the person completed the task may resume a later wait (#8106):\n" + withEventWait);
+
+        String timedOnly = bpmn(userTask.formatted("pause")
+                                        .replace(
+                                                "      - { name: awaitUpdate, kind: wait, args: { onUpdate: ArchiveRequest, next: done } }\n",
+                                                ""));
+        assertFalse(timedOnly.contains("EarlyMessages"), "a process without an event wait keeps no message:\n" + timedOnly);
     }
 
     private static void assertFlow(String bpmn, String source, String target) {

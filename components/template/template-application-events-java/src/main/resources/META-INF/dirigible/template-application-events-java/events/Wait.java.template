@@ -27,10 +27,13 @@ import gen.${javaGenFolderName}.data.${javaEventPerspective}.${eventEntity}Repos
  * process's instance - read from the record's ProcessIds stamps, not from its single ProcessId, which
  * holds whichever process started last: once a record can be the subject of several flows, correlating
  * on that one would resume a stranger's wait, or nothing at all.
- * Fail-soft by design: no stamp, no matching parked instance, or an instance already past the wait is
- * a no-op, never an error - the event is simply not for this wait. A correlation that fails for any
- * other reason is a different matter: the instance stays parked on a wait nobody will resume, so it is
- * logged with its cause rather than swallowed (dirigible #7230).
+ * An instance that is running but not parked on the wait YET - still running the steps after a user
+ * task when the event arrives - keeps the event, and the wait continues on it the moment the process
+ * reaches it (dirigible #8106): the event must not be lost to the window before the wait subscribes.
+ * Fail-soft by design: no stamp, or an instance that has ended, is a no-op, never an error - the event
+ * is simply not for this wait. A delivery that fails for any other reason is a different matter: the
+ * instance stays parked on a wait nobody will resume, so it is logged with its cause rather than
+ * swallowed (dirigible #7230).
  *
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean.
@@ -85,12 +88,13 @@ public class ${className}Wait implements MessageHandler {
             return;
         }
         try {
-            Process.correlateMessageEvent(instance, "${messageName}", java.util.Map.of());
-        } catch (IllegalArgumentException notParked) {
-            // The one expected miss: the instance is not waiting on this message (already resumed, on
-            // another step, or ended), which the platform reports with exactly this type. A no-op by
-            // the fail-soft glue convention.
-            LOG.debug("${process} instance [{}] was not parked on \"${messageName}\"", instance, notParked);
+            // Resumes the parked instance, or keeps the event for the wait the instance has not reached
+            // yet - until it completes a user task, after which the event no longer counts.
+            Process.deliverMessageEvent(instance, "${messageName}");
+        } catch (IllegalArgumentException ended) {
+            // The one expected miss: the instance is no longer running, which the platform reports with
+            // exactly this type. A no-op by the fail-soft glue convention.
+            LOG.debug("${process} instance [{}] is not running - \"${messageName}\" is not for it", instance, ended);
         } catch (RuntimeException failed) {
             // Anything else - the correlation did not happen, so an instance that should have moved on
             // stays parked on this wait until someone notices. Fail-soft, but never silent.

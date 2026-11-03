@@ -132,6 +132,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     /** A {@code call:} the {@code ${JSTask}} delegate runs - see {@link #isScriptHandler}. */
     private static final Pattern SCRIPT_HANDLER = Pattern.compile(".*\\.(?:m?js|ts)(?:/\\w*)?(?:/\\w*)?");
     private static final String JAVA_SOURCE_EXTENSION = ".java";
+    /*
+     * The engine-bpm-flowable EarlyMessages bean (a string contract, like ${JavaTask}): an event that
+     * reaches an instance before it is parked on its wait is kept, and the wait continues on it once
+     * armed (#8106).
+     */
+    private static final String EARLY_MESSAGES_CHECK = "${EarlyMessages.checkWhenArmed(execution)}";
+    private static final String EARLY_MESSAGES_CONSUMED = "${EarlyMessages.consumed(execution)}";
+    private static final String EARLY_MESSAGES_DISCARD = "${EarlyMessages.discardAll(execution)}";
 
     @Override
     public String name() {
@@ -848,8 +856,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // one by id. The name is process + step (unique per file; correlation additionally scopes by
         // process-instance id, so the compound name is for readability, not disambiguation). A timed
         // wait catches a timer, not a message.
+        boolean hasEventWait = false;
         for (StepIntent step : steps) {
             if ("wait".equals(step.getKind()) && step.getName() != null && !ProcessWaitSupport.isTimed(step)) {
+                hasEventWait = true;
                 String message = ProcessWaitSupport.messageName(processId, step.getName());
                 sb.append("  <message id=\"")
                   .append(escapeXmlAttribute(message))
@@ -901,7 +911,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, access, clearsByStep, synchronousNodes,
-                    completingActionsByForm, writesByTask);
+                    completingActionsByForm, writesByTask, hasEventWait);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -1363,13 +1373,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
             String processName, String eventsPackage, TaskAccess access, Map<String, List<String>> clearsByStep,
-            Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask) {
+            Set<String> synchronousNodes, Map<String, List<String>> completingActionsByForm, Map<String, List<String>> writesByTask,
+            boolean hasEventWait) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         List<String> clears = clearsFor(step, clearsByStep);
         List<String> writes = writesByTask.getOrDefault(step.getName(), List.of());
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes);
+                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes, hasEventWait);
                 break;
             case "serviceTask":
             case "script":
@@ -1390,7 +1401,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", LoggedValue.of(kind),
                         LoggedValue.of(step.getName()));
-                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes);
+                appendUserTask(sb, step, rolesByLowerName, projectName, access, clears, completingActionsByForm, writes, hasEventWait);
                 break;
         }
     }
@@ -1415,7 +1426,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            TaskAccess access, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes) {
+            TaskAccess access, List<String> clears, Map<String, List<String>> completingActionsByForm, List<String> writes,
+            boolean discardEarlyEvents) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         String candidateGroupsExtra = String.join(",", access.candidateGroupsExtra(step));
@@ -1488,6 +1500,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(escapeXmlAttribute(String.join(",", writes)))
           .append("\"></flowable:property>\n");
         appendClearVariableListeners(sb, clears);
+        if (discardEarlyEvents) {
+            // Only an event that arrives after this task completes may resume a later wait (#8106).
+            sb.append("        <flowable:executionListener event=\"end\" expression=\"")
+              .append(EARLY_MESSAGES_DISCARD)
+              .append("\"></flowable:executionListener>\n");
+        }
         sb.append("      </extensionElements>\n    </userTask>\n");
     }
 
@@ -1884,6 +1902,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append(escapeXmlAttribute(stringArg(step, ProcessWaitSupport.AFTER)))
               .append("</timeDuration></timerEventDefinition>\n");
         } else {
+            // An event that arrives before the process reaches the wait is kept on the instance by the
+            // wait listener (#8106): the start listener delivers it once the wait is armed, the end
+            // listener spends it, whatever resumed the wait.
+            sb.append("      <extensionElements>\n");
+            sb.append("        <flowable:executionListener event=\"start\" expression=\"")
+              .append(EARLY_MESSAGES_CHECK)
+              .append("\"></flowable:executionListener>\n");
+            sb.append("        <flowable:executionListener event=\"end\" expression=\"")
+              .append(EARLY_MESSAGES_CONSUMED)
+              .append("\"></flowable:executionListener>\n");
+            sb.append("      </extensionElements>\n");
             sb.append("      <messageEventDefinition messageRef=\"")
               .append(escapeXmlAttribute(ProcessWaitSupport.messageName(processName, step.getName())))
               .append("\"></messageEventDefinition>\n");
