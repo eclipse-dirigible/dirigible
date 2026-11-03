@@ -30,7 +30,9 @@ public interface TargetDeleteRule {
      * How many of this contribution's records reference the given record through a relation that
      * restricts its delete. A record this contribution would delete with it restricts the delete too
      * while its own delete is refused: the contribution then throws that refusal from here, before
-     * anything is written (dirigible #8114).
+     * anything is written (dirigible #8114). Such a contribution overrides
+     * {@link #references(String, Object)} with a plain count, as the generated one does, because an
+     * update asks that and is not a delete to refuse.
      *
      * @param targetEntity the fully qualified class name of the entity being deleted
      * @param targetId the primary key of the record being deleted
@@ -48,6 +50,24 @@ public interface TargetDeleteRule {
      * @param targetId the primary key of the record being deleted
      */
     void release(String targetEntity, Object targetId);
+
+    /**
+     * Whether any of this contribution's records references the given record, whatever its relation
+     * does on a delete - {@code restrict}, {@code nullify} or {@code cascade} alike. A record's
+     * controllers ask it before they let a field that is fixed while the record is referenced change
+     * (intent {@code fixedWhenReferenced: true}, dirigible #8194).
+     *
+     * <p>
+     * The default answers from {@link #countRestricting(String, Object)}, so a contribution generated
+     * before this method existed still counts its restricting references.
+     *
+     * @param targetEntity the fully qualified class name of the entity being updated
+     * @param targetId the primary key of the record being updated
+     * @return {@code true} when a record of this contribution references it
+     */
+    default boolean references(String targetEntity, Object targetId) {
+        return countRestricting(targetEntity, targetId) > 0;
+    }
 
     /**
      * How a refusal names the referencing records, as a person reading the page knows them.

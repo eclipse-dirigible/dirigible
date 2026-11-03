@@ -17,8 +17,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
 import org.eclipse.dirigible.components.data.store.java.outbox.EventOutbox;
@@ -34,6 +38,7 @@ import org.mockito.InOrder;
 
 import jakarta.persistence.LockTimeoutException;
 import jakarta.persistence.OptimisticLockException;
+import jakarta.persistence.PessimisticLockException;
 
 /**
  * What {@code inUnitOfWork} owes its caller when the block fails: the transaction is rolled back
@@ -226,6 +231,111 @@ class JavaEntityStoreUnitOfWorkTest {
 
         assertSame(timeout, thrown.getCause());
         assertRolledBackBeforeClose();
+    }
+
+    /**
+     * A unit the database rolled back to break a deadlock is run once more (#8341): nothing it wrote
+     * survived and nothing it read was wrong, and by then the other transaction has committed.
+     */
+    @Test
+    void aDeadlockVictimIsRunOnceMore() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        String result = store.inUnitOfWorkRetryingDeadlock(() -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw deadlock("40001");
+            }
+            return "saved";
+        });
+
+        assertEquals("saved", result);
+        assertEquals(2, attempts.get());
+        verify(transaction).rollback();
+        verify(transaction).commit();
+        verify(session, times(2)).close();
+    }
+
+    /** PostgreSQL reports a deadlock as 40P01. */
+    @Test
+    void aPostgreSqlDeadlockVictimIsRunOnceMore() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertEquals("saved", store.inUnitOfWorkRetryingDeadlock(() -> {
+            if (attempts.incrementAndGet() == 1) {
+                throw deadlock("40P01");
+            }
+            return "saved";
+        }));
+        assertEquals(2, attempts.get());
+    }
+
+    /** Once: a second deadlock is the caller's conflict. */
+    @Test
+    void aSecondDeadlockIsTheCallersConflict() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWorkRetryingDeadlock(() -> {
+            attempts.incrementAndGet();
+            throw deadlock("40001");
+        }));
+
+        assertEquals(2, attempts.get());
+        verify(transaction, times(2)).rollback();
+        verify(transaction, never()).commit();
+    }
+
+    /**
+     * A lock wait that timed out is not repeated: it may have waited for a long-running writer, and
+     * repeating it would double the caller's wait.
+     */
+    @Test
+    void aLockTimeoutIsNotRunAgain() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWorkRetryingDeadlock(() -> {
+            attempts.incrementAndGet();
+            throw new LockTimeoutException("lock wait timed out", new SQLException("Timeout trying to lock table", "HYT00"));
+        }));
+
+        assertEquals(1, attempts.get());
+    }
+
+    /** Nor is a write that found a row it read already changed - that is a conflict over data. */
+    @Test
+    void aStaleRowIsNotRunAgain() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWorkRetryingDeadlock(() -> {
+            attempts.incrementAndGet();
+            throw new StaleObjectStateException("journal_JournalEntryItemEntity", 54);
+        }));
+
+        assertEquals(1, attempts.get());
+    }
+
+    /**
+     * Joining an open unit runs the block once: only the owner of the whole transaction can repeat it,
+     * and the outer unit's earlier writes are not this block's to repeat.
+     */
+    @Test
+    void aJoiningBlockIsNotRunAgain() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        assertThrows(ConcurrentWriteException.class, () -> store.inUnitOfWork(() -> store.inUnitOfWorkRetryingDeadlock(() -> {
+            attempts.incrementAndGet();
+            throw deadlock("40001");
+        })));
+
+        assertEquals(1, attempts.get());
+        verify(session).beginTransaction();
+    }
+
+    /**
+     * What H2 raises for the victim it picked: the SQLSTATE travels as the cause of the lock failure.
+     */
+    private static RuntimeException deadlock(String sqlState) {
+        return new PessimisticLockException("Deadlock detected. The current transaction was rolled back.",
+                new LockAcquisitionException("deadlock detected", new SQLException("Deadlock detected", sqlState)));
     }
 
     private void assertRolledBackBeforeClose() {

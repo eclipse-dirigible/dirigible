@@ -380,7 +380,8 @@ class GlueGenerator {
      */
     private static void bindSetter(Map<String, Object> item, Map<String, Object> context, Map<String, Object> parameters) {
         copy(context, item, "process", "className", "entity", "perspective", "keyProperty", "keyAccessor", "field", "value", "relation",
-                "clear", "errorMessage", "now", "nowExpression", "via", "targetEntity", "targetPerspective", "targetKeyAccessor");
+                "clear", "errorMessage", "now", "nowExpression", "via", "targetEntity", "targetPerspective", "targetKeyAccessor",
+                "rollupStatus", "rollupDisplacedStatus", "rollupOwnedStatuses");
         copyJavaLiterals(context, item, "value");
         context.put("javaPerspective", sanitize(item, "perspective"));
         // A one-hop setter (#7934) writes through its target's repository, in the target's package.
@@ -1247,6 +1248,9 @@ class GlueGenerator {
         // emit: no compared properties (every existing post reads as unchanged, the old no-op) and no
         // lifecycle guard around the rewrite.
         context.put("amendableGuard", strOr(item, "amendableGuard", ""));
+        // Which posted documents are history (issue #7959). A .glue written before it counts every one,
+        // as that shape's handler did.
+        context.put("deadEntryCondition", strOr(item, "deadEntryCondition", ""));
         // The compared item cells, each carrying how the write leaves its column. #7188 renamed the
         // #7163 key `expressionDefault` to `compareOnlyWhenDerived` and the template reads only the new
         // one, so a .glue generated between the two rendered its CURRENT_DATE-default cells with that

@@ -143,7 +143,7 @@ final class ModelParameterProcessor {
         entity.put("referencedProjections", new ArrayList<>());
         splitChecks(entity, parameters);
         resolveUniqueConstraintLiterals(entity, parameters);
-        resolveFixedAfterCreate(entity, parameters);
+        resolveFixedProperties(entity, parameters);
         for (Map<String, Object> flag : asMaps(entity.get("singleFlags"))) {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
@@ -589,23 +589,31 @@ final class ModelParameterProcessor {
      * {@code decimal}, so the controllers compare it by value ({@code 100} against a stored
      * {@code 100.00} is no change), and a {@code normalize:} field is marked {@code normalized}, so
      * they normalize the payload before comparing. A relation is neither, so its generated code is
-     * unchanged. Always present, empty when the entity fixes nothing.
+     * unchanged. Always present, empty when the entity fixes nothing. The fields fixed while the record
+     * is referenced (intent {@code fixedWhenReferenced: true}, #8194) are collected the same way into
+     * {@code fixedWhenReferencedProperties}.
      *
      * @param entity the entity
      * @param parameters the generation parameters (project name and model file path)
      */
-    private static void resolveFixedAfterCreate(Map<String, Object> entity, Map<String, Object> parameters) {
+    private static void resolveFixedProperties(Map<String, Object> entity, Map<String, Object> parameters) {
+        for (String flag : ModelTranslations.FIXED_FLAGS) {
+            entity.put(flag + "Properties", fixedProperties(entity, parameters, flag));
+        }
+    }
+
+    private static List<Map<String, Object>> fixedProperties(Map<String, Object> entity, Map<String, Object> parameters, String flag) {
         List<Map<String, Object>> fixed = new ArrayList<>();
         for (Map<String, Object> property : asMaps(entity.get("properties"))) {
-            String messageKey = ModelTranslations.fixedMessageKey(entity, property);
+            String messageKey = ModelTranslations.fixedMessageKey(entity, property, flag);
             if (messageKey == null) {
                 continue;
             }
             String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", property.get("name"));
-            entry.put("messageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
-                    + JavaLiterals.escape(str(property, "fixedAfterCreateMessage")) + "\"");
+            entry.put("messageArgsJava",
+                    "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(str(property, flag + "Message")) + "\"");
             if ("java.math.BigDecimal".equals(ModelDataTypes.parse(str(property, "dataType"))
                                                             .javaClass())) {
                 entry.put("decimal", Boolean.TRUE);
@@ -616,7 +624,28 @@ final class ModelParameterProcessor {
             }
             fixed.add(entry);
         }
-        entity.put("fixedAfterCreateProperties", fixed);
+        return fixed;
+    }
+
+    /**
+     * Hands every bounded derived column (#8096) the arguments of its refusal - the catalog key the
+     * en-US catalog writes it under and the default-language text - for the repository's
+     * {@code requireFits}. Run by {@code ModelGenerator} once it has marked the columns, which is after
+     * {@link #process}.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    static void resolveOverflowChecks(Map<String, Object> entity, Map<String, Object> parameters) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            String messageKey = ModelTranslations.overflowMessageKey(entity, property);
+            if (messageKey != null) {
+                String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+                property.put("overflowMessageArgsJava", "\"" + JavaLiterals.escape(catalogKey) + "\", \""
+                        + JavaLiterals.escape(ModelTranslations.overflowMessage(entity, property)) + "\"");
+                entity.put("hasOverflowChecks", Boolean.TRUE);
+            }
+        }
     }
 
     /**
@@ -2616,7 +2645,7 @@ final class ModelParameterProcessor {
      * @param name the property name, may be null
      * @return the property, or null
      */
-    private static Map<String, Object> findProperty(Map<String, Object> entity, String name) {
+    static Map<String, Object> findProperty(Map<String, Object> entity, String name) {
         if (name == null) {
             return null;
         }

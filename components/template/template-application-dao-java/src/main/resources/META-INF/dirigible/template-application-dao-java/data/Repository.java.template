@@ -175,8 +175,29 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #macro(rollupGuardCheck)
 #foreach($rollupGuard in $rollupGuards)
-#if(!$rollupGuard.guardStatusProperty || $rollupGuard.guardStatusProperty == "")
+#if($rollupGuard.capacityField && (!$rollupGuard.guardStatusProperty || $rollupGuard.guardStatusProperty == ""))
 #rollupGuardBody($rollupGuard)
+#end
+#end
+#end
+## Fit guard (#8096): a sum roll-up's total must fit the parent column it is written into. The roll-up
+## is recomputed asynchronously after this write commits, so a total the column cannot hold killed that
+## handler for good while this write answered 200 and the parent kept a stale total. So the sum is
+## projected here from the store, as the capacity guard does - the rows the roll-up counts, this one
+## as written - and the parent's own requireFits refuses it before anything is stored. Run after the
+## calculated fields, since the summed field may be one of them.
+#macro(rollupFitCheck)
+#foreach($rollupGuard in $rollupGuards)
+#if($rollupGuard.fitField && $rollupGuard.fitField != "")
+        if (entity.${rollupGuard.fkProperty} != null#if($rollupGuard.incomingMatch && $rollupGuard.incomingMatch != "") && ${rollupGuard.incomingMatch}#end) {
+            java.math.BigDecimal fitSum = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : entity.${rollupGuard.ofField};
+            for (${name}Entity fitRow : findAll(Criteria.create().eq("${rollupGuard.fkProperty}", entity.${rollupGuard.fkProperty})#if($rollupGuard.filterChain)${rollupGuard.filterChain}#end)) {
+                if (fitRow.${rollupGuard.ofField} != null && !fitRow.${rollupGuard.childIdField}.equals(entity.${rollupGuard.childIdField})) {
+                    fitSum = fitSum.add(fitRow.${rollupGuard.ofField});
+                }
+            }
+            ${rollupGuard.parentEntity}Repository.requireFits("${rollupGuard.fitField}", fitSum);
+        }
 #end
 #end
 #end
@@ -471,10 +492,27 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($hasSingleFlags || $documentItem)
 #if($hasSingleFlags)
         // A single flag changes hands in ONE unit of work with the write that takes it, so the holder
         // it demotes and this row commit together or not at all.
-        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> saveInUnit(entity));
+#end
+#if($documentItem)
+        // A document line commits in ONE unit of work with the header total it moves: a total the
+        // header cannot take refuses the line, instead of failing after the line was stored and leaving
+        // a document whose footer is not the sum of its lines (#8096).
+#end
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+#if($documentItem)
+            // The header is locked FIRST: the line's reference check share-locks it too, and two lines
+            // added at once would each hold that share lock while waiting to write the total. Taken
+            // first, the second line waits for the first to commit and then sums it.
+            if (entity.${documentItem.fkProperty} != null) {
+                new ${documentItem.parentEntity}Repository().lockForUpdate(entity.${documentItem.fkProperty});
+            }
+#end
+            return saveInUnit(entity);
+        });
     }
 
     private ${name}Entity saveInUnit(${name}Entity entity) {
@@ -526,6 +564,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
 #end
+#rollupFitCheck()
 #if($documentMaster)
         recalculate(entity);
 #end
@@ -538,8 +577,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         // this create names until it commits (#8252): a delete of one of them either waits for the
         // insert and then counts it, or has deleted the row the check waits for and refuses this create
         // - checked and inserted apart, both won and the row pointed at nothing. The check comes before
-        // the number is drawn, so a refused create spends none.
-        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        // the number is drawn, so a refused create spends none. A unit the database rolled back to
+        // break a deadlock is run once more (#8341): on H2 the share lock is exclusive, so a write and
+        // a derived write naming the same rows in another order deadlock although neither changed
+        // anything the other read.
+        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, null);
             return insert(entity);
         });
@@ -620,7 +662,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
-#if($hasSingleFlags)
+#if($hasSingleFlags || $documentItem)
+        // One unit with the header total(s) it moves - see save() (#8096).
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
     }
 
@@ -711,6 +754,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+#rollupFitCheck()
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
@@ -761,7 +805,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasReferenceChecks)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated", rekeyEvents);
         });
@@ -774,7 +818,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasReferenceChecks)
         // The reference check and the update are ONE transaction, the rows it names share-locked until
         // it commits - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity, "${projectName}-${perspectiveName}-${name}-updated");
         });
@@ -803,7 +847,8 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
-#if($hasSingleFlags)
+#if($hasSingleFlags || $documentItem)
+        // One unit with the header total(s) it moves - see save() (#8096).
         return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateWithoutEventInUnit(entity));
     }
 
@@ -866,7 +911,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         ${name}Entity historyBefore = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #if($hasReferenceChecks)
         // The reference check and the write are ONE transaction - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity);
         });
@@ -879,7 +924,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #else
 #if($hasReferenceChecks)
         // The reference check and the write are ONE transaction - see save() (#8252).
-        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+        ${name}Entity updated = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
             requireReferencesExist(entity, referencesStored);
             return super.update(entity);
         });
@@ -941,6 +986,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 
     @Override
     public int updateProperties(Object id, java.util.Map<String, Object> values, String eventTopic) {
+#if($documentItem)
+        // One unit with the header total(s) it moves - see save() (#8096).
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updatePropertiesInUnit(id, values, eventTopic));
+    }
+
+    private int updatePropertiesInUnit(Object id, java.util.Map<String, Object> values, String eventTopic) {
+#end
         if (values == null || values.isEmpty()) {
             return 0;
         }
@@ -1123,6 +1175,39 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         return org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite.run(values.keySet(),
                 () -> updateProperties(id, values, "${projectName}-${perspectiveName}-${name}-updated"));
     }
+#if($hasOverflowChecks)
+
+    /**
+     * Refuses a total its column cannot hold (#8096): a document total resummed from the lines, or a
+     * roll-up target a child's write would move. Asked by this repository's own resum and by the
+     * child repositories BEFORE they store the write, so the refusal is a translatable 400 with
+     * nothing persisted - not a database error after the child was stored, leaving a total that is
+     * not the sum of its children.
+     *
+     * @param property the total's property
+     * @param value the value it would take, may be null
+     * @throws org.eclipse.dirigible.sdk.db.ValidationException when the column cannot hold the value
+     */
+    public static void requireFits(String property, java.math.BigDecimal value) {
+        if (value == null) {
+            return;
+        }
+        switch (property) {
+#foreach($property in $properties)
+#if($property.overflowMessageArgsJava)
+            case "${property.name}" -> {
+                if (value.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP).precision() > ${property.dataPrecision}) {
+                    throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${property.overflowMessageArgsJava}, "value", value.setScale(${property.dataScale}, java.math.RoundingMode.HALF_UP).toPlainString());
+                }
+            }
+#end
+#end
+            default -> {
+                // not a bounded total
+            }
+        }
+    }
+#end
 #if($phases && $phases != "")
 #foreach($phase in $phases.split(","))
 #set($Phase = "${phase.substring(0,1).toUpperCase()}${phase.substring(1)}")
@@ -2197,6 +2282,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     public String referencingLabel() {
         return "${entityLabel}";
     }
+
+    /**
+     * Whether a ${name} row references a record through any relation a delete rule covers - restrict,
+     * nullify or cascade alike. The record's controllers ask before they let a field it fixes while
+     * referenced change (intent {@code fixedWhenReferenced: true}, dirigible #8194).
+     */
+    @Override
+    public boolean references(String targetEntity, Object targetId) {
+#foreach($property in $properties)
+#if($property.whenTargetDeleted && $property.targetEntityClass)
+        if ("${property.targetEntityClass}".equals(targetEntity)
+                && count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId)) > 0) {
+            return true;
+        }
+#end
+#end
+        return false;
+    }
 #end
 #if($hasTargetAgreementRules)
 
@@ -2402,6 +2505,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($property.isCalculatedProperty && !$property.calculatedActionOnUpdate && $property.calculatedPropertyExpressionUpdate)
         totals.put("${property.name}", entity.${property.name});
 #end
+#end
+#if($hasOverflowChecks)
+        // A total its column cannot hold is refused before it is written: the line that moved it is in
+        // the same unit, so it is refused with it (#8096).
+        for (java.util.Map.Entry<String, Object> total : totals.entrySet()) {
+            if (total.getValue() instanceof java.math.BigDecimal value) {
+                requireFits(total.getKey(), value);
+            }
+        }
 #end
 #if($history == "true")
         // Recalculation deliberately goes to the BASE targeted write (it has already computed the row,

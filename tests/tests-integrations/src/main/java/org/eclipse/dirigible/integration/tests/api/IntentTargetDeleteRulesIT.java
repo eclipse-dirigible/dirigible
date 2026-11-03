@@ -68,6 +68,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * refused as it would be in sequence.
  *
  * <p>
+ * dirigible #8194 is the update twin of {@code restrict}: a referenced currency's code was
+ * rewritten by a plain PUT, changing what every document referencing it prints. A field declaring
+ * {@code fixedWhenReferenced: true} is refused a change with a 409 while a record references the
+ * row - the same referencing records, same-model and cross-model, the delete's rules count.
+ *
+ * <p>
  * dirigible #8114 is a cascade sweeping away a record its own delete refuses: the cascade deleted
  * the referencing record through its repository, which never meets the refusals its REST delete
  * meets, so a payout dated in a closed period - or in a status that freezes it - went with its
@@ -88,12 +94,14 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     private static final String OWNER_INTENT = """
             name: staff
             description: target-delete fixture - the owner of the referenced master data
+            languages: [en, bg]
 
             entities:
               - name: Employee
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
+                  - { name: code, type: string,  length: 20, fixedWhenReferenced: true }
                 relations:
                   - { name: Manager, kind: manyToOne, to: Employee }
             """;
@@ -108,8 +116,11 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
             entities:
               - name: ExpenseCategory
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: name, type: string,  required: true, length: 100 }
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: name,    type: string,  required: true, length: 100 }
+                  - { name: ceiling, type: decimal, fixedWhenReferenced: true }
+                relations:
+                  - { name: Owner, kind: manyToOne, to: Employee, model: staff, fixedWhenReferenced: true }
               - name: ExpenseClaim
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
@@ -168,6 +179,19 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     private static final int RACE_ATTEMPTS = 20;
     private static final long RACE_TIMEOUT_SECONDS = 60;
 
+    /** The default text of an employee code's refusal (#8194), and a translator's overlay of it. */
+    private static final String CODE_REFUSAL = "'Code' cannot change while other records reference this Employee";
+    private static final String CODE_REFUSAL_BG = "Кодът не може да се смени, докато други записи сочат служителя";
+    private static final String OWNER_BG_OVERLAY = """
+            {
+              "staff-model": {
+                "checks": {
+                  "Employee_fixedWhenReferenced_Code": "Кодът не може да се смени, докато други записи сочат служителя"
+                }
+              }
+            }
+            """;
+
     /** The series the advances are numbered from: AD and a 7-digit sequence. */
     private static final String CONSUMER_NUMBERS = "{\"series\": [{\"name\": \"Advance\", \"prefix\": \"AD\", \"size\": 9}]}";
 
@@ -190,6 +214,7 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     void a_targets_delete_applies_the_rules_of_the_records_referencing_it() {
         writeFile(OWNER, "app.intent", OWNER_INTENT);
         generateProject(OWNER);
+        writeFile(OWNER, "i18n/bg-BG/" + OWNER_MODEL + ".model.json", OWNER_BG_OVERLAY);
         writeFile(CONSUMER, "app.intent", CONSUMER_INTENT);
         writeFile(CONSUMER, "claims.numbers", CONSUMER_NUMBERS);
         generateProject(CONSUMER);
@@ -221,6 +246,9 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         assertACreateNamingNoRecordIsRefused();
         assertAnUpdateNamingNoRecordIsRefused();
         assertAKeepReferenceOutlivesItsTarget();
+
+        assertAFieldFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow();
+        assertARelationFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow();
 
         assertACreateAndADeleteOfItsTargetNeverBothWin();
     }
@@ -335,6 +363,86 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                                  .body("Approver", equalTo(hal)));
         assertWriteRefused(advances + "/" + advance, true,
                 "{\"Id\":" + advance + ",\"Employee\":777777,\"Approver\":" + hal + ",\"Amount\":6}", "Employee 777777 does not exist");
+    }
+
+    /**
+     * #8194: an employee's code, referenced cross-model by a claim and same-model by a report's
+     * manager, and a category's ceiling (a decimal) referenced same-model by a claim. Editable while
+     * nothing references the row; from the first reference on a change is a 409 in the reader's
+     * language, while the same value - a decimal compared by value - and an omitted one still save;
+     * editable again once the reference is gone.
+     */
+    private void assertAFieldFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow() {
+        int kim = create(employees, "{\"Name\":\"Kim\",\"Code\":\"K-1\"}");
+        String kimUrl = employees + "/" + kim;
+        assertUpdated(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim\",\"Code\":\"K-2\"}", "Code", "K-2");
+
+        // Cross-model: a claim of the consumer references her.
+        int claim = create(claims, "{\"Employee\":" + kim + ",\"Amount\":1}");
+        assertUpdateRefused(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim\",\"Code\":\"K-3\"}", null, CODE_REFUSAL);
+        assertUpdateRefused(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim\",\"Code\":\"K-3\"}", "bg", CODE_REFUSAL_BG);
+        assertUpdated(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim Lee\",\"Code\":\"K-2\"}", "Name", "Kim Lee");
+        assertUpdated(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim Lee\"}", "Code", "K-2");
+
+        // The reference gone, the code is editable again.
+        assertDeleted(claims + "/" + claim);
+        assertUpdated(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim Lee\",\"Code\":\"K-3\"}", "Code", "K-3");
+
+        // Same-model: another employee names her as manager.
+        int lou = create(employees, "{\"Name\":\"Lou\",\"Manager\":" + kim + "}");
+        assertUpdateRefused(kimUrl, "{\"Id\":" + kim + ",\"Name\":\"Kim Lee\",\"Code\":\"K-4\"}", null, CODE_REFUSAL);
+
+        // Same-model in the consumer, a decimal: 100.00 against a stored 100 is no change, 200 is one.
+        int fuel = create(categories, "{\"Name\":\"Fuel\",\"Ceiling\":100}");
+        String fuelUrl = categories + "/" + fuel;
+        assertUpdated(fuelUrl, "{\"Id\":" + fuel + ",\"Name\":\"Fuel\",\"Ceiling\":150}", "Name", "Fuel");
+        create(claims, "{\"Employee\":" + lou + ",\"Category\":" + fuel + ",\"Amount\":1}");
+        assertUpdated(fuelUrl, "{\"Id\":" + fuel + ",\"Name\":\"Fuel & oil\",\"Ceiling\":150.00}", "Name", "Fuel & oil");
+        assertUpdateRefused(fuelUrl, "{\"Id\":" + fuel + ",\"Name\":\"Fuel\",\"Ceiling\":200}", null,
+                "'Ceiling' cannot change while other records reference this ExpenseCategory");
+    }
+
+    /**
+     * #8194 on a to-one - a bank account's currency, a product's type: a category's owner, a
+     * cross-model relation, is re-pickable while no claim uses the category and fixed once one does;
+     * the same id still saves.
+     */
+    private void assertARelationFixedWhenReferencedChangesOnlyWhileNothingReferencesTheRow() {
+        int ann = create(employees, "{\"Name\":\"Ann\"}");
+        int ben = create(employees, "{\"Name\":\"Ben\"}");
+        int tools = create(categories, "{\"Name\":\"Tools\",\"Owner\":" + ann + "}");
+        String toolsUrl = categories + "/" + tools;
+        assertUpdated(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools\",\"Owner\":" + ben + "}", "Owner", ben);
+
+        create(claims, "{\"Employee\":" + ann + ",\"Category\":" + tools + ",\"Amount\":1}");
+        assertUpdateRefused(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools\",\"Owner\":" + ann + "}", null,
+                "'Owner' cannot change while other records reference this ExpenseCategory");
+        assertUpdated(toolsUrl, "{\"Id\":" + tools + ",\"Name\":\"Tools & parts\",\"Owner\":" + ben + "}", "Name", "Tools & parts");
+    }
+
+    private void assertUpdated(String url, String body, String property, Object expected) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(body)
+                                                 .when()
+                                                 .put(url)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(property, equalTo(expected)));
+    }
+
+    private void assertUpdateRefused(String url, String body, String language, String message) {
+        restAssuredExecutor.execute(() -> {
+            var request = given().contentType("application/json")
+                                 .body(body);
+            if (language != null) {
+                request = request.header("Accept-Language", language);
+            }
+            request.when()
+                   .put(url)
+                   .then()
+                   .statusCode(409)
+                   .body("message", equalTo(message));
+        });
     }
 
     private void assertWriteRefused(String url, boolean update, String body, String message) {

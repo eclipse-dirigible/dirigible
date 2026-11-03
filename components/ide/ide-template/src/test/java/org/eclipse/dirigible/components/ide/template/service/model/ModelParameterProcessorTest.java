@@ -64,6 +64,36 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8096: a bounded derived total refuses in the reader's language - the repository's requireFits
+     * hands {@code CheckMessages} the key the en-US catalog writes the message under, which names the
+     * largest value the column holds. An unmarked decimal is not bounded.
+     */
+    @Test
+    void aBoundedTotalRefusesUnderACatalogKeyNamingTheColumnsLargestValue() {
+        Map<String, Object> net = property("Net", "DECIMAL");
+        net.put("dataPrecision", "6");
+        net.put("dataScale", "2");
+        net.put("overflowChecked", "true");
+        Map<String, Object> rate = property("Rate", "DECIMAL");
+        rate.put("dataPrecision", "6");
+        rate.put("dataScale", "2");
+        Map<String, Object> order = entity("SalesOrder", "SalesOrder", property("Id", "INTEGER"), net, rate);
+        Map<String, Object> model = model(order);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "sales.model");
+
+        ModelParameterProcessor.resolveOverflowChecks(order, parameters);
+
+        assertEquals("\"bookstore:sales-model.checks.SalesOrder_overflow_Net\", "
+                + "\"SalesOrder.Net would become {value}, more than the 9999.99 it can hold\"", net.get("overflowMessageArgsJava"));
+        assertEquals(Boolean.TRUE, order.get("hasOverflowChecks"));
+        assertFalse(rate.containsKey("overflowMessageArgsJava"));
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("SalesOrder.Net would become {value}, more than the 9999.99 it can hold", catalog.get("SalesOrder_overflow_Net"));
+        assertFalse(catalog.containsKey("SalesOrder_overflow_Rate"));
+    }
+
+    /**
      * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
      * flag, which refuses nothing, has no message to translate.
      */
@@ -168,6 +198,40 @@ class ModelParameterProcessorTest {
         assertEquals(Boolean.TRUE, fixed.get(1)
                                         .get("normalized"));
         assertTrue(Boolean.TRUE.equals(timesheet.get("hasNormalize")), "the repository's normalize the controller calls is generated");
+    }
+
+    /**
+     * A field fixed while referenced (#8194) is resolved like a fixed one, into its own list and under
+     * its own catalog key, so the controllers ask whether the row is referenced only for it.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesTheRefusalOfAFieldFixedWhenReferenced() {
+        Map<String, Object> code = property("Code", "VARCHAR");
+        code.put("fixedWhenReferenced", "true");
+        code.put("fixedWhenReferencedMessage", "'Code' cannot change while other records reference this Currency");
+        Map<String, Object> rounding = property("Rounding", "DECIMAL");
+        rounding.put("fixedWhenReferenced", "true");
+        rounding.put("fixedWhenReferencedMessage", "'Rounding' cannot change while other records reference this Currency");
+        Map<String, Object> currency = entity("Currency", "Currencies", property("Id", "INTEGER"), code, rounding);
+        Map<String, Object> model = model(currency);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "currencies.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertTrue(((List<Map<String, Object>>) currency.get("fixedAfterCreateProperties")).isEmpty());
+        List<Map<String, Object>> fixed = (List<Map<String, Object>>) currency.get("fixedWhenReferencedProperties");
+        assertEquals(2, fixed.size());
+        assertEquals(
+                "\"bookstore:currencies-model.checks.Currency_fixedWhenReferenced_Code\", "
+                        + "\"'Code' cannot change while other records reference this Currency\"",
+                fixed.get(0)
+                     .get("messageArgsJava"));
+        assertEquals(Boolean.TRUE, fixed.get(1)
+                                        .get("decimal"));
+        assertEquals("'Code' cannot change while other records reference this Currency", ModelTranslations.checkMessages(model)
+                                                                                                          .get("Currency_fixedWhenReferenced_Code"));
     }
 
     @Test

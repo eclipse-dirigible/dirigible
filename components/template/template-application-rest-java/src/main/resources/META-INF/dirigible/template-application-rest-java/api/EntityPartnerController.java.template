@@ -268,6 +268,9 @@ public class ${name}PartnerController {
 #if($fixedAfterCreateProperties && $fixedAfterCreateProperties.size() > 0)
         applyFixedAfterCreate(existing, entity);
 #end
+#if($fixedWhenReferencedProperties && $fixedWhenReferencedProperties.size() > 0)
+        applyFixedWhenReferenced(id, existing, entity);
+#end
 #if($periodLock)
         // The stored date is checked above; this refuses a move INTO a closed period.
         requirePeriodOpen(entity.${periodLock.dateProperty});
@@ -678,6 +681,43 @@ public class ${name}PartnerController {
         } else if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
 #end
             throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+        }
+#end
+    }
+#end
+#if($fixedWhenReferencedProperties && $fixedWhenReferencedProperties.size() > 0)
+
+    // Fields fixed while referenced (intent `fixedWhenReferenced: true`, dirigible #8194): fixed once
+    // another record references this one, as on the power surface - see its controller.
+    private void applyFixedWhenReferenced(Object id, ${name}Entity stored, ${name}Entity entity) {
+        if (stored == null) {
+            return;
+        }
+#set($referencedNormalized = false)
+#foreach($fixed in $fixedWhenReferencedProperties)
+#if($fixed.normalized)
+#set($referencedNormalized = true)
+#end
+#end
+#if($referencedNormalized)
+        ${name}Repository.normalize(entity);
+#end
+        Boolean referenced = null;
+#foreach($fixed in $fixedWhenReferencedProperties)
+#if($fixed.decimal)
+        if (entity.${fixed.name} == null ? stored.${fixed.name} != null
+                : stored.${fixed.name} == null || entity.${fixed.name}.compareTo(stored.${fixed.name}) != 0) {
+#else
+        if (!java.util.Objects.equals(entity.${fixed.name}, stored.${fixed.name})) {
+#end
+            if (referenced == null) {
+                referenced = repository.isReferenced(id);
+            }
+            if (referenced && entity.${fixed.name} == null) {
+                entity.${fixed.name} = stored.${fixed.name};
+            } else if (referenced) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, org.eclipse.dirigible.sdk.db.CheckMessages.message(${fixed.messageArgsJava}));
+            }
         }
 #end
     }

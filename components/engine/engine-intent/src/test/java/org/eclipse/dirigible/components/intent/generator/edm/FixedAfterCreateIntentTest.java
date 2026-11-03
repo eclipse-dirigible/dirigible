@@ -121,6 +121,57 @@ class FixedAfterCreateIntentTest {
                 """, "is a manyToMany so it cannot declare [fixedAfterCreate]");
     }
 
+    /**
+     * A to-one fixed while other records reference the row (#8194) - a bank account's currency, a
+     * product's type: the same two-scalar shape as the field key, same-model and cross-model.
+     */
+    @Test
+    void aRelationFixedWhenReferencedCarriesTheFlagAndTheDefaultTextOfItsRefusal() {
+        Map<String, Object> project = projectProperty("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedWhenReferenced: true }
+                """);
+        assertEquals("true", project.get("fixedWhenReferenced"));
+        assertEquals("'Project' cannot change while other records reference this Timesheet", project.get("fixedWhenReferencedMessage"));
+        assertFalse(project.containsKey("fixedAfterCreate"));
+
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: employees, project: employees }
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: oneToOne, to: Employee, model: employees, fixedWhenReferenced: true }
+                """;
+        Map<String, Object> employee =
+                propertyByName(entity(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "timesheets")), "Employee");
+        assertEquals("'Employee' cannot change while other records reference this Timesheet", employee.get("fixedWhenReferencedMessage"));
+    }
+
+    @Test
+    void aRelationFixedWhenReferencedIsRefusedWhereNoUserRePicksIt() {
+        assertIssue("""
+                  - { name: Projects, kind: oneToMany, to: Project, fixedWhenReferenced: true }
+                """, "declares fixedWhenReferenced but only a manyToOne/oneToOne relation has an FK a user picks");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, composition: true, fixedWhenReferenced: true }
+                """, "is a composition parent (preset by the layout) so it cannot declare fixedWhenReferenced");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedWhenReferenced: true, calculatedActionOnUpdate: custom.KeepProject }
+                """, "declares both fixedWhenReferenced and calculatedActionOnUpdate");
+        assertIssue("""
+                  - { name: Project, kind: manyToOne, to: Project, fixedAfterCreate: true, fixedWhenReferenced: true }
+                """, "relation [Project] declares both fixedAfterCreate and fixedWhenReferenced");
+        assertIssue("""
+                  - { name: Projects, kind: subset, to: Project, fixedWhenReferenced: true }
+                """, "is a subset relation so it cannot declare [fixedWhenReferenced]");
+        assertIssue("""
+                  - { name: Projects, kind: manyToMany, to: Project, fixedWhenReferenced: true }
+                """, "is a manyToMany so it cannot declare [fixedWhenReferenced]");
+    }
+
     /** A customer whose code is set on create and fixed afterwards (#8363). */
     private static final String CUSTOMER = """
             name: customers
@@ -286,6 +337,41 @@ class FixedAfterCreateIntentTest {
                   - { name: code, type: string, length: 20, translatable: false, fixedAfterCreate: true }
                 """.indent(4));
         assertEquals("true", propertyByName(customer, "Code").get("fixedAfterCreate"));
+    }
+
+    /**
+     * A field fixed while other records reference the row (#8194): the same two-scalar shape, with its
+     * own refusal text, and editable on the forms (only a referenced row refuses the change).
+     */
+    @Test
+    void aFieldFixedWhenReferencedCarriesTheFlagAndTheDefaultTextOfItsRefusal() {
+        Map<String, Object> customer = customer(withField("""
+                  - { name: code, type: string, length: 20, fixedWhenReferenced: true }
+                """));
+        Map<String, Object> code = propertyByName(customer, "Code");
+        assertEquals("true", code.get("fixedWhenReferenced"));
+        assertEquals("'Code' cannot change while other records reference this Customer", code.get("fixedWhenReferencedMessage"));
+        assertFalse(code.containsKey("fixedAfterCreate"));
+        assertFalse(code.containsKey("isReadOnlyProperty"));
+        assertFalse(propertyByName(customer, "Name").containsKey("fixedWhenReferenced"));
+    }
+
+    @Test
+    void aFieldFixedWhenReferencedIsRefusedOnTheKeyAndOnACalculatedField() {
+        assertFieldIssue("""
+                  - { name: key, type: integer, primaryKey: true, generated: true, fixedWhenReferenced: true }
+                """, "field [key] declares fixedWhenReferenced but the platform assigns a primary key or a generated field");
+        assertFieldIssue("""
+                  - { name: upper, type: string, calculatedOnCreate: "entity.Name", fixedWhenReferenced: true }
+                """,
+                "field [upper] declares fixedWhenReferenced but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: kept, type: string, calculatedActionOnUpdate: custom.Keep, fixedWhenReferenced: true }
+                """,
+                "field [kept] declares fixedWhenReferenced but a calculatedOnCreate, calculatedOnUpdate or calculatedActionOnUpdate field is derived");
+        assertFieldIssue("""
+                  - { name: code, type: string, length: 20, fixedAfterCreate: true, fixedWhenReferenced: true }
+                """, "field [code] declares both fixedAfterCreate and fixedWhenReferenced");
     }
 
     private static String withField(String field) {

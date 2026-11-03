@@ -24,6 +24,13 @@ public class PermissionIntent {
     private List<String> can = new ArrayList<>();
     private String description;
 
+    /**
+     * Whether the resources this entry's tokens bind are gated by the roles the module names ONLY: the
+     * deployment's {@code .settings} {@code access.extraRoles} / {@code extraRolesReadOnly} are not
+     * appended to any of their gates (issue #8112).
+     */
+    private Boolean exclusive;
+
     public String getRole() {
         return role;
     }
@@ -46,5 +53,13 @@ public class PermissionIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public boolean isExclusive() {
+        return Boolean.TRUE.equals(exclusive);
+    }
+
+    public void setExclusive(Boolean exclusive) {
+        this.exclusive = exclusive;
     }
 }

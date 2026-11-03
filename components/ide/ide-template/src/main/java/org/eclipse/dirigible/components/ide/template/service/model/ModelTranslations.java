@@ -139,20 +139,55 @@ final class ModelTranslations {
     }
 
     /**
-     * The catalog key of a {@code fixedAfterCreate} property's refusal - a to-one relation (issue
-     * #7903) or a field (#8363).
+     * The flags that fix a property, each with its default-language refusal in {@code <flag>Message}.
+     */
+    static final List<String> FIXED_FLAGS = List.of("fixedAfterCreate", "fixedWhenReferenced");
+
+    /**
+     * The catalog key of a fixed property's refusal: {@code fixedAfterCreate} - a to-one relation
+     * (issue #7903) or a field (#8363) - under {@code <Entity>_fixed_<Property>}, and
+     * {@code fixedWhenReferenced} (#8194) under {@code <Entity>_fixedWhenReferenced_<Property>}.
      *
      * @param entity the entity
      * @param property the fixed property (a field, or a relation's FK)
+     * @param flag one of {@link #FIXED_FLAGS}
      * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
-     *         property is not fixed after create or carries no message
+     *         property does not carry the flag or carries no message
      */
-    static String fixedMessageKey(Map<String, Object> entity, Map<String, Object> property) {
-        String message = str(property, "fixedAfterCreateMessage");
-        if (!ModelValues.isTrue(property, "fixedAfterCreate") || message == null || message.isBlank()) {
+    static String fixedMessageKey(Map<String, Object> entity, Map<String, Object> property, String flag) {
+        String message = str(property, flag + "Message");
+        if (!ModelValues.isTrue(property, flag) || message == null || message.isBlank()) {
             return null;
         }
-        return str(entity, "name") + "_fixed_" + str(property, "name");
+        String infix = "fixedAfterCreate".equals(flag) ? "_fixed_" : "_" + flag + "_";
+        return str(entity, "name") + infix + str(property, "name");
+    }
+
+    /**
+     * The catalog key of the refusal of a derived total its column cannot hold (#8096).
+     *
+     * @param entity the entity
+     * @param property the property
+     * @return the key, relative to the catalog's {@code checks} sub-object; {@code null} when the
+     *         property is not a bounded derived column
+     */
+    static String overflowMessageKey(Map<String, Object> entity, Map<String, Object> property) {
+        return "true".equals(property.get("overflowChecked")) ? str(entity, "name") + "_overflow_" + str(property, "name") : null;
+    }
+
+    /**
+     * The default-language refusal of a derived total its column cannot hold (#8096), naming the
+     * largest value the column stores; {@code {value}} is the total the write would have produced.
+     *
+     * @param entity the entity
+     * @param property the bounded decimal property
+     * @return the message
+     */
+    static String overflowMessage(Map<String, Object> entity, Map<String, Object> property) {
+        int precision = Integer.parseInt(str(property, "dataPrecision").trim());
+        int scale = Integer.parseInt(str(property, "dataScale").trim());
+        String max = (precision > scale ? "9".repeat(precision - scale) : "0") + (scale > 0 ? "." + "9".repeat(scale) : "");
+        return str(entity, "name") + "." + str(property, "name") + " would become {value}, more than the " + max + " it can hold";
     }
 
     /**
@@ -314,9 +349,9 @@ final class ModelTranslations {
 
     /**
      * Collects the user-facing messages of the entities' checks, business keys, picker rules (issue
-     * #7611) and fixed relations (#7903), in the default language, keyed as the generated code resolves
-     * them - so a language catalog translates a refusal, a warning or a picker hint exactly as it
-     * translates a label.
+     * #7611), fixed relations (#7903) and bounded derived totals (#8096), in the default language,
+     * keyed as the generated code resolves them - so a language catalog translates a refusal, a warning
+     * or a picker hint exactly as it translates a label.
      *
      * @param model the entity model
      * @return key to default-language message, in model order
@@ -345,9 +380,15 @@ final class ModelTranslations {
                 }
             }
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
-                String fixedKey = fixedMessageKey(entity, property);
-                if (fixedKey != null) {
-                    messages.put(fixedKey, property.get("fixedAfterCreateMessage"));
+                for (String flag : FIXED_FLAGS) {
+                    String fixedKey = fixedMessageKey(entity, property, flag);
+                    if (fixedKey != null) {
+                        messages.put(fixedKey, property.get(flag + "Message"));
+                    }
+                }
+                String overflowKey = overflowMessageKey(entity, property);
+                if (overflowKey != null) {
+                    messages.put(overflowKey, overflowMessage(entity, property));
                 }
                 String pickable = str(property, "widgetPickable");
                 if (pickable == null || !pickable.contains("\"messageKey\"")) {

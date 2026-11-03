@@ -105,6 +105,13 @@ public class FieldIntent {
      * {@link #readOnly}, the caller still writes the field on create.
      */
     private boolean fixedAfterCreate;
+    /**
+     * Fixed while other records reference this one ({@code fixedWhenReferenced: true}, dirigible #8194
+     * - the update twin of the delete {@code restrict}): editable while nothing references the record,
+     * and from the first reference on - through a to-one of this model or another - a user update
+     * through the generated controllers that changes it is answered 409. System writers are unaffected.
+     */
+    private boolean fixedWhenReferenced;
 
     /**
      * Hidden from the personal (my) surface entirely: absent from its pages and stripped from the
@@ -425,6 +432,14 @@ public class FieldIntent {
 
     public void setFixedAfterCreate(boolean fixedAfterCreate) {
         this.fixedAfterCreate = fixedAfterCreate;
+    }
+
+    public boolean isFixedWhenReferenced() {
+        return fixedWhenReferenced;
+    }
+
+    public void setFixedWhenReferenced(boolean fixedWhenReferenced) {
+        this.fixedWhenReferenced = fixedWhenReferenced;
     }
 
     public String getFunction() {
