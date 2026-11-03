@@ -29,7 +29,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.13.0.tgz
     version: 15.13.0
   - apiVersion: v2
     appVersion: 15.12.0
@@ -59,7 +59,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.12.0.tgz
     version: 15.12.0
   - apiVersion: v2
     appVersion: 15.11.0
@@ -89,7 +89,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.11.0.tgz
     version: 15.11.0
   - apiVersion: v2
     appVersion: 15.10.0
@@ -119,7 +119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.10.0.tgz
     version: 15.10.0
   - apiVersion: v2
     appVersion: 15.9.0
@@ -149,7 +149,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.9.0.tgz
     version: 15.9.0
   - apiVersion: v2
     appVersion: 15.8.0
@@ -179,7 +179,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.8.0.tgz
     version: 15.8.0
   - apiVersion: v2
     appVersion: 15.7.0
@@ -209,7 +209,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.7.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.7.0.tgz
     version: 15.7.0
   - apiVersion: v2
     appVersion: 15.6.0
@@ -239,7 +239,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.6.0.tgz
     version: 15.6.0
   - apiVersion: v2
     appVersion: 15.5.0
@@ -269,7 +269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.5.0.tgz
     version: 15.5.0
   - apiVersion: v2
     appVersion: 15.4.1
@@ -299,7 +299,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.4.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.4.1.tgz
     version: 15.4.1
   - apiVersion: v2
     appVersion: 15.2.0
@@ -329,7 +329,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.2.0.tgz
     version: 15.2.0
   - apiVersion: v2
     appVersion: 15.1.0
@@ -359,7 +359,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.1.0.tgz
     version: 15.1.0
   - apiVersion: v2
     appVersion: 15.0.0
@@ -389,7 +389,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-15.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-15.0.0.tgz
     version: 15.0.0
   - apiVersion: v2
     appVersion: 14.97.0
@@ -419,7 +419,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.97.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.97.0.tgz
     version: 14.97.0
   - apiVersion: v2
     appVersion: 14.96.0
@@ -449,7 +449,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.96.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.96.0.tgz
     version: 14.96.0
   - apiVersion: v2
     appVersion: 14.95.0
@@ -479,7 +479,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.95.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.95.0.tgz
     version: 14.95.0
   - apiVersion: v2
     appVersion: 14.94.0
@@ -509,7 +509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.94.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.94.0.tgz
     version: 14.94.0
   - apiVersion: v2
     appVersion: 14.91.0
@@ -539,7 +539,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.91.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.91.0.tgz
     version: 14.91.0
   - apiVersion: v2
     appVersion: 14.90.0
@@ -569,7 +569,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.90.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.90.0.tgz
     version: 14.90.0
   - apiVersion: v2
     appVersion: 14.89.0
@@ -599,7 +599,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.89.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.89.0.tgz
     version: 14.89.0
   - apiVersion: v2
     appVersion: 14.88.0
@@ -629,7 +629,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.88.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.88.0.tgz
     version: 14.88.0
   - apiVersion: v2
     appVersion: 14.87.0
@@ -659,7 +659,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.87.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.87.0.tgz
     version: 14.87.0
   - apiVersion: v2
     appVersion: 14.86.0
@@ -689,7 +689,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.86.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.86.0.tgz
     version: 14.86.0
   - apiVersion: v2
     appVersion: 14.85.0
@@ -719,7 +719,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.85.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.85.0.tgz
     version: 14.85.0
   - apiVersion: v2
     appVersion: 14.84.0
@@ -749,7 +749,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.84.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.84.0.tgz
     version: 14.84.0
   - apiVersion: v2
     appVersion: 14.83.0
@@ -779,7 +779,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.83.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.83.0.tgz
     version: 14.83.0
   - apiVersion: v2
     appVersion: 14.82.0
@@ -809,7 +809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.82.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.82.0.tgz
     version: 14.82.0
   - apiVersion: v2
     appVersion: 14.81.0
@@ -839,7 +839,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.81.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.81.0.tgz
     version: 14.81.0
   - apiVersion: v2
     appVersion: 14.76.0
@@ -869,7 +869,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.76.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.76.0.tgz
     version: 14.76.0
   - apiVersion: v2
     appVersion: 14.75.0
@@ -899,7 +899,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.75.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.75.0.tgz
     version: 14.75.0
   - apiVersion: v2
     appVersion: 14.74.0
@@ -929,7 +929,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.74.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.74.0.tgz
     version: 14.74.0
   - apiVersion: v2
     appVersion: 14.73.0
@@ -959,7 +959,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.73.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.73.0.tgz
     version: 14.73.0
   - apiVersion: v2
     appVersion: 14.72.0
@@ -989,7 +989,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.72.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.72.0.tgz
     version: 14.72.0
   - apiVersion: v2
     appVersion: 14.71.0
@@ -1019,7 +1019,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.71.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.71.0.tgz
     version: 14.71.0
   - apiVersion: v2
     appVersion: 14.70.0
@@ -1049,7 +1049,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.70.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.70.0.tgz
     version: 14.70.0
   - apiVersion: v2
     appVersion: 14.69.0
@@ -1079,7 +1079,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.69.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.69.0.tgz
     version: 14.69.0
   - apiVersion: v2
     appVersion: 14.68.0
@@ -1109,7 +1109,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.68.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.68.0.tgz
     version: 14.68.0
   - apiVersion: v2
     appVersion: 14.67.0
@@ -1139,7 +1139,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.67.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.67.0.tgz
     version: 14.67.0
   - apiVersion: v2
     appVersion: 14.66.0
@@ -1169,7 +1169,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.66.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.66.0.tgz
     version: 14.66.0
   - apiVersion: v2
     appVersion: 14.65.0
@@ -1199,7 +1199,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.65.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.65.0.tgz
     version: 14.65.0
   - apiVersion: v2
     appVersion: 14.64.0
@@ -1229,7 +1229,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.64.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.64.0.tgz
     version: 14.64.0
   - apiVersion: v2
     appVersion: 14.62.0
@@ -1259,7 +1259,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.62.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.62.0.tgz
     version: 14.62.0
   - apiVersion: v2
     appVersion: 14.61.0
@@ -1289,7 +1289,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.61.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.61.0.tgz
     version: 14.61.0
   - apiVersion: v2
     appVersion: 14.60.0
@@ -1319,7 +1319,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.60.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.60.0.tgz
     version: 14.60.0
   - apiVersion: v2
     appVersion: 14.58.0
@@ -1349,7 +1349,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.58.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.58.0.tgz
     version: 14.58.0
   - apiVersion: v2
     appVersion: 14.57.0
@@ -1379,7 +1379,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.57.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.57.0.tgz
     version: 14.57.0
   - apiVersion: v2
     appVersion: 14.56.0
@@ -1409,7 +1409,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.56.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.56.0.tgz
     version: 14.56.0
   - apiVersion: v2
     appVersion: 14.54.0
@@ -1439,7 +1439,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.54.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.54.0.tgz
     version: 14.54.0
   - apiVersion: v2
     appVersion: 14.53.0
@@ -1469,7 +1469,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.53.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.53.0.tgz
     version: 14.53.0
   - apiVersion: v2
     appVersion: 14.52.0
@@ -1499,7 +1499,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.52.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.52.0.tgz
     version: 14.52.0
   - apiVersion: v2
     appVersion: 14.51.0
@@ -1529,7 +1529,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.51.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.51.0.tgz
     version: 14.51.0
   - apiVersion: v2
     appVersion: 14.50.0
@@ -1559,7 +1559,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.50.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.50.0.tgz
     version: 14.50.0
   - apiVersion: v2
     appVersion: 14.49.0
@@ -1589,7 +1589,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.49.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.49.0.tgz
     version: 14.49.0
   - apiVersion: v2
     appVersion: 14.48.0
@@ -1619,7 +1619,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.48.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.48.0.tgz
     version: 14.48.0
   - apiVersion: v2
     appVersion: 14.47.0
@@ -1649,7 +1649,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.47.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.47.0.tgz
     version: 14.47.0
   - apiVersion: v2
     appVersion: 14.46.0
@@ -1679,7 +1679,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.46.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.46.0.tgz
     version: 14.46.0
   - apiVersion: v2
     appVersion: 14.45.0
@@ -1709,7 +1709,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.45.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.45.0.tgz
     version: 14.45.0
   - apiVersion: v2
     appVersion: 14.43.0
@@ -1739,7 +1739,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.43.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.43.0.tgz
     version: 14.43.0
   - apiVersion: v2
     appVersion: 14.42.0
@@ -1769,7 +1769,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.42.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.42.0.tgz
     version: 14.42.0
   - apiVersion: v2
     appVersion: 14.41.0
@@ -1799,7 +1799,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.41.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.41.0.tgz
     version: 14.41.0
   - apiVersion: v2
     appVersion: 14.40.0
@@ -1829,7 +1829,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.40.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.40.0.tgz
     version: 14.40.0
   - apiVersion: v2
     appVersion: 14.39.0
@@ -1859,7 +1859,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.39.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.39.0.tgz
     version: 14.39.0
   - apiVersion: v2
     appVersion: 14.38.0
@@ -1889,7 +1889,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.38.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.38.0.tgz
     version: 14.38.0
   - apiVersion: v2
     appVersion: 14.37.0
@@ -1919,7 +1919,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.37.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.37.0.tgz
     version: 14.37.0
   - apiVersion: v2
     appVersion: 14.36.0
@@ -1949,7 +1949,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.36.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.36.0.tgz
     version: 14.36.0
   - apiVersion: v2
     appVersion: 14.35.0
@@ -1979,7 +1979,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.35.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.35.0.tgz
     version: 14.35.0
   - apiVersion: v2
     appVersion: 14.34.0
@@ -2009,7 +2009,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.34.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.34.0.tgz
     version: 14.34.0
   - apiVersion: v2
     appVersion: 14.33.0
@@ -2039,7 +2039,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.33.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.33.0.tgz
     version: 14.33.0
   - apiVersion: v2
     appVersion: 14.32.0
@@ -2069,7 +2069,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.32.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.32.0.tgz
     version: 14.32.0
   - apiVersion: v2
     appVersion: 14.31.0
@@ -2099,7 +2099,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.31.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.31.0.tgz
     version: 14.31.0
   - apiVersion: v2
     appVersion: 14.30.0
@@ -2129,7 +2129,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.30.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.30.0.tgz
     version: 14.30.0
   - apiVersion: v2
     appVersion: 14.29.0
@@ -2159,7 +2159,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.29.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.29.0.tgz
     version: 14.29.0
   - apiVersion: v2
     appVersion: 14.28.0
@@ -2189,7 +2189,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.28.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.28.0.tgz
     version: 14.28.0
   - apiVersion: v2
     appVersion: 14.27.0
@@ -2219,7 +2219,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.27.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.27.0.tgz
     version: 14.27.0
   - apiVersion: v2
     appVersion: 14.26.0
@@ -2249,7 +2249,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.26.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.26.0.tgz
     version: 14.26.0
   - apiVersion: v2
     appVersion: 14.24.0
@@ -2279,7 +2279,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.24.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.24.0.tgz
     version: 14.24.0
   - apiVersion: v2
     appVersion: 14.23.0
@@ -2309,7 +2309,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.23.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.23.0.tgz
     version: 14.23.0
   - apiVersion: v2
     appVersion: 14.22.0
@@ -2339,7 +2339,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.22.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.22.0.tgz
     version: 14.22.0
   - apiVersion: v2
     appVersion: 14.21.0
@@ -2369,7 +2369,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.21.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.21.0.tgz
     version: 14.21.0
   - apiVersion: v2
     appVersion: 14.19.0
@@ -2399,7 +2399,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.19.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.19.0.tgz
     version: 14.19.0
   - apiVersion: v2
     appVersion: 14.18.0
@@ -2429,7 +2429,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.18.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.18.0.tgz
     version: 14.18.0
   - apiVersion: v2
     appVersion: 14.17.0
@@ -2459,7 +2459,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.17.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.17.0.tgz
     version: 14.17.0
   - apiVersion: v2
     appVersion: 14.16.0
@@ -2489,7 +2489,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.16.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.16.0.tgz
     version: 14.16.0
   - apiVersion: v2
     appVersion: 14.15.0
@@ -2519,7 +2519,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.15.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.15.0.tgz
     version: 14.15.0
   - apiVersion: v2
     appVersion: 14.14.0
@@ -2549,7 +2549,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.14.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.14.0.tgz
     version: 14.14.0
   - apiVersion: v2
     appVersion: 14.13.0
@@ -2579,7 +2579,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.13.0.tgz
     version: 14.13.0
   - apiVersion: v2
     appVersion: 14.12.0
@@ -2609,7 +2609,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.12.0.tgz
     version: 14.12.0
   - apiVersion: v2
     appVersion: 14.11.0
@@ -2639,7 +2639,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.11.0.tgz
     version: 14.11.0
   - apiVersion: v2
     appVersion: 14.10.0
@@ -2669,7 +2669,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.10.0.tgz
     version: 14.10.0
   - apiVersion: v2
     appVersion: 14.9.0
@@ -2699,7 +2699,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.9.0.tgz
     version: 14.9.0
   - apiVersion: v2
     appVersion: 14.8.0
@@ -2729,7 +2729,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.8.0.tgz
     version: 14.8.0
   - apiVersion: v2
     appVersion: 14.6.0
@@ -2759,7 +2759,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.6.0.tgz
     version: 14.6.0
   - apiVersion: v2
     appVersion: 14.5.0
@@ -2789,7 +2789,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.5.0.tgz
     version: 14.5.0
   - apiVersion: v2
     appVersion: 14.3.0
@@ -2819,7 +2819,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.3.0.tgz
     version: 14.3.0
   - apiVersion: v2
     appVersion: 14.2.0
@@ -2849,7 +2849,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.2.0.tgz
     version: 14.2.0
   - apiVersion: v2
     appVersion: 14.1.1
@@ -2879,7 +2879,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.1.1.tgz
     version: 14.1.1
   - apiVersion: v2
     appVersion: 14.0.0
@@ -2909,7 +2909,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-14.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-14.0.0.tgz
     version: 14.0.0
   - apiVersion: v2
     appVersion: 13.19.0
@@ -2939,7 +2939,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.19.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.19.0.tgz
     version: 13.19.0
   - apiVersion: v2
     appVersion: 13.18.0
@@ -2969,7 +2969,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.18.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.18.0.tgz
     version: 13.18.0
   - apiVersion: v2
     appVersion: 13.17.0
@@ -2999,7 +2999,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.17.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.17.0.tgz
     version: 13.17.0
   - apiVersion: v2
     appVersion: 13.15.0
@@ -3029,7 +3029,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.15.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.15.0.tgz
     version: 13.15.0
   - apiVersion: v2
     appVersion: 13.14.0
@@ -3059,7 +3059,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.14.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.14.0.tgz
     version: 13.14.0
   - apiVersion: v2
     appVersion: 13.13.0
@@ -3089,7 +3089,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.13.0.tgz
     version: 13.13.0
   - apiVersion: v2
     appVersion: 13.12.0
@@ -3119,7 +3119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.12.0.tgz
     version: 13.12.0
   - apiVersion: v2
     appVersion: 13.11.0
@@ -3149,7 +3149,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.11.0.tgz
     version: 13.11.0
   - apiVersion: v2
     appVersion: 13.10.0
@@ -3179,7 +3179,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.10.0.tgz
     version: 13.10.0
   - apiVersion: v2
     appVersion: 13.9.0
@@ -3209,7 +3209,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.9.0.tgz
     version: 13.9.0
   - apiVersion: v2
     appVersion: 13.8.0
@@ -3239,7 +3239,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.8.0.tgz
     version: 13.8.0
   - apiVersion: v2
     appVersion: 13.7.0
@@ -3269,7 +3269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.7.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.7.0.tgz
     version: 13.7.0
   - apiVersion: v2
     appVersion: 13.6.0
@@ -3299,7 +3299,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.6.0.tgz
     version: 13.6.0
   - apiVersion: v2
     appVersion: 13.5.0
@@ -3329,7 +3329,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.5.0.tgz
     version: 13.5.0
   - apiVersion: v2
     appVersion: 13.2.0
@@ -3359,7 +3359,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.2.0.tgz
     version: 13.2.0
   - apiVersion: v2
     appVersion: 13.1.0
@@ -3389,7 +3389,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.1.0.tgz
     version: 13.1.0
   - apiVersion: v2
     appVersion: 13.0.0
@@ -3419,7 +3419,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-13.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-13.0.0.tgz
     version: 13.0.0
   - apiVersion: v2
     appVersion: 12.95.0
@@ -3449,7 +3449,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.95.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.95.0.tgz
     version: 12.95.0
   - apiVersion: v2
     appVersion: 12.94.0
@@ -3479,7 +3479,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.94.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.94.0.tgz
     version: 12.94.0
   - apiVersion: v2
     appVersion: 12.91.0
@@ -3509,7 +3509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.91.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.91.0.tgz
     version: 12.91.0
   - apiVersion: v2
     appVersion: 12.90.0
@@ -3539,7 +3539,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.90.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.90.0.tgz
     version: 12.90.0
   - apiVersion: v2
     appVersion: 12.89.0
@@ -3569,7 +3569,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.89.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.89.0.tgz
     version: 12.89.0
   - apiVersion: v2
     appVersion: 12.88.0
@@ -3599,7 +3599,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.88.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.88.0.tgz
     version: 12.88.0
   - apiVersion: v2
     appVersion: 12.87.0
@@ -3629,7 +3629,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.87.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.87.0.tgz
     version: 12.87.0
   - apiVersion: v2
     appVersion: 12.86.0
@@ -3659,7 +3659,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.86.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.86.0.tgz
     version: 12.86.0
   - apiVersion: v2
     appVersion: 12.85.0
@@ -3689,7 +3689,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.85.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.85.0.tgz
     version: 12.85.0
   - apiVersion: v2
     appVersion: 12.83.0
@@ -3719,7 +3719,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.83.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.83.0.tgz
     version: 12.83.0
   - apiVersion: v2
     appVersion: 12.82.0
@@ -3749,7 +3749,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.82.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.82.0.tgz
     version: 12.82.0
   - apiVersion: v2
     appVersion: 12.81.0
@@ -3779,7 +3779,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.81.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.81.0.tgz
     version: 12.81.0
   - apiVersion: v2
     appVersion: 12.80.0
@@ -3809,7 +3809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.80.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.80.0.tgz
     version: 12.80.0
   - apiVersion: v2
     appVersion: 12.79.0
@@ -3839,7 +3839,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.79.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.79.0.tgz
     version: 12.79.0
   - apiVersion: v2
     appVersion: 12.78.0
@@ -3869,7 +3869,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.78.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.78.0.tgz
     version: 12.78.0
   - apiVersion: v2
     appVersion: 12.77.0
@@ -3899,7 +3899,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.77.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.77.0.tgz
     version: 12.77.0
   - apiVersion: v2
     appVersion: 12.76.0
@@ -3929,7 +3929,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.76.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.76.0.tgz
     version: 12.76.0
   - apiVersion: v2
     appVersion: 12.75.0
@@ -3959,7 +3959,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.75.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.75.0.tgz
     version: 12.75.0
   - apiVersion: v2
     appVersion: 12.74.0
@@ -3989,7 +3989,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.74.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.74.0.tgz
     version: 12.74.0
   - apiVersion: v2
     appVersion: 12.73.0
@@ -4019,7 +4019,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.73.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.73.0.tgz
     version: 12.73.0
   - apiVersion: v2
     appVersion: 12.72.0
@@ -4049,7 +4049,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.72.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.72.0.tgz
     version: 12.72.0
   - apiVersion: v2
     appVersion: 12.71.0
@@ -4079,7 +4079,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.71.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.71.0.tgz
     version: 12.71.0
   - apiVersion: v2
     appVersion: 12.70.0
@@ -4109,7 +4109,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.70.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.70.0.tgz
     version: 12.70.0
   - apiVersion: v2
     appVersion: 12.69.0
@@ -4139,7 +4139,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.69.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.69.0.tgz
     version: 12.69.0
   - apiVersion: v2
     appVersion: 12.68.0
@@ -4169,7 +4169,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.68.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.68.0.tgz
     version: 12.68.0
   - apiVersion: v2
     appVersion: 12.67.0
@@ -4199,7 +4199,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.67.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.67.0.tgz
     version: 12.67.0
   - apiVersion: v2
     appVersion: 12.66.0
@@ -4229,7 +4229,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.66.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.66.0.tgz
     version: 12.66.0
   - apiVersion: v2
     appVersion: 12.65.0
@@ -4259,7 +4259,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.65.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.65.0.tgz
     version: 12.65.0
   - apiVersion: v2
     appVersion: 12.64.0
@@ -4289,7 +4289,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.64.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.64.0.tgz
     version: 12.64.0
   - apiVersion: v2
     appVersion: 12.63.0
@@ -4319,7 +4319,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.63.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.63.0.tgz
     version: 12.63.0
   - apiVersion: v2
     appVersion: 12.62.0
@@ -4349,7 +4349,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.62.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.62.0.tgz
     version: 12.62.0
   - apiVersion: v2
     appVersion: 12.61.0
@@ -4379,7 +4379,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.61.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.61.0.tgz
     version: 12.61.0
   - apiVersion: v2
     appVersion: 12.60.0
@@ -4409,7 +4409,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.60.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.60.0.tgz
     version: 12.60.0
   - apiVersion: v2
     appVersion: 12.59.0
@@ -4439,7 +4439,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.59.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.59.0.tgz
     version: 12.59.0
   - apiVersion: v2
     appVersion: 12.58.0
@@ -4469,7 +4469,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.58.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.58.0.tgz
     version: 12.58.0
   - apiVersion: v2
     appVersion: 12.57.0
@@ -4499,7 +4499,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.57.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.57.0.tgz
     version: 12.57.0
   - apiVersion: v2
     appVersion: 12.56.0
@@ -4529,7 +4529,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.56.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.56.0.tgz
     version: 12.56.0
   - apiVersion: v2
     appVersion: 12.55.1
@@ -4559,7 +4559,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.55.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.55.1.tgz
     version: 12.55.1
   - apiVersion: v2
     appVersion: 12.53.1
@@ -4589,7 +4589,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.53.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.53.1.tgz
     version: 12.53.1
   - apiVersion: v2
     appVersion: 12.53.0
@@ -4619,7 +4619,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.53.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.53.0.tgz
     version: 12.53.0
   - apiVersion: v2
     appVersion: 12.52.0
@@ -4649,7 +4649,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.52.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.52.0.tgz
     version: 12.52.0
   - apiVersion: v2
     appVersion: 12.51.0
@@ -4679,7 +4679,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.51.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.51.0.tgz
     version: 12.51.0
   - apiVersion: v2
     appVersion: 12.49.0
@@ -4709,7 +4709,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.49.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.49.0.tgz
     version: 12.49.0
   - apiVersion: v2
     appVersion: 12.48.0
@@ -4739,7 +4739,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.48.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.48.0.tgz
     version: 12.48.0
   - apiVersion: v2
     appVersion: 12.47.0
@@ -4769,7 +4769,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.47.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.47.0.tgz
     version: 12.47.0
   - apiVersion: v2
     appVersion: 12.46.0
@@ -4799,7 +4799,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.46.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.46.0.tgz
     version: 12.46.0
   - apiVersion: v2
     appVersion: 12.45.0
@@ -4829,7 +4829,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.45.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.45.0.tgz
     version: 12.45.0
   - apiVersion: v2
     appVersion: 12.44.0
@@ -4859,7 +4859,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.44.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.44.0.tgz
     version: 12.44.0
   - apiVersion: v2
     appVersion: 12.42.0
@@ -4889,7 +4889,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.42.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.42.0.tgz
     version: 12.42.0
   - apiVersion: v2
     appVersion: 12.41.0
@@ -4919,7 +4919,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.41.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.41.0.tgz
     version: 12.41.0
   - apiVersion: v2
     appVersion: 12.36.0
@@ -4949,7 +4949,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.36.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.36.0.tgz
     version: 12.36.0
   - apiVersion: v2
     appVersion: 12.35.0
@@ -4979,7 +4979,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.35.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.35.0.tgz
     version: 12.35.0
   - apiVersion: v2
     appVersion: 12.33.0
@@ -5009,7 +5009,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.33.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.33.0.tgz
     version: 12.33.0
   - apiVersion: v2
     appVersion: 12.32.0
@@ -5039,7 +5039,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.32.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.32.0.tgz
     version: 12.32.0
   - apiVersion: v2
     appVersion: 12.31.0
@@ -5069,7 +5069,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.31.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.31.0.tgz
     version: 12.31.0
   - apiVersion: v2
     appVersion: 12.30.0
@@ -5099,7 +5099,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.30.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.30.0.tgz
     version: 12.30.0
   - apiVersion: v2
     appVersion: 12.29.0
@@ -5129,7 +5129,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.29.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.29.0.tgz
     version: 12.29.0
   - apiVersion: v2
     appVersion: 12.28.0
@@ -5159,7 +5159,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.28.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.28.0.tgz
     version: 12.28.0
   - apiVersion: v2
     appVersion: 12.24.0
@@ -5189,7 +5189,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.24.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.24.0.tgz
     version: 12.24.0
   - apiVersion: v2
     appVersion: 12.23.0
@@ -5219,7 +5219,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.23.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.23.0.tgz
     version: 12.23.0
   - apiVersion: v2
     appVersion: 12.22.0
@@ -5249,7 +5249,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.22.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.22.0.tgz
     version: 12.22.0
   - apiVersion: v2
     appVersion: 12.21.0
@@ -5279,7 +5279,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.21.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.21.0.tgz
     version: 12.21.0
   - apiVersion: v2
     appVersion: 12.20.0
@@ -5309,7 +5309,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.20.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.20.0.tgz
     version: 12.20.0
   - apiVersion: v2
     appVersion: 12.19.0
@@ -5339,7 +5339,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.19.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.19.0.tgz
     version: 12.19.0
   - apiVersion: v2
     appVersion: 12.18.0
@@ -5369,7 +5369,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.18.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.18.0.tgz
     version: 12.18.0
   - apiVersion: v2
     appVersion: 12.17.0
@@ -5399,7 +5399,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.17.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.17.0.tgz
     version: 12.17.0
   - apiVersion: v2
     appVersion: 12.16.0
@@ -5429,7 +5429,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.16.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.16.0.tgz
     version: 12.16.0
   - apiVersion: v2
     appVersion: 12.15.0
@@ -5459,7 +5459,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.15.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.15.0.tgz
     version: 12.15.0
   - apiVersion: v2
     appVersion: 12.14.0
@@ -5489,7 +5489,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.14.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.14.0.tgz
     version: 12.14.0
   - apiVersion: v2
     appVersion: 12.13.0
@@ -5519,7 +5519,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.13.0.tgz
     version: 12.13.0
   - apiVersion: v2
     appVersion: 12.12.0
@@ -5549,7 +5549,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.12.0.tgz
     version: 12.12.0
   - apiVersion: v2
     appVersion: 12.11.1
@@ -5579,7 +5579,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.11.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.11.1.tgz
     version: 12.11.1
   - apiVersion: v2
     appVersion: 12.11.0
@@ -5609,7 +5609,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.11.0.tgz
     version: 12.11.0
   - apiVersion: v2
     appVersion: 12.10.0
@@ -5639,7 +5639,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.10.0.tgz
     version: 12.10.0
   - apiVersion: v2
     appVersion: 12.9.0
@@ -5669,7 +5669,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.9.0.tgz
     version: 12.9.0
   - apiVersion: v2
     appVersion: 12.8.0
@@ -5699,7 +5699,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.8.0.tgz
     version: 12.8.0
   - apiVersion: v2
     appVersion: 12.6.0
@@ -5729,7 +5729,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.6.0.tgz
     version: 12.6.0
   - apiVersion: v2
     appVersion: 12.5.0
@@ -5759,7 +5759,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.5.0.tgz
     version: 12.5.0
   - apiVersion: v2
     appVersion: 12.4.1
@@ -5789,7 +5789,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.4.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.4.1.tgz
     version: 12.4.1
   - apiVersion: v2
     appVersion: 12.4.0
@@ -5819,7 +5819,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.4.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.4.0.tgz
     version: 12.4.0
   - apiVersion: v2
     appVersion: 12.3.0
@@ -5849,7 +5849,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.3.0.tgz
     version: 12.3.0
   - apiVersion: v2
     appVersion: 12.2.1
@@ -5879,7 +5879,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.2.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.2.1.tgz
     version: 12.2.1
   - apiVersion: v2
     appVersion: 12.2.0
@@ -5909,7 +5909,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.2.0.tgz
     version: 12.2.0
   - apiVersion: v2
     appVersion: 12.1.0
@@ -5939,7 +5939,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.1.0.tgz
     version: 12.1.0
   - apiVersion: v2
     appVersion: 12.0.0
@@ -5969,7 +5969,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-12.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-12.0.0.tgz
     version: 12.0.0
   - apiVersion: v2
     appVersion: 11.67.0
@@ -5999,7 +5999,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.67.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.67.0.tgz
     version: 11.67.0
   - apiVersion: v2
     appVersion: 11.66.0
@@ -6029,7 +6029,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.66.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.66.0.tgz
     version: 11.66.0
   - apiVersion: v2
     appVersion: 11.62.0
@@ -6059,7 +6059,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.62.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.62.0.tgz
     version: 11.62.0
   - apiVersion: v2
     appVersion: 11.61.0
@@ -6089,7 +6089,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.61.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.61.0.tgz
     version: 11.61.0
   - apiVersion: v2
     appVersion: 11.60.0
@@ -6119,7 +6119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.60.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.60.0.tgz
     version: 11.60.0
   - apiVersion: v2
     appVersion: 11.59.0
@@ -6149,7 +6149,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.59.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.59.0.tgz
     version: 11.59.0
   - apiVersion: v2
     appVersion: 11.58.0
@@ -6179,7 +6179,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.58.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.58.0.tgz
     version: 11.58.0
   - apiVersion: v2
     appVersion: 11.55.0
@@ -6209,7 +6209,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.55.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.55.0.tgz
     version: 11.55.0
   - apiVersion: v2
     appVersion: 11.54.0
@@ -6239,7 +6239,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.54.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.54.0.tgz
     version: 11.54.0
   - apiVersion: v2
     appVersion: 11.53.0
@@ -6269,7 +6269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.53.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.53.0.tgz
     version: 11.53.0
   - apiVersion: v2
     appVersion: 11.51.0
@@ -6299,7 +6299,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.51.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.51.0.tgz
     version: 11.51.0
   - apiVersion: v2
     appVersion: 11.49.0
@@ -6329,7 +6329,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.49.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.49.0.tgz
     version: 11.49.0
   - apiVersion: v2
     appVersion: 11.48.2
@@ -6359,7 +6359,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.48.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.48.2.tgz
     version: 11.48.2
   - apiVersion: v2
     appVersion: 11.48.0
@@ -6389,7 +6389,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.48.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.48.0.tgz
     version: 11.48.0
   - apiVersion: v2
     appVersion: 11.47.7
@@ -6419,7 +6419,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.47.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.47.7.tgz
     version: 11.47.7
   - apiVersion: v2
     appVersion: 11.47.4
@@ -6449,7 +6449,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.47.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.47.4.tgz
     version: 11.47.4
   - apiVersion: v2
     appVersion: 11.47.3
@@ -6479,7 +6479,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.47.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.47.3.tgz
     version: 11.47.3
   - apiVersion: v2
     appVersion: 11.47.2
@@ -6509,7 +6509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.47.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.47.2.tgz
     version: 11.47.2
   - apiVersion: v2
     appVersion: 11.47.0
@@ -6539,7 +6539,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.47.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.47.0.tgz
     version: 11.47.0
   - apiVersion: v2
     appVersion: 11.46.0
@@ -6569,7 +6569,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.46.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.46.0.tgz
     version: 11.46.0
   - apiVersion: v2
     appVersion: 11.45.13
@@ -6599,7 +6599,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.13.tgz
     version: 11.45.13
   - apiVersion: v2
     appVersion: 11.45.12
@@ -6629,7 +6629,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.12.tgz
     version: 11.45.12
   - apiVersion: v2
     appVersion: 11.45.11
@@ -6659,7 +6659,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.11.tgz
     version: 11.45.11
   - apiVersion: v2
     appVersion: 11.45.10
@@ -6689,7 +6689,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.10.tgz
     version: 11.45.10
   - apiVersion: v2
     appVersion: 11.45.9
@@ -6719,7 +6719,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.9.tgz
     version: 11.45.9
   - apiVersion: v2
     appVersion: 11.45.8
@@ -6749,7 +6749,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.8.tgz
     version: 11.45.8
   - apiVersion: v2
     appVersion: 11.45.7
@@ -6779,7 +6779,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.7.tgz
     version: 11.45.7
   - apiVersion: v2
     appVersion: 11.45.5
@@ -6809,7 +6809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.5.tgz
     version: 11.45.5
   - apiVersion: v2
     appVersion: 11.45.4
@@ -6839,7 +6839,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.4.tgz
     version: 11.45.4
   - apiVersion: v2
     appVersion: 11.45.3
@@ -6869,7 +6869,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.3.tgz
     version: 11.45.3
   - apiVersion: v2
     appVersion: 11.45.2
@@ -6899,7 +6899,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.2.tgz
     version: 11.45.2
   - apiVersion: v2
     appVersion: 11.45.1
@@ -6929,7 +6929,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.1.tgz
     version: 11.45.1
   - apiVersion: v2
     appVersion: 11.45.0
@@ -6959,7 +6959,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.45.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.45.0.tgz
     version: 11.45.0
   - apiVersion: v2
     appVersion: 11.44.0
@@ -6989,7 +6989,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.44.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.44.0.tgz
     version: 11.44.0
   - apiVersion: v2
     appVersion: 11.43.0
@@ -7019,7 +7019,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.43.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.43.0.tgz
     version: 11.43.0
   - apiVersion: v2
     appVersion: 11.42.0
@@ -7049,7 +7049,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.42.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.42.0.tgz
     version: 11.42.0
   - apiVersion: v2
     appVersion: 11.41.1
@@ -7079,7 +7079,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.41.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.41.1.tgz
     version: 11.41.1
   - apiVersion: v2
     appVersion: 11.41.0
@@ -7109,7 +7109,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.41.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.41.0.tgz
     version: 11.41.0
   - apiVersion: v2
     appVersion: 11.40.0
@@ -7139,7 +7139,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.40.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.40.0.tgz
     version: 11.40.0
   - apiVersion: v2
     appVersion: 11.39.0
@@ -7169,7 +7169,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.39.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.39.0.tgz
     version: 11.39.0
   - apiVersion: v2
     appVersion: 11.37.0
@@ -7199,7 +7199,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.37.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.37.0.tgz
     version: 11.37.0
   - apiVersion: v2
     appVersion: 11.36.0
@@ -7229,7 +7229,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.36.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.36.0.tgz
     version: 11.36.0
   - apiVersion: v2
     appVersion: 11.35.0
@@ -7259,7 +7259,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.35.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.35.0.tgz
     version: 11.35.0
   - apiVersion: v2
     appVersion: 11.34.1
@@ -7289,7 +7289,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.34.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.34.1.tgz
     version: 11.34.1
   - apiVersion: v2
     appVersion: 11.34.0
@@ -7319,7 +7319,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.34.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.34.0.tgz
     version: 11.34.0
   - apiVersion: v2
     appVersion: 11.32.0
@@ -7349,7 +7349,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.32.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.32.0.tgz
     version: 11.32.0
   - apiVersion: v2
     appVersion: 11.31.0
@@ -7379,7 +7379,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.31.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.31.0.tgz
     version: 11.31.0
   - apiVersion: v2
     appVersion: 11.29.0
@@ -7409,7 +7409,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.29.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.29.0.tgz
     version: 11.29.0
   - apiVersion: v2
     appVersion: 11.28.0
@@ -7439,7 +7439,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.28.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.28.0.tgz
     version: 11.28.0
   - apiVersion: v2
     appVersion: 11.27.0
@@ -7469,7 +7469,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.27.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.27.0.tgz
     version: 11.27.0
   - apiVersion: v2
     appVersion: 11.26.0
@@ -7499,7 +7499,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.26.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.26.0.tgz
     version: 11.26.0
   - apiVersion: v2
     appVersion: 11.25.0
@@ -7529,7 +7529,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.25.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.25.0.tgz
     version: 11.25.0
   - apiVersion: v2
     appVersion: 11.24.0
@@ -7559,7 +7559,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.24.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.24.0.tgz
     version: 11.24.0
   - apiVersion: v2
     appVersion: 11.23.0
@@ -7589,7 +7589,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.23.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.23.0.tgz
     version: 11.23.0
   - apiVersion: v2
     appVersion: 11.22.0
@@ -7619,7 +7619,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.22.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.22.0.tgz
     version: 11.22.0
   - apiVersion: v2
     appVersion: 11.21.0
@@ -7649,7 +7649,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.21.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.21.0.tgz
     version: 11.21.0
   - apiVersion: v2
     appVersion: 11.20.0
@@ -7679,7 +7679,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.20.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.20.0.tgz
     version: 11.20.0
   - apiVersion: v2
     appVersion: 11.19.0
@@ -7709,7 +7709,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.19.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.19.0.tgz
     version: 11.19.0
   - apiVersion: v2
     appVersion: 11.18.0
@@ -7739,7 +7739,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.18.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.18.0.tgz
     version: 11.18.0
   - apiVersion: v2
     appVersion: 11.17.0
@@ -7769,7 +7769,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.17.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.17.0.tgz
     version: 11.17.0
   - apiVersion: v2
     appVersion: 11.16.0
@@ -7799,7 +7799,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.16.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.16.0.tgz
     version: 11.16.0
   - apiVersion: v2
     appVersion: 11.15.0
@@ -7829,7 +7829,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.15.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.15.0.tgz
     version: 11.15.0
   - apiVersion: v2
     appVersion: 11.14.0
@@ -7859,7 +7859,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.14.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.14.0.tgz
     version: 11.14.0
   - apiVersion: v2
     appVersion: 11.13.0
@@ -7889,7 +7889,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.13.0.tgz
     version: 11.13.0
   - apiVersion: v2
     appVersion: 11.12.0
@@ -7919,7 +7919,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.12.0.tgz
     version: 11.12.0
   - apiVersion: v2
     appVersion: 11.11.0
@@ -7949,7 +7949,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.11.0.tgz
     version: 11.11.0
   - apiVersion: v2
     appVersion: 11.9.0
@@ -7979,7 +7979,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.9.0.tgz
     version: 11.9.0
   - apiVersion: v2
     appVersion: 11.8.0
@@ -8009,7 +8009,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.8.0.tgz
     version: 11.8.0
   - apiVersion: v2
     appVersion: 11.7.0
@@ -8039,7 +8039,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.7.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.7.0.tgz
     version: 11.7.0
   - apiVersion: v2
     appVersion: 11.6.1
@@ -8069,7 +8069,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.6.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.6.1.tgz
     version: 11.6.1
   - apiVersion: v2
     appVersion: 11.6.0
@@ -8099,7 +8099,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.6.0.tgz
     version: 11.6.0
   - apiVersion: v2
     appVersion: 11.5.0
@@ -8129,7 +8129,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.5.0.tgz
     version: 11.5.0
   - apiVersion: v2
     appVersion: 11.3.0
@@ -8159,7 +8159,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.3.0.tgz
     version: 11.3.0
   - apiVersion: v2
     appVersion: 11.2.6
@@ -8189,7 +8189,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.2.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.2.6.tgz
     version: 11.2.6
   - apiVersion: v2
     appVersion: 11.2.5
@@ -8219,7 +8219,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.2.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.2.5.tgz
     version: 11.2.5
   - apiVersion: v2
     appVersion: 11.2.3
@@ -8249,7 +8249,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.2.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.2.3.tgz
     version: 11.2.3
   - apiVersion: v2
     appVersion: 11.2.2
@@ -8279,7 +8279,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.2.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.2.2.tgz
     version: 11.2.2
   - apiVersion: v2
     appVersion: 11.2.1
@@ -8309,7 +8309,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.2.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.2.1.tgz
     version: 11.2.1
   - apiVersion: v2
     appVersion: 11.1.1
@@ -8339,7 +8339,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.1.1.tgz
     version: 11.1.1
   - apiVersion: v2
     appVersion: 11.1.0
@@ -8369,7 +8369,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.1.0.tgz
     version: 11.1.0
   - apiVersion: v2
     appVersion: 11.0.0
@@ -8399,7 +8399,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-11.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-11.0.0.tgz
     version: 11.0.0
   - apiVersion: v2
     appVersion: 10.6.50
@@ -8429,7 +8429,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.50.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.50.tgz
     version: 10.6.50
   - apiVersion: v2
     appVersion: 10.6.48
@@ -8459,7 +8459,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.48.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.48.tgz
     version: 10.6.48
   - apiVersion: v2
     appVersion: 10.6.47
@@ -8489,7 +8489,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.47.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.47.tgz
     version: 10.6.47
   - apiVersion: v2
     appVersion: 10.6.46
@@ -8519,7 +8519,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.46.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.46.tgz
     version: 10.6.46
   - apiVersion: v2
     appVersion: 10.6.45
@@ -8549,7 +8549,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.45.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.45.tgz
     version: 10.6.45
   - apiVersion: v2
     appVersion: 10.6.44
@@ -8579,7 +8579,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.44.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.44.tgz
     version: 10.6.44
   - apiVersion: v2
     appVersion: 10.6.43
@@ -8609,7 +8609,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.43.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.43.tgz
     version: 10.6.43
   - apiVersion: v2
     appVersion: 10.6.42
@@ -8639,7 +8639,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.42.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.42.tgz
     version: 10.6.42
   - apiVersion: v2
     appVersion: 10.6.41
@@ -8669,7 +8669,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.41.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.41.tgz
     version: 10.6.41
   - apiVersion: v2
     appVersion: 10.6.40
@@ -8699,7 +8699,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.40.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.40.tgz
     version: 10.6.40
   - apiVersion: v2
     appVersion: 10.6.39
@@ -8729,7 +8729,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.39.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.39.tgz
     version: 10.6.39
   - apiVersion: v2
     appVersion: 10.6.37
@@ -8759,7 +8759,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.37.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.37.tgz
     version: 10.6.37
   - apiVersion: v2
     appVersion: 10.6.36
@@ -8789,7 +8789,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.36.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.36.tgz
     version: 10.6.36
   - apiVersion: v2
     appVersion: 10.6.35
@@ -8819,7 +8819,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.35.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.35.tgz
     version: 10.6.35
   - apiVersion: v2
     appVersion: 10.6.34
@@ -8849,7 +8849,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.34.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.34.tgz
     version: 10.6.34
   - apiVersion: v2
     appVersion: 10.6.33
@@ -8879,7 +8879,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.33.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.33.tgz
     version: 10.6.33
   - apiVersion: v2
     appVersion: 10.6.32
@@ -8909,7 +8909,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.32.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.32.tgz
     version: 10.6.32
   - apiVersion: v2
     appVersion: 10.6.31
@@ -8939,7 +8939,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.31.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.31.tgz
     version: 10.6.31
   - apiVersion: v2
     appVersion: 10.6.29
@@ -8969,7 +8969,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.29.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.29.tgz
     version: 10.6.29
   - apiVersion: v2
     appVersion: 10.6.28
@@ -8999,7 +8999,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.28.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.28.tgz
     version: 10.6.28
   - apiVersion: v2
     appVersion: 10.6.27
@@ -9029,7 +9029,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.27.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.27.tgz
     version: 10.6.27
   - apiVersion: v2
     appVersion: 10.6.26
@@ -9059,7 +9059,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.26.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.26.tgz
     version: 10.6.26
   - apiVersion: v2
     appVersion: 10.6.25
@@ -9089,7 +9089,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.25.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.25.tgz
     version: 10.6.25
   - apiVersion: v2
     appVersion: 10.6.24
@@ -9119,7 +9119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.24.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.24.tgz
     version: 10.6.24
   - apiVersion: v2
     appVersion: 10.6.23
@@ -9149,7 +9149,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.23.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.23.tgz
     version: 10.6.23
   - apiVersion: v2
     appVersion: 10.6.22
@@ -9179,7 +9179,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.22.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.22.tgz
     version: 10.6.22
   - apiVersion: v2
     appVersion: 10.6.21
@@ -9209,7 +9209,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.21.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.21.tgz
     version: 10.6.21
   - apiVersion: v2
     appVersion: 10.6.20
@@ -9239,7 +9239,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.20.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.20.tgz
     version: 10.6.20
   - apiVersion: v2
     appVersion: 10.6.19
@@ -9269,7 +9269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.19.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.19.tgz
     version: 10.6.19
   - apiVersion: v2
     appVersion: 10.6.18
@@ -9299,7 +9299,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.18.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.18.tgz
     version: 10.6.18
   - apiVersion: v2
     appVersion: 10.6.17
@@ -9329,7 +9329,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.17.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.17.tgz
     version: 10.6.17
   - apiVersion: v2
     appVersion: 10.6.16
@@ -9359,7 +9359,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.16.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.16.tgz
     version: 10.6.16
   - apiVersion: v2
     appVersion: 10.6.15
@@ -9389,7 +9389,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.15.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.15.tgz
     version: 10.6.15
   - apiVersion: v2
     appVersion: 10.6.14
@@ -9419,7 +9419,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.14.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.14.tgz
     version: 10.6.14
   - apiVersion: v2
     appVersion: 10.6.13
@@ -9449,7 +9449,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.13.tgz
     version: 10.6.13
   - apiVersion: v2
     appVersion: 10.6.12
@@ -9479,7 +9479,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.12.tgz
     version: 10.6.12
   - apiVersion: v2
     appVersion: 10.6.11
@@ -9509,7 +9509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.11.tgz
     version: 10.6.11
   - apiVersion: v2
     appVersion: 10.6.10
@@ -9539,7 +9539,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.10.tgz
     version: 10.6.10
   - apiVersion: v2
     appVersion: 10.6.9
@@ -9569,7 +9569,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.9.tgz
     version: 10.6.9
   - apiVersion: v2
     appVersion: 10.6.8
@@ -9599,7 +9599,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.8.tgz
     version: 10.6.8
   - apiVersion: v2
     appVersion: 10.6.7
@@ -9629,7 +9629,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.7.tgz
     version: 10.6.7
   - apiVersion: v2
     appVersion: 10.6.6
@@ -9659,7 +9659,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.6.tgz
     version: 10.6.6
   - apiVersion: v2
     appVersion: 10.6.5
@@ -9689,7 +9689,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.5.tgz
     version: 10.6.5
   - apiVersion: v2
     appVersion: 10.6.4
@@ -9719,7 +9719,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.4.tgz
     version: 10.6.4
   - apiVersion: v2
     appVersion: 10.6.3
@@ -9749,7 +9749,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.3.tgz
     version: 10.6.3
   - apiVersion: v2
     appVersion: 10.6.2
@@ -9779,7 +9779,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.2.tgz
     version: 10.6.2
   - apiVersion: v2
     appVersion: 10.6.1
@@ -9809,7 +9809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.1.tgz
     version: 10.6.1
   - apiVersion: v2
     appVersion: 10.6.0
@@ -9839,7 +9839,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.6.0.tgz
     version: 10.6.0
   - apiVersion: v2
     appVersion: 10.5.13
@@ -9869,7 +9869,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.13.tgz
     version: 10.5.13
   - apiVersion: v2
     appVersion: 10.5.12
@@ -9899,7 +9899,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.12.tgz
     version: 10.5.12
   - apiVersion: v2
     appVersion: 10.5.11
@@ -9929,7 +9929,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.11.tgz
     version: 10.5.11
   - apiVersion: v2
     appVersion: 10.5.10
@@ -9959,7 +9959,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.10.tgz
     version: 10.5.10
   - apiVersion: v2
     appVersion: 10.5.9
@@ -9989,7 +9989,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.9.tgz
     version: 10.5.9
   - apiVersion: v2
     appVersion: 10.5.7
@@ -10019,7 +10019,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.7.tgz
     version: 10.5.7
   - apiVersion: v2
     appVersion: 10.5.6
@@ -10049,7 +10049,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.6.tgz
     version: 10.5.6
   - apiVersion: v2
     appVersion: 10.5.5
@@ -10079,7 +10079,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.5.tgz
     version: 10.5.5
   - apiVersion: v2
     appVersion: 10.5.4
@@ -10109,7 +10109,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.4.tgz
     version: 10.5.4
   - apiVersion: v2
     appVersion: 10.5.3
@@ -10139,7 +10139,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.3.tgz
     version: 10.5.3
   - apiVersion: v2
     appVersion: 10.5.2
@@ -10169,7 +10169,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.2.tgz
     version: 10.5.2
   - apiVersion: v2
     appVersion: 10.5.1
@@ -10199,7 +10199,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.1.tgz
     version: 10.5.1
   - apiVersion: v2
     appVersion: 10.5.0
@@ -10229,7 +10229,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.5.0.tgz
     version: 10.5.0
   - apiVersion: v2
     appVersion: 10.4.1
@@ -10259,7 +10259,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.4.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.4.1.tgz
     version: 10.4.1
   - apiVersion: v2
     appVersion: 10.4.0
@@ -10289,7 +10289,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.4.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.4.0.tgz
     version: 10.4.0
   - apiVersion: v2
     appVersion: 10.3.0
@@ -10319,7 +10319,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.3.0.tgz
     version: 10.3.0
   - apiVersion: v2
     appVersion: 10.2.10
@@ -10349,7 +10349,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.10.tgz
     version: 10.2.10
   - apiVersion: v2
     appVersion: 10.2.8
@@ -10379,7 +10379,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.8.tgz
     version: 10.2.8
   - apiVersion: v2
     appVersion: 10.2.7
@@ -10409,7 +10409,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.7.tgz
     version: 10.2.7
   - apiVersion: v2
     appVersion: 10.2.6
@@ -10439,7 +10439,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.6.tgz
     version: 10.2.6
   - apiVersion: v2
     appVersion: 10.2.5
@@ -10469,7 +10469,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.5.tgz
     version: 10.2.5
   - apiVersion: v2
     appVersion: 10.2.4
@@ -10499,7 +10499,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.4.tgz
     version: 10.2.4
   - apiVersion: v2
     appVersion: 10.2.3
@@ -10529,7 +10529,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.3.tgz
     version: 10.2.3
   - apiVersion: v2
     appVersion: 10.2.2
@@ -10559,7 +10559,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.2.tgz
     version: 10.2.2
   - apiVersion: v2
     appVersion: 10.2.0
@@ -10589,7 +10589,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.2.0.tgz
     version: 10.2.0
   - apiVersion: v2
     appVersion: 10.1.3
@@ -10619,7 +10619,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.1.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.1.3.tgz
     version: 10.1.3
   - apiVersion: v2
     appVersion: 10.1.2
@@ -10649,7 +10649,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.1.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.1.2.tgz
     version: 10.1.2
   - apiVersion: v2
     appVersion: 10.1.1
@@ -10679,7 +10679,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.1.1.tgz
     version: 10.1.1
   - apiVersion: v2
     appVersion: 10.1.0
@@ -10709,7 +10709,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.1.0.tgz
     version: 10.1.0
   - apiVersion: v2
     appVersion: 10.0.5
@@ -10739,7 +10739,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.5.tgz
     version: 10.0.5
   - apiVersion: v2
     appVersion: 10.0.4
@@ -10769,7 +10769,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.4.tgz
     version: 10.0.4
   - apiVersion: v2
     appVersion: 10.0.3
@@ -10799,7 +10799,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.3.tgz
     version: 10.0.3
   - apiVersion: v2
     appVersion: 10.0.2
@@ -10829,7 +10829,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.2.tgz
     version: 10.0.2
   - apiVersion: v2
     appVersion: 10.0.1
@@ -10859,7 +10859,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.1.tgz
     version: 10.0.1
   - apiVersion: v2
     appVersion: 10.0.0
@@ -10889,7 +10889,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-10.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-10.0.0.tgz
     version: 10.0.0
   - apiVersion: v2
     appVersion: 9.2.2
@@ -10919,7 +10919,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.2.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.2.2.tgz
     version: 9.2.2
   - apiVersion: v2
     appVersion: 9.2.1
@@ -10949,7 +10949,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.2.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.2.1.tgz
     version: 9.2.1
   - apiVersion: v2
     appVersion: 9.2.0
@@ -10979,7 +10979,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.2.0.tgz
     version: 9.2.0
   - apiVersion: v2
     appVersion: 9.1.1
@@ -11009,7 +11009,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.1.1.tgz
     version: 9.1.1
   - apiVersion: v2
     appVersion: 9.1.0
@@ -11039,7 +11039,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.1.0.tgz
     version: 9.1.0
   - apiVersion: v2
     appVersion: 9.0.0
@@ -11069,7 +11069,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-9.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-9.0.0.tgz
     version: 9.0.0
   - apiVersion: v2
     appVersion: 8.18.9
@@ -11099,7 +11099,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.9.tgz
     version: 8.18.9
   - apiVersion: v2
     appVersion: 8.18.8
@@ -11129,7 +11129,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.8.tgz
     version: 8.18.8
   - apiVersion: v2
     appVersion: 8.18.5
@@ -11159,7 +11159,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.5.tgz
     version: 8.18.5
   - apiVersion: v2
     appVersion: 8.18.4
@@ -11189,7 +11189,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.4.tgz
     version: 8.18.4
   - apiVersion: v2
     appVersion: 8.18.3
@@ -11219,7 +11219,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.3.tgz
     version: 8.18.3
   - apiVersion: v2
     appVersion: 8.18.2
@@ -11249,7 +11249,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.2.tgz
     version: 8.18.2
   - apiVersion: v2
     appVersion: 8.18.1
@@ -11279,7 +11279,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.1.tgz
     version: 8.18.1
   - apiVersion: v2
     appVersion: 8.18.0
@@ -11309,7 +11309,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.18.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.18.0.tgz
     version: 8.18.0
   - apiVersion: v2
     appVersion: 8.17.1
@@ -11339,7 +11339,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.17.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.17.1.tgz
     version: 8.17.1
   - apiVersion: v2
     appVersion: 8.17.0
@@ -11369,7 +11369,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.17.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.17.0.tgz
     version: 8.17.0
   - apiVersion: v2
     appVersion: 8.16.1
@@ -11399,7 +11399,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.16.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.16.1.tgz
     version: 8.16.1
   - apiVersion: v2
     appVersion: 8.16.0
@@ -11429,7 +11429,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.16.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.16.0.tgz
     version: 8.16.0
   - apiVersion: v2
     appVersion: 8.15.4
@@ -11459,7 +11459,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.15.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.15.4.tgz
     version: 8.15.4
   - apiVersion: v2
     appVersion: 8.15.3
@@ -11489,7 +11489,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.15.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.15.3.tgz
     version: 8.15.3
   - apiVersion: v2
     appVersion: 8.15.2
@@ -11519,7 +11519,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.15.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.15.2.tgz
     version: 8.15.2
   - apiVersion: v2
     appVersion: 8.15.1
@@ -11549,7 +11549,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.15.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.15.1.tgz
     version: 8.15.1
   - apiVersion: v2
     appVersion: 8.15.0
@@ -11579,7 +11579,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.15.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.15.0.tgz
     version: 8.15.0
   - apiVersion: v2
     appVersion: 8.14.2
@@ -11609,7 +11609,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.14.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.14.2.tgz
     version: 8.14.2
   - apiVersion: v2
     appVersion: 8.14.1
@@ -11639,7 +11639,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.14.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.14.1.tgz
     version: 8.14.1
   - apiVersion: v2
     appVersion: 8.14.0
@@ -11669,7 +11669,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.14.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.14.0.tgz
     version: 8.14.0
   - apiVersion: v2
     appVersion: 8.13.0
@@ -11699,7 +11699,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.13.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.13.0.tgz
     version: 8.13.0
   - apiVersion: v2
     appVersion: 8.12.0
@@ -11729,7 +11729,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.12.0.tgz
     version: 8.12.0
   - apiVersion: v2
     appVersion: 8.11.4
@@ -11759,7 +11759,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.11.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.11.4.tgz
     version: 8.11.4
   - apiVersion: v2
     appVersion: 8.11.3
@@ -11789,7 +11789,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.11.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.11.3.tgz
     version: 8.11.3
   - apiVersion: v2
     appVersion: 8.11.2
@@ -11819,7 +11819,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.11.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.11.2.tgz
     version: 8.11.2
   - apiVersion: v2
     appVersion: 8.11.1
@@ -11849,7 +11849,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.11.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.11.1.tgz
     version: 8.11.1
   - apiVersion: v2
     appVersion: 8.11.0
@@ -11879,7 +11879,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.11.0.tgz
     version: 8.11.0
   - apiVersion: v2
     appVersion: 8.10.4
@@ -11909,7 +11909,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.10.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.10.4.tgz
     version: 8.10.4
   - apiVersion: v2
     appVersion: 8.10.3
@@ -11939,7 +11939,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.10.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.10.3.tgz
     version: 8.10.3
   - apiVersion: v2
     appVersion: 8.10.2
@@ -11969,7 +11969,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.10.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.10.2.tgz
     version: 8.10.2
   - apiVersion: v2
     appVersion: 8.10.0
@@ -11999,7 +11999,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.10.0.tgz
     version: 8.10.0
   - apiVersion: v2
     appVersion: 8.9.2
@@ -12029,7 +12029,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.9.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.9.2.tgz
     version: 8.9.2
   - apiVersion: v2
     appVersion: 8.9.1
@@ -12059,7 +12059,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.9.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.9.1.tgz
     version: 8.9.1
   - apiVersion: v2
     appVersion: 8.9.0
@@ -12089,7 +12089,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.9.0.tgz
     version: 8.9.0
   - apiVersion: v2
     appVersion: 8.8.2
@@ -12119,7 +12119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.8.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.8.2.tgz
     version: 8.8.2
   - apiVersion: v2
     appVersion: 8.8.1
@@ -12149,7 +12149,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.8.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.8.1.tgz
     version: 8.8.1
   - apiVersion: v2
     appVersion: 8.8.0
@@ -12179,7 +12179,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.8.0.tgz
     version: 8.8.0
   - apiVersion: v2
     appVersion: 8.7.1
@@ -12209,7 +12209,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.7.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.7.1.tgz
     version: 8.7.1
   - apiVersion: v2
     appVersion: 8.7.0
@@ -12239,7 +12239,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.7.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.7.0.tgz
     version: 8.7.0
   - apiVersion: v2
     appVersion: 8.6.1
@@ -12269,7 +12269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.6.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.6.1.tgz
     version: 8.6.1
   - apiVersion: v2
     appVersion: 8.6.0
@@ -12299,7 +12299,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.6.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.6.0.tgz
     version: 8.6.0
   - apiVersion: v2
     appVersion: 8.5.3
@@ -12329,7 +12329,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.5.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.5.3.tgz
     version: 8.5.3
   - apiVersion: v2
     appVersion: 8.5.2
@@ -12359,7 +12359,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.5.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.5.2.tgz
     version: 8.5.2
   - apiVersion: v2
     appVersion: 8.5.1
@@ -12389,7 +12389,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.5.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.5.1.tgz
     version: 8.5.1
   - apiVersion: v2
     appVersion: 8.5.0
@@ -12419,7 +12419,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.5.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.5.0.tgz
     version: 8.5.0
   - apiVersion: v2
     appVersion: 8.4.7
@@ -12449,7 +12449,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.7.tgz
     version: 8.4.7
   - apiVersion: v2
     appVersion: 8.4.6
@@ -12479,7 +12479,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.6.tgz
     version: 8.4.6
   - apiVersion: v2
     appVersion: 8.4.5
@@ -12509,7 +12509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.5.tgz
     version: 8.4.5
   - apiVersion: v2
     appVersion: 8.4.4
@@ -12539,7 +12539,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.4.tgz
     version: 8.4.4
   - apiVersion: v2
     appVersion: 8.4.3
@@ -12569,7 +12569,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.3.tgz
     version: 8.4.3
   - apiVersion: v2
     appVersion: 8.4.2
@@ -12599,7 +12599,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.2.tgz
     version: 8.4.2
   - apiVersion: v2
     appVersion: 8.4.1
@@ -12629,7 +12629,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.4.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.4.1.tgz
     version: 8.4.1
   - apiVersion: v2
     appVersion: 8.3.3
@@ -12659,7 +12659,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.3.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.3.3.tgz
     version: 8.3.3
   - apiVersion: v2
     appVersion: 8.3.2
@@ -12689,7 +12689,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.3.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.3.2.tgz
     version: 8.3.2
   - apiVersion: v2
     appVersion: 8.3.1
@@ -12719,7 +12719,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.3.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.3.1.tgz
     version: 8.3.1
   - apiVersion: v2
     appVersion: 8.3.0
@@ -12749,7 +12749,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.3.0.tgz
     version: 8.3.0
   - apiVersion: v2
     appVersion: 8.2.2
@@ -12779,7 +12779,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.2.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.2.2.tgz
     version: 8.2.2
   - apiVersion: v2
     appVersion: 8.2.1
@@ -12809,7 +12809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.2.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.2.1.tgz
     version: 8.2.1
   - apiVersion: v2
     appVersion: 8.2.0
@@ -12839,7 +12839,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.2.0.tgz
     version: 8.2.0
   - apiVersion: v2
     appVersion: 8.1.0
@@ -12869,7 +12869,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.1.0.tgz
     version: 8.1.0
   - apiVersion: v2
     appVersion: 8.0.2
@@ -12899,7 +12899,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.0.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.0.2.tgz
     version: 8.0.2
   - apiVersion: v2
     appVersion: 8.0.1
@@ -12929,7 +12929,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.0.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.0.1.tgz
     version: 8.0.1
   - apiVersion: v2
     appVersion: 8.0.0
@@ -12959,7 +12959,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-8.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-8.0.0.tgz
     version: 8.0.0
   - apiVersion: v2
     appVersion: 7.2.0
@@ -12990,7 +12990,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.2.0.tgz
     version: 7.2.0
   - apiVersion: v2
     appVersion: 7.1.6
@@ -13021,7 +13021,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.6.tgz
     version: 7.1.6
   - apiVersion: v2
     appVersion: 7.1.5
@@ -13052,7 +13052,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.5.tgz
     version: 7.1.5
   - apiVersion: v2
     appVersion: 7.1.4
@@ -13083,7 +13083,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.4.tgz
     version: 7.1.4
   - apiVersion: v2
     appVersion: 7.1.3
@@ -13114,7 +13114,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.3.tgz
     version: 7.1.3
   - apiVersion: v2
     appVersion: 7.1.2
@@ -13145,7 +13145,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.2.tgz
     version: 7.1.2
   - apiVersion: v2
     appVersion: 7.1.1
@@ -13176,7 +13176,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.1.tgz
     version: 7.1.1
   - apiVersion: v2
     appVersion: 7.1.0
@@ -13207,7 +13207,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.1.0.tgz
     version: 7.1.0
   - apiVersion: v2
     appVersion: 7.0.0
@@ -13238,7 +13238,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-7.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-7.0.0.tgz
     version: 7.0.0
   - apiVersion: v2
     appVersion: 6.3.31
@@ -13269,7 +13269,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.31.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.31.tgz
     version: 6.3.31
   - apiVersion: v2
     appVersion: 6.3.30
@@ -13300,7 +13300,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.30.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.30.tgz
     version: 6.3.30
   - apiVersion: v2
     appVersion: 6.3.28
@@ -13331,7 +13331,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.28.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.28.tgz
     version: 6.3.28
   - apiVersion: v2
     appVersion: 6.3.25
@@ -13362,7 +13362,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.25.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.25.tgz
     version: 6.3.25
   - apiVersion: v2
     appVersion: 6.3.24
@@ -13393,7 +13393,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.24.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.24.tgz
     version: 6.3.24
   - apiVersion: v2
     appVersion: 6.3.23
@@ -13424,7 +13424,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.23.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.23.tgz
     version: 6.3.23
   - apiVersion: v2
     appVersion: 6.3.22
@@ -13455,7 +13455,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.22.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.22.tgz
     version: 6.3.22
   - apiVersion: v2
     appVersion: 6.3.21
@@ -13486,7 +13486,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.21.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.21.tgz
     version: 6.3.21
   - apiVersion: v2
     appVersion: 6.3.20
@@ -13517,7 +13517,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.20.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.20.tgz
     version: 6.3.20
   - apiVersion: v2
     appVersion: 6.3.19
@@ -13548,7 +13548,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.19.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.19.tgz
     version: 6.3.19
   - apiVersion: v2
     appVersion: 6.3.18
@@ -13579,7 +13579,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.18.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.18.tgz
     version: 6.3.18
   - apiVersion: v2
     appVersion: 6.3.16
@@ -13610,7 +13610,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.16.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.16.tgz
     version: 6.3.16
   - apiVersion: v2
     appVersion: 6.3.15
@@ -13641,7 +13641,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.15.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.15.tgz
     version: 6.3.15
   - apiVersion: v2
     appVersion: 6.3.14
@@ -13672,7 +13672,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.14.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.14.tgz
     version: 6.3.14
   - apiVersion: v2
     appVersion: 6.3.12
@@ -13703,7 +13703,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.12.tgz
     version: 6.3.12
   - apiVersion: v2
     appVersion: 6.3.11
@@ -13734,7 +13734,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.11.tgz
     version: 6.3.11
   - apiVersion: v2
     appVersion: 6.3.9
@@ -13765,7 +13765,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.9.tgz
     version: 6.3.9
   - apiVersion: v2
     appVersion: 6.3.8
@@ -13796,7 +13796,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.8.tgz
     version: 6.3.8
   - apiVersion: v2
     appVersion: 6.3.7
@@ -13827,7 +13827,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.7.tgz
     version: 6.3.7
   - apiVersion: v2
     appVersion: 6.3.6
@@ -13858,7 +13858,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.6.tgz
     version: 6.3.6
   - apiVersion: v2
     appVersion: 6.3.5
@@ -13889,7 +13889,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.5.tgz
     version: 6.3.5
   - apiVersion: v2
     appVersion: 6.3.4
@@ -13920,7 +13920,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.4.tgz
     version: 6.3.4
   - apiVersion: v2
     appVersion: 6.3.3
@@ -13951,7 +13951,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.3.tgz
     version: 6.3.3
   - apiVersion: v2
     appVersion: 6.3.2
@@ -13982,7 +13982,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.2.tgz
     version: 6.3.2
   - apiVersion: v2
     appVersion: 6.3.1
@@ -14013,7 +14013,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.1.tgz
     version: 6.3.1
   - apiVersion: v2
     appVersion: 6.3.0
@@ -14044,7 +14044,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.3.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.3.0.tgz
     version: 6.3.0
   - apiVersion: v2
     appVersion: 6.2.36
@@ -14075,7 +14075,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.36.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.36.tgz
     version: 6.2.36
   - apiVersion: v2
     appVersion: 6.2.35
@@ -14106,7 +14106,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.35.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.35.tgz
     version: 6.2.35
   - apiVersion: v2
     appVersion: 6.2.34
@@ -14137,7 +14137,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.34.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.34.tgz
     version: 6.2.34
   - apiVersion: v2
     appVersion: 6.2.33
@@ -14168,7 +14168,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.33.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.33.tgz
     version: 6.2.33
   - apiVersion: v2
     appVersion: 6.2.32
@@ -14199,7 +14199,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.32.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.32.tgz
     version: 6.2.32
   - apiVersion: v2
     appVersion: 6.2.31
@@ -14230,7 +14230,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.31.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.31.tgz
     version: 6.2.31
   - apiVersion: v2
     appVersion: 6.2.30
@@ -14261,7 +14261,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.30.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.30.tgz
     version: 6.2.30
   - apiVersion: v2
     appVersion: 6.2.29
@@ -14292,7 +14292,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.29.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.29.tgz
     version: 6.2.29
   - apiVersion: v2
     appVersion: 6.2.28
@@ -14323,7 +14323,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.28.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.28.tgz
     version: 6.2.28
   - apiVersion: v2
     appVersion: 6.2.27
@@ -14354,7 +14354,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.27.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.27.tgz
     version: 6.2.27
   - apiVersion: v2
     appVersion: 6.2.26
@@ -14385,7 +14385,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.26.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.26.tgz
     version: 6.2.26
   - apiVersion: v2
     appVersion: 6.2.25
@@ -14416,7 +14416,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.25.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.25.tgz
     version: 6.2.25
   - apiVersion: v2
     appVersion: 6.2.24
@@ -14447,7 +14447,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.24.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.24.tgz
     version: 6.2.24
   - apiVersion: v2
     appVersion: 6.2.23
@@ -14478,7 +14478,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.23.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.23.tgz
     version: 6.2.23
   - apiVersion: v2
     appVersion: 6.2.22
@@ -14509,7 +14509,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.22.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.22.tgz
     version: 6.2.22
   - apiVersion: v2
     appVersion: 6.2.21
@@ -14540,7 +14540,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.21.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.21.tgz
     version: 6.2.21
   - apiVersion: v2
     appVersion: 6.2.20
@@ -14571,7 +14571,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.20.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.20.tgz
     version: 6.2.20
   - apiVersion: v2
     appVersion: 6.2.19
@@ -14602,7 +14602,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.19.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.19.tgz
     version: 6.2.19
   - apiVersion: v2
     appVersion: 6.2.18
@@ -14633,7 +14633,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.18.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.18.tgz
     version: 6.2.18
   - apiVersion: v2
     appVersion: 6.2.17
@@ -14664,7 +14664,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.17.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.17.tgz
     version: 6.2.17
   - apiVersion: v2
     appVersion: 6.2.16
@@ -14695,7 +14695,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.16.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.16.tgz
     version: 6.2.16
   - apiVersion: v2
     appVersion: 6.2.15
@@ -14726,7 +14726,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.15.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.15.tgz
     version: 6.2.15
   - apiVersion: v2
     appVersion: 6.2.14
@@ -14757,7 +14757,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.14.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.14.tgz
     version: 6.2.14
   - apiVersion: v2
     appVersion: 6.2.13
@@ -14788,7 +14788,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.13.tgz
     version: 6.2.13
   - apiVersion: v2
     appVersion: 6.2.12
@@ -14819,7 +14819,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.12.tgz
     version: 6.2.12
   - apiVersion: v2
     appVersion: 6.2.11
@@ -14850,7 +14850,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.11.tgz
     version: 6.2.11
   - apiVersion: v2
     appVersion: 6.2.10
@@ -14881,7 +14881,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.10.tgz
     version: 6.2.10
   - apiVersion: v2
     appVersion: 6.2.9
@@ -14912,7 +14912,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.9.tgz
     version: 6.2.9
   - apiVersion: v2
     appVersion: 6.2.8
@@ -14943,7 +14943,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.8.tgz
     version: 6.2.8
   - apiVersion: v2
     appVersion: 6.2.7
@@ -14974,7 +14974,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.7.tgz
     version: 6.2.7
   - apiVersion: v2
     appVersion: 6.2.6
@@ -15005,7 +15005,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.6.tgz
     version: 6.2.6
   - apiVersion: v2
     appVersion: 6.2.5
@@ -15036,7 +15036,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.5.tgz
     version: 6.2.5
   - apiVersion: v2
     appVersion: 6.2.4
@@ -15067,7 +15067,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.4.tgz
     version: 6.2.4
   - apiVersion: v2
     appVersion: 6.2.3
@@ -15098,7 +15098,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.3.tgz
     version: 6.2.3
   - apiVersion: v2
     appVersion: 6.2.2
@@ -15129,7 +15129,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.2.tgz
     version: 6.2.2
   - apiVersion: v2
     appVersion: 6.2.1
@@ -15160,7 +15160,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.1.tgz
     version: 6.2.1
   - apiVersion: v2
     appVersion: 6.2.0
@@ -15191,7 +15191,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.2.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.2.0.tgz
     version: 6.2.0
   - apiVersion: v2
     appVersion: 6.1.23
@@ -15222,7 +15222,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.23.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.23.tgz
     version: 6.1.23
   - apiVersion: v2
     appVersion: 6.1.22
@@ -15253,7 +15253,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.22.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.22.tgz
     version: 6.1.22
   - apiVersion: v2
     appVersion: 6.1.21
@@ -15284,7 +15284,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.21.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.21.tgz
     version: 6.1.21
   - apiVersion: v2
     appVersion: 6.1.20
@@ -15315,7 +15315,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.20.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.20.tgz
     version: 6.1.20
   - apiVersion: v2
     appVersion: 6.1.19
@@ -15346,7 +15346,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.19.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.19.tgz
     version: 6.1.19
   - apiVersion: v2
     appVersion: 6.1.18
@@ -15377,7 +15377,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.18.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.18.tgz
     version: 6.1.18
   - apiVersion: v2
     appVersion: 6.1.17
@@ -15408,7 +15408,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.17.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.17.tgz
     version: 6.1.17
   - apiVersion: v2
     appVersion: 6.1.16
@@ -15439,7 +15439,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.16.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.16.tgz
     version: 6.1.16
   - apiVersion: v2
     appVersion: 6.1.15
@@ -15470,7 +15470,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.15.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.15.tgz
     version: 6.1.15
   - apiVersion: v2
     appVersion: 6.1.14
@@ -15501,7 +15501,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.14.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.14.tgz
     version: 6.1.14
   - apiVersion: v2
     appVersion: 6.1.13
@@ -15532,7 +15532,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.13.tgz
     version: 6.1.13
   - apiVersion: v2
     appVersion: 6.1.12
@@ -15563,7 +15563,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.12.tgz
     version: 6.1.12
   - apiVersion: v2
     appVersion: 6.1.11
@@ -15594,7 +15594,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.11.tgz
     version: 6.1.11
   - apiVersion: v2
     appVersion: 6.1.10
@@ -15624,7 +15624,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.10.tgz
     version: 6.1.10
   - apiVersion: v2
     appVersion: 6.1.9
@@ -15655,7 +15655,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.9.tgz
     version: 6.1.9
   - apiVersion: v2
     appVersion: 6.1.8
@@ -15686,7 +15686,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.8.tgz
     version: 6.1.8
   - apiVersion: v2
     appVersion: 6.1.7
@@ -15716,7 +15716,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.7.tgz
     version: 6.1.7
   - apiVersion: v2
     appVersion: 6.1.6
@@ -15747,7 +15747,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.6.tgz
     version: 6.1.6
   - apiVersion: v2
     appVersion: 6.1.5
@@ -15778,7 +15778,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.5.tgz
     version: 6.1.5
   - apiVersion: v2
     appVersion: 6.1.4
@@ -15809,7 +15809,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.4.tgz
     version: 6.1.4
   - apiVersion: v2
     appVersion: 6.1.3
@@ -15840,7 +15840,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.3.tgz
     version: 6.1.3
   - apiVersion: v2
     appVersion: 6.1.2
@@ -15871,7 +15871,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.2.tgz
     version: 6.1.2
   - apiVersion: v2
     appVersion: 6.1.1
@@ -15902,7 +15902,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.1.tgz
     version: 6.1.1
   - apiVersion: v2
     appVersion: 6.1.0
@@ -15933,7 +15933,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.1.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.1.0.tgz
     version: 6.1.0
   - apiVersion: v2
     appVersion: 6.0.0
@@ -15964,7 +15964,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-6.0.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-6.0.0.tgz
     version: 6.0.0
   - apiVersion: v2
     appVersion: 5.12.20
@@ -15995,7 +15995,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.20.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.20.tgz
     version: 5.12.20
   - apiVersion: v2
     appVersion: 5.12.19
@@ -16026,7 +16026,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.19.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.19.tgz
     version: 5.12.19
   - apiVersion: v2
     appVersion: 5.12.18
@@ -16057,7 +16057,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.18.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.18.tgz
     version: 5.12.18
   - apiVersion: v2
     appVersion: 5.12.17
@@ -16088,7 +16088,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.17.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.17.tgz
     version: 5.12.17
   - apiVersion: v2
     appVersion: 5.12.16
@@ -16119,7 +16119,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.16.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.16.tgz
     version: 5.12.16
   - apiVersion: v2
     appVersion: 5.12.15
@@ -16150,7 +16150,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.15.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.15.tgz
     version: 5.12.15
   - apiVersion: v2
     appVersion: 5.12.14
@@ -16181,7 +16181,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.14.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.14.tgz
     version: 5.12.14
   - apiVersion: v2
     appVersion: 5.12.13
@@ -16212,7 +16212,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.13.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.13.tgz
     version: 5.12.13
   - apiVersion: v2
     appVersion: 5.12.12
@@ -16243,7 +16243,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.12.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.12.tgz
     version: 5.12.12
   - apiVersion: v2
     appVersion: 5.12.11
@@ -16274,7 +16274,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.11.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.11.tgz
     version: 5.12.11
   - apiVersion: v2
     appVersion: 5.12.10
@@ -16305,7 +16305,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.10.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.10.tgz
     version: 5.12.10
   - apiVersion: v2
     appVersion: 5.12.9
@@ -16336,7 +16336,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.9.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.9.tgz
     version: 5.12.9
   - apiVersion: v2
     appVersion: 5.12.8
@@ -16367,7 +16367,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.8.tgz
     version: 5.12.8
   - apiVersion: v2
     appVersion: 5.12.6
@@ -16398,7 +16398,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.6.tgz
     version: 5.12.6
   - apiVersion: v2
     appVersion: 5.12.5
@@ -16429,7 +16429,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.5.tgz
     version: 5.12.5
   - apiVersion: v2
     appVersion: 5.12.4
@@ -16460,7 +16460,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.4.tgz
     version: 5.12.4
   - apiVersion: v2
     appVersion: 5.12.3
@@ -16491,7 +16491,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.3.tgz
     version: 5.12.3
   - apiVersion: v2
     appVersion: 5.12.2
@@ -16522,7 +16522,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.2.tgz
     version: 5.12.2
   - apiVersion: v2
     appVersion: 5.12.1
@@ -16553,7 +16553,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.1.tgz
     version: 5.12.1
   - apiVersion: v2
     appVersion: 5.12.0
@@ -16584,7 +16584,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.12.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.12.0.tgz
     version: 5.12.0
   - apiVersion: v2
     appVersion: 5.11.8
@@ -16615,7 +16615,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.8.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.8.tgz
     version: 5.11.8
   - apiVersion: v2
     appVersion: 5.11.7
@@ -16646,7 +16646,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.7.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.7.tgz
     version: 5.11.7
   - apiVersion: v2
     appVersion: 5.11.6
@@ -16677,7 +16677,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.6.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.6.tgz
     version: 5.11.6
   - apiVersion: v2
     appVersion: 5.11.5
@@ -16708,7 +16708,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.5.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.5.tgz
     version: 5.11.5
   - apiVersion: v2
     appVersion: 5.11.4
@@ -16739,7 +16739,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.4.tgz
     version: 5.11.4
   - apiVersion: v2
     appVersion: 5.11.3
@@ -16770,7 +16770,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.3.tgz
     version: 5.11.3
   - apiVersion: v2
     appVersion: 5.11.2
@@ -16801,7 +16801,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.2.tgz
     version: 5.11.2
   - apiVersion: v2
     appVersion: 5.11.1
@@ -16832,7 +16832,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.1.tgz
     version: 5.11.1
   - apiVersion: v2
     appVersion: 5.11.0
@@ -16863,7 +16863,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.11.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.11.0.tgz
     version: 5.11.0
   - apiVersion: v2
     appVersion: 5.10.3
@@ -16894,7 +16894,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.10.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.10.3.tgz
     version: 5.10.3
   - apiVersion: v2
     appVersion: 5.10.2
@@ -16925,7 +16925,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.10.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.10.2.tgz
     version: 5.10.2
   - apiVersion: v2
     appVersion: 5.10.1
@@ -16956,7 +16956,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.10.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.10.1.tgz
     version: 5.10.1
   - apiVersion: v2
     appVersion: 5.10.0
@@ -16987,7 +16987,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.10.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.10.0.tgz
     version: 5.10.0
   - apiVersion: v2
     appVersion: 5.9.3
@@ -17018,7 +17018,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.9.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.9.3.tgz
     version: 5.9.3
   - apiVersion: v2
     appVersion: 5.9.2
@@ -17049,7 +17049,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.9.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.9.2.tgz
     version: 5.9.2
   - apiVersion: v2
     appVersion: 5.9.1
@@ -17080,7 +17080,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.9.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.9.1.tgz
     version: 5.9.1
   - apiVersion: v2
     appVersion: 5.9.0
@@ -17111,7 +17111,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.9.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.9.0.tgz
     version: 5.9.0
   - apiVersion: v2
     appVersion: 5.8.4
@@ -17142,7 +17142,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.8.4.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.8.4.tgz
     version: 5.8.4
   - apiVersion: v2
     appVersion: 5.8.3
@@ -17173,7 +17173,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.8.3.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.8.3.tgz
     version: 5.8.3
   - apiVersion: v2
     appVersion: 5.8.2
@@ -17204,7 +17204,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.8.2.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.8.2.tgz
     version: 5.8.2
   - apiVersion: v2
     appVersion: 5.8.1
@@ -17235,7 +17235,7 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.8.1.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.8.1.tgz
     version: 5.8.1
   - apiVersion: v2
     appVersion: 5.8.0
@@ -17266,6 +17266,6 @@ entries:
     - https://github.com/eclipse/dirigible/
     type: application
     urls:
-    - https://eclipse.github.io/dirigible/charts/dirigible-5.8.0.tgz
+    - https://eclipse-dirigible.github.io/dirigible/charts/dirigible-5.8.0.tgz
     version: 5.8.0
 generated: "2026-11-03T09:54:18.39136+02:00"
