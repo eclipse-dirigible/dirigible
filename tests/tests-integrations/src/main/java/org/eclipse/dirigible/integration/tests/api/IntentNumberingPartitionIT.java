@@ -50,6 +50,10 @@ import org.springframework.test.annotation.DirtiesContext;
  * second company forks from that counter instead of starting at 1 (#6517). That is exactly what the
  * {@code init:} series did before the fix, so the control also keeps the four assertions above from
  * passing on a build that had simply stopped partitioning.
+ *
+ * <p>
+ * The same fixture pins that a create the database refuses after its number was drawn spends none
+ * (#8113) - on every generated create path.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentNumberingPartitionIT extends IntegrationTest {
@@ -60,6 +64,13 @@ class IntentNumberingPartitionIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String REQUESTS = API + "/request/RequestController";
     private static final String TICKETS = API + "/ticket/TicketController";
+    private static final String VOUCHERS = API + "/voucher/VoucherController";
+    private static final String CLAIMS = API + "/claim/ClaimController";
+    private static final String MY_CLAIMS = API + "/claim/ClaimMyController";
+    private static final String PARTNER_CLAIMS = API + "/claim/ClaimPartnerController";
+    private static final String CLAIM_FROM_TRIP = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/ClaimFromTripGenerate/run";
+    /** Past what the claim's DECIMAL(5, 2) amount holds: refused by the insert, after the draw. */
+    private static final String OVERFLOW = "123456";
     private static final long TIMEOUT_SECONDS = 90;
 
     /**
@@ -69,7 +80,9 @@ class IntentNumberingPartitionIT extends IntegrationTest {
     private static final String NUMBERS_JSON = """
             {"series": [
               {"name": "Partitioned Request", "prefix": "REQ", "size": 8},
-              {"name": "Partitioned Ticket",  "prefix": "TCK", "size": 8}
+              {"name": "Partitioned Ticket",  "prefix": "TCK", "size": 8},
+              {"name": "Refused Voucher",     "prefix": "VCH", "size": 8},
+              {"name": "Refused Claim",       "prefix": "CLM", "size": 8}
             ]}
             """;
 
@@ -104,12 +117,62 @@ class IntentNumberingPartitionIT extends IntegrationTest {
                 relations:
                   - { name: Company, kind: manyToOne, to: Company }
 
+              # A create the database refuses after the draw (#8113): a duplicate ref, an amount past
+              # its column. The voucher has no to-one, so no reference check wraps its insert in a unit
+              # of work - the claim has, and the owner relations that give it a my and a partner surface.
+              - name: Voucher
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 100, number: { series: Refused Voucher, stampOn: create } }
+                  - { name: ref,    type: string, length: 20, unique: true }
+                  - { name: amount, type: decimal, precision: 5, scale: 2 }
+
+              - name: Employee
+                identity: email
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string, required: true, length: 100 }
+
+              - name: Claim
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 100, number: { series: Refused Claim, per: Company, stampOn: create } }
+                  - { name: ref,    type: string, length: 20, unique: true }
+                  - { name: amount, type: decimal, precision: 5, scale: 2 }
+                relations:
+                  - { name: Company,  kind: manyToOne, to: Company, init: 1 }
+                  - { name: Employee, kind: manyToOne, to: Employee, personal: true }
+                  - { name: Partner,  kind: manyToOne, to: Employee, partner: true }
+
+              - name: Trip
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 20 }
+
+            generates:
+              - name: claim-from-trip
+                from: Trip
+                to: Claim
+                label: Claim
+                map: { ref: name }
+                prompt:
+                  - { field: amount }
+
             seeds:
               - name: companies
                 entity: Company
                 rows:
                   - { id: 1, name: Default }
                   - { id: 2, name: Second }
+              - name: employees
+                entity: Employee
+                rows:
+                  - { id: 1, email: admin }
+              - name: trips
+                entity: Trip
+                rows:
+                  - { id: 1, name: T-1 }
+                  - { id: 2, name: A }
             """;
 
     @Autowired
@@ -153,6 +216,57 @@ class IntentNumberingPartitionIT extends IntegrationTest {
         // this control is what keeps them from passing on a build that had simply stopped partitioning.
         assertEquals(3, sequenceOf(create(TICKETS, "{\"Note\":\"second one\",\"Company\":2}", 2)),
                 "a partition materialized after the base row advanced forks from it - the #7101 mechanism");
+    }
+
+    /**
+     * A create the database refuses AFTER its number was drawn - a duplicate key (409), a value its
+     * column cannot hold (500) - spends none (#8113). Both refusals come from the insert itself, past
+     * every guard, and the counter used to commit before it: each left a permanent hole in a series
+     * that must be gap-free. Every generated create path is driven - the power, my and partner
+     * controllers and a create-from - and each must hand the next good create the very next number.
+     */
+    @Test
+    void a_create_the_database_refuses_spends_no_number() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int voucher = sequenceOf(create(VOUCHERS, "{\"Ref\":\"A\"}", null));
+        refuse(VOUCHERS, "{\"Ref\":\"A\"}", 409);
+        refuse(VOUCHERS, "{\"Ref\":\"B\",\"Amount\":" + OVERFLOW + "}", 500);
+        assertEquals(voucher + 1, sequenceOf(create(VOUCHERS, "{\"Ref\":\"B\"}", null)),
+                "a create refused on an entity with no reference check spent a number");
+
+        int first = sequenceOf(create(CLAIMS, "{\"Ref\":\"A\"}", 1));
+        refuse(CLAIMS, "{\"Ref\":\"A\"}", 409);
+        refuse(CLAIMS, "{\"Ref\":\"B\",\"Amount\":" + OVERFLOW + "}", 500);
+        assertEquals(first + 1, sequenceOf(create(CLAIMS, "{\"Ref\":\"B\"}", 1)), "a create the power surface refused spent a number");
+
+        refuse(MY_CLAIMS, "{\"Ref\":\"B\"}", 409);
+        refuse(MY_CLAIMS, "{\"Ref\":\"C\",\"Amount\":" + OVERFLOW + "}", 500);
+        assertEquals(first + 2, sequenceOf(create(MY_CLAIMS, "{\"Ref\":\"C\"}", 1)), "a create the my surface refused spent a number");
+
+        refuse(PARTNER_CLAIMS, "{\"Ref\":\"C\"}", 409);
+        refuse(PARTNER_CLAIMS, "{\"Ref\":\"D\",\"Amount\":" + OVERFLOW + "}", 500);
+        assertEquals(first + 3, sequenceOf(create(PARTNER_CLAIMS, "{\"Ref\":\"D\"}", 1)),
+                "a create the partner surface refused spent a number");
+
+        // The create-from saves its header inside its own unit of work: Trip 2 maps the taken ref A, Trip 1
+        // a fresh one with an amount past the column.
+        refuse(CLAIM_FROM_TRIP, "{\"id\":2}", 500);
+        refuse(CLAIM_FROM_TRIP, "{\"id\":1,\"values\":{\"Amount\":" + OVERFLOW + "}}", 500);
+        assertEquals(first + 4, sequenceOf(create(CLAIMS, "{\"Ref\":\"E\"}", 1)), "a create-from the database refused spent a number");
+    }
+
+    /** Posts a create the database must refuse with the given status. */
+    private void refuse(String endpoint, String body, int status) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(body)
+                                                 .when()
+                                                 .post(endpoint)
+                                                 .then()
+                                                 .statusCode(status),
+                TIMEOUT_SECONDS);
     }
 
     /** The sequence half of an allocated number - the three-letter prefix, then the padded counter. */

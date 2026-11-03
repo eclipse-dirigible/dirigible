@@ -33,8 +33,8 @@ import org.eclipse.dirigible.components.data.store.java.store.JavaEntityStore;
  * Reads made inside the block see the block's own uncommitted writes, so a guard that re-reads the
  * row it just wrote behaves as it would after a commit. Blocks nest; the outermost one owns the
  * commit. The events the writes record are handed to the broker only once the whole unit committed.
- * The change history and document-number allocation deliberately stay outside it — both are records
- * of an attempt, not business state.
+ * A document number drawn inside the block is part of it and comes back if the unit rolls back. The
+ * change history deliberately stays outside it — a record of an attempt, not business state.
  */
 public final class UnitOfWork {
 

@@ -93,7 +93,7 @@ final class SliceRuntime implements AutoCloseable {
                 new JavaEntityManager(dataSourcesManager, new MultiTenantConnectionProviderImpl(dataSourcesManager, database.dataSource()),
                         new CurrentTenantIdentifierResolverImpl(tenantContext));
         JavaEntityStore store = new JavaEntityStore(entityManager, IntentSliceOutbox.create(dataSourcesManager, tenantContext));
-        numbering = IntentSliceNumbering.create(dataSourcesManager);
+        numbering = IntentSliceNumbering.create(dataSourcesManager, store);
         numberSeries = readNumberSeries(projectRoot);
         messageConsumer = mock(MessageConsumer.class, invocation -> {
             throw new UnsupportedOperationException("The IntentSlice has no broker to receive messages from");

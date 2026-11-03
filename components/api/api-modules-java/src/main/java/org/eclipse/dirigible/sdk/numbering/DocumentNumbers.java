@@ -29,6 +29,12 @@ import org.eclipse.dirigible.sdk.component.Beans;
  * that partition's own sequence is used.
  *
  * <p>
+ * Drawn inside a unit of work ({@code UnitOfWork.call}), a number is part of it: a unit that rolls
+ * back - the database refusing the very insert the number was drawn for - returns it, so the series
+ * keeps no gap. Outside one, the allocation commits on its own and the number is spent whatever
+ * happens next.
+ *
+ * <p>
  * Example: {@code DocumentNumbers.next("Sales Invoice", String.valueOf(entity.Company))}.
  */
 public final class DocumentNumbers {

@@ -55,6 +55,13 @@
             <artifactId>dirigible-components-api-modules-java</artifactId>
         </dependency>
 
+        <!-- Numbering: the WriteTransaction an allocation joins, which the unit of work implements -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-numbering</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Messaging: the broker the event outbox drains into -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
