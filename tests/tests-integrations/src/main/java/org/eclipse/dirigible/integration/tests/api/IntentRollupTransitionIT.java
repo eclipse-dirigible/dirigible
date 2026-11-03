@@ -41,6 +41,12 @@ import org.springframework.test.annotation.DirtiesContext;
  * {@code -deleted} and {@code -rekeyed} only - so a cancelled call-off went on counting against its
  * contract until some unrelated write of a sibling fired. Both directions are walked: the cancelled
  * row leaves the sum, the re-issued one comes back.
+ *
+ * <p>
+ * A second roll-up over the same child and relation counts the CANCELLED call-offs under a filter
+ * of its own (dirigible #8330). Both share one generated handler per event, and that handler used
+ * to read the rows once with the first roll-up's filter - so the count counted the issued rows
+ * instead. The two values moving in opposite directions is what proves each reads its own rows.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentRollupTransitionIT extends IntegrationTest {
@@ -70,6 +76,7 @@ class IntentRollupTransitionIT extends IntegrationTest {
                 fields:
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: committed, type: decimal, precision: 18, scale: 2 }
+                  - { name: cancelledCallOffs, type: integer }
               - name: CallOff
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
@@ -91,6 +98,12 @@ class IntentRollupTransitionIT extends IntegrationTest {
                 of: total
                 where:
                   - { field: Status, op: ne, value: CANCELLED }
+              - name: contractCancelledCallOffs
+                entity: CallOff
+                via: Contract
+                field: cancelledCallOffs
+                where:
+                  - { field: Status, op: ne, value: ISSUED }
 
             seeds:
               - name: call-off-statuses
@@ -119,23 +132,25 @@ class IntentRollupTransitionIT extends IntegrationTest {
         int contract = create(CONTRACTS, "{}");
         int cancelled = create(CALL_OFFS, "{\"Total\":100,\"Contract\":" + contract + "}");
         create(CALL_OFFS, "{\"Total\":50,\"Contract\":" + contract + "}");
-        awaitCommitted(contract, 150.0f);
+        awaitRollups(contract, 150.0f, 0);
 
-        // The button publishes -transitioned only: the cancelled row leaves the filtered sum...
+        // The button publishes -transitioned only: the cancelled row leaves the filtered sum and
+        // enters the count of cancelled rows, whose filter is its own...
         transition("CancelCallOff", cancelled);
-        awaitCommitted(contract, 50.0f);
+        awaitRollups(contract, 50.0f, 1);
 
-        // ...and comes back into it once it is issued again.
+        // ...and both move back once it is issued again.
         transition("ReissueCallOff", cancelled);
-        awaitCommitted(contract, 150.0f);
+        awaitRollups(contract, 150.0f, 0);
     }
 
-    private void awaitCommitted(int contract, float committed) {
+    private void awaitRollups(int contract, float committed, int cancelledCallOffs) {
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(CONTRACTS + "/" + contract)
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("Committed", equalTo(committed)),
+                                                 .body("Committed", equalTo(committed))
+                                                 .body("CancelledCallOffs", equalTo(cancelledCallOffs)),
                 ROLLUP_TIMEOUT_SECONDS);
     }
 
