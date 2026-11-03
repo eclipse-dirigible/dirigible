@@ -112,13 +112,22 @@ class RecordHeaderHarmoniaIT extends UserInterfaceIntegrationTest {
         ide.openHomePage();
 
         browser.openPath(APP + "/Order/" + order + "/preview");
-        assertEquals("Acme Ltd / 2026-001|Order|2026-11-30 \u00b7 Acme Ltd|2026-11-30@Due Date,Acme Ltd@Customer",
-                pollUntil(HEADER.formatted("Order"), v -> !"pending".equals(v)),
+        assertHeader("Order", "Acme Ltd / 2026-001|Order|2026-11-30 \u00b7 Acme Ltd|2026-11-30@Due Date,Acme Ltd@Customer",
                 "the title is the record's label, the caption the entity, the subtitle exactly the declared values with their labels");
 
         browser.openPath(APP + "/Memo/" + memo + "/preview");
-        assertEquals("Memo|||", pollUntil(HEADER.formatted("Memo"), v -> !"pending".equals(v)),
-                "an entity without a label keeps its name as the title, with no caption and no subtitle");
+        assertHeader("Memo", "Memo|||", "an entity without a label keeps its name as the title, with no caption and no subtitle");
+    }
+
+    /**
+     * Polls the header until it reads {@code expected}, and asserts the last reading. The title is an
+     * {@code x-text} binding, the caption and the subtitle are {@code x-show} toggles - and Alpine
+     * reveals an {@code x-show} element on a {@code setTimeout}, one task after the text bindings of
+     * the same flush. A single read taken the instant the record has loaded can therefore see the title
+     * with an empty caption and no subtitle.
+     */
+    private void assertHeader(String entity, String expected, String message) {
+        assertEquals(expected, pollUntil(HEADER.formatted(entity), expected::equals), message);
     }
 
     private int create(String controller, Map<String, Object> body) {
