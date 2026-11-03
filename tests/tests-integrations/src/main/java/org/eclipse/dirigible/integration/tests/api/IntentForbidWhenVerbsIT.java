@@ -43,6 +43,11 @@ import org.springframework.test.annotation.DirtiesContext;
  * invoice was PAID. {@code verbs: [create, update]} keeps the refusal of the allocation and lets it
  * be deleted; {@code verbs: [delete]} is the other half - a row anyone may write and nobody may
  * remove while the condition holds.
+ *
+ * <p>
+ * dirigible #8114: the delete half held only on the note's own REST delete. Its folder's delete
+ * cascaded into it through the repository and swept the locked note away; the folder's delete is
+ * now refused with the note's message, and nothing in the folder is deleted.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentForbidWhenVerbsIT extends IntegrationTest {
@@ -53,7 +58,8 @@ class IntentForbidWhenVerbsIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String INVOICES = API + "/invoice/InvoiceController";
     private static final String ALLOCATIONS = API + "/allocation/AllocationController";
-    private static final String NOTES = API + "/note/NoteController";
+    private static final String FOLDERS = API + "/folder/FolderController";
+    private static final String NOTES = API + "/folder/NoteController";
     private static final String NO_ALLOCATION = "Cannot add a payment to a fully paid invoice";
     private static final String NO_REMOVAL = "A locked note cannot be removed";
     private static final long TIMEOUT_SECONDS = 90;
@@ -78,6 +84,11 @@ class IntentForbidWhenVerbsIT extends IntegrationTest {
                 relations:
                   - { name: Invoice, kind: manyToOne, to: Invoice }
 
+              - name: Folder
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string, length: 100 }
+
               - name: Note
                 checks:
                   - { kind: forbidWhen, when: "locked == true", verbs: [delete], message: "%s" }
@@ -85,6 +96,8 @@ class IntentForbidWhenVerbsIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: text,   type: string, length: 100 }
                   - { name: locked, type: boolean }
+                relations:
+                  - { name: Folder, kind: manyToOne, to: Folder, composition: true }
             """.formatted(NO_ALLOCATION, NO_REMOVAL);
 
     @Autowired
@@ -138,9 +151,11 @@ class IntentForbidWhenVerbsIT extends IntegrationTest {
                                                  .statusCode(404));
 
         // verbs: [delete] - a locked note is written freely and refused only its removal.
-        int note = create(NOTES, "{\"Text\":\"keep\",\"Locked\":true}");
+        int folder = create(FOLDERS, "{\"Label\":\"f\"}");
+        int loose = create(NOTES, "{\"Folder\":" + folder + ",\"Text\":\"loose\",\"Locked\":false}");
+        int note = create(NOTES, "{\"Folder\":" + folder + ",\"Text\":\"keep\",\"Locked\":true}");
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Id\":" + note + ",\"Text\":\"kept\",\"Locked\":true}")
+                                                 .body("{\"Id\":" + note + ",\"Folder\":" + folder + ",\"Text\":\"kept\",\"Locked\":true}")
                                                  .when()
                                                  .put(NOTES + "/" + note)
                                                  .then()
@@ -155,6 +170,36 @@ class IntentForbidWhenVerbsIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Text", equalTo("kept")));
+
+        // ...and so is the folder's (#8114): its cascade meets the note's refusal before it deletes
+        // anything, so the folder and both its notes are still there.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(FOLDERS + "/" + folder)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString(NO_REMOVAL)));
+        for (String kept : List.of(FOLDERS + "/" + folder, NOTES + "/" + loose, NOTES + "/" + note)) {
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get(kept)
+                                                     .then()
+                                                     .statusCode(200));
+        }
+        // Unlocked, the note goes with its folder.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + note + ",\"Folder\":" + folder + ",\"Text\":\"kept\",\"Locked\":false}")
+                                                 .when()
+                                                 .put(NOTES + "/" + note)
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(FOLDERS + "/" + folder)
+                                                 .then()
+                                                 .statusCode(greaterThanOrEqualTo(200))
+                                                 .statusCode(lessThan(300)));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(NOTES + "/" + note)
+                                                 .then()
+                                                 .statusCode(404));
     }
 
     private int create(String controller, String body) {

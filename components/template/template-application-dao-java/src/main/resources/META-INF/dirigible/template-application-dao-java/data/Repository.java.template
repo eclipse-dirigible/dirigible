@@ -87,12 +87,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 ## emitted as a block before the first cascade, so the refusal cannot arrive after a sibling's rows
 ## are already deleted - see deleteOwnedChildren.
 #set($haveRefusingChild = false)
+#set($haveCascadingChild = false)
 #if($compositionChildren)
 #foreach($owned in $compositionChildren)
 #if($owned.refuse == "true")
 #set($haveRefusingChild = true)
+#else
+#set($haveCascadingChild = true)
 #end
 #end
+#end
+## Does this entity's own delete meet a refusal - an immutability, a closed period, a forbidWhen over the
+## delete? A cascade asks it before it deletes the row (#8114) - see requireDeleteAllowed.
+#set($hasDeleteRefusals = false)
+#if($immutableAlways || $immutableStatusProperty || $periodLock || ($deleteChecks && $deleteChecks.size() > 0))
+#set($hasDeleteRefusals = true)
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
 #macro(calcScale $property)#if($property.dataScale)${property.dataScale}#elseif($property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float")2#{else}0#end#end
@@ -1972,6 +1981,69 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         }
 #end
     }
+
+    /**
+     * Refuses the delete of this stored ${name} as its own REST delete does, for a cascade that is about
+     * to delete it with another record (#8114): a composition master's delete and a
+     * {@code whenTargetDeleted: cascade} reach this repository and never that controller, so a row its
+     * own delete refuses - dated in a closed period, immutable in its status, guarded by a
+     * {@code checks: forbidWhen} - was swept away with the record it belongs to. The cascade asks this
+     * for every row before it deletes any, and the record it started from is refused with the row's
+     * message: a {@code DeleteRestrictionException} (409) for the immutability and the period lock, a
+     * {@code ValidationException} (400) for a forbidWhen, the statuses the direct delete answers.
+     */
+    public void requireDeleteAllowed(${name}Entity entity) {
+#if($immutableAlways)
+        throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
+                "This ${name} is append-only - records can neither be edited nor deleted");
+#else
+#if($immutableStatusProperty)
+        if (entity.${immutableStatusProperty} != null) {
+            for (String immutable : "${immutableStatusValues}".split(",")) {
+                if (immutable.equals(String.valueOf(entity.${immutableStatusProperty}))) {
+                    throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
+                            "This ${name} is immutable in its current status - corrections go through the workflow");
+                }
+            }
+        }
+#end
+#if($periodLock)
+        if (isPeriodClosed(entity.${periodLock.dateProperty})) {
+            throw new org.eclipse.dirigible.sdk.db.DeleteRestrictionException(
+                    "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+        }
+#end
+#set($deleteChecksLoadHops = false)
+#foreach($check in $deleteChecks)
+#if($check.pathLoads && $check.pathLoads.size() > 0)
+#set($deleteChecksLoadHops = true)
+#end
+#end
+#if($deleteChecksLoadHops)
+        java.util.Map<String, Object> loadedHops = new java.util.HashMap<>();
+#end
+#foreach($check in $deleteChecks)
+        // A `checks: forbidWhen` refuses the removal of the row it guards (#7372), the gate riding along.
+#if($check.status && $check.status != "")
+        if (entity.${check.statusProperty} != null && entity.${check.statusProperty} == ${check.status}) {
+#end
+        {
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+            if (${check.guardJavaExpression}) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            }
+        }
+#if($check.status && $check.status != "")
+        }
+#end
+#end
+#end
+    }
 #if($compositionChildren && $compositionChildren.size() > 0)
 
     /**
@@ -2009,10 +2081,24 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+#if($haveCascadingChild)
+        // Every refusal a cascaded row's OWN delete meets is decided before the first delete as well
+        // (#8114): a row its direct delete refuses - a closed period, an immutable status, a forbidWhen -
+        // refuses this delete, rather than leaving with the record.
+#end
 #foreach($owned in $compositionChildren)
 #if($owned.refuse != "true")
         gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository ${owned.childEntity}Owner =
                 new gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Repository();
+        for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
+                .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
+            ${owned.childEntity}Owner.requireDeleteAllowed(${owned.childEntity}Row);
+        }
+#end
+#end
+## The rows are read again for the delete: a sibling child's own cascade may already have removed some.
+#foreach($owned in $compositionChildren)
+#if($owned.refuse != "true")
         for (gen.${javaGenFolderName}.data.${owned.javaChildPerspective}.${owned.childEntity}Entity ${owned.childEntity}Row : ${owned.childEntity}Owner
                 .findAll(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${owned.fkProperty}", id))) {
             ${owned.childEntity}Owner.delete(${owned.childEntity}Row);
@@ -2059,6 +2145,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
      * {@code whenTargetDeleted: restrict}, the default for a to-one, dirigible #7547). The referenced
      * record's repository cannot know this entity - it may be generated by another model - so it asks
      * every {@code TargetDeleteRule} before it deletes, and refuses while one of them counts a reference.
+#if($hasDeleteRefusals)
+     * A ${name} a {@code whenTargetDeleted: cascade} would delete with the record restricts it too, while
+     * its own delete is refused (#8114): that refusal is thrown here, before anything is written.
+#end
      */
     @Override
     public int countRestricting(String targetEntity, Object targetId) {
@@ -2067,6 +2157,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($property.whenTargetDeleted == "restrict" && $property.targetEntityClass)
         if ("${property.targetEntityClass}".equals(targetEntity)) {
             restricting += count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId));
+        }
+#elseif($property.whenTargetDeleted == "cascade" && $property.targetEntityClass && $hasDeleteRefusals)
+        if ("${property.targetEntityClass}".equals(targetEntity)) {
+            for (${name}Entity cascaded : findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${property.name}", targetId))) {
+                requireDeleteAllowed(cascaded);
+            }
         }
 #end
 #end
@@ -2386,8 +2483,15 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
     // failure of the unit of work that carried it elsewhere). An uncovered date stays open, exactly
     // as on the controllers: periods are declared as they are needed.
     private void requirePeriodOpen(${periodLock.dateJavaClass} date) {
+        if (isPeriodClosed(date)) {
+            throw new ValidationException(
+                    "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+        }
+    }
+
+    private boolean isPeriodClosed(${periodLock.dateJavaClass} date) {
         if (date == null) {
-            return;
+            return false;
         }
         for (${periodLock.entityClass} period : new ${periodLock.repositoryClass}().findAll(
                 org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
@@ -2398,11 +2502,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             }
             for (String closed : "${periodLock.closedValues}".split(",")) {
                 if (closed.equals(String.valueOf(period.${periodLock.statusProperty}))) {
-                    throw new ValidationException(
-                            "The ${periodLock.entity} covering this date is closed - book the correction in an open period");
+                    return true;
                 }
             }
         }
+        return false;
     }
 #end
 }

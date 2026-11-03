@@ -66,6 +66,13 @@ import org.springframework.beans.factory.annotation.Autowired;
  * record that was gone. Now the delete locks its record before it counts, and the create locks the
  * records it names in the transaction it inserts in, so one of the two waits for the other and is
  * refused as it would be in sequence.
+ *
+ * <p>
+ * dirigible #8114 is a cascade sweeping away a record its own delete refuses: the cascade deleted
+ * the referencing record through its repository, which never meets the refusals its REST delete
+ * meets, so a payout dated in a closed period - or in a status that freezes it - went with its
+ * employee while deleting it directly was refused. The employee's delete is now refused with the
+ * payout's own message and status, and nothing is deleted.
  */
 class IntentTargetDeleteRulesIT extends IntegrationTest {
 
@@ -125,6 +132,36 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                 relations:
                   - { name: Employee, kind: manyToOne, to: Employee, model: staff }
                   - { name: Approver, kind: manyToOne, to: Employee, model: staff, whenTargetDeleted: keep }
+              - name: PayStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string,  required: true, length: 100 }
+              - name: PayPeriod
+                period: { start: startDate, end: endDate, closedWhen: "Status == CLOSED" }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: startDate, type: date, required: true }
+                  - { name: endDate,   type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PayStatus, function: EntityStatus, init: 1 }
+              - name: Payout
+                immutableWhen: "Status == CLOSED"
+                immutableInPeriod: { period: PayPeriod, date: paidOn }
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: paidOn, type: date }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Employee, kind: manyToOne, to: Employee, model: staff, required: true, whenTargetDeleted: cascade }
+                  - { name: Status,   kind: manyToOne, to: PayStatus, function: EntityStatus, init: 1 }
+
+            seeds:
+              - name: pay-statuses
+                entity: PayStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: CLOSED }
             """;
 
     /** How many times the create/delete race is run; the unfixed platform lost it in most attempts. */
@@ -146,6 +183,8 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
     private String claims;
     private String timesheets;
     private String advances;
+    private String payPeriods;
+    private String payouts;
 
     @Test
     void a_targets_delete_applies_the_rules_of_the_records_referencing_it() {
@@ -170,11 +209,14 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
         claims = consumerApi + "/expenseclaim/ExpenseClaimController";
         timesheets = consumerApi + "/timesheet/TimesheetController";
         advances = consumerApi + "/advance/AdvanceController";
+        payPeriods = consumerApi + "/payperiod/PayPeriodController";
+        payouts = consumerApi + "/payout/PayoutController";
 
         assertRestrictIsTheDefaultSameModelAndCrossModel();
         assertNullifyClearsTheReference();
         assertCascadeDeletesTheReferencingRecord();
         assertARestrictionIsCheckedBeforeAnythingIsReleased();
+        assertACascadeMeetsTheCascadedRecordsOwnRefusals();
 
         assertACreateNamingNoRecordIsRefused();
         assertAnUpdateNamingNoRecordIsRefused();
@@ -366,6 +408,44 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                                  .body("Reviewer", equalTo(dee)));
     }
 
+    /**
+     * #8114, the issue's walk: a payout booked into an open period, the period closed, then its
+     * employee deleted. The payout's direct delete is refused 409 by the period lock, and the cascade
+     * now refuses the employee's delete with the same message, the payout kept - likewise for a payout
+     * frozen by its status ({@code immutableWhen}).
+     */
+    private void assertACascadeMeetsTheCascadedRecordsOwnRefusals() {
+        int period = create(payPeriods, "{\"StartDate\":\"2031-01-01\",\"EndDate\":\"2031-01-31\",\"Status\":1}");
+        int kim = create(employees, "{\"Name\":\"Kim\"}");
+        int booked = create(payouts, "{\"Employee\":" + kim + ",\"PaidOn\":\"2031-01-17\",\"Amount\":34}");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + period
+                                                         + ",\"StartDate\":\"2031-01-01\",\"EndDate\":\"2031-01-31\",\"Status\":2}")
+                                                 .when()
+                                                 .put(payPeriods + "/" + period)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String closed = "The PayPeriod covering this date is closed - book the correction in an open period";
+        assertRefused(payouts + "/" + booked, closed);
+        assertRefused(employees + "/" + kim, closed);
+        assertFound(payouts + "/" + booked);
+
+        int lee = create(employees, "{\"Name\":\"Lee\"}");
+        int settled = create(payouts, "{\"Employee\":" + lee + ",\"Amount\":5,\"Status\":2}");
+        String frozen = "This Payout is immutable in its current status - corrections go through the workflow";
+        assertRefused(payouts + "/" + settled, frozen);
+        assertRefused(employees + "/" + lee, frozen);
+        assertFound(payouts + "/" + settled);
+    }
+
+    private void assertFound(String record) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(record)
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
     private void assertRefused(String record, String message) {
         restAssuredExecutor.execute(() -> {
             String body = given().when()
@@ -374,12 +454,9 @@ class IntentTargetDeleteRulesIT extends IntegrationTest {
                                  .statusCode(409)
                                  .extract()
                                  .asString();
-            assertTrue(body.contains(message), "the 409 must name the referencing records and their count; got: " + body);
+            assertTrue(body.contains(message), "the 409 must say why the delete is refused; got: " + body);
         });
-        restAssuredExecutor.execute(() -> given().when()
-                                                 .get(record)
-                                                 .then()
-                                                 .statusCode(200));
+        assertFound(record);
     }
 
     private void assertDeleted(String record) {

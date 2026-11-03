@@ -28,7 +28,9 @@ public interface TargetDeleteRule {
 
     /**
      * How many of this contribution's records reference the given record through a relation that
-     * restricts its delete.
+     * restricts its delete. A record this contribution would delete with it restricts the delete too
+     * while its own delete is refused: the contribution then throws that refusal from here, before
+     * anything is written (dirigible #8114).
      *
      * @param targetEntity the fully qualified class name of the entity being deleted
      * @param targetId the primary key of the record being deleted

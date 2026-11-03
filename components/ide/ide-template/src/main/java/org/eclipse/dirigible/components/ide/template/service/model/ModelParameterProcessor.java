@@ -429,11 +429,10 @@ final class ModelParameterProcessor {
                     // well, and the gate rides along with it rather than routing it elsewhere: a delete
                     // is nobody's transition (no process step deletes a record, and `whenDeleted:` only
                     // REACTS to one), so there is no repository-side write for a gated check to sit on.
-                    // Keeping it out of the repository is also what leaves the composition cascade alone:
-                    // a master sweeping its own children away goes through their repositories, and
-                    // whether THAT delete is allowed is `whenMasterDeleted:`'s question, not a child
-                    // check's. A rule scoped away from the delete (#7710) - "no new allocation onto a PAID
-                    // invoice", which must still let a wrong allocation be removed - stays out of it.
+                    // The repository renders the same list into requireDeleteAllowed, which a cascade asks
+                    // before it deletes the row (#8114). A rule scoped away from the delete (#7710) - "no
+                    // new allocation onto a PAID invoice", which must still let a wrong allocation be
+                    // removed - stays out of it.
                     if (verbs == null || verbs.contains("delete")) {
                         deleteChecks.add(check);
                     }

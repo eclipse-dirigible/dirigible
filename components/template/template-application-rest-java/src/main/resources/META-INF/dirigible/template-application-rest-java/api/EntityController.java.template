@@ -1525,9 +1525,9 @@ public class ${name}Controller {
      * <p>
      * The gate rides along here instead of routing the rule to the repository, as it does for a create
      * and an update: a delete is nobody's transition - no process step deletes a record - so there is
-     * no repository-side write for a gated check to sit on. It also keeps the composition cascade out
-     * of this: a master sweeping its own children away goes through their repositories and never this
-     * verb, and whether THAT is allowed is what {@code whenMasterDeleted:} declares.
+     * no repository-side write for a gated check to sit on. A cascade never reaches this verb - a master
+     * or a target deleting this row goes through its repository - so the repository's
+     * {@code requireDeleteAllowed} renders the same check for it (#8114).
      */
     private static void requireDeletable(${name}Entity entity) {
 #set($checksLoadHops = false)
