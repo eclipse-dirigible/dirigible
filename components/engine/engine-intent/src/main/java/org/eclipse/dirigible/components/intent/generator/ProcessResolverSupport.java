@@ -111,7 +111,8 @@ public final class ProcessResolverSupport {
      *        user-task that referenced the path)
      * @param token the authored {@code relation.field} text (e.g. {@code book.price})
      * @param variable the process variable the resolver sets (e.g. {@code book_price})
-     * @param handler the generated handler class simple name (e.g. {@code ResolveBookPrice})
+     * @param handler the generated handler class simple name (e.g. {@code ResolveLoanBookPrice}), named
+     *        per owner entity so two entities' forms showing one path never share it
      * @param fkProperty the process variable holding the FK id (e.g. {@code Book})
      * @param targetEntity the related entity (e.g. {@code Book})
      * @param targetField the PascalCase field read off it (e.g. {@code Price})
@@ -219,7 +220,7 @@ public final class ProcessResolverSupport {
         if (relation == null) {
             return; // not a to-one relation of the trigger entity - leave the token alone
         }
-        String handler = "Resolve" + IntentNaming.pascalCase(relationName) + IntentNaming.pascalCase(fieldName);
+        String handler = handlerName(owner.getName(), relationName, fieldName);
         Set<String> settingEntities = IntentEntities.settingEntities(byName.values());
         Target resolved = relation.isCrossModel() ? crossModelTarget(relation, fieldName, crossModel)
                 : localTarget(byName, compositionParents, settingEntities, relation, fieldName, process, step, origin);
@@ -234,6 +235,23 @@ public final class ProcessResolverSupport {
                 resolved.perspective(), resolved.idAccessor(), owner.getName(),
                 IntentEntities.resolvePerspective(owner.getName(), compositionParents, settingEntities), IntentEntities.keyFieldName(owner),
                 idAccessor(IntentEntities.primaryKeyOf(owner)), resolved.crossModel(), resolved.model()));
+    }
+
+    /**
+     * The generated resolver class for a {@code relation.field} read off the given owner entity:
+     * {@code Resolve<Owner><Relation><Field>}. The owner is part of the name because the class loads
+     * the owner's record by the process's id variable - two forms on two entities showing the same path
+     * are two different resolvers, and a path-only name made the last one generated overwrite the
+     * other, so the first form read its id as the wrong entity's (dirigible #8331). Two processes on
+     * the same owner share the class, which is then generated identically for both.
+     *
+     * @param owner the trigger entity whose record the resolver loads
+     * @param relationName the authored to-one relation name
+     * @param fieldName the authored field name on the related entity
+     * @return the handler class simple name (e.g. {@code ResolveLoanBookPrice})
+     */
+    static String handlerName(String owner, String relationName, String fieldName) {
+        return "Resolve" + IntentNaming.pascalCase(owner) + IntentNaming.pascalCase(relationName) + IntentNaming.pascalCase(fieldName);
     }
 
     /** Where the target's generated Entity/Repository live, and how its key is read off the FK. */

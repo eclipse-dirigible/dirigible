@@ -807,8 +807,8 @@ class IntentEngineIT extends IntegrationTest {
 
         // The decision resolver (customer.creditLimit) is a JavaDelegate that loads Customer and sets
         // the variable the rewritten condition tests.
-        String resolver = codeOf("gen/events/orders/ResolveCustomerCreditLimit.java");
-        assertTrue(resolver.contains("class ResolveCustomerCreditLimit implements JavaDelegate"),
+        String resolver = codeOf("gen/events/orders/ResolveOrderCustomerCreditLimit.java");
+        assertTrue(resolver.contains("class ResolveOrderCustomerCreditLimit implements JavaDelegate"),
                 "the resolver should be a Flowable JavaDelegate");
         assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
                 "the resolver should load the target entity from its real (lowercased) Java package");
@@ -824,8 +824,8 @@ class IntentEngineIT extends IntegrationTest {
         // The form-only relation.field (customer.name on the ApproveOrder form) produces its own resolver
         // even though no decision references it - the user-task form is a resolver trigger in its own
         // right.
-        String formResolver = codeOf("gen/events/orders/ResolveCustomerName.java");
-        assertTrue(formResolver.contains("class ResolveCustomerName implements JavaDelegate"),
+        String formResolver = codeOf("gen/events/orders/ResolveOrderCustomerName.java");
+        assertTrue(formResolver.contains("class ResolveOrderCustomerName implements JavaDelegate"),
                 "a relation.field referenced only by a user-task form should still generate a resolver");
         assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
                 "the form resolver should publish the related field as the customer_name variable the form control binds to");
@@ -5767,9 +5767,9 @@ class IntentEngineIT extends IntegrationTest {
                 glue.contains("\"triggers\"") && glue.contains("\"process\": \"OrderApproval\"") && glue.contains("\"entity\": \"Order\""),
                 "glue should carry the trigger for the OrderApproval process on Order");
         // Resolvers: one per relation.field referenced in a decision OR a user-task form.
-        assertTrue(glue.contains("\"resolvers\"") && glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""),
+        assertTrue(glue.contains("\"resolvers\"") && glue.contains("\"handler\": \"ResolveOrderCustomerCreditLimit\""),
                 "glue should carry the customer.creditLimit resolver (used by both the form and the decision)");
-        assertTrue(glue.contains("\"handler\": \"ResolveCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
+        assertTrue(glue.contains("\"handler\": \"ResolveOrderCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
                 "glue should carry the form-only customer.name resolver");
         // Assignees: one per user task whose assignee is a relation walk.
         assertTrue(
@@ -5891,7 +5891,7 @@ class IntentEngineIT extends IntegrationTest {
                 "settings should carry the glue generation recipe");
         assertTrue(
                 settings.contains("\"overrides\"") && settings.contains("\"OrderApproval\"")
-                        && settings.contains("\"ResolveCustomerCreditLimit\"") && settings.contains("\"ApproveOrder\""),
+                        && settings.contains("\"ResolveOrderCustomerCreditLimit\"") && settings.contains("\"ApproveOrder\""),
                 "settings should enumerate the trigger / resolver / form overrides");
         assertTrue(settings.contains("\"candidateGroupsExtra\"") && settings.contains("ADMINISTRATOR"),
                 "settings should default candidateGroupsExtra to ADMINISTRATOR");
@@ -6015,7 +6015,7 @@ class IntentEngineIT extends IntegrationTest {
         // now names a genuinely trigger-only key.)
         assertFalse(glue.contains("\"businessKeyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
         // The resolver was not opted out, so it survives.
-        assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
+        assertTrue(glue.contains("\"handler\": \"ResolveOrderCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.
         assertTrue(contentOf("orders.settings").contains("\"generate\": false"),
                 "the edited settings must be preserved across regeneration");
@@ -6124,14 +6124,16 @@ class IntentEngineIT extends IntegrationTest {
         // The resolver task id is the lower-camel form of the handler (unified with the authored step
         // ids), with a humanized name; the delegate still resolves the PascalCase handler class.
         assertTrue(
-                body.contains("<serviceTask id=\"resolveCustomerCreditLimit\" name=\"Resolve Customer Credit Limit\"")
+                body.contains("<serviceTask id=\"resolveOrderCustomerCreditLimit\" name=\"Resolve Order Customer Credit Limit\"")
                         && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
                 "a JavaTask resolver service task should be generated for the shared relation.field");
-        assertTrue(body.contains("gen.events.orders.ResolveCustomerCreditLimit") && body.contains("gen.events.orders.ResolveCustomerName"),
+        assertTrue(
+                body.contains("gen.events.orders.ResolveOrderCustomerCreditLimit")
+                        && body.contains("gen.events.orders.ResolveOrderCustomerName"),
                 "both the shared and the form-only relation.field should produce a resolver task pointing at its handler FQN");
         assertTrue(
-                body.contains("sourceRef=\"start\" targetRef=\"resolveCustomerCreditLimit\"")
-                        && body.contains("sourceRef=\"resolveCustomerName\" targetRef=\"managerReview\""),
+                body.contains("sourceRef=\"start\" targetRef=\"resolveOrderCustomerCreditLimit\"")
+                        && body.contains("sourceRef=\"resolveOrderCustomerName\" targetRef=\"managerReview\""),
                 "the resolvers should sit at the head of the flow, right before the user-task form that needs them");
         assertTrue(body.contains("sourceRef=\"managerReview\" targetRef=\"bigOrder\""),
                 "the decision should follow the form directly - its resolver already ran before the form, not just before the gateway");

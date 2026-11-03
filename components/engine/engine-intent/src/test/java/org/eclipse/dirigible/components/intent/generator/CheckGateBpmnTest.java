@@ -265,7 +265,7 @@ class CheckGateBpmnTest {
         assertSynchronous(bpmn, "invoiceDecisionReviewWrite");
         // The resolver the second decision needs sits between the task and the gate too - and it is a
         // service task like any other, so its boundary would commit the completion just the same.
-        assertSynchronous(bpmn, "resolveCustomerRating");
+        assertSynchronous(bpmn, "resolveInvoiceCustomerRating");
         assertSynchronous(bpmn, "activate");
     }
 
@@ -278,7 +278,7 @@ class CheckGateBpmnTest {
         // just as much, so the resolver the second decision needs may not commit the completion first
         // (issue #7139).
         assertSynchronous(bpmn, "invoiceConvergeReviewWrite");
-        assertSynchronous(bpmn, "resolveCustomerRating");
+        assertSynchronous(bpmn, "resolveInvoiceCustomerRating");
         assertSynchronous(bpmn, "activate");
     }
 
@@ -292,7 +292,7 @@ class CheckGateBpmnTest {
         // the reviewer's edits to the entity's rules, and its refusal must reach them (#7552). The gated
         // set itself stays synchronous either way (#7014): it is the write the gate stands in front of.
         assertSynchronous(bpmn, "invoiceTimeoutReviewWrite");
-        assertAsynchronous(bpmn, "resolveCustomerRating");
+        assertAsynchronous(bpmn, "resolveInvoiceCustomerRating");
         assertSynchronous(bpmn, "activate");
     }
 

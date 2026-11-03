@@ -122,11 +122,13 @@ class IntentGenerationServiceRefusalTest {
                      .anyMatch(issue -> issue.contains("Mobile")),
                 "the refusal must still name the unknown property, got: " + ex.getIssues());
         // The point of the issue: no .edm/.model from @Order(200) and - above all - no .bpmn from
-        // @Order(300) carrying a ResolveCustomerMobile service task whose handler was never generated.
+        // @Order(300) carrying a ResolveSalesInvoiceCustomerMobile service task whose handler was never
+        // generated.
         Map<String, byte[]> after = snapshot(root);
         assertEquals(before.keySet(), after.keySet(), "a refused pass must leave no generated file behind");
-        after.forEach((file, content) -> assertFalse(new String(content, StandardCharsets.UTF_8).contains("esolveCustomerMobile"),
-                "[" + file + "] must not carry the dangling resolver the refusal exists to prevent"));
+        after.forEach(
+                (file, content) -> assertFalse(new String(content, StandardCharsets.UTF_8).contains("esolveSalesInvoiceCustomerMobile"),
+                        "[" + file + "] must not carry the dangling resolver the refusal exists to prevent"));
     }
 
     @Test
