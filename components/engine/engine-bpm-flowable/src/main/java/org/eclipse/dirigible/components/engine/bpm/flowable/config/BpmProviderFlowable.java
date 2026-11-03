@@ -1034,6 +1034,37 @@ public class BpmProviderFlowable implements BpmProvider {
     }
 
     /**
+     * Whether the instance ran to its end - finished by the flow itself (an end event, a terminate end
+     * event), not cancelled. The read behind a restart refusal: a fresh instance for a record whose
+     * flow already completed re-runs every step over a record in its final status (#8189), while a
+     * cancelled instance - a stuck or dead-lettered one an operator cleared - is the restart's purpose.
+     * An instance that ended before Flowable recorded the state has none, and then only a cancel left a
+     * delete reason behind. With the history level at {@code none} an instance that is not running is
+     * assumed completed, as {@link #isProcessInstanceKnown(String)} trusts the stamp.
+     *
+     * @param processInstanceId the instance id
+     * @return true when the instance completed
+     */
+    public boolean isProcessInstanceCompleted(String processInstanceId) {
+        if (getProcessInstance(processInstanceId) != null) {
+            return false;
+        }
+        if (getHistoryLevel() == HistoryLevel.NONE) {
+            return true;
+        }
+        HistoricProcessInstance ended = processEngine.getHistoryService()
+                                                     .createHistoricProcessInstanceQuery()
+                                                     .processInstanceId(processInstanceId)
+                                                     .processInstanceTenantId(getTenantId())
+                                                     .finished()
+                                                     .singleResult();
+        if (ended == null) {
+            return false;
+        }
+        return ended.getState() != null ? "completed".equals(ended.getState()) : ended.getDeleteReason() == null;
+    }
+
+    /**
      * The history level the engine runs with.
      *
      * @return the level

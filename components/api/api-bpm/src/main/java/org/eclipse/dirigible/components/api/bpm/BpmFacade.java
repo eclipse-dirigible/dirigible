@@ -188,6 +188,22 @@ public class BpmFacade implements InitializingBean {
                         .isProcessInstanceKnown(processInstanceId);
     }
 
+    /**
+     * Whether the instance ran to its end - finished by the flow, not cancelled. A blank id has not.
+     * With the history level at {@code none} an instance that is not running is assumed completed.
+     *
+     * @param processInstanceId the instance id
+     * @return true when the instance completed
+     */
+    public static boolean isProcessCompleted(String processInstanceId) {
+        if (processInstanceId == null || processInstanceId.isBlank()) {
+            return false;
+        }
+        return BpmFacade.get()
+                        .getBpmProviderFlowable()
+                        .isProcessInstanceCompleted(processInstanceId);
+    }
+
     public static Object getVariable(String processInstanceId, String variableName) {
         return BpmFacade.get()
                         .getBpmProviderFlowable()
