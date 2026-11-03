@@ -20,6 +20,12 @@ component shapes. Read this before changing anything under `engine-java`, `data-
   (parent = platform CL, so user code sees the SDK, Spring, Hibernate), then the bean container, then
   the behaviour consumers. The previous generation's CL becomes unreachable on swap → GC reclaims its
   Metaspace.
+- A compile or wiring failure is settled in `finishing()`, outside the per-artefact phases whose
+  errors the orchestrator collects, so `finishing()` reports every still-`FAILED` source through
+  `callback.addError` on each pass (rebuilt or not) - that is what degrades readiness to
+  `READY_DEGRADED` - and `SynchronizationProcessor` takes the artefact census for the `artefacts`
+  health component from a fresh read AFTER `finishing()`. Before #8239 both said READY / 0 failed
+  while the source was listed `FAILED`.
 - `JavaLoader.rebuild()` order each generation: compile → load classes → unload-notify consumers for
   removed/replaced FQNs → swap the loader → **`componentContainer.rebuild(...)`** → load-notify
   consumers. So when a consumer runs, every bean is already built and injected.
