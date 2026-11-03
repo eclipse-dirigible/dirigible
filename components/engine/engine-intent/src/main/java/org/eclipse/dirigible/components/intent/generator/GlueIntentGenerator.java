@@ -2878,6 +2878,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // that has moved on is reported and left alone (unwinding a posted entry is a
             // correcting entry's job - `reverses:` - not a silent overwrite).
             e.put("amendableGuard", amendableGuard(creates));
+            // "The" post is the LIVE one (#7959): an entry the accountant rejected or one a booked twin
+            // reversed stays on file, and the source's next edit or re-issue drafts a new entry.
+            e.put("deadEntryCondition", deadEntryCondition(creates, model));
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
@@ -3161,6 +3164,57 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             return "";
         }
         return "target." + property + " != null && target." + property + " == " + init.trim();
+    }
+
+    /**
+     * The Java condition under which a document the back-reference finds no longer stands for its
+     * source (#7959), evaluated against the local {@code candidate} with {@code targetRepository} in
+     * scope: one the accountant rejected (its status classified {@code stage: cancelled} or
+     * {@code void}), a {@code reversals:} twin (its link set - it reverses another entry, it is not the
+     * source's own), or one reversed by a BOOKED twin (its back-link names a twin standing in the
+     * status the reversal is offered from). Such a document is history: the source it was posted for is
+     * released, and its next edit or re-issue posts afresh.
+     *
+     * @param creates the created (target) entity
+     * @param model the model, for the status seeds and the reversals of the target
+     * @return the condition, or the empty string when nothing can retire a posted document
+     */
+    private static String deadEntryCondition(EntityIntent creates, IntentModel model) {
+        List<String> terms = new ArrayList<>();
+        RelationIntent status = LifecycleStages.statusRelation(creates);
+        String statusProperty = status == null ? null : IntentNaming.pascalCase(status.getName());
+        if (status != null && status.getTo() != null && !status.isCrossModel()) {
+            Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+            List<Integer> retired = new ArrayList<>(stages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+            retired.addAll(stages.getOrDefault(LifecycleStages.VOID, List.of()));
+            if (!retired.isEmpty()) {
+                terms.add("candidate." + statusProperty + " != null && (" + retiredCondition("candidate", statusProperty, retired) + ")");
+            }
+        }
+        for (GeneratesIntent g : model.getGenerates()) {
+            if (!g.isReversal() || !creates.getName()
+                                           .equals(g.getTo())) {
+                continue;
+            }
+            ReversalIntent reversal = g.getReversal();
+            terms.add("candidate." + IntentNaming.pascalCase(reversal.getLink()) + " != null");
+            if (reversal.getBackLink() == null || reversal.getBackLink()
+                                                          .isBlank()
+                    || statusProperty == null || g.getFromStatus() == null || g.getFromStatus()
+                                                                               .isEmpty()) {
+                continue; // no back-link, or no status that says the twin is booked
+            }
+            String backLink = "candidate." + IntentNaming.pascalCase(reversal.getBackLink());
+            String booked = String.join(" || ", g.getFromStatus()
+                                                 .stream()
+                                                 .map(id -> "twinStatus == " + id)
+                                                 .toList());
+            terms.add(backLink + " != null && java.util.Optional.ofNullable(targetRepository.findById(" + backLink + ")).map(twin -> twin."
+                    + statusProperty + ").filter(twinStatus -> " + booked + ").isPresent()");
+        }
+        return String.join(" || ", terms.stream()
+                                        .map(term -> "(" + term + ")")
+                                        .toList());
     }
 
     /**

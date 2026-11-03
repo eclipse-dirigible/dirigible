@@ -955,6 +955,12 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   entry in place, and once the entry has left its `init:` status the divergence is logged, as for an
   amended re-issue. The edit never writes a FIRST post - a source the create skipped (no rule row,
   a false `when`) stays on the unposted worklist. Nothing to declare.
+  **A rejected or reversed entry is history (#7959).** The post a source carries is its LIVE entry:
+  one whose status seed row is classified `stage: cancelled` or `stage: void` (the accountant rejected
+  it), a `reversals:` twin, and an entry whose `backLink` names a twin standing in the reversal's
+  `when:` status are not it. So once every entry of a source is one of those, its next edit (or
+  re-issue) drafts a NEW entry from what it says now. Classify the created document's status seeds
+  with `stage:` - without it a rejected entry cannot be told from a posted one.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
