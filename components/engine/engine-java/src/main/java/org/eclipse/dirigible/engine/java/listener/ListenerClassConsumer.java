@@ -958,7 +958,7 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
         // the guest fallback of a thread without a request (#8228). Absent, the handler runs as before.
         String user = originatingUserOf(msg, label);
         try {
-            tenantContext.execute(tenantId, () -> OriginatingUser.callAs(user, () -> {
+            tenantContext.execute(tenantId, () -> {
                 // Re-establishing the tenant's identity above is not enough: Configuration's tenant
                 // override lookup depends on a thread-scoped map that only TenantConfigurationInitFilter
                 // populates for HTTP requests. A listener dispatch is not a request, so without this the
@@ -966,13 +966,13 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
                 // (e.g. a generated notification's {appUrl} token) - load it here the same way, and clear
                 // it so it never leaks onto the pooled broker thread.
                 Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
-                try {
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
                     dispatcher.onMessage(text);
                 } finally {
                     Configuration.removeThreadConfiguration();
                 }
                 return null;
-            }));
+            });
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             // This log IS the failure report: the handler's own onError defaults to a no-op, so without

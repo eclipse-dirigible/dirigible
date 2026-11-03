@@ -22,11 +22,10 @@ class UserFacadeOriginatingUserTest {
 
     @Test
     void the_originating_user_names_a_thread_without_a_request() {
-        OriginatingUser.callAs("alice", () -> {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
             assertThat(UserFacade.getName()).isEqualTo("alice");
             assertThat(UserFacade.findName()).contains("alice");
-            return null;
-        });
+        }
     }
 
     @Test

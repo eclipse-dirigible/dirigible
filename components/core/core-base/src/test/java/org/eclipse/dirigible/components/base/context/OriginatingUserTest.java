@@ -15,47 +15,50 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 
 /**
- * The originating user is bound for exactly one call and never stays on the (pooled) thread
+ * The originating user is bound for exactly one scope and never stays on the (pooled) thread
  * (#8228).
  */
 class OriginatingUserTest {
 
     @Test
-    void the_user_is_bound_for_the_call_only() {
-        String seen = OriginatingUser.callAs("alice", () -> OriginatingUser.get()
-                                                                           .orElse(null));
+    void the_user_is_bound_for_the_scope_only() {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            assertThat(OriginatingUser.get()).contains("alice");
+        }
 
-        assertThat(seen).isEqualTo("alice");
         assertThat(OriginatingUser.get()).isEmpty();
     }
 
     @Test
-    void a_nested_call_restores_the_outer_user() {
-        String afterInner = OriginatingUser.callAs("alice", () -> {
-            assertThat(OriginatingUser.callAs("bob", () -> OriginatingUser.get()
-                                                                          .orElse(null))).isEqualTo("bob");
-            return OriginatingUser.get()
-                                  .orElse(null);
-        });
-
-        assertThat(afterInner).isEqualTo("alice");
+    void a_nested_scope_restores_the_outer_user() {
+        try (OriginatingUser.Binding outer = OriginatingUser.bind("alice")) {
+            try (OriginatingUser.Binding inner = OriginatingUser.bind("bob")) {
+                assertThat(OriginatingUser.get()).contains("bob");
+            }
+            assertThat(OriginatingUser.get()).contains("alice");
+        }
     }
 
     @Test
-    void no_user_unbinds_the_outer_one_for_the_call() {
-        boolean empty = OriginatingUser.callAs("alice", () -> OriginatingUser.callAs(null, () -> OriginatingUser.get()
-                                                                                                                .isEmpty()));
-
-        assertThat(empty).isTrue();
-        assertThat(OriginatingUser.callAs(" ", () -> OriginatingUser.get()
-                                                                    .isEmpty())).isTrue();
+    void no_user_unbinds_the_outer_one_for_the_scope() {
+        try (OriginatingUser.Binding outer = OriginatingUser.bind("alice")) {
+            try (OriginatingUser.Binding none = OriginatingUser.bind(null)) {
+                assertThat(OriginatingUser.get()).isEmpty();
+            }
+            try (OriginatingUser.Binding blank = OriginatingUser.bind(" ")) {
+                assertThat(OriginatingUser.get()).isEmpty();
+            }
+            assertThat(OriginatingUser.get()).contains("alice");
+        }
     }
 
     @Test
-    void a_throwing_call_does_not_leave_the_user_behind() {
-        assertThatThrownBy(() -> OriginatingUser.callAs("alice", () -> {
-            throw new IllegalStateException("boom");
-        })).isInstanceOf(IllegalStateException.class);
+    void a_throwing_scope_does_not_leave_the_user_behind() {
+        assertThatThrownBy(() -> {
+            try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+                throw new IllegalStateException("boom");
+            }
+        }).isInstanceOf(IllegalStateException.class);
 
         assertThat(OriginatingUser.get()).isEmpty();
     }

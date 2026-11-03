@@ -105,7 +105,10 @@ class EventOutboxOriginatingUserTest {
     @Test
     void the_in_process_delivery_publishes_as_the_user_whose_write_recorded_the_event() {
         outbox.prepare();
-        EventOutbox.Batch batch = OriginatingUser.callAs("alice", () -> outbox.record(session, List.of(new DomainEvent(TOPIC, "{}"))));
+        EventOutbox.Batch batch;
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            batch = outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
 
         // Dispatched off the writer's binding: the user comes from the entry, not from the thread.
         batch.dispatch();
@@ -116,7 +119,9 @@ class EventOutboxOriginatingUserTest {
     @Test
     void the_relay_redelivers_as_the_user_whose_write_recorded_the_event() throws SQLException {
         outbox.prepare();
-        OriginatingUser.callAs("alice", () -> outbox.record(session, List.of(new DomainEvent(TOPIC, "{}"))));
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
 
         // The relay job's thread has no user of its own.
         outbox.relay();
@@ -139,10 +144,9 @@ class EventOutboxOriginatingUserTest {
     @Test
     void a_durable_publish_records_the_current_user_too() {
         outbox.prepare();
-        OriginatingUser.callAs("alice", () -> {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
             outbox.publishToTopic(TOPIC, "{}");
-            return null;
-        });
+        }
 
         assertThat(publishedAs).containsExactly("alice");
     }
@@ -165,7 +169,9 @@ class EventOutboxOriginatingUserTest {
         outbox.relay();
         assertThat(publishedAs).containsExactly((String) null);
 
-        OriginatingUser.callAs("alice", () -> outbox.record(session, List.of(new DomainEvent(TOPIC, "{}"))));
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
+            outbox.record(session, List.of(new DomainEvent(TOPIC, "{}")));
+        }
         assertThat(storedUsers()).containsExactly("alice");
     }
 

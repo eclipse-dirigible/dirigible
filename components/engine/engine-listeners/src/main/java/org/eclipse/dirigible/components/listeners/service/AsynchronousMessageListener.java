@@ -107,10 +107,12 @@ class AsynchronousMessageListener implements MessageListener {
         // }
         try {
             String user = originatingUser;
-            tenantContext.execute(tenantId, () -> OriginatingUser.callAs(user, () -> {
-                executeOnMessageHandler(textMsg);
+            tenantContext.execute(tenantId, () -> {
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
+                    executeOnMessageHandler(textMsg);
+                }
                 return null;
-            }));
+            });
             LOGGER.trace("Done processing the received message in [{}] by [{}]", listenerDescriptor.getDestination(),
                     listenerDescriptor.getHandlerPath());
             // TracingFacade.taskSuccessful(taskState, null);

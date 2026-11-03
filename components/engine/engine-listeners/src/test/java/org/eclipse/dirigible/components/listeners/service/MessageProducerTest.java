@@ -148,10 +148,9 @@ class MessageProducerTest {
         when(session.createProducer(topic)).thenReturn(jsmProducer);
         when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
 
-        OriginatingUser.callAs("alice", () -> {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
             producer.sendMessageToTopic(TOPIC, MESSAGE);
-            return null;
-        });
+        }
 
         verify(txtMessage).setStringProperty(OriginatingUserProperty.PROPERTY_NAME, "alice");
         verify(jsmProducer).send(txtMessage);
@@ -187,10 +186,9 @@ class MessageProducerTest {
         when(session.createProducer(queue)).thenReturn(jsmProducer);
         when(session.createTextMessage(MESSAGE)).thenReturn(txtMessage);
 
-        OriginatingUser.callAs("alice", () -> {
+        try (OriginatingUser.Binding binding = OriginatingUser.bind("alice")) {
             producer.sendMessageToQueue(GLOBAL_QUEUE, MESSAGE);
-            return null;
-        });
+        }
 
         verify(txtMessage, never()).setStringProperty(anyString(), anyString());
     }

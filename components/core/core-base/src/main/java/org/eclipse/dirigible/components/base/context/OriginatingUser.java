@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.base.context;
 
 import java.util.Optional;
 
-import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
-
 /**
  * The user whose action raised the event being handled on the current thread.
  *
@@ -46,27 +44,41 @@ public final class OriginatingUser {
     }
 
     /**
-     * Runs the callable with the given user bound to the current thread, and restores whatever was
-     * bound before once it returns or throws - so a pooled thread never keeps it.
+     * Binds the given user to the current thread until the returned binding is closed, which restores
+     * whatever was bound before - use it in a try-with-resources, so a pooled thread never keeps it.
      *
-     * @param user the originating user; {@code null} or blank binds no user for the call
-     * @param callable the work to run
-     * @param <R> the result type
-     * @param <E> the exception type
-     * @return the callable's result
-     * @throws E the callable's exception
+     * <p>
+     * A scope rather than a callback on purpose: a callback would be one more implementation of the
+     * callable that {@code TenantContext.execute} takes, and static analysis that cannot tell those
+     * implementations apart then reads every caller of {@code execute} - a GET among them - as reaching
+     * the message sends and handler runs bound here.
+     *
+     * @param user the originating user; {@code null} or blank binds no user
+     * @return the binding to close
      */
-    public static <R, E extends Throwable> R callAs(String user, CallableResultAndException<R, E> callable) throws E {
-        String previous = CURRENT.get();
-        bind(user);
-        try {
-            return callable.call();
-        } finally {
-            bind(previous);
+    public static Binding bind(String user) {
+        Binding binding = new Binding(CURRENT.get());
+        set(user);
+        return binding;
+    }
+
+    /** A user bound by {@link #bind(String)}; closing it restores the user bound before. */
+    public static final class Binding implements AutoCloseable {
+
+        private final String previous;
+
+        private Binding(String previous) {
+            this.previous = previous;
+        }
+
+        /** Restores the user bound before this binding. */
+        @Override
+        public void close() {
+            set(previous);
         }
     }
 
-    private static void bind(String user) {
+    private static void set(String user) {
         if (user == null || user.isBlank()) {
             CURRENT.remove();
         } else {

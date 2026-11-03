@@ -183,10 +183,9 @@ public class EventOutbox implements org.eclipse.dirigible.components.api.messagi
         try {
             // Bound from the entry, not from the delivering thread: the relay runs on a job thread with
             // no user, and the producer stamps whatever is bound here onto the message.
-            OriginatingUser.callAs(event.user(), () -> {
+            try (OriginatingUser.Binding binding = OriginatingUser.bind(event.user())) {
                 MessagingFacade.sendToTopic(event.topic(), event.payload());
-                return null;
-            });
+            }
         } catch (RuntimeException ex) {
             String message = "Failed to publish outbox entry [{}] on topic [{}] ([{}] failed attempts so far); "
                     + "it stays in the outbox and the relay keeps trying.";
