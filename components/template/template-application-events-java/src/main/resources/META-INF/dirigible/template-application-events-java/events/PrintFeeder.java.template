@@ -10,10 +10,12 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
+import org.eclipse.dirigible.sdk.http.Response;
 #if($hasCrossModel)
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
 #end
+import org.eclipse.dirigible.sdk.security.User;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
@@ -28,7 +30,9 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * so validations, events and the multilingual translation overlay (print in the caller's language)
  * all apply, and the browser calls it as the logged-in user so authorization and tenant are the
  * caller's own.
- * Served at /services/java/<project>/gen/events/${javaGenFolderName}/${className}PrintFeeder/{id}.
+ * Served at /services/java/<project>/gen/events/${javaGenFolderName}/${className}PrintFeeder/{id},
+ * to a caller holding the ${entity}'s read gate (issue #7921) - the roles its generated controller
+ * admits on a read.
  */
 @Controller
 @Component("${javaGenFolderName}_${className}PrintFeeder")
@@ -39,12 +43,35 @@ public class ${className}PrintFeeder {
     private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}PrintFeeder");
 #end
 
+    /** What {@link #feed} answers for a ${entity} that does not exist. */
+    private static final String NOT_FOUND = "{}";
+
     @Get("/{id}")
-    public String feed(@PathParam("id") Integer id) {
+    public String serve(@PathParam("id") Integer id) {
+        // The role gate (issue #7921): a print reads the ${entity}, so its caller must hold the read gate
+        // its generated controller demands. Asked before anything is read, so a refused caller cannot
+        // probe which ids exist either. Reading the document reads what it prints: the related records
+        // are not gated one by one.
+        if (!isInAnyRole("${readRolesJavaLiteral}")) {
+            Response.setStatus(403);
+            return "{\"error\": \"forbidden\"}";
+        }
+        String payload = feed(id);
+        if (NOT_FOUND.equals(payload)) {
+            Response.setStatus(404);
+        }
+        return payload;
+    }
+
+    /**
+     * The { document, items } payload of one ${entity}. Not gated: the in-process callers (a snapshot, an
+     * attached print) run behind their own gate or where nobody is signed in at all.
+     */
+    public String feed(Integer id) {
         gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity root =
                 new gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository().findById(id);
         if (root == null) {
-            return "{}";
+            return NOT_FOUND;
         }
         Map<String, Object> document = new LinkedHashMap<>();
 #foreach($s in $rootScalars)
@@ -145,6 +172,17 @@ public class ${className}PrintFeeder {
         payload.put("document", document);
         payload.put("items", items);
         return Json.stringify(payload);
+    }
+
+    /** Whether the caller holds ANY role of a comma-separated gate; an empty gate admits nobody. */
+    private static boolean isInAnyRole(String roles) {
+        for (String role : roles.split(",")) {
+            String name = role.trim();
+            if (!name.isEmpty() && User.isInRole(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 #if($hasCrossModel)
 

@@ -108,7 +108,7 @@ class PrintScaffoldFeederContractTest {
         IntentGenerationContext context = new IntentGenerationContext(model, "/proj", "proj", "workspace", "app", null);
         Map<String, Map<String, Object>> feeders = new LinkedHashMap<>();
         for (Map<String, Object> feeder : PrintFeederSupport.buildPrintFeeders(model, byName, IntentEntities.compositionParents(model),
-                context)) {
+                null, context)) {
             feeders.put((String) feeder.get("entity"), feeder);
         }
         return feeders;

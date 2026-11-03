@@ -20,6 +20,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.restassured.path.json.JsonPath;
+
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -33,7 +35,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.annotation.DirtiesContext;
 
 /**
- * The generated click endpoints are gated like the controllers beside them (#7913).
+ * The generated click endpoints are gated like the controllers beside them (#7913), and so is the
+ * print feeder (#7921).
  *
  * <p>
  * A create-from ({@code <Name>Generate/run}) changes its source through {@code sourceStatus:} and
@@ -43,6 +46,12 @@ import org.springframework.test.annotation.DirtiesContext;
  * write gate of its source AND of its target, a transition the write gate of its record, and a
  * refused caller is answered 403 before any record is read - an id that does not exist is refused
  * the same way, so the endpoint cannot be used to probe which ids exist.
+ *
+ * <p>
+ * The print feeder ({@code <Name>PrintFeeder/{id}}) reads a whole document, and was likewise served
+ * to any signed-in user. It now demands the read gate of the document - whoever its controller lets
+ * read it - refused with 403 before the record is loaded, and answers 404 for an id that does not
+ * exist rather than 200 {@code {}}.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentClickRoleGateIT extends IntegrationTest {
@@ -56,6 +65,7 @@ class IntentClickRoleGateIT extends IntegrationTest {
     private static final String EVENTS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT;
     private static final String GENERATE = EVENTS + "/OrderFromQuoteGenerate/run";
     private static final String TRANSITION = EVENTS + "/AcceptQuoteTransition/run";
+    private static final String PRINT = EVENTS + "/QuotePrintFeeder/";
     private static final long TIMEOUT_SECONDS = 90;
 
     private static final String PASSWORD = "role-gate-it-password";
@@ -65,6 +75,12 @@ class IntentClickRoleGateIT extends IntegrationTest {
     private static final String CLERK = "role-gate-it-clerk";
     /** May write both. */
     private static final String SALES = "role-gate-it-sales";
+    /** May read quotes only. */
+    private static final String VIEWER = "role-gate-it-viewer";
+    /** May read orders only. */
+    private static final String SHIPPER = "role-gate-it-shipper";
+    /** May write quotes, as {@link #CLERK} - its own user, see {@link #deploy()}. */
+    private static final String WRITER = "role-gate-it-print-writer";
 
     private static final int OPEN = 1;
     private static final int ORDERED = 2;
@@ -88,6 +104,13 @@ class IntentClickRoleGateIT extends IntegrationTest {
                 relations:
                   - { name: Status, kind: manyToOne, to: QuoteStatus, function: EntityStatus, init: 1 }
 
+              - name: QuoteItem
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 40 }
+                relations:
+                  - { name: Quote, kind: manyToOne, to: Quote, composition: true, required: true }
+
               - name: SalesOrder
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -108,6 +131,8 @@ class IntentClickRoleGateIT extends IntegrationTest {
             permissions:
               - { role: GateClerk, can: [Quote:write] }
               - { role: GateSales, can: [Quote:write, SalesOrder:write] }
+              - { role: GateViewer, can: [Quote:read] }
+              - { role: GateShipper, can: [SalesOrder:read] }
 
             seeds:
               - name: quote-statuses
@@ -132,10 +157,7 @@ class IntentClickRoleGateIT extends IntegrationTest {
 
     @Test
     void a_click_demands_the_write_gates_of_what_it_writes() {
-        generateProject();
-        publishProject();
-        synchronizationProcessor.forceProcessSynchronizers();
-        // The authored roles exist once the published .roles is synchronized.
+        deploy();
         securityUtil.ensureUserInDefaultTenant(NOBODY, PASSWORD);
         securityUtil.ensureUserInDefaultTenant(CLERK, PASSWORD, "GateClerk");
         securityUtil.ensureUserInDefaultTenant(SALES, PASSWORD, "GateSales");
@@ -163,6 +185,61 @@ class IntentClickRoleGateIT extends IntegrationTest {
         int other = create(QUOTES, "{\"Name\":\"q-2\"}");
         post(CLERK, TRANSITION, other, 200);
         assertEquals(ACCEPTED, status(other));
+    }
+
+    @Test
+    void a_print_demands_the_read_gate_of_its_document() {
+        deploy();
+        securityUtil.ensureUserInDefaultTenant(NOBODY, PASSWORD);
+        securityUtil.ensureUserInDefaultTenant(VIEWER, PASSWORD, "GateViewer");
+        securityUtil.ensureUserInDefaultTenant(SHIPPER, PASSWORD, "GateShipper");
+        securityUtil.ensureUserInDefaultTenant(WRITER, PASSWORD, "GateClerk");
+
+        int quote = create(QUOTES, "{\"Name\":\"q-print\"}");
+
+        // No role at all, or a role that reads only another entity: refused before the quote is loaded
+        // - and for an id that does not exist alike.
+        print(NOBODY, quote, 403);
+        print(NOBODY, 987654, 403);
+        print(SHIPPER, quote, 403);
+
+        // The quote's read gate prints it. Its status is printed too, though the viewer holds no gate of
+        // the status entity: reading the document reads what it prints.
+        restAssuredExecutor.execute(() -> {
+            JsonPath payload = JsonPath.from(given().when()
+                                                    .get(PRINT + quote)
+                                                    .then()
+                                                    .statusCode(200)
+                                                    .extract()
+                                                    .asString());
+            assertEquals("q-print", payload.getString("document.Name"));
+            assertEquals("OPEN", payload.getString("document.Status.Name"));
+        }, VIEWER, PASSWORD, TIMEOUT_SECONDS);
+        // The controller admits a writer on a read, and so does the print.
+        print(WRITER, quote, 200);
+
+        // A caller who may read is told that an id does not exist.
+        print(VIEWER, 987654, 404);
+    }
+
+    /**
+     * Generate and publish the intent. The authored roles exist once the published {@code .roles} is
+     * synchronized, so each test creates its users after this - and only users no other test created:
+     * the cleanup's unpublish deletes the roles and their assignments with them, so a user created by
+     * an earlier test would sign in holding none.
+     */
+    private void deploy() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    private void print(String user, int id, int expectedStatus) {
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PRINT + id)
+                                                 .then()
+                                                 .statusCode(expectedStatus),
+                user, PASSWORD, TIMEOUT_SECONDS);
     }
 
     private void post(String user, String endpoint, int id, int expectedStatus) {

@@ -158,6 +158,23 @@ public final class PermissionSupport {
             return appendWrite(authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "FullAccess");
         }
 
+        /**
+         * The read gate of an entity as the EDM emits it ({@code roleRead}): the roles a {@code can:} token
+         * grants read on the entity (or, for a composition child without its own, on its composition root),
+         * else the convention role {@code <project>.<root>.<Entity>ReadOnly} - and the deployment's extra
+         * read roles after either. The generated controller admits the write gate on a read as well.
+         *
+         * @param projectName the project the convention role is prefixed with
+         * @param rolePerspective the entity's composition root (the entity itself when it is one)
+         * @param entity the entity's declared name
+         * @return the comma-separated read roles
+         */
+        public String readGate(String projectName, String rolePerspective, String entity) {
+            String gateName = covers(entity) ? entity : rolePerspective;
+            String authored = covers(gateName) ? readRoles(gateName) : null;
+            return appendRead(authored != null ? authored : projectName + "." + rolePerspective + "." + entity + "ReadOnly");
+        }
+
         private static List<String> append(Collection<String> roles, List<String> extras) {
             Set<String> gate = new LinkedHashSet<>(roles);
             gate.addAll(extras);
