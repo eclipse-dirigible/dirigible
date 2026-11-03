@@ -23,14 +23,17 @@ import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -192,6 +195,59 @@ public class RabbitMQFacadeTest {
     }
 
     /**
+     * Stopping one receiver leaves the queue, the other receivers consuming it and the messages pending
+     * in it (#8210) - the queue used to be deleted with every stop.
+     */
+    @Test
+    public void stoppingAReceiverKeepsTheQueueItsMessagesAndTheOtherConsumers() throws Exception {
+        String sharedQueue = "shared-consumer-queue";
+        BlockingQueue<String> received = new LinkedBlockingQueue<>();
+        RabbitMQMessageListener stopping = ignored -> {
+        };
+        RabbitMQMessageListener staying = received::add;
+        RabbitMQFacade.startListening(sharedQueue, stopping);
+        RabbitMQFacade.startListening(sharedQueue, staying);
+        try {
+            awaitConsumers(sharedQueue, 2);
+
+            RabbitMQFacade.stopListening(sharedQueue, stopping);
+            awaitConsumers(sharedQueue, 1);
+            RabbitMQFacade.send(sharedQueue, message);
+
+            assertEquals(message, received.poll(10, TimeUnit.SECONDS), "the remaining consumer must keep receiving");
+        } finally {
+            RabbitMQFacade.stopListening(sharedQueue, staying);
+        }
+
+        // passively, and published without a declaration: neither recreates a deleted queue
+        awaitExistingQueue(sharedQueue, queueState -> queueState.getConsumerCount() == 0, "no consumer");
+        try (Connection connection = adminConnection(); Channel channel = connection.createChannel()) {
+            channel.basicPublish("", sharedQueue, null, message.getBytes(StandardCharsets.UTF_8));
+        }
+        awaitExistingQueue(sharedQueue, queueState -> queueState.getMessageCount() == 1, "one pending message");
+    }
+
+    /**
+     * Waits until the queue, which must exist all along, reaches the given state - declared passively,
+     * so that a deleted queue fails instead of being recreated.
+     */
+    private static void awaitExistingQueue(String queue, Predicate<AMQP.Queue.DeclareOk> state, String description) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(15);
+        while (!state.test(declarePassively(queue))) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("Queue [" + queue + "] did not reach " + description);
+            }
+            Thread.sleep(100);
+        }
+    }
+
+    private static AMQP.Queue.DeclareOk declarePassively(String queue) throws Exception {
+        try (Connection connection = adminConnection(); Channel channel = connection.createChannel()) {
+            return channel.queueDeclarePassive(queue);
+        }
+    }
+
+    /**
      * Waits until the queue has the given number of consumers - a receiver starts on a thread of its
      * own.
      */
@@ -207,14 +263,18 @@ public class RabbitMQFacadeTest {
 
     /** The consumers of a queue - none when the queue does not exist (yet, or any more). */
     private static int consumerCount(String queue) throws Exception {
+        try (Connection connection = adminConnection(); Channel channel = connection.createChannel()) {
+            return channel.queueDeclare(queue, false, false, false, Map.of())
+                          .getConsumerCount();
+        }
+    }
+
+    private static Connection adminConnection() throws Exception {
         ConnectionFactory factory = new ConnectionFactory();
         factory.setHost(rabbit.getHost());
         factory.setPort(rabbit.getAmqpPort());
         factory.setUsername(rabbit.getAdminUsername());
         factory.setPassword(rabbit.getAdminPassword());
-        try (Connection connection = factory.newConnection(); Channel channel = connection.createChannel()) {
-            return channel.queueDeclare(queue, false, false, false, Map.of())
-                          .getConsumerCount();
-        }
+        return factory.newConnection();
     }
 }

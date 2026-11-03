@@ -25,7 +25,9 @@ import com.rabbitmq.client.Envelope;
 
 /**
  * Consumes a queue on behalf of a listener - a handler script's or a Java one - until it is
- * stopped, then deletes the queue and closes its channel and connection.
+ * stopped, then cancels its own consumer and closes its channel and connection. The queue itself
+ * stays: other receivers - of this instance or of another one bound to the same broker - may
+ * consume it, and it may hold messages not delivered yet (#8210).
  */
 public class RabbitMQReceiverRunner implements Runnable {
 
@@ -80,6 +82,7 @@ public class RabbitMQReceiverRunner implements Runnable {
      */
     @Override
     public void run() {
+        String consumerTag = null;
         try {
             if (logger.isInfoEnabled()) {
                 logger.info("Starting a RabbitMQ receiver for: " + this.queue);
@@ -92,7 +95,7 @@ public class RabbitMQReceiverRunner implements Runnable {
                     deliver(new String(body, StandardCharsets.UTF_8));
                 }
             };
-            channel.basicConsume(queue, true, consumer);
+            consumerTag = channel.basicConsume(queue, true, consumer);
             stopped.await();
         } catch (IOException e) {
             logger.error(e.getMessage(), e);
@@ -101,13 +104,34 @@ public class RabbitMQReceiverRunner implements Runnable {
                   .interrupt();
             logger.warn("The RabbitMQ receiver for [{}] was interrupted", queue, e);
         } finally {
+            release(consumerTag);
+        }
+    }
+
+    /**
+     * Cancels this receiver's consumer, when it was registered, and closes the channel and then the
+     * connection - each step on its own, so a failing one does not leave the next behind. The queue is
+     * never deleted.
+     *
+     * @param consumerTag the tag of the registered consumer, {@code null} when none was registered
+     */
+    private void release(String consumerTag) {
+        if (consumerTag != null) {
             try {
-                channel.queueDelete(queue);
-                channel.close();
-                connection.close();
+                channel.basicCancel(consumerTag);
             } catch (Exception e) {
-                logger.error(e.getMessage(), e);
+                logger.error("Failed to cancel the RabbitMQ consumer [{}] of [{}]", consumerTag, queue, e);
             }
+        }
+        try {
+            channel.close();
+        } catch (Exception e) {
+            logger.error("Failed to close the RabbitMQ channel of [{}]", queue, e);
+        }
+        try {
+            connection.close();
+        } catch (Exception e) {
+            logger.error("Failed to close the RabbitMQ connection of [{}]", queue, e);
         }
     }
 
