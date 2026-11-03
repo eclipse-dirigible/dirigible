@@ -14,6 +14,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,6 +33,9 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
 
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(AbstractTableBuilder.class);
+
+    /** A length (or precision and scale) at the start of a column argument, e.g. {@code (100)}. */
+    private static final Pattern LEADING_LENGTH = Pattern.compile("^\\s*\\([^)]*\\)\\s*");
 
     /** The Constant OPERATION_NOT_SUPPORTED_FOR_THIS_DATABASE_TYPE_ERROR. */
     private static final String OPERATION_NOT_SUPPORTED_FOR_THIS_DATABASE_TYPE_ERROR = "Operation not supported for this Database type!";
@@ -222,6 +226,9 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
                     + isIdentity + ", args: " + Arrays.toString(args));
         }
         String[] definition = new String[] {name, getDialect().getDataTypeName(type)};
+        if (getDialect().isLengthless(type)) {
+            args = withoutLength(args);
+        }
         String[] column;
         if (isIdentity) {
             column = Stream.of(definition, args, new String[] {getDialect().getIdentityArgument()})
@@ -263,6 +270,26 @@ public abstract class AbstractTableBuilder<TABLE_BUILDER extends AbstractTableBu
 
         this.columns.add(column);
         return (TABLE_BUILDER) this;
+    }
+
+    /**
+     * Drops the length the leading argument declares, such as the {@code (100)} of
+     * {@code VARBINARY(100)}, keeping whatever follows it (a DEFAULT clause, for instance).
+     *
+     * @param args the column arguments
+     * @return the arguments without the length
+     */
+    private static String[] withoutLength(String[] args) {
+        if (args == null || args.length == 0) {
+            return args;
+        }
+        String rest = LEADING_LENGTH.matcher(args[0])
+                                    .replaceFirst("");
+        String[] remaining = Arrays.copyOfRange(args, rest.isEmpty() ? 1 : 0, args.length);
+        if (!rest.isEmpty()) {
+            remaining[0] = rest;
+        }
+        return remaining;
     }
 
     public TABLE_BUILDER schema(String schemaName) {

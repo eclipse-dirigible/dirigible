@@ -145,7 +145,9 @@ public class PostgresSqlDialect extends
     @Override
     public String getDataTypeName(DataType dataType) {
         return switch (dataType) {
-            case BLOB -> "bytea";
+            // PostgreSQL has no VARBINARY / BINARY [VARYING] / BINARY LARGE OBJECT - bytea is its one binary
+            // type. Rendered verbatim they failed the table with 'type "varbinary" does not exist' (#8291).
+            case BLOB, BINARY_LARGE_OBJECT, VARBINARY, BINARY_VARYING, BINARY -> "bytea";
             case DOUBLE -> "DOUBLE PRECISION";
             // PostgreSQL has neither CLOB nor NCLOB - TEXT is its unbounded character type, the same
             // rendering CHARACTER LARGE OBJECT already gets. Without this a table declaring a CLOB
@@ -153,6 +155,21 @@ public class PostgresSqlDialect extends
             case CHARACTER_LARGE_OBJECT, CLOB, NCLOB -> "TEXT";
             case NVARCHAR -> "VARCHAR";
             default -> super.getDataTypeName(dataType);
+        };
+    }
+
+    /**
+     * bytea takes no length: {@code bytea(100)} is a syntax error, so the length a
+     * {@code VARBINARY(100)} declares is dropped.
+     *
+     * @param dataType the data type
+     * @return true for the types rendered as bytea
+     */
+    @Override
+    public boolean isLengthless(DataType dataType) {
+        return switch (dataType) {
+            case BLOB, BINARY_LARGE_OBJECT, BYTEA, VARBINARY, BINARY_VARYING, BINARY -> true;
+            default -> false;
         };
     }
 

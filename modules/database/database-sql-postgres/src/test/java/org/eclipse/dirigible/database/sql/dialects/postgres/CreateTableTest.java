@@ -78,4 +78,56 @@ public class CreateTableTest {
         assertEquals("CREATE TABLE \"NOTES\" ( \"NOTE\" TEXT , \"SUMMARY\" TEXT , \"BODY\" TEXT )", sql);
     }
 
+    /**
+     * PostgreSQL has no VARBINARY / BINARY VARYING / BINARY type - its binary type is bytea, which
+     * takes no length (#8291). The table used to fail with 'type "varbinary" does not exist', and
+     * bytea(100) is a syntax error.
+     */
+    @Test
+    public void createTableWithBinaryColumns() {
+        String sql = SqlFactory.getNative(new PostgresSqlDialect())
+                               .create()
+                               .table("FILES")
+                               .column("ID", DataType.INTEGER, true, false, false)
+                               .column("VB", DataType.VARBINARY, false, true, false, "(100)")
+                               .column("BV", DataType.BINARY_VARYING, false, false, false, "(50)")
+                               .column("BI", DataType.BINARY, false, true, false, "(16)")
+                               .column("BL", DataType.BINARY_LARGE_OBJECT)
+                               .columnVarbinary("PLAIN", true)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE TABLE \"FILES\" ( \"ID\" INTEGER NOT NULL PRIMARY KEY , \"VB\" bytea , \"BV\" bytea NOT NULL ,"
+                + " \"BI\" bytea , \"BL\" bytea , \"PLAIN\" bytea )", sql);
+    }
+
+    /**
+     * A length dropped from a bytea column leaves the arguments after it in place.
+     */
+    @Test
+    public void createTableWithBinaryColumnKeepsTheArgumentsAfterTheLength() {
+        String sql = SqlFactory.getNative(new PostgresSqlDialect())
+                               .create()
+                               .table("FILES")
+                               .column("VB", DataType.VARBINARY, false, true, false, "(100) DEFAULT NULL")
+                               .build();
+
+        assertEquals("CREATE TABLE \"FILES\" ( \"VB\" bytea DEFAULT NULL )", sql);
+    }
+
+    /**
+     * An added VARBINARY column renders as bytea without its length as well.
+     */
+    @Test
+    public void alterTableAddBinaryColumn() {
+        String sql = SqlFactory.getNative(new PostgresSqlDialect())
+                               .alter()
+                               .table("FILES")
+                               .add()
+                               .column("VB", DataType.VARBINARY, false, true, false, "(100)")
+                               .build();
+
+        assertEquals("ALTER TABLE \"FILES\" ADD \"VB\" bytea ;", sql);
+    }
+
 }
