@@ -16,7 +16,7 @@ This chart bootstraps a [Eclipse Dirigible](https://www.dirigible.io/) deploymen
 Add the Eclipse Dirigible chart repository:
 
 ```
-helm repo add dirigible https://eclipse.github.io/dirigible
+helm repo add dirigible https://eclipse-dirigible.github.io/dirigible
 helm repo update
 ```
 
