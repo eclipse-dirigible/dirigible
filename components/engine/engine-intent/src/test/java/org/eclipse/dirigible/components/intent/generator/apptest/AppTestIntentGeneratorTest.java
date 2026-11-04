@@ -162,6 +162,50 @@ class AppTestIntentGeneratorTest {
         assertEquals(Boolean.TRUE, name.get("major"));
     }
 
+    /**
+     * Each field and relation carries the label its list column header renders (dirigible #8294): the
+     * {@code .model}'s {@code widgetLabel} when the intent authored one, else the humanized name -
+     * never the raw PascalCase name a multi-word column does not show.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void labelsEachPropertyAsThePageRendersIt() {
+        IntentModel assets = IntentParser.parse("""
+                name: fixed-assets
+                entities:
+                  - name: Asset
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: acquisitionDate, type: date }
+                      - { name: counterpartyIBAN, type: string, length: 34 }
+                      - { name: maxTaxRate, type: decimal, label: "Max. tax rate (%)" }
+                      - { name: name, type: string, length: 100 }
+                    relations:
+                      - { name: ResponsibleEmployee, kind: manyToOne, to: Asset }
+                      - { name: Parent, kind: manyToOne, to: Asset, label: "Parent asset" }
+                """);
+        Map<String, Object> edmAsset = edmEntity("Asset", "Asset", "Assets", "MANAGE_LIST", "Assets", "assets", "FA_ASSET", false);
+        edmAsset.put("properties",
+                List.of(property("Id", Map.of("dataPrimaryKey", "true")),
+                        property("MaxTaxRate", Map.of("widgetLabel", "Max. tax rate (%)")),
+                        property("Parent", Map.of("widgetLabel", "Parent asset"))));
+        Map<String, Object> asset =
+                entity(AppTestIntentGenerator.buildManifest("fixed-assets", "fixed-assets", assets, Map.of("Asset", edmAsset)), "Asset");
+
+        Map<String, String> fieldLabels = new LinkedHashMap<>();
+        for (Map<String, Object> field : (List<Map<String, Object>>) asset.get("fields")) {
+            fieldLabels.put((String) field.get("name"), (String) field.get("label"));
+        }
+        assertEquals(Map.of("AcquisitionDate", "Acquisition Date", "CounterpartyIBAN", "Counterparty IBAN", "MaxTaxRate",
+                "Max. tax rate (%)", "Name", "Name"), fieldLabels);
+
+        Map<String, String> relationLabels = new LinkedHashMap<>();
+        for (Map<String, Object> relation : (List<Map<String, Object>>) asset.get("relations")) {
+            relationLabels.put((String) relation.get("name"), (String) relation.get("label"));
+        }
+        assertEquals(Map.of("ResponsibleEmployee", "Responsible Employee", "Parent", "Parent asset"), relationLabels);
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void derivesTheMultilingualSampleFromInlineSeeds() {

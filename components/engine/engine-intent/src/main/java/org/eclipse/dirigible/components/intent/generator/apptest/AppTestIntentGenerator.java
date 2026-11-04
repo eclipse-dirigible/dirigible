@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
 import org.eclipse.dirigible.components.intent.LoggedValue;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -344,8 +345,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (field.isPrimaryKey() || field.isGenerated()) {
                 continue;
             }
+            String name = IntentNaming.pascalCase(field.getName());
+            Map<String, Object> property = properties.get(name);
             Map<String, Object> out = new LinkedHashMap<>();
-            out.put("name", IntentNaming.pascalCase(field.getName()));
+            out.put("name", name);
+            out.put("label", label(property, name));
             out.put("type", logicalType(field.getType()));
             if (field.isRequired()) {
                 out.put("required", true);
@@ -356,7 +360,6 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (field.getLength() != null) {
                 out.put("length", field.getLength());
             }
-            Map<String, Object> property = properties.get(String.valueOf(out.get("name")));
             // Read-only must mirror the generated form exactly, or the runner waits forever on an
             // input that is not there: an author-marked field and a uuid render in the read-only
             // details block (no #f_<Name> input), a calculated field renders as a non-editable
@@ -482,8 +485,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (!toOne || relation.getTo() == null) {
                 continue;
             }
+            String name = IntentNaming.pascalCase(relation.getName());
             Map<String, Object> out = new LinkedHashMap<>();
-            out.put("name", IntentNaming.pascalCase(relation.getName()));
+            out.put("name", name);
+            out.put("label", label(properties.get(name), name));
             out.put("kind", relation.getKind());
             out.put("to", relation.getTo());
             if (relation.isRequired() || relation.isComposition()) {
@@ -885,6 +890,21 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 && (notBlank(string(property.get("calculatedPropertyExpressionCreate")))
                         || notBlank(string(property.get("calculatedPropertyExpressionUpdate")))
                         || notBlank(string(property.get("calculatedActionOnUpdate"))));
+    }
+
+    /**
+     * The caption a property's list column header, form label and details row render (dirigible #8294):
+     * the {@code .model}'s {@code widgetLabel} (an authored {@code label:}), else the humanized
+     * property name - the rule {@code ModelParameterProcessor} applies before the Harmonia templates
+     * render it (#8132). A flow looking a column up by its raw name fails on every multi-word property
+     * ({@code AcquisitionDate} renders "Acquisition Date").
+     *
+     * @param property the property's {@code .model} entry, null when the model does not carry it
+     * @param name the PascalCase property name
+     * @return the label the generated page shows
+     */
+    private static String label(Map<String, Object> property, String name) {
+        return stringOr(property == null ? null : property.get("widgetLabel"), NamingHelper.humanizeIdentifier(name));
     }
 
     private static boolean notBlank(String value) {
