@@ -545,6 +545,50 @@ class AppTestIntentGeneratorTest {
     }
 
     /**
+     * dirigible #7823: a target labelled by a {@code stampOn: issue} number shows a row not issued yet
+     * as the draft marker in the picker, so the relation says so and the runner prefers a stamped row.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksARelationWhosePickerShowsADocumentNumber() {
+        String intent = """
+                name: drafts
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string, length: 200 }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: Refund, kind: manyToOne, to: Payment }
+                """;
+        Map<String, Object> paymentEdm =
+                edmEntity("Payment", "Payment", "Payments", "MANAGE_LIST", "Payments", "sales", "KF_MOD_DRAFTS_PAYMENT", false);
+        // what the EDM generator emits for a dropdown whose label is a stampOn: issue number (#7722)
+        paymentEdm.put("properties", List.of(property("Id", Map.of("dataPrimaryKey", "true")),
+                property("Invoice", Map.of("widgetDropDownDocumentNumber", "true")), property("Refund", Map.of())));
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("SalesInvoice",
+                edmEntity("SalesInvoice", "Sales Invoice", "Sales Invoices", "MANAGE_LIST", "Sales", "sales", "KF_MOD_DRAFTS_SI", false));
+        edm.put("Payment", paymentEdm);
+
+        Map<String, Object> payment =
+                entity(AppTestIntentGenerator.buildManifest("drafts", "drafts", IntentParser.parse(intent), edm), "Payment");
+        List<Map<String, Object>> relations = (List<Map<String, Object>>) payment.get("relations");
+
+        assertEquals("Number", relations.get(0)
+                                        .get("labelFrom"));
+        assertEquals(Boolean.TRUE, relations.get(0)
+                                            .get("labelDocumentNumber"));
+        assertNull(relations.get(1)
+                            .get("labelDocumentNumber"));
+    }
+
+    /**
      * dirigible #7903: a relation fixed after create is picked on the New form and read-only on edit -
      * marked for the edit only, so the create flow still picks it.
      */
