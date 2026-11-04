@@ -1312,6 +1312,9 @@ class GlueGeneratesTest {
         assertEquals("2", g.get("reopenStatusValue"));
         assertEquals("target.State == 3 || target.State == 4", g.get("reopenRetiredCondition"));
         assertEquals(false, g.get("hasRetiredStatus"), "there is no at-most-once guard here to step a retired target over");
+        // The reopen reaches the fine through the map's back-reference, as the event shape does - left
+        // empty it rendered `target. == null` and did not compile (#7985).
+        assertEquals("Fine", g.get("backRefProperty"));
     }
 
     @Test

@@ -50,6 +50,10 @@ import org.springframework.test.annotation.DirtiesContext;
  * 0.00 while the very same line POSTed through REST recomputed correctly (issue #7096). The
  * text-level assertions on the create-from live in {@code IntentEngineIT}; this is the runtime half
  * the pipeline's silent degradation demands.
+ *
+ * <p>
+ * The same button create-from declares its reopen ({@code sourceStatusOnRetire}), so voiding the
+ * invoice returns the proforma to the status it was invoiced from (issue #7985).
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentGeneratesItemsIT extends IntegrationTest {
@@ -59,6 +63,7 @@ class IntentGeneratesItemsIT extends IntegrationTest {
     private static final String PROJECT_PATH = IRepositoryStructure.PATH_USERS + "/admin/" + WORKSPACE + "/" + PROJECT;
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String GENERATE_RUN = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/InvoiceFromProformaGenerate/run";
+    private static final String VOID_INVOICE = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/VoidInvoiceTransition/run";
     private static final long TIMEOUT_SECONDS = 90;
 
     /**
@@ -73,6 +78,12 @@ class IntentGeneratesItemsIT extends IntegrationTest {
 
                     entities:
                       - name: ProformaStatus
+                        kind: setting
+                        fields:
+                          - { name: id,   type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string,  required: true, length: 100 }
+
+                      - name: InvoiceStatus
                         kind: setting
                         fields:
                           - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -102,6 +113,9 @@ class IntentGeneratesItemsIT extends IntegrationTest {
                           - { name: number,  type: string, length: 100 }
                           - { name: net,     type: decimal, precision: 18, scale: 2, aggregate: true }
                           - { name: payable, type: decimal, precision: 18, scale: 2, aggregate: true, calculatedOnCreate: "Net", calculatedOnUpdate: "Net" }
+                        relations:
+                          - { name: Proforma, kind: manyToOne, to: Proforma }
+                          - { name: Status,   kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
 
                       - name: InvoiceItem
                         fields:
@@ -119,6 +133,11 @@ class IntentGeneratesItemsIT extends IntegrationTest {
                         rows:
                           - { id: 1, name: Draft }
                           - { id: 2, name: Invoiced }
+                      - name: invoice-statuses
+                        entity: InvoiceStatus
+                        rows:
+                          - { id: 1, name: Issued, stage: live }
+                          - { id: 2, name: Voided, stage: void }
 
                     generates:
                       - name: invoice-from-proforma
@@ -127,6 +146,7 @@ class IntentGeneratesItemsIT extends IntegrationTest {
                         forEntity: Proforma
                         map:
                           number: number
+                          Proforma: id
                         items:
                           from: ProformaItem
                           to: InvoiceItem
@@ -135,6 +155,10 @@ class IntentGeneratesItemsIT extends IntegrationTest {
                             quantity: quantity
                             price: price
                         sourceStatus: 2
+                        sourceStatusOnRetire: 1
+
+                    transitions:
+                      - { name: VoidInvoice, forEntity: Invoice, from: [1], setStatus: 2, label: Void }
                     """;
 
     @Autowired
@@ -196,6 +220,46 @@ class IntentGeneratesItemsIT extends IntegrationTest {
         assertHeader("/invoice/InvoiceController/" + invoice, "Payable", 35.0f);
         // The completion hook committed with the same unit.
         assertHeader("/proforma/ProformaController/" + proforma, "Status", 2);
+    }
+
+    /**
+     * The reopen of a BUTTON create-from (#7985), the shape #7647 made legal: its listener rendered an
+     * empty back-reference ({@code target. == null}) and did not compile, so a voided invoice left its
+     * proforma Invoiced for ever - and the button refused it from there.
+     */
+    @Test
+    void voiding_the_invoice_returns_its_proforma_through_the_declared_reopen() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int proforma = create("/proforma/ProformaController", "{\"Number\":\"PF-2\"}");
+        AtomicInteger invoice = new AtomicInteger();
+        restAssuredExecutor.execute(() -> invoice.set(JsonPath.from(given().contentType("application/json")
+                                                                           .body("{\"id\":" + proforma + "}")
+                                                                           .when()
+                                                                           .post(GENERATE_RUN)
+                                                                           .then()
+                                                                           .statusCode(200)
+                                                                           .extract()
+                                                                           .asString())
+                                                              .getInt("Id")),
+                TIMEOUT_SECONDS);
+        assertHeader("/proforma/ProformaController/" + proforma, "Status", 2);
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + invoice.get() + "}")
+                                                 .when()
+                                                 .post(VOID_INVOICE)
+                                                 .then()
+                                                 .statusCode(200));
+        // The reopen listens on the invoice's -transitioned topic, so it runs once the void committed.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/proforma/ProformaController/" + proforma)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1)),
+                TIMEOUT_SECONDS);
     }
 
     private void assertHeader(String path, String property, Object expected) {

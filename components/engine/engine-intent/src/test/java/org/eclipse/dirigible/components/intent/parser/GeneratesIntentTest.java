@@ -1241,6 +1241,7 @@ class GeneratesIntentTest {
     @Test
     void acceptsAReopenOnAButtonCreateFromWithACompletionHook() {
         IntentModel model = IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    map: { Fine: id }
                     sourceStatus: DECLARED
                     sourceStatusOnRetire: IDENTIFIED
                 """);
@@ -1251,6 +1252,23 @@ class GeneratesIntentTest {
         assertEquals(3, generates.getSourceStatus());
         assertEquals(2, generates.getSourceStatusOnRetire());
         assertFalse(generates.isEventDriven(), "the shape under test is the button one");
+    }
+
+    /**
+     * The reopen reaches the source it returns through the map's back-reference, in the button shape as
+     * in the event one (#7985): without it the emitted reopen read {@code target.} and did not compile.
+     */
+    @Test
+    void rejectsAReopenOnAButtonCreateFromWhoseMapCopiesNoSourceKey() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(GENERATES_REOPEN_HEAD + """
+                    map: { note: note }
+                    sourceStatus: DECLARED
+                    sourceStatusOnRetire: IDENTIFIED
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares sourceStatusOnRetire, so its map must copy the source's [id]")),
+                "got: " + ex.getIssues());
     }
 
     /** With no completion hook there is nothing to invert, button or not. */
