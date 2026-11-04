@@ -49,7 +49,8 @@ class RequiredWhenAnyItemRepositoryTemplateIT {
                 "the lines must be read at the gate: " + rendered);
         assertTrue(rendered.contains("Criteria.create().eq(\"Invoice\", entity.Id)"), "the document's own lines: " + rendered);
         assertTrue(rendered.contains("if (" + ANY_ITEM + ") {"), "each line tested against the authored condition: " + rendered);
-        assertTrue(rendered.contains("if ((anyItem1) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {"),
+        assertTrue(rendered.contains(
+                "if ((anyItem1) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {"),
                 "the value is required when any line matched: " + rendered);
         assertTrue(rendered.contains("import org.eclipse.dirigible.components.data.store.java.repository.Criteria;"),
                 "the items query needs Criteria: " + rendered);
