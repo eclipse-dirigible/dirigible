@@ -52,6 +52,10 @@ class SchemaTwoUniqueConstraintsIT extends IntegrationTest {
 
     private static final String SECOND_KEY = "TwoKeysTimesheet_Company_Number";
 
+    private static final String OTHER_SCHEMA_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/other.schema";
+
+    private static final String OTHER_TABLE_NAME = "TWO_KEYS_OTHER";
+
     private static final String SCHEMA_SOURCE = """
             {
                 "schema": {
@@ -110,6 +114,53 @@ class SchemaTwoUniqueConstraintsIT extends IntegrationTest {
     }
 
     /**
+     * #8317: a key the alter could not add over duplicate rows is attempted again on a later pass, once
+     * the duplicates are resolved - although the schema itself did not change again.
+     */
+    @Test
+    void aKeyRefusedOverDuplicatesIsAddedOnALaterPassOnceTheyAreResolved() throws Exception {
+        publish(SCHEMA_PATH, SCHEMA_SOURCE.replaceAll("(?s)\"uniqueIndexes\": \\[.*?\n\\s*\\]", "\"uniqueIndexes\": []"));
+        insertRow("P1", "E1", "C1", "N1");
+        insertRow("P2", "E2", "C1", "N1");
+
+        publish(SCHEMA_PATH, SCHEMA_SOURCE);
+        // an added constraint's index is named after it, with a vendor suffix on H2
+        assertThat(uniqueIndexNames()).as("the duplicates refuse the second key, the first one is added")
+                                      .anyMatch(name -> name.startsWith(FIRST_KEY))
+                                      .noneMatch(name -> name.startsWith(SECOND_KEY));
+
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("DELETE FROM \"" + TABLE_NAME + "\" WHERE \"PROJECT\" = 'P2'");
+        }
+        // any later pass carrying a change - here another project file - attempts the key again
+        publish(OTHER_SCHEMA_PATH, """
+                {
+                    "schema": {
+                        "structures": [
+                            {
+                                "name": "TWO_KEYS_OTHER",
+                                "type": "TABLE",
+                                "columns": [ { "name": "ID", "type": "INTEGER", "primaryKey": true, "nullable": false } ]
+                            }
+                        ]
+                    }
+                }
+                """);
+
+        assertThat(uniqueIndexNames()).as("the second key is added once the duplicates are gone")
+                                      .anyMatch(name -> name.startsWith(SECOND_KEY));
+        assertThat(refusalOf("P3", "E3", "C1", "N1")).as("the second key refuses a duplicate (company, number)")
+                                                     .contains(SECOND_KEY);
+    }
+
+    private void publish(String path, String content) {
+        repository.createResource(path, content.getBytes(StandardCharsets.UTF_8), false, "application/json", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
+    /**
      * A declared unique key materializes as a unique index (that is the DDL
      * {@code TableCreateProcessor} emits), so the database's own index catalog is what proves it
      * reached the table - on every vendor, through one JDBC call.
@@ -160,11 +211,16 @@ class SchemaTwoUniqueConstraintsIT extends IntegrationTest {
 
     @AfterEach
     void cleanUp() throws Exception {
-        repository.removeResource(SCHEMA_PATH);
+        for (String path : List.of(SCHEMA_PATH, OTHER_SCHEMA_PATH)) {
+            if (repository.hasResource(path)) {
+                repository.removeResource(path);
+            }
+        }
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 Statement statement = connection.createStatement()) {
             statement.execute("DROP TABLE IF EXISTS \"" + TABLE_NAME + "\"");
+            statement.execute("DROP TABLE IF EXISTS \"" + OTHER_TABLE_NAME + "\"");
         }
     }
 }

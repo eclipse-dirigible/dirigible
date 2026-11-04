@@ -258,6 +258,67 @@ class TableAlterProcessorTest {
         }
     }
 
+    /**
+     * #8317: a key the alter could not add because of duplicate rows is attempted again once the
+     * duplicates are resolved, without the table's definition changing.
+     */
+    @Test
+    void aRefusedKeyIsAddedByALaterRetryOnceTheDuplicatesAreResolved() throws SQLException {
+        try (Connection connection = connect("alter_unique_retry")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 1, 'SI1'), (2, 1, 'SI1')");
+            Table tableModel = modelWithCompositeKey();
+
+            TableAlterProcessor.execute(connection, tableModel);
+            assertTrue(uniqueConstraints(connection).isEmpty(), "the duplicates refuse the key");
+
+            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+            assertTrue(uniqueConstraints(connection).isEmpty(), "still refused while the duplicates are there");
+
+            insert(connection, "DELETE FROM \"T_NOTES\" WHERE \"ID\" = 2");
+            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+
+            assertEquals(Map.of("Notes_Company_Number", List.of("COMPANY", "NUMBER")), uniqueConstraints(connection));
+        }
+    }
+
+    @Test
+    void aRetryAddsADeclaredKeyButNeverDropsAnUndeclaredOne() throws SQLException {
+        try (Connection connection = connect("alter_unique_retry_no_drop")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100), \"CODE\" VARCHAR(20) UNIQUE");
+            Table tableModel = modelWithCompositeKey();
+
+            TableAlterProcessor.retryUniqueConstraints(connection, tableModel);
+
+            Map<String, List<String>> uniques = uniqueConstraints(connection);
+            assertEquals(List.of("COMPANY", "NUMBER"), uniques.get("Notes_Company_Number"), "the declared key is added: " + uniques);
+            assertTrue(uniques.containsValue(List.of("CODE")), "the undeclared key is the alter's to drop, not the retry's: " + uniques);
+        }
+    }
+
+    /**
+     * A table created with a composite key holds it as a UNIQUE INDEX, which the constraint catalog
+     * does not list - the retry must not add it a second time as a constraint.
+     */
+    @Test
+    void aKeyEnforcedByAUniqueIndexIsNotAddedAgain() throws SQLException {
+        try (Connection connection = connect("alter_unique_retry_index")) {
+            createTable(connection, "\"COMPANY\" INTEGER, \"NUMBER\" VARCHAR(100)");
+            insert(connection, "CREATE UNIQUE INDEX \"Notes_Company_Number\" ON \"T_NOTES\" (\"COMPANY\", \"NUMBER\")");
+
+            TableAlterProcessor.retryUniqueConstraints(connection, modelWithCompositeKey());
+
+            assertTrue(uniqueConstraints(connection).isEmpty(), "the index already enforces the key");
+        }
+    }
+
+    @Test
+    void aRetryOfATableNotYetCreatedDoesNothing() throws SQLException {
+        try (Connection connection = connect("alter_unique_retry_missing")) {
+            assertDoesNotThrow(() -> TableAlterProcessor.retryUniqueConstraints(connection, modelWithCompositeKey()));
+        }
+    }
+
     private static Table modelWithCompositeKey() {
         Table tableModel = new Table("T_NOTES");
         new TableColumn("ID", "INTEGER", null, tableModel);

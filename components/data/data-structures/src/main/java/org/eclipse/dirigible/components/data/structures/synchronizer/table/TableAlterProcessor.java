@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.readiness.PlatformReadiness;
@@ -50,6 +51,12 @@ public class TableAlterProcessor {
 
     /** The Constant INCOMPATIBLE_CHANGE_OF_TABLE. */
     private static final String INCOMPATIBLE_CHANGE_OF_TABLE = "Incompatible change of table [%s] by adding a column [%s] which is [%s]";
+
+    /**
+     * The tables, by {@link #tableIdentity}, whose declared unique keys this process saw holding - the
+     * ones {@link #retryUniqueConstraints} has nothing to attempt on (#8317).
+     */
+    private static final Set<String> UNIQUE_KEYS_HOLD = ConcurrentHashMap.newKeySet();
     // $NON-NLS-1$
 
     /**
@@ -388,11 +395,59 @@ public class TableAlterProcessor {
      * that depends on the unique - is logged with the table and key, without failing the column
      * reconciliation or the publish.
      *
+     * <p>
+     * A key that could not be added is not forgotten (#8317): the table is left out of the ones whose
+     * keys are known to hold, so {@link #retryUniqueConstraints} attempts it again on a later pass.
+     *
      * @param connection the connection
      * @param quotedTableName the table name as the alter builder wants it (quoted)
      * @param tableModel the model
      */
     static void reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel) {
+        reconcileUniqueConstraints(connection, quotedTableName, tableModel, true);
+    }
+
+    /**
+     * Attempts again the declared UNIQUE keys of an existing table that this process has not yet seen
+     * holding (#8317) - one the alter could not add, the duplicate rows that blocked it since resolved
+     * by a migration or by hand, or any table not checked since the process started. Only the missing
+     * keys are added; nothing is dropped, that stays the alter's. A table whose keys hold is remembered
+     * and costs nothing on later calls; one that is still refused is logged and attempted again on the
+     * next call, without failing anything - its artefact stays as it is.
+     *
+     * @param connection the connection
+     * @param tableModel the model
+     */
+    public static void retryUniqueConstraints(Connection connection, Table tableModel) {
+        String quotedTableName = "\"" + tableModel.getName() + "\"";
+        try {
+            if (UNIQUE_KEYS_HOLD.contains(tableIdentity(connection, quotedTableName)) || !SqlFactory.getNative(connection)
+                                                                                                    .existsTable(connection,
+                                                                                                            tableModel.getName())) {
+                return;
+            }
+        } catch (SQLException e) {
+            logger.warn("Unique constraints of table [{}] are not attempted again on this pass - the database could not be read",
+                    tableModel.getName(), e);
+            return;
+        }
+        reconcileUniqueConstraints(connection, quotedTableName, tableModel, false);
+    }
+
+    /**
+     * The identity of a table across the tenants and databases this process serves.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the alter builder wants it (quoted)
+     * @return the catalog, schema and table
+     * @throws SQLException when the connection cannot name its catalog or schema
+     */
+    private static String tableIdentity(Connection connection, String quotedTableName) throws SQLException {
+        return connection.getCatalog() + "." + connection.getSchema() + "." + DatabaseNameNormalizer.normalizeTableName(quotedTableName);
+    }
+
+    private static void reconcileUniqueConstraints(Connection connection, String quotedTableName, Table tableModel,
+            boolean dropUndeclared) {
         String tableName = DatabaseNameNormalizer.normalizeTableName(quotedTableName);
         Map<String, List<String>> existing;
         try {
@@ -404,6 +459,7 @@ public class TableAlterProcessor {
         }
         if (existing == null) {
             logger.info("Unique constraints of table [{}] are not reconciled - this database exposes no catalog of them", tableName);
+            rememberWhetherDeclaredKeysHold(connection, quotedTableName, true);
             return;
         }
         existing.replaceAll((name, columns) -> columns.stream()
@@ -442,6 +498,9 @@ public class TableAlterProcessor {
                 present.add(columns);
                 continue;
             }
+            if (!dropUndeclared) {
+                continue;
+            }
             logger.warn("Dropping unique constraint [{}] on table [{}] over {} - the model no longer declares it", constraint.getKey(),
                     tableName, constraint.getValue());
             AlterTableBuilder drop = SqlFactory.getNative(connection)
@@ -452,8 +511,10 @@ public class TableAlterProcessor {
                                                        .toArray(new String[0]));
             executeConstraintChange(connection, drop, tableName, constraint.getKey());
         }
+        boolean declaredKeysHold = true;
+        Set<Set<String>> indexed = desired.size() > present.size() ? uniqueIndexes(connection, tableName) : Set.of();
         for (Map.Entry<Set<String>, DesiredUnique> key : desired.entrySet()) {
-            if (present.contains(key.getKey())) {
+            if (present.contains(key.getKey()) || indexed.contains(key.getKey())) {
                 continue;
             }
             DesiredUnique unique = key.getValue();
@@ -464,8 +525,60 @@ public class TableAlterProcessor {
             add.add()
                .unique(unique.name(), unique.columns()
                                             .toArray(new String[0]));
-            executeConstraintChange(connection, add, tableName, unique.name());
+            declaredKeysHold &= executeConstraintChange(connection, add, tableName, unique.name());
         }
+        rememberWhetherDeclaredKeysHold(connection, quotedTableName, declaredKeysHold);
+    }
+
+    /**
+     * Records whether every declared key of the table holds, so that {@link #retryUniqueConstraints}
+     * skips it or attempts it again.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the alter builder wants it (quoted)
+     * @param declaredKeysHold whether every declared key holds
+     */
+    private static void rememberWhetherDeclaredKeysHold(Connection connection, String quotedTableName, boolean declaredKeysHold) {
+        try {
+            String identity = tableIdentity(connection, quotedTableName);
+            if (declaredKeysHold) {
+                UNIQUE_KEYS_HOLD.add(identity);
+            } else {
+                UNIQUE_KEYS_HOLD.remove(identity);
+            }
+        } catch (SQLException e) {
+            logger.warn("Table [{}] is not recorded as reconciled - the connection cannot name its catalog, so its unique constraints"
+                    + " are checked again on the next pass", quotedTableName, e);
+        }
+    }
+
+    /**
+     * The column sets of the table's unique indexes. A table created with a composite key holds it as a
+     * UNIQUE INDEX, which the catalog of constraints does not list - the key is enforced all the same
+     * and must not be added a second time as a constraint (#8317).
+     *
+     * @param connection the connection
+     * @param tableName the (unquoted) table
+     * @return the column sets, upper-cased; empty when the database cannot list them
+     */
+    private static Set<Set<String>> uniqueIndexes(Connection connection, String tableName) {
+        Map<String, Set<String>> indexes = new HashMap<>();
+        try (ResultSet rs = connection.getMetaData()
+                                      .getIndexInfo(null, connection.getSchema(), tableName, true, false)) {
+            while (rs.next()) {
+                String index = rs.getString("INDEX_NAME");
+                String column = rs.getString("COLUMN_NAME");
+                if (index != null && column != null) {
+                    indexes.computeIfAbsent(index, name -> new HashSet<>())
+                           .add(column.toUpperCase());
+                }
+            }
+        } catch (SQLException e) {
+            logger.warn("Unique indexes of table [{}] could not be read - a declared key they already enforce may be added again",
+                    tableName, e);
+            return Set.of();
+        }
+        return new HashSet<>(indexes.values());
     }
 
     /** A key the model wants: its constraint name and its columns in the declared order. */
@@ -479,17 +592,20 @@ public class TableAlterProcessor {
      * @param builder the built statement
      * @param tableName the table, for the log
      * @param constraint the constraint, for the log
+     * @return whether the database took the change
      */
-    private static void executeConstraintChange(Connection connection, AlterTableBuilder builder, String tableName, String constraint) {
+    private static boolean executeConstraintChange(Connection connection, AlterTableBuilder builder, String tableName, String constraint) {
         String sql = builder.build();
         if (logger.isInfoEnabled()) {
             logger.info(sql);
         }
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.executeUpdate();
+            return true;
         } catch (SQLException e) {
-            logger.error("Unique constraint [{}] on table [{}] could not be reconciled - the table's other changes stand. Statement: [{}]",
-                    constraint, tableName, sql, e);
+            logger.error("Unique constraint [{}] on table [{}] could not be reconciled - the table's other changes stand, and it is"
+                    + " attempted again on the next pass. Statement: [{}]", constraint, tableName, sql, e);
+            return false;
         }
     }
 
