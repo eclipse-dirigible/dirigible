@@ -104,6 +104,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
 import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
@@ -7846,9 +7847,19 @@ public final class IntentParser {
      */
     @SuppressWarnings("unchecked")
     private static void normalizeOrderBy(Object tree) {
-        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+        if (!(tree instanceof Map<?, ?> root)) {
             return;
         }
+        // A report's orderBy (dirigible #8435) takes the same three spellings.
+        for (String section : List.of("entities", "reports")) {
+            if (root.get(section) instanceof List<?> nodes) {
+                normalizeOrderByOf(nodes);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void normalizeOrderByOf(List<?> entities) {
         for (Object entityNode : entities) {
             if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("orderBy")) {
                 continue;
@@ -12900,6 +12911,60 @@ public final class IntentParser {
             validateAgingReport(model, report, issues);
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
+            validateReportOrderBy(report, issues);
+            for (String problem : ReportMoments.problems(report.getFilter())) {
+                issues.add("report [" + report.getName() + "] filter " + problem);
+            }
+        }
+    }
+
+    /**
+     * A report's {@code orderBy:} (dirigible #8435) names its own output: each term must be one of the
+     * report's dimensions or measures as authored (compared ignoring case and whitespace), no term may
+     * repeat, and the direction is asc or desc. A statement or an account analysis carries its own
+     * order - line order, the running balance - so neither takes one.
+     */
+    private static void validateReportOrderBy(ReportIntent report, List<String> issues) {
+        List<OrderByIntent> orderBy = report.getOrderBy();
+        if (orderBy == null || orderBy.isEmpty()) {
+            return;
+        }
+        String prefix = "report [" + report.getName() + "]";
+        if (report.isStatement() || report.isLedger()) {
+            issues.add(prefix + " declares orderBy but a " + report.getKind()
+                                                                   .trim()
+                    + " report carries its own row order");
+            return;
+        }
+        Set<String> known = new LinkedHashSet<>();
+        List<String> authored = new ArrayList<>();
+        for (List<String> expressions : List.of(report.getDimensions(), report.getMeasures())) {
+            for (String expression : expressions) {
+                if (expression != null && !expression.isBlank()) {
+                    known.add(normalizeExpression(expression));
+                    authored.add(expression.trim());
+                }
+            }
+        }
+        Set<String> seen = new HashSet<>();
+        for (OrderByIntent term : orderBy) {
+            String field = term == null ? null : term.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(prefix + " orderBy has an entry without a field");
+                continue;
+            }
+            String key = normalizeExpression(field);
+            if (!seen.add(key)) {
+                issues.add(prefix + " orderBy names [" + field + "] more than once");
+            }
+            if (!known.contains(key)) {
+                issues.add(
+                        prefix + " orderBy references [" + field + "] which is not one of the report's dimensions or measures " + authored);
+            }
+            String dir = term.getDir();
+            if (dir != null && !"asc".equalsIgnoreCase(dir.trim()) && !"desc".equalsIgnoreCase(dir.trim())) {
+                issues.add(prefix + " orderBy [" + field + "] has dir [" + dir + "] - it is asc or desc");
+            }
         }
     }
 

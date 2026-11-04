@@ -42,6 +42,7 @@ import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
@@ -521,6 +522,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                     : statementQuery.sql(baseTable, baseAlias, joinRows, where);
         }
 
+        // The row order (dirigible #8435), on every report whose query buildQuery() produced - a
+        // statement and an account analysis end in their own ORDER BY.
+        List<Map<String, Object>> orderings = List.of();
+        if (!report.isLedger() && statementQuery == null) {
+            orderings = orderings(report, columns, dimensionColumns, measureColumns);
+            query = orderBy(query, orderings);
+        }
+
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("name", report.getName());
         document.put("alias", baseAlias);
@@ -584,8 +593,89 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (!statement && conditions != null && !conditions.isEmpty()) {
             document.put("conditions", conditions);
         }
+        // The editor's own ordering model, so its visual builder rebuilds the same ORDER BY and the
+        // report keeps round-tripping (#6675); the generated repository reads it to keep the order
+        // when it wraps the query in the per-column filters.
+        if (!orderings.isEmpty()) {
+            document.put("orderings", orderings);
+        }
         document.put("security", security(context, report.getName(), PermissionSupport.gates(context.getModel(), context.getSettings())));
         return new Emission(document, views);
+    }
+
+    /**
+     * The report's row order as the editor's {@code orderings} rows - {@code { column, direction }},
+     * the column the quoted output alias (dirigible #8435). The authored {@code orderBy:} names
+     * dimensions and measures as written; without one, a report bucketing a date by {@code month(x)} /
+     * {@code year(x)} is chronological - its buckets ascending, in the order declared - and any other
+     * report keeps the database's order. Ordering by the output alias rather than the expression keeps
+     * an aggregate's ORDER BY valid ({@code ORDER BY "Quantity"}, not a second {@code SUM}) and reads
+     * the same on H2 and PostgreSQL.
+     *
+     * @return the ordering rows, empty for none
+     */
+    private static List<Map<String, Object>> orderings(ReportIntent report, List<Map<String, Object>> columns,
+            Map<String, WidgetDimension> dimensionColumns, Map<String, Map<String, Object>> measureColumns) {
+        List<Map<String, Object>> orderings = new ArrayList<>();
+        if (!report.getOrderBy()
+                   .isEmpty()) {
+            for (OrderByIntent term : report.getOrderBy()) {
+                if (term == null || term.getField() == null) {
+                    continue;
+                }
+                String key = expressionKey(term.getField());
+                Map<String, Object> column = dimensionColumns.containsKey(key) ? dimensionColumns.get(key)
+                                                                                                 .column()
+                        : measureColumns.get(key);
+                if (column == null) {
+                    column = columnByAlias(columns, term.getField());
+                }
+                if (column != null) {
+                    orderings.add(ordering(column, term.direction()));
+                }
+            }
+            return orderings;
+        }
+        for (WidgetDimension dimension : dimensionColumns.values()) {
+            // month/year only: an ageing bucket's labels (0-30, 31-60, 90+) would sort as text.
+            if ("month".equals(dimension.bucket()) || "year".equals(dimension.bucket())) {
+                orderings.add(ordering(dimension.column(), "asc"));
+            }
+        }
+        return orderings;
+    }
+
+    /** A column named by its output alias, ignoring case and whitespace - or null. */
+    private static Map<String, Object> columnByAlias(List<Map<String, Object>> columns, String name) {
+        String key = expressionKey(name);
+        for (Map<String, Object> column : columns) {
+            if (key.equals(expressionKey((String) column.get("alias")))) {
+                return column;
+            }
+        }
+        return null;
+    }
+
+    private static Map<String, Object> ordering(Map<String, Object> column, String direction) {
+        Map<String, Object> ordering = new LinkedHashMap<>();
+        ordering.put("column", "\"" + column.get("alias") + "\"");
+        ordering.put("direction", direction.toUpperCase(Locale.ROOT));
+        return ordering;
+    }
+
+    /**
+     * The query with its ORDER BY, spelt token for token as the editor's {@code buildQuery()} appends
+     * it.
+     */
+    private static String orderBy(String query, List<Map<String, Object>> orderings) {
+        if (orderings.isEmpty()) {
+            return query;
+        }
+        List<String> terms = new ArrayList<>();
+        for (Map<String, Object> ordering : orderings) {
+            terms.add(ordering.get("column") + " " + ordering.get("direction"));
+        }
+        return query + "\nORDER BY " + String.join(", ", terms);
     }
 
     /**
@@ -3167,7 +3257,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static String buildWhere(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             Map<String, Join> joins, String filter) {
         if (filter == null || filter.isBlank() || source == null) {
-            return filter == null ? null : filter.trim();
+            return filter == null ? null : ReportMoments.rewrite(filter.trim());
         }
         String where = rewriteDottedReferences(filter, (relationName, fieldName) -> {
             RelationIntent relation = relationByName(source, relationName);
@@ -3207,7 +3297,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // Normalize only OUTSIDE single-quoted string literals so a value literal that itself contains
         // `==` (e.g. Code == 'A==B') is left intact.
         where = normalizeEqualityOperator(where);
-        return where.trim();
+        // Relative moments last (dirigible #8435): their SQL spells YEAR/MONTH/DAY, which the field
+        // rewriting above must never see.
+        return ReportMoments.rewrite(where.trim());
     }
 
     /**

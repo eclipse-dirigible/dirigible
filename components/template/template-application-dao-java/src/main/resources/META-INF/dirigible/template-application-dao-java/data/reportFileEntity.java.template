@@ -38,6 +38,12 @@ public class ${name}Repository {
     private static final String QUERY = String.join("\n"#foreach($line in $queryJavaLines),
             ${line}#end);
 
+    /**
+     * The report's row order over its output columns - re-applied around the filtered query, whose
+     * derived table would otherwise drop the query's own ORDER BY. Empty when the report has none.
+     */
+    private static final String ORDER_BY = "$!{orderByJavaLiteral}";
+
     /** The report's output columns (result-set alias -> SQL type) - the filterable surface. */
     private static final Map<String, String> FILTER_COLUMNS = Map.ofEntries(
 #foreach($column in $columns)
@@ -174,6 +180,9 @@ public class ${name}Repository {
             }
             sql.append("\"").append(column).append("\" ").append(operator).append(" :").append(marker);
             parameters.add(parameter(marker, parameterType(type), condition.get("value")));
+        }
+        if (!ORDER_BY.isEmpty()) {
+            sql.append(" ORDER BY ").append(ORDER_BY);
         }
         return sql.toString();
     }

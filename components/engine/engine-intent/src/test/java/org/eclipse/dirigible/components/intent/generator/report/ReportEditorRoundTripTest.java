@@ -128,6 +128,28 @@ class ReportEditorRoundTripTest {
         assertEquals("COUNT", count.get("aggregate"));
     }
 
+    /**
+     * An ordered year-to-date report (dirigible #8435): the ORDER BY rides on the editor's own
+     * {@code orderings} and the relative moment on the condition's right-hand side, so the builder
+     * still owns the query.
+     */
+    @Test
+    void anOrderedYearToDateReportRoundTrips() {
+        Map<String, Object> document = document("""
+                  - name: TopCustomers
+                    source: Invoice
+                    dimensions: [Customer.name, "month(issuedOn)"]
+                    measures: ["sum(total)"]
+                    filter: "issuedOn >= START_OF_YEAR"
+                    orderBy: [{ field: "sum(total)", dir: desc }, Customer.name]
+                """);
+        assertRoundTrips(document);
+        assertTrue(String.valueOf(document.get("query"))
+                         .endsWith("\nORDER BY \"Sum Total\" DESC, \"Customer Name\" ASC"),
+                document.get("query")
+                        .toString());
+    }
+
     @Test
     void aTranslatedDimensionRoundTrips() {
         Map<String, Object> document = document("""
@@ -474,7 +496,18 @@ class ReportEditorRoundTripTest {
             query.append("\nGROUP BY ")
                  .append(String.join(", ", groupParts));
         }
-        // The editor also appends HAVING and ORDER BY; no generated report declares either.
+        // The editor also appends HAVING; no generated report declares one. ORDER BY comes from the
+        // report's orderBy: or its chronological default (dirigible #8435).
+        Object orderings = report.get("orderings");
+        if (orderings instanceof List<?> rows && !rows.isEmpty()) {
+            List<String> terms = new ArrayList<>();
+            for (Object row : rows) {
+                Map<?, ?> ordering = (Map<?, ?>) row;
+                terms.add(ordering.get("column") + " " + ordering.get("direction"));
+            }
+            query.append("\nORDER BY ")
+                 .append(String.join(", ", terms));
+        }
         return query.toString();
     }
 }
