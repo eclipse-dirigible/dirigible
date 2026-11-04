@@ -259,14 +259,13 @@ public class ${className}Generate {
             // from being invoiced with nothing the intent could say about it.
             // Decided HERE, before the ${toEntity} header is built and saved, and that ordering is as
             // deliberate as the sourceStatus flip's below: both refusals under this rule read nothing
-            // but the source's rows, while the header's save allocates its document number and records
-            // its History create entry OUTSIDE this unit (the counter is a sequence in its own
-            // transaction so concurrent creates never serialize on it - dirigible #7069). A refusal
-            // fired after the save therefore rolled the header back and left a spent number in a
-            // series that must stay gap-free and a trail row for a document that never existed - one
-            // of each per click, three invoice numbers for three presses on a month with one rejected
-            // timesheet (dirigible #7224). Refused here, a rejected click writes nothing at all, which
-            // is what run() promises for a missing required `prompt:` input too.
+            // but the source's rows, while the header's save records its History create entry OUTSIDE
+            // this unit and holds its series' counter row until the unit ends (dirigible #8113). A
+            // refusal fired after the save used to leave a spent number in a series that must stay
+            // gap-free and a trail row for a document that never existed - one of each per click,
+            // three invoice numbers for three presses on a month with one rejected timesheet
+            // (dirigible #7224). Refused here, a rejected click writes nothing at all, which is what
+            // run() promises for a missing required `prompt:` input too.
             java.util.List<gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity> qualifying =
                     new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                             .findAll(Criteria.create()

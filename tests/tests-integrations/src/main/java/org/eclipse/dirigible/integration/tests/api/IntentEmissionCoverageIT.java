@@ -1027,10 +1027,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # `attach: print` is authored on a transition AND on a process step (below).
               #
               # number + history: what a REFUSED create-from must leave untouched (#7224). Bill is the
-              # target of both rule-carrying create-froms below, and its repository allocates the
-              # document number and records the History create entry outside the unit of work - so a
-              # rule that refused AFTER the header's save burned a number of the gap-free series and
-              # left a trail row for a document that never existed, once per click.
+              # target of both rule-carrying create-froms below, and its repository records the
+              # History create entry outside the unit of work (the document number too, before #8113) -
+              # so a rule that refused AFTER the header's save burned a number of the gap-free series
+              # and left a trail row for a document that never existed, once per click.
               - name: Bill
                 function: Document
                 history: true
@@ -5777,8 +5777,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(checkedBillFromStay.contains("\"Stay night carries no \\\"amount\\\" (StayNight \" + unqualified + \")\""),
                 "refuse: must throw the authored message carrying the keys of the offending rows");
         // ...and both refusals are decided BEFORE the header is saved (#7224). The target's save
-        // allocates the document number and records the History create entry outside the unit of
-        // work, so a refusal fired after it took the header back and left a spent number and a trail
+        // records the History create entry outside the unit of work (the document number too, before
+        // #8113), so a refusal fired after it took the header back and left a spent number and a trail
         // row for a document that never existed - once per click.
         int billHeaderSave = billFromStay.indexOf("BillRepository().save(target)");
         assertTrue(billHeaderSave > 0 && billFromStay.indexOf("would have no lines") < billHeaderSave,
@@ -8245,12 +8245,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("$", hasSize(3)),
                 30);
 
-        // A refused run must cost NOTHING (#7224). The Bill's save allocates its document number and
-        // records its History create entry outside the unit of work - by design, so concurrent creates
-        // never serialize on the counter - which the rollback of a refusal fired AFTER the save could
-        // not undo: every refused click spent a number of a gap-free series and left the trail of a
-        // document that never existed. The trail is read as CREATE rows only, because the BillFlow
-        // process the bill above started writes its ProcessId back on its own time.
+        // A refused run must cost NOTHING (#7224). The Bill's save records its History create entry
+        // outside the unit of work (and, before #8113, allocated its document number there too), which
+        // the rollback of a refusal fired AFTER the save could not undo: every refused click spent a
+        // number of a gap-free series and left the trail of a document that never existed. The trail is
+        // read as CREATE rows only, because the BillFlow process the bill above started writes its
+        // ProcessId back on its own time.
         long billsRecorded = billHistoryCreates();
 
         // The refusal reading: every night fails the amount rule, so the run stops with the authored

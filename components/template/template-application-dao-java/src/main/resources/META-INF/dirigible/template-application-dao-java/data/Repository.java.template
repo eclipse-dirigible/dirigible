@@ -12,7 +12,12 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
 ## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
 #set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
+## A document number drawn on create (#8113): save() runs the draw and the insert as one unit of work.
+#set($numbersOnCreate = false)
 #foreach ($property in $properties)
+    #if($property.numberStampOnCreate)
+        #set($numbersOnCreate = true)
+    #end
     #if($property.dataPrimaryKey)
         #set($pkPropertyName = $property.name)
     #end
@@ -580,6 +585,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             requireReferencesExist(entity, null);
             return insert(entity);
         });
+#elseif($numbersOnCreate)
+        // The number is drawn inside the insert's transaction (#8113): a create the database refuses - a
+        // duplicate key, a value its column cannot hold - takes its number back with the row.
+        ${name}Entity saved = org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> insert(entity));
 #else
         ${name}Entity saved = insert(entity);
 #end
@@ -608,13 +617,13 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($hasSingleFlags)
         enforceSingleFlags(entity);
 #end
-## Allocated LAST, once every guard that can refuse this create has passed: the counter is a SEQUENCE,
-## incremented in its own transaction so concurrent creates never serialize on it, which means an
-## allocation cannot be rolled back with the insert - whatever it hands out is spent. A number consumed
-## by a write that then failed leaves a permanent hole in a series a jurisdiction requires to be
-## gap-free, so the allocation must be the last thing that happens before the statement, not the first
-## (dirigible #7099). A failure of the INSERT itself can still spend one; nothing short of allocating
-## inside the insert's transaction closes that, and doing so would serialize every create in the tenant.
+## Allocated LAST, once every guard that can refuse this create has passed (dirigible #7099), and inside
+## the insert's transaction - save() runs this method in a unit of work, which the allocation joins
+## (dirigible #8113). A create the database refuses - a duplicate key, a value its column cannot hold -
+## then rolls its number back with the row, so a series a jurisdiction requires to be gap-free keeps no
+## hole for it. The counter row stays locked from the draw until the insert commits: concurrent creates
+## of ONE series and partition wait for each other (never two the same number, never one past a number
+## that may yet come back), which is why nothing but the insert follows the draw.
 ## First-class numbering, stampOn:create: allocate the real document number on insert (when empty)
 ## from the tenant's series. The number's SHAPE is not here - prefix and width live in the series
 ## configuration (the module's .numbers artefact, then per-tenant settings), so a deployment can change

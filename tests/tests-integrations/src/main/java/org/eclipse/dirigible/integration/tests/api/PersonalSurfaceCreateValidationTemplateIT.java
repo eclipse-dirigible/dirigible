@@ -98,8 +98,9 @@ class PersonalSurfaceCreateValidationTemplateIT {
     }
 
     /**
-     * The counter is a sequence incremented in its own transaction, so what it hands out is spent
-     * whatever the insert does: it has to be the LAST thing before the statement.
+     * The guards run before the insert's transaction opens, so a number drawn ahead of one that refuses
+     * would be spent - and the counter row stays locked from the draw to the commit: the allocation has
+     * to be the LAST thing before the statement.
      */
     @Test
     void theDocumentNumberIsAllocatedAfterEveryGuardThatCanRefuseTheCreate() throws Exception {

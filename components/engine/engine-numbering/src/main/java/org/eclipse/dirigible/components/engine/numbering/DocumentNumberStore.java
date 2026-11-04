@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -24,6 +25,7 @@ import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.SqlFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 /**
@@ -80,8 +82,11 @@ class DocumentNumberStore {
 
     private final DataSourcesManager dataSourcesManager;
 
-    DocumentNumberStore(DataSourcesManager dataSourcesManager) {
+    private final ObjectProvider<WriteTransaction> writeTransaction;
+
+    DocumentNumberStore(DataSourcesManager dataSourcesManager, ObjectProvider<WriteTransaction> writeTransaction) {
         this.dataSourcesManager = dataSourcesManager;
+        this.writeTransaction = writeTransaction;
     }
 
     /**
@@ -109,7 +114,9 @@ class DocumentNumberStore {
 
     /**
      * Allocate the next value of (series, partition) - gap-free per tenant; a concurrent allocation
-     * blocks on the increment's row lock.
+     * blocks on the increment's row lock until the allocating transaction ends. That transaction is the
+     * write transaction open on this thread when there is one (#8113), so the number commits or rolls
+     * back with the write it was drawn for; otherwise the allocation commits on its own.
      *
      * @param series the series identity
      * @param partition the partition value ({@code ""} when unpartitioned)
@@ -129,17 +136,21 @@ class DocumentNumberStore {
             if (!partition.isEmpty() && !exists(connection, series, partition)) {
                 materializePartition(connection, series, partition);
             }
+            // Inside the write the number is for, when one is open (#8113): a create the database refuses
+            // after the number was drawn - a duplicate key, a value its column cannot hold - then rolls
+            // the counter back with its row, and a concurrent create waits for that outcome instead of
+            // drawing past a number that may yet come back. The DDL and the partition insert above stay
+            // outside it: DDL commits an open transaction on some databases.
+            WriteTransaction open = writeTransaction.getIfAvailable();
+            Optional<Allocation> joined =
+                    open == null ? Optional.empty() : open.join(shared -> incrementAndRead(shared, series, partition));
+            if (joined.isPresent()) {
+                return joined.get();
+            }
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                if (increment(connection, series, partition) == 0) {
-                    // No row: the series was never declared. Refusing is the point - inventing a default
-                    // here would stamp a number in a shape nobody chose.
-                    throw new IllegalStateException(
-                            "Document-number series [" + series + "]" + (partition.isEmpty() ? "" : " partition [" + partition + "]")
-                                    + " is not declared for this tenant - declare it in a .numbers artefact");
-                }
-                Allocation allocation = read(connection, series, partition);
+                Allocation allocation = incrementAndRead(connection, series, partition);
                 connection.commit();
                 return allocation;
             } catch (SQLException | IllegalStateException ex) {
@@ -425,6 +436,17 @@ class DocumentNumberStore {
                 return resultSet.next();
             }
         }
+    }
+
+    private Allocation incrementAndRead(Connection connection, String series, String partition) throws SQLException {
+        if (increment(connection, series, partition) == 0) {
+            // No row: the series was never declared. Refusing is the point - inventing a default here
+            // would stamp a number in a shape nobody chose.
+            throw new IllegalStateException(
+                    "Document-number series [" + series + "]" + (partition.isEmpty() ? "" : " partition [" + partition + "]")
+                            + " is not declared for this tenant - declare it in a .numbers artefact");
+        }
+        return read(connection, series, partition);
     }
 
     private int increment(Connection connection, String series, String partition) throws SQLException {

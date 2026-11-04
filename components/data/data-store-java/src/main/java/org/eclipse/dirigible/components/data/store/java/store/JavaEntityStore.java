@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.data.store.java.outbox.EventOutbox;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.components.data.store.java.repository.DerivedWrite;
 import org.eclipse.dirigible.components.data.store.java.repository.DomainEvent;
+import org.eclipse.dirigible.components.engine.numbering.WriteTransaction;
 import org.eclipse.dirigible.sdk.db.ConcurrentWriteException;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.hibernate.Session;
@@ -67,7 +68,7 @@ import jakarta.persistence.PessimisticLockException;
  * {@link UserFacade#getName()} and {@link Instant#now()}.
  */
 @Component
-public class JavaEntityStore {
+public class JavaEntityStore implements WriteTransaction {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaEntityStore.class);
 
@@ -104,10 +105,11 @@ public class JavaEntityStore {
      * nest: an inner {@code inUnitOfWork} joins the outer one, which alone owns the commit.
      *
      * <p>
-     * What is deliberately NOT in the unit: the change history ({@code History}), document-number
-     * allocation and the outbox table's own DDL each run on their own connection, so a rolled-back unit
-     * can leave a history row or consume a number. Both are append-only records of an attempt, not
-     * business state.
+     * A document number drawn inside the block joins it (#8113), so a unit that rolls back takes its
+     * number back and the gap-free series keeps no hole for it. What is deliberately NOT in the unit:
+     * the change history ({@code History}) and the outbox table's own DDL run on their own connection,
+     * so a rolled-back unit can leave a history row - an append-only record of an attempt, not business
+     * state.
      *
      * @param <R> the block's result type
      * @param work the block to run
@@ -145,6 +147,21 @@ public class JavaEntityStore {
     }
 
     /**
+     * Runs JDBC work on the connection of this thread's unit of work, inside its transaction - what a
+     * document-number allocation joins, so the number commits or rolls back with the unit (#8113). The
+     * work must return a non-null result.
+     *
+     * @param <R> the result type
+     * @param work the statements to run
+     * @return the work's result, or empty when no unit of work is open on this thread
+     */
+    @Override
+    public <R> Optional<R> join(WriteTransaction.Work<R> work) {
+        UnitOfWork unit = UNIT_OF_WORK.get();
+        return unit == null ? Optional.empty() : Optional.of(unit.session.doReturningWork(work::run));
+    }
+
+    /**
      * Runs the block as {@link #inUnitOfWork(Supplier)} does, and runs it ONCE MORE when the database
      * rolled the unit back to break a deadlock (dirigible #8341).
      *
@@ -162,10 +179,11 @@ public class JavaEntityStore {
      *
      * <p>
      * The block must be safe to run again: whatever it writes it builds from its own arguments and what
-     * it reads inside the block, and the writes it makes outside the transaction (a history row, a
-     * document number) are records of an attempt. Joining a unit that is already open runs the block
-     * once, as {@link #inUnitOfWork(Supplier)} does - the outermost unit owns the transaction, and only
-     * its owner can repeat it.
+     * it reads inside the block, and the writes it makes outside the transaction (a history row) are
+     * records of an attempt; a document number drawn inside it came back with the rollback (#8113) and
+     * is drawn again. Joining a unit that is already open runs the block once, as
+     * {@link #inUnitOfWork(Supplier)} does - the outermost unit owns the transaction, and only its
+     * owner can repeat it.
      *
      * @param <R> the block's result type
      * @param work the block to run

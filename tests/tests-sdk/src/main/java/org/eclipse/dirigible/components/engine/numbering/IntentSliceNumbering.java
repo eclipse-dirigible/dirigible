@@ -9,7 +9,10 @@
  */
 package org.eclipse.dirigible.components.engine.numbering;
 
+import java.util.Map;
+
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 
 /**
  * Builds the document-number service for the in-process test slice (dirigible #7643), whose
@@ -20,12 +23,15 @@ public final class IntentSliceNumbering {
     private IntentSliceNumbering() {}
 
     /**
-     * Creates a document-number service allocating in the given datasources' default database.
+     * Creates a document-number service allocating in the given datasources' default database, inside
+     * the given write transaction when one is open - as the platform's does (#8113).
      *
      * @param dataSourcesManager the source of the default database
+     * @param writeTransaction the write transaction an allocation joins - the slice's entity store
      * @return the service
      */
-    public static DocumentNumberService create(DataSourcesManager dataSourcesManager) {
-        return new DocumentNumberService(new DocumentNumberStore(dataSourcesManager));
+    public static DocumentNumberService create(DataSourcesManager dataSourcesManager, WriteTransaction writeTransaction) {
+        return new DocumentNumberService(new DocumentNumberStore(dataSourcesManager,
+                new StaticListableBeanFactory(Map.of("writeTransaction", writeTransaction)).getBeanProvider(WriteTransaction.class)));
     }
 }
