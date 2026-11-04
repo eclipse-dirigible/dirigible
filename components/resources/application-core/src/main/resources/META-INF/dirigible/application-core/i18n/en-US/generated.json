@@ -131,6 +131,8 @@
       "showing": "{{from}}-{{to}} of {{total}} {{name}}",
       "print": "Print",
       "export": "Export",
+      "allRecords": "All records",
+      "currentPage": "Current page",
       "reset": "Reset",
       "create": "Create",
       "edit": "Edit",

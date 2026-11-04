@@ -380,14 +380,20 @@ document.addEventListener('alpine:init', () => {
       return pages;
     },
 
-    // Export the FULL result set (POST /export returns all rows) as CSV.
-    async exportCsv() {
+    // Export / Print take a scope (#8434): 'all' (the default) re-queries the full result under the
+    // filters and parameters in force; 'page' is the page of rows on screen.
+    async exportScopeRows(scope) {
+      if (scope === 'page') return (this.rows || []).slice();
+      const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
+      return Array.isArray(data) ? data : [];
+    },
+    // Export the rows in scope as CSV.
+    async exportCsv(scope) {
       this.actionError = null;
       try {
         // The export honors the active per-column filters and parameters - it downloads what the
         // table shows.
-        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
-        const rows = Array.isArray(data) ? data : [];
+        const rows = await this.exportScopeRows(scope);
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);
         const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
@@ -403,13 +409,12 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Print the report: the FULL filtered result set (POST /export, same as the CSV export - not
-    // just the on-screen page) rendered into a minimal print document in a new window.
-    async printReport() {
+    // Print the report: the rows in scope (the same as the CSV export) rendered into a minimal print
+    // document in a new window.
+    async printReport(scope) {
       this.actionError = null;
       try {
-        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
-        const rows = Array.isArray(data) ? data : [];
+        const rows = await this.exportScopeRows(scope);
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);
         const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
