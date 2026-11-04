@@ -43,14 +43,24 @@ public final class ReportMoments {
 
     /**
      * A moment: the token in group 1, then optionally the sign in group 2 and the period text in group
-     * 3. {@code START_OF_\w+} is matched broadly so a misspelt unit is reported rather than passed
-     * through to the database as an unknown column.
+     * 3. A {@code START_OF_<word>} of any spelling is matched so a misspelt unit is reported rather
+     * than passed through to the database as an unknown column. The word is matched as
+     * underscore-separated alphanumeric segments, possessively: one way to match any input, so the scan
+     * stays linear however the filter is spelt (the CodeQL polynomial-regex alert on {@code \w+} after
+     * the {@code START_OF_} prefix).
      */
-    private static final Pattern MOMENT =
-            Pattern.compile("(?<![\\w.\"])(CURRENT_DATE|START_OF_\\w+)(?:\\s*([+-])\\s*(P\\w*))?(?![\\w.\"])", Pattern.CASE_INSENSITIVE);
+    private static final Pattern MOMENT = Pattern.compile(
+            "(?<![\\w.\"])(CURRENT_DATE|START_OF_[A-Za-z0-9]++(?:_[A-Za-z0-9]++)*+)(?:\\s*+([+-])\\s*+(P[A-Za-z0-9]*+))?(?![\\w.\"])",
+            Pattern.CASE_INSENSITIVE);
 
-    /** A date period: years, months, weeks, days - at least one, each a non-negative integer. */
-    private static final Pattern PERIOD = Pattern.compile("P(?:(\\d+)Y)?(?:(\\d+)M)?(?:(\\d+)W)?(?:(\\d+)D)?", Pattern.CASE_INSENSITIVE);
+    /**
+     * A date period: years, months, weeks, days - at least one, each a non-negative integer of at most
+     * five digits. The bound keeps {@link Long#parseLong} from overflowing on an absurd period, which
+     * would otherwise escape the parser as a raw {@link NumberFormatException} instead of an authoring
+     * issue - and no report window is 100,000 days long.
+     */
+    private static final Pattern PERIOD =
+            Pattern.compile("P(?:(\\d{1,5})Y)?(?:(\\d{1,5})M)?(?:(\\d{1,5})W)?(?:(\\d{1,5})D)?", Pattern.CASE_INSENSITIVE);
 
     private ReportMoments() {}
 

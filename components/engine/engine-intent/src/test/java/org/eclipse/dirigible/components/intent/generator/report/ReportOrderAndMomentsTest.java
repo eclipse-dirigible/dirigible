@@ -222,4 +222,40 @@ class ReportOrderAndMomentsTest {
                 ReportMoments.rewrite("d >= START_OF_QUARTER AND note = 'START_OF_MONTH it''s CURRENT_DATE-P1D'"));
         assertEquals(List.of(), ReportMoments.problems("note = 'START_OF_NOTHING'"));
     }
+
+    /**
+     * CodeQL java/uncaught-number-format-exception: an overflowing period is an authoring issue, not a
+     * crash.
+     */
+    @Test
+    void anOverflowingPeriodIsAnIssueNotACrash() {
+        assertEquals(1, ReportMoments.problems("d >= CURRENT_DATE-P99999999999999999999999D")
+                                     .size());
+        assertEquals("d >= CURRENT_DATE-P99999999999999999999999D", ReportMoments.rewrite("d >= CURRENT_DATE-P99999999999999999999999D"));
+        IntentValidationException failure = assertThrows(IntentValidationException.class, () -> document("""
+                  - name: SalesByProduct
+                    source: OrderLine
+                    dimensions: [product.name]
+                    measures: ["sum(amount)"]
+                    filter: "orderedOn >= CURRENT_DATE-P99999999999999999999999D"
+                """));
+        assertTrue(failure.getMessage()
+                          .contains("is not a date period"),
+                failure.getMessage());
+    }
+
+    /**
+     * CodeQL java/polynomial-redos: a filter of repeated START_OF_ prefixes is scanned in linear time,
+     * and a multi-segment misspelling is still reported whole.
+     */
+    @Test
+    void repeatedPrefixesScanQuicklyAndMultiSegmentNamesAreReported() {
+        String hostile = "START_OF_".repeat(200_000) + ".";
+        long started = System.nanoTime();
+        ReportMoments.problems(hostile);
+        ReportMoments.rewrite(hostile);
+        assertTrue(System.nanoTime() - started < 2_000_000_000L, "the moment scan must stay linear");
+        assertEquals(List.of("references unknown moment [START_OF_FISCAL_YEAR] - expected CURRENT_DATE or one of "
+                + "[START_OF_YEAR, START_OF_QUARTER, START_OF_MONTH]"), ReportMoments.problems("d >= START_OF_FISCAL_YEAR"));
+    }
 }
