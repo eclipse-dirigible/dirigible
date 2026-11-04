@@ -16,6 +16,9 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.SQLException;
+
+import org.apache.ibatis.exceptions.PersistenceException;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -72,6 +75,35 @@ class BpmProviderFlowableDeleteProcessRetryTest {
         verify(runtimeService, times(3)).deleteProcessInstance(INSTANCE, "deleted");
     }
 
+    /**
+     * PostgreSQL does not serialize the two writers: the delete and the completion lock the instance's
+     * execution rows in opposite orders, and the database rolls the delete back to break the deadlock
+     * (issue #8463). That is the same loss as the optimistic lock, and is retried the same way.
+     */
+    @Test
+    void aDeleteTheDatabaseRolledBackToBreakADeadlockIsRetried() {
+        when(query.singleResult()).thenReturn(mock(ProcessInstance.class));
+        doThrow(deadlockVictim("40P01")).doThrow(deadlockVictim("40001"))
+                                        .doNothing()
+                                        .when(runtimeService)
+                                        .deleteProcessInstance(INSTANCE, "deleted");
+
+        provider.deleteProcess(INSTANCE, "deleted");
+
+        verify(runtimeService, times(3)).deleteProcessInstance(INSTANCE, "deleted");
+    }
+
+    @Test
+    void aLockWaitTimeoutIsNotRetried() {
+        when(query.singleResult()).thenReturn(mock(ProcessInstance.class));
+        doThrow(deadlockVictim("55P03")).when(runtimeService)
+                                        .deleteProcessInstance(INSTANCE, "deleted");
+
+        provider.deleteProcess(INSTANCE, "deleted");
+
+        verify(runtimeService, times(1)).deleteProcessInstance(INSTANCE, "deleted");
+    }
+
     @Test
     void anInstanceThatEndedWhileItWasBeingDeletedIsNotRetried() {
         ProcessInstance running = mock(ProcessInstance.class);
@@ -106,6 +138,14 @@ class BpmProviderFlowableDeleteProcessRetryTest {
         provider.deleteProcess(INSTANCE, "deleted");
 
         verify(runtimeService, times(1)).deleteProcessInstance(INSTANCE, "deleted");
+    }
+
+    /**
+     * The shape Flowable surfaces a statement the database rolled back in: MyBatis over the driver's.
+     */
+    private static PersistenceException deadlockVictim(String sqlState) {
+        return new PersistenceException("### Error updating database",
+                new SQLException("ERROR: deadlock detected - while deleting tuple in relation \"act_ru_execution\"", sqlState));
     }
 
     private static FlowableOptimisticLockingException lostLock() {
