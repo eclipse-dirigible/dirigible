@@ -203,12 +203,17 @@ not as an apology.
   renders them, and still counted by every report and roll-up over the child. Declare it on the
   entity's OWNING composition (its first one); a deeper chain cascades level by level, each child
   dealing with its own children as it goes.
-- **`fixedAfterCreate: true` on a plain (non-composition, non-`EntityStatus`) `manyToOne`/`oneToOne` = picked
+- **`fixedAfterCreate: true` on a plain (non-`EntityStatus`) `manyToOne`/`oneToOne` = picked
   on create, fixed from then on** (#7903): the New form offers the picker, the Edit form renders it
   read-only, and an update that carries a different value is answered 409 (translatable under
   `checks.<Entity>_fixed_<Relation>`); an update that omits it keeps the stored value. Workflow steps,
   roll-ups and generates write through the repository and are unaffected. Not with
   `calculatedActionOnUpdate` (that recomputes the value on every update).
+- **A `composition: true` relation is fixed after create WITHOUT declaring it** (#8306): a detail line
+  belongs to the master it was created on, and an update naming another master is answered 409 (`This <Line> belongs to its <Master> - to move it, delete it and add it to the other <Master>`, under `checks.<Line>_fixed_<Relation>`).
+  Moving a line is a delete plus a create on the other master. Do not add a `calculatedActionOnUpdate`
+  that refuses another master - the rule is already there; `fixedAfterCreate: true` on a composition is
+  accepted and redundant.
 - **`fixedAfterCreate: true` on a FIELD = set on create, fixed from then on** (#8363) - the same key, rule
   and message as on a relation: a customer code printed on invoices, a reference an external ledger
   matches. The New form takes the value, the Edit form renders the input read-only (the rest of the
@@ -5359,7 +5364,7 @@ or a seeded name.
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | relation `whenMasterDeleted` | `cascade` (default - a delete of the master deletes the children it owns), `refuse` (the master's delete is rejected while children exist); composition relations only |
-| relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not a composition, not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409 |
+| relation `fixedAfterCreate` | `true` - a plain `manyToOne`/`oneToOne` (not an `EntityStatus`, not with `calculatedActionOnUpdate`): editable on create, read-only on edit, a changed value in an update answered 409. A `composition: true` relation is fixed this way by default (#8306) |
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |

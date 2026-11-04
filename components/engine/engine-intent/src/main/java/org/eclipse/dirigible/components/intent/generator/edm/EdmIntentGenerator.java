@@ -2329,16 +2329,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * which the REST controllers refuse a changed value of on update and the forms render read-only on
      * edit - and {@code fixedAfterCreateMessage}, the default-language text of that refusal, which the
      * model's en-US catalog carries under {@code checks.<Entity>_fixed_<Relation>} so a language
-     * catalog translates it like any check message. A {@code fixedWhenReferenced: true} relation
-     * (#8194) is emitted the same way as {@code fixedWhenReferenced} +
-     * {@code fixedWhenReferencedMessage}, under {@code checks.<Entity>_fixedWhenReferenced_<Relation>},
-     * as the field key is. Nothing is emitted for an ordinary relation.
+     * catalog translates it like any check message. A composition parent is fixed without declaring it
+     * (#8306): a PUT naming another master would move the line and its amounts there, so its refusal
+     * says how a line does move. A {@code fixedWhenReferenced: true} relation (#8194) is emitted the
+     * same way as {@code fixedWhenReferenced} + {@code fixedWhenReferencedMessage}, under
+     * {@code checks.<Entity>_fixedWhenReferenced_<Relation>}, as the field key is. Nothing is emitted
+     * for an ordinary relation.
      */
     private static void putFixedRelation(Map<String, Object> p, String ownerEntity, RelationIntent relation) {
         String name = IntentNaming.pascalCase(relation.getName());
-        if (relation.isFixedAfterCreate()) {
+        if (relation.isFixedOnceCreated()) {
             p.put("fixedAfterCreate", "true");
-            p.put("fixedAfterCreateMessage", "'" + name + "' cannot change once the " + ownerEntity + " is created");
+            p.put("fixedAfterCreateMessage",
+                    relation.isComposition()
+                            ? "This " + ownerEntity + " belongs to its " + relation.getTo()
+                                    + " - to move it, delete it and add it to the other " + relation.getTo()
+                            : "'" + name + "' cannot change once the " + ownerEntity + " is created");
         }
         if (relation.isFixedWhenReferenced()) {
             p.put("fixedWhenReferenced", "true");

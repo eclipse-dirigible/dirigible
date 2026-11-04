@@ -6205,12 +6205,12 @@ public final class IntentParser {
 
     /**
      * {@code fixedAfterCreate: true} (dirigible #7903) fixes a user-picked FK once the record exists,
-     * so it needs a single FK a user picks: a to-one relation that is not a composition parent (preset
-     * by the layout, never picked), not an EntityStatus badge (moved by its workflow by design) and not
-     * recomputed by a {@code calculatedActionOnUpdate} (which owns the value on every update already).
-     * {@code fixedWhenReferenced: true} (dirigible #8194) fixes the FK once another record references
-     * this one, so it needs the same: a composition parent is preset by the layout and never re-picked
-     * anyway, a status is the workflow's to move, and an update recompute is a system write.
+     * so it needs a single FK a user picks: a to-one relation that is not an EntityStatus badge (moved
+     * by its workflow by design) and not recomputed by a {@code calculatedActionOnUpdate} (which owns
+     * the value on every update already). On a composition parent it is accepted and redundant: a
+     * composition is fixed after create by default (dirigible #8306). {@code fixedWhenReferenced: true}
+     * (dirigible #8194) fixes the FK once another record references this one, so it needs the same, and
+     * is refused on a composition parent, which that default already fixes more strictly.
      *
      * @param entity the entity declaring the relation
      * @param relation the relation
@@ -6224,8 +6224,8 @@ public final class IntentParser {
             issues.add(subject + " declares " + key + " but only a manyToOne/oneToOne relation has an FK a user picks");
             return;
         }
-        if (relation.isComposition()) {
-            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare " + key);
+        if (relation.isComposition() && !"fixedAfterCreate".equals(key)) {
+            issues.add(subject + " is a composition parent, which is fixed after create already (#8306), so it cannot declare " + key);
         }
         if (relation.isEntityStatus()) {
             issues.add(subject + " is an EntityStatus (moved by the workflow) so it cannot declare " + key);

@@ -71,6 +71,11 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
     private static final String REFUSAL_BG = "Проектът не може да се смени след създаването на отчета";
     private static final String FIELD_REFUSAL = "'Reference' cannot change once the Timesheet is created";
     private static final String FIELD_REFUSAL_BG = "Номерът не може да се смени след създаването на отчета";
+    private static final String INVOICES = API + "/invoice/InvoiceController";
+    private static final String INVOICE_ITEMS = API + "/invoice/InvoiceItemController";
+    private static final String MASTER_REFUSAL =
+            "This InvoiceItem belongs to its Invoice - to move it, delete it and add it to the other Invoice";
+    private static final String MASTER_REFUSAL_BG = "Редът принадлежи на своята фактура";
     private static final long TIMEOUT_SECONDS = 90;
     /** The workflow step runs once the create event has started its instance. */
     private static final long PROCESS_TIMEOUT_SECONDS = 60;
@@ -126,6 +131,22 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                   - { name: Timesheet, kind: manyToOne, to: Timesheet }
                   - { name: Expense,   kind: manyToOne, to: Expense }
 
+              # A composition: a line belongs to the invoice it was created on, without declaring it (#8306).
+              - name: Invoice
+                function: Document
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string, length: 200 }
+                  - { name: amount, type: decimal, aggregate: true }
+              - name: InvoiceItem
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string, length: 200 }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+
             processes:
               # A system writer of the fixed relation and field: the guard is the controllers', so these still land.
               - name: Reassign
@@ -154,7 +175,8 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
               "fixedrel-model": {
                 "checks": {
                   "Timesheet_fixed_Project": "Проектът не може да се смени след създаването на отчета",
-                  "Timesheet_fixed_Reference": "Номерът не може да се смени след създаването на отчета"
+                  "Timesheet_fixed_Reference": "Номерът не може да се смени след създаването на отчета",
+                  "InvoiceItem_fixed_Invoice": "Редът принадлежи на своята фактура"
                 }
               }
             }
@@ -270,6 +292,74 @@ class IntentFixedAfterCreateIT extends IntegrationTest {
                                                                                      .body("message", equalTo(
                                                                                              "'Batch' cannot change while other records reference this Expense"));
         put(MY_TIMESHEETS, timesheet, "{\"Note\":\"mine again\",\"Batch\":\"B-1\"}", null).statusCode(200);
+    }
+
+    /**
+     * A composition child's master is fixed after create by default (#8306): a PUT of a line naming
+     * another invoice used to move the line - and its amount - to that invoice. It is refused now, in
+     * the reader's language, and neither invoice's total moves; a PUT repeating or omitting the invoice
+     * still saves, and a line is still created on either invoice.
+     */
+    @Test
+    void a_composition_childs_master_is_fixed_after_create() {
+        generateProject();
+        assertTrue(contentOf("i18n/en-US/fixedrel.model.json").contains("\"InvoiceItem_fixed_Invoice\": \"" + MASTER_REFUSAL + "\""),
+                "the refusal's default text must be in the en-US catalog");
+        writeResource(PROJECT_PATH + "/i18n/bg-BG/fixedrel.model.json", BG_OVERLAY);
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int first = create(INVOICES, "{\"Note\":\"supplier A\"}");
+        int second = create(INVOICES, "{\"Note\":\"supplier B\"}");
+        int line = create(INVOICE_ITEMS, "{\"Invoice\":" + first + ",\"Note\":\"goods\",\"Amount\":250}");
+        awaitAmount(first, "250");
+
+        // Naming the other invoice is refused, in the reader's language, and moves no money.
+        String moved = "{\"Invoice\":" + second + ",\"Note\":\"goods\",\"Amount\":250}";
+        put(INVOICE_ITEMS, line, moved, null).statusCode(409)
+                                             .body("message", equalTo(MASTER_REFUSAL));
+        put(INVOICE_ITEMS, line, moved, "bg").statusCode(409)
+                                             .body("message", equalTo(MASTER_REFUSAL_BG));
+        readItem(line).body("Invoice", equalTo(first));
+        awaitAmount(first, "250");
+        awaitAmount(second, "0");
+
+        // Repeating the stored invoice saves, and the edit reaches its total.
+        put(INVOICE_ITEMS, line, "{\"Invoice\":" + first + ",\"Note\":\"goods\",\"Amount\":300}", null).statusCode(200);
+        awaitAmount(first, "300");
+        // Omitting it keeps the stored invoice.
+        put(INVOICE_ITEMS, line, "{\"Note\":\"more goods\",\"Amount\":300}", null).statusCode(200)
+                                                                                  .body("Invoice", equalTo(first));
+        readItem(line).body("Invoice", equalTo(first))
+                      .body("Note", equalTo("more goods"));
+
+        // A line is still created on either invoice.
+        create(INVOICE_ITEMS, "{\"Invoice\":" + second + ",\"Note\":\"services\",\"Amount\":40}");
+        awaitAmount(second, "40");
+        awaitAmount(first, "300");
+    }
+
+    private ValidatableResponse readItem(int item) {
+        AtomicReference<ValidatableResponse> response = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> response.set(given().when()
+                                                              .get(INVOICE_ITEMS + "/" + item)
+                                                              .then()
+                                                              .statusCode(200)));
+        return response.get();
+    }
+
+    /** An invoice's aggregated amount, compared by value; an invoice with no line reads as zero. */
+    private void awaitAmount(int invoice, String expected) {
+        restAssuredExecutor.execute(() -> {
+            Object amount = given().when()
+                                   .get(INVOICES + "/" + invoice)
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Amount");
+            BigDecimal actual = amount == null ? BigDecimal.ZERO : new BigDecimal(String.valueOf(amount));
+            assertEquals(0, actual.compareTo(new BigDecimal(expected)), "invoice " + invoice + " amount: " + amount);
+        }, TIMEOUT_SECONDS);
     }
 
     /**

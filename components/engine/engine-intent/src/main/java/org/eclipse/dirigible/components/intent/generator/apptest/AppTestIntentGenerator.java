@@ -502,8 +502,8 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             }
             // fixedAfterCreate (#7903): the New form offers the picker, the Edit form renders it
             // read-only and the controller refuses a changed value - so a flow picks it on create and
-            // never on edit.
-            if (relation.isFixedAfterCreate()) {
+            // never on edit. A composition parent is fixed the same way without declaring it (#8306).
+            if (relation.isFixedOnceCreated()) {
                 out.put("readOnlyOnEdit", true);
             }
             // dependsOn cascade: the option list narrows to target rows whose filterBy equals the

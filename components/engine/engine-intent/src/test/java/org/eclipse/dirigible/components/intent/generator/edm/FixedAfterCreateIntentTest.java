@@ -97,11 +97,29 @@ class FixedAfterCreateIntentTest {
                 """, "declares fixedAfterCreate but only a manyToOne/oneToOne relation has an FK a user picks");
     }
 
+    /**
+     * A composition child's master is fixed after create without declaring it (#8306): a PUT naming
+     * another master would move the line and its amounts there.
+     */
     @Test
-    void aCompositionParentIsPresetByTheLayout() {
-        assertIssue("""
+    void aCompositionParentIsFixedByDefault() {
+        Map<String, Object> project = projectProperty("""
+                  - { name: Project, kind: manyToOne, to: Project, composition: true }
+                """);
+        assertEquals("true", project.get("fixedAfterCreate"));
+        assertEquals("This Timesheet belongs to its Project - to move it, delete it and add it to the other Project",
+                project.get("fixedAfterCreateMessage"));
+    }
+
+    /** Declaring it on a composition is accepted and redundant (it used to be refused). */
+    @Test
+    void aCompositionParentAcceptsTheRedundantFlag() {
+        Map<String, Object> project = projectProperty("""
                   - { name: Project, kind: manyToOne, to: Project, composition: true, fixedAfterCreate: true }
-                """, "is a composition parent (preset by the layout) so it cannot declare fixedAfterCreate");
+                """);
+        assertEquals("true", project.get("fixedAfterCreate"));
+        assertEquals("This Timesheet belongs to its Project - to move it, delete it and add it to the other Project",
+                project.get("fixedAfterCreateMessage"));
     }
 
     @Test
@@ -157,7 +175,7 @@ class FixedAfterCreateIntentTest {
                 """, "declares fixedWhenReferenced but only a manyToOne/oneToOne relation has an FK a user picks");
         assertIssue("""
                   - { name: Project, kind: manyToOne, to: Project, composition: true, fixedWhenReferenced: true }
-                """, "is a composition parent (preset by the layout) so it cannot declare fixedWhenReferenced");
+                """, "is a composition parent, which is fixed after create already (#8306), so it cannot declare fixedWhenReferenced");
         assertIssue("""
                   - { name: Project, kind: manyToOne, to: Project, fixedWhenReferenced: true, calculatedActionOnUpdate: custom.KeepProject }
                 """, "declares both fixedWhenReferenced and calculatedActionOnUpdate");
