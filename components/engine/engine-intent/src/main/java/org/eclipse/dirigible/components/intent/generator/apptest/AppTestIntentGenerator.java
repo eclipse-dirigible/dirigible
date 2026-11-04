@@ -511,9 +511,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (relation.isFixedOnceCreated()) {
                 out.put("readOnlyOnEdit", true);
             }
-            // dependsOn cascade: the option list narrows to target rows whose filterBy equals the
-            // trigger sibling's value - the runner must pick MATCHING samples (the dependent row
-            // first, then its FK as the trigger's sample), not independent first rows.
+            // dependsOn cascade: the option list narrows to target rows whose filterBy (default: the
+            // key) equals the trigger row's valueFrom (default: its key) - the runner must pick
+            // MATCHING samples, not independent first rows (#7957).
             if (relation.getDependsOn() != null) {
                 Map<String, Object> dependsOn = new LinkedHashMap<>();
                 dependsOn.put("relation", IntentNaming.pascalCase(relation.getDependsOn()
@@ -522,6 +522,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                             .getFilterBy() != null) {
                     dependsOn.put("filterBy", IntentNaming.pascalCase(relation.getDependsOn()
                                                                               .getFilterBy()));
+                }
+                if (relation.getDependsOn()
+                            .getValueFrom() != null) {
+                    dependsOn.put("valueFrom", IntentNaming.pascalCase(relation.getDependsOn()
+                                                                               .getValueFrom()));
                 }
                 out.put("dependsOn", dependsOn);
             }

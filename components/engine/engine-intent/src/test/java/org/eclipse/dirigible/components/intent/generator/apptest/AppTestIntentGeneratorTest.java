@@ -260,6 +260,47 @@ class AppTestIntentGeneratorTest {
         assertEquals("Name", currency.get("labelFrom"));
     }
 
+    /**
+     * dirigible #7957: a dependsOn relation that copies a value off its trigger's row narrows its
+     * picker to the rows carrying that value, so the runner needs the {@code valueFrom} to sample that
+     * row.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void carriesTheValueADependsOnRelationCopiesFromItsTrigger() {
+        String intent = """
+                name: purchases
+                entities:
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100 }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier, required: true }
+                  - name: PurchaseCreditNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reason, type: string, length: 200 }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice, required: true }
+                      - { name: Supplier, kind: manyToOne, to: Supplier, dependsOn: { relation: PurchaseInvoice, valueFrom: Supplier } }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        for (String name : List.of("Supplier", "PurchaseInvoice", "PurchaseCreditNote")) {
+            edm.put(name, edmEntity(name, name, name + "s", "MANAGE_LIST", "Purchases", "purchases", "KF_MOD_PURCHASES_" + name, false));
+        }
+
+        Map<String, Object> note = entity(AppTestIntentGenerator.buildManifest("purchases", "purchases", IntentParser.parse(intent), edm),
+                "PurchaseCreditNote");
+        Map<String, Object> supplier = ((List<Map<String, Object>>) note.get("relations")).get(1);
+
+        assertEquals(Map.of("relation", "PurchaseInvoice", "valueFrom", "Supplier"), supplier.get("dependsOn"));
+    }
+
     @Test
     void skipsProjectionAndDetailEntities() {
         Map<String, Map<String, Object>> edm = edm();
