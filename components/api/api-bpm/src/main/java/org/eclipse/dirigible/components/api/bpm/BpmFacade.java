@@ -354,4 +354,18 @@ public class BpmFacade implements InitializingBean {
                  .getBpmProviderFlowable()
                  .correlateMessageEvent(processInstanceId, messageName, variables);
     }
+
+    /**
+     * Delivers a message to the instance's catch event, or keeps it for that catch event when the
+     * instance is running but has not reached it yet.
+     *
+     * @param processInstanceId the process instance id
+     * @param messageName the message name
+     * @throws IllegalArgumentException if the instance is not running in the current tenant
+     */
+    public static void deliverMessageEvent(String processInstanceId, String messageName) {
+        BpmFacade.get()
+                 .getBpmProviderFlowable()
+                 .deliverMessageEvent(processInstanceId, messageName);
+    }
 }

@@ -16,6 +16,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
@@ -935,6 +936,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
 
+              # #8106: an event that arrives after the user task completed but before the wait
+              # subscribed is kept and resumes the wait once armed; one that arrived while the task was
+              # still open is not an answer to the wait after it.
+              - name: Inquiry
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: title, type: string, length: 200 }
+                  - { name: state, type: string, length: 20 }
+                relations:
+                  - { name: replies, kind: oneToMany, to: InquiryReply }
+              - name: InquiryReply
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: text, type: string, length: 200 }
+                relations:
+                  - { name: Inquiry, kind: manyToOne, to: Inquiry, composition: true, required: true }
+
               # Step resilience (#6762): the tenant-provisioning shape - a flaky remote call retried
               # on a declared cycle, a produced secret consumed downstream and cleared, an exhausted
               # failure routed to a recorded {error} message.
@@ -1507,6 +1525,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                           - { name: escalate,    kind: serviceTask, args: { setField: state, value: ESCALATED, next: end } }
                           - { name: markExpired, kind: serviceTask, args: { setField: state, value: EXPIRED, next: end } }
                           - { name: awaitReply,  kind: wait, args: { onCreate: RfqReply, via: Rfq, when: "internal == false", next: markReplied } }
+                          - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
+                          - { name: end, kind: end }
+
+                      # #8106: the PT3S pause is the window between the user task and the wait - an
+                      # event inside it used to be dropped, parking the instance forever.
+                      - name: InquiryFlow
+                        trigger: { onCreate: Inquiry }
+                        steps:
+                          - { name: answer,      kind: userTask, args: { assignee: reviewer, next: settle } }
+                          - { name: settle,      kind: wait, args: { after: PT3S, next: awaitReply } }
+                          - { name: awaitReply,  kind: wait, args: { onCreate: InquiryReply, via: Inquiry, next: markReplied } }
                           - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
                           - { name: end, kind: end }
 
@@ -2639,6 +2668,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
+        assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
         assertFieldPlacementRuntime();
         assertRecordHeaderRuntime();
@@ -2914,6 +2944,105 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("find { it.variableName == 'checks' }.value", equalTo(3)),
                 30);
+    }
+
+    /**
+     * A wait whose event arrives before the process reaches it (#8106), compiled and running. The reply
+     * posted right after the person completed the task lands in the PT3S pause before the wait, when
+     * the wait has not subscribed yet: it is kept, and the wait continues on it once armed. A reply
+     * posted while the task is still open is discarded when it completes, so that instance parks on the
+     * wait until a reply after the task arrives.
+     */
+    private void assertEarlyWaitEventRuntime() {
+        String inquiryApi = API + "/inquiry/InquiryController";
+        String replyApi = API + "/inquiry/InquiryReplyController";
+
+        int early = createInquiry(inquiryApi, "early reply");
+        completeAnswerTask(processIdOf(inquiryApi, early));
+        postInquiryReply(replyApi, early, "sent the moment the task completed");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(inquiryApi + "/" + early)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("REPLIED")),
+                180);
+
+        int stale = createInquiry(inquiryApi, "stale reply");
+        String staleProcess = processIdOf(inquiryApi, stale);
+        postInquiryReply(replyApi, stale, "sent while the task was still open");
+        completeAnswerTask(staleProcess);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/bpm/bpm-processes/instance/" + staleProcess + "/active")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasKey("awaitReply")),
+                180);
+        sleep(3000);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(inquiryApi + "/" + stale)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", nullValue()));
+        postInquiryReply(replyApi, stale, "sent after the task");
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(inquiryApi + "/" + stale)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("REPLIED")),
+                60);
+    }
+
+    private int createInquiry(String inquiryApi, String title) {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body("{\"Title\":\"" + title + "\"}")
+                                                        .when()
+                                                        .post(inquiryApi)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")));
+        return id.get();
+    }
+
+    private String processIdOf(String inquiryApi, int inquiry) {
+        AtomicReference<String> processId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> processId.set(given().when()
+                                                               .get(inquiryApi + "/" + inquiry)
+                                                               .then()
+                                                               .statusCode(200)
+                                                               .body("ProcessId", notNullValue())
+                                                               .extract()
+                                                               .path("ProcessId")),
+                60);
+        return processId.get();
+    }
+
+    private void completeAnswerTask(String processId) {
+        AtomicReference<String> taskId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> taskId.set(given().when()
+                                                            .get("/services/bpm/bpm-processes/instance/" + processId + "/tasks?type=groups")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .body("size()", equalTo(1))
+                                                            .extract()
+                                                            .path("[0].id")),
+                60);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"action\":\"COMPLETE\"}")
+                                                 .when()
+                                                 .post("/services/inbox/tasks/" + taskId.get())
+                                                 .then()
+                                                 .statusCode(200));
+    }
+
+    private void postInquiryReply(String replyApi, int inquiry, String text) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Text\":\"" + text + "\",\"Inquiry\":" + inquiry + "}")
+                                                 .when()
+                                                 .post(replyApi)
+                                                 .then()
+                                                 .statusCode(200));
     }
 
     /**
@@ -4519,17 +4648,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(
                 waitHandler.contains("ProcessStamps.idFor(carrier.ProcessIds, \"RfqFlow\")")
                         && waitHandler.contains("instance = carrier.ProcessId;")
-                        && waitHandler.contains("Process.correlateMessageEvent(instance, \"RfqFlowAwaitReply\""),
-                "the wait listener must correlate the message on its own process's stamped instance");
+                        && waitHandler.contains("Process.deliverMessageEvent(instance, \"RfqFlowAwaitReply\")"),
+                "the wait listener must deliver the message to its own process's stamped instance");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
-        // ...and a correlation that does NOT happen is never silent (#7230). Only the not-parked case -
-        // the platform's IllegalArgumentException - is the expected no-op; anything else leaves the
-        // instance waiting on a step nobody will resume, and is logged with its throwable.
+        // ...and a delivery that does NOT happen is never silent (#7230). Only the ended-instance case -
+        // the platform's IllegalArgumentException - is the expected no-op (an instance that has not
+        // reached the wait yet keeps the event, #8106); anything else leaves the instance waiting on a
+        // step nobody will resume, and is logged with its throwable.
         assertTrue(
-                waitHandler.contains("catch (IllegalArgumentException notParked)") && waitHandler.contains("LOG.debug(")
-                        && waitHandler.contains("notParked);"),
-                "the not-parked miss must be caught by its own type and logged with the throwable");
+                waitHandler.contains("catch (IllegalArgumentException ended)") && waitHandler.contains("LOG.debug(")
+                        && waitHandler.contains("ended);"),
+                "the ended-instance miss must be caught by its own type and logged with the throwable");
         assertTrue(waitHandler.contains("catch (RuntimeException failed)") && waitHandler.contains("LOG.warn(\"Could not resume")
                 && waitHandler.contains("failed);"), "any other correlation failure must be logged with the throwable");
         assertFalse(waitHandler.contains("catch (RuntimeException notParked)"),

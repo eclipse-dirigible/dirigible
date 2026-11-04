@@ -1642,13 +1642,18 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should resolve the ProcessId-carrying record through the via FK");
         assertTrue(
                 wait.contains("ProcessStamps.idFor(carrier.ProcessIds, \"CaseHandling\")")
-                        && wait.contains("Process.correlateMessageEvent(instance, \"CaseHandlingAwaitReply\""),
-                "the listener should correlate the catch event's message on THIS process's stamped instance (#6862)");
+                        && wait.contains("Process.deliverMessageEvent(instance, \"CaseHandlingAwaitReply\")"),
+                "the listener should deliver the catch event's message to THIS process's stamped instance (#6862), keeping it"
+                        + " when the instance has not reached the wait yet (#8106)");
+        assertTrue(
+                bpmn.contains("${EarlyMessages.checkWhenArmed(execution)}") && bpmn.contains("${EarlyMessages.consumed(execution)}")
+                        && bpmn.contains("${EarlyMessages.discardAll(execution)}"),
+                "the wait consumes an event kept for it once armed, and the user task discards what arrived before it completed (#8106)");
         // Fail-soft, but not blind (#7230): only the platform's IllegalArgumentException - not parked,
         // or already ended - is the expected no-op; every other failure leaves an instance that IS
         // parked here parked forever, and is logged with its throwable.
-        assertTrue(wait.contains("catch (IllegalArgumentException notParked)") && wait.contains("LOG.debug("),
-                "the not-parked miss should be caught by its own type, not by a blanket RuntimeException");
+        assertTrue(wait.contains("catch (IllegalArgumentException ended)") && wait.contains("LOG.debug("),
+                "the ended-instance miss should be caught by its own type, not by a blanket RuntimeException");
         assertTrue(wait.contains("catch (RuntimeException failed)") && wait.contains("LOG.warn(\"Could not resume")
                 && wait.contains("failed);"), "any other correlation failure should be logged with the throwable");
         assertFalse(wait.contains("catch (RuntimeException notParked)"),

@@ -146,6 +146,23 @@ public final class Process {
     }
 
     /**
+     * Delivers a message to the instance's intermediate-message catch event - or, when the instance is
+     * running but has not reached that catch event yet, keeps it there, and the catch event continues
+     * on it the moment it is armed. A message is kept only until the instance completes a user task:
+     * what arrived before a person acted does not resume a wait the process reaches after it. The catch
+     * event consumes a kept message only when it carries the platform's {@code EarlyMessages} execution
+     * listeners, as every catch event of an intent {@code wait} step does.
+     *
+     * @param processInstanceId the instance to deliver the message to
+     * @param messageName the message name declared by the catch event
+     * @throws IllegalArgumentException the expected miss - the instance has ended or is outside the
+     *         current tenant. Any other runtime exception is a real fault.
+     */
+    public static void deliverMessageEvent(String processInstanceId, String messageName) {
+        BpmFacade.deliverMessageEvent(processInstanceId, messageName);
+    }
+
+    /**
      * Run an action after the current BPMN execution chain COMMITS - i.e. after the current service
      * task and every service task that follows it up to the next wait state have completed. Use it from
      * a delegate to publish an event about a workflow transition: an asynchronous consumer that

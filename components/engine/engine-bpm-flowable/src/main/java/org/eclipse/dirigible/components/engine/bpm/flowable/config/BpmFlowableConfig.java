@@ -15,6 +15,7 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.ResilientActivityBehaviorFactory;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.EarlyMessageJobHandler;
 import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.ResilientClassDelegateFactory;
 import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigibleProcessDiagramGenerator;
 import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
@@ -140,6 +141,10 @@ public class BpmFlowableConfig {
         // container - a constructor collaborator fails, an @Inject field silently reads null (#7222).
         // The engine keeps a pre-set listener factory and only injects the expression manager into it.
         config.setListenerFactory(new DefaultListenerFactory(classDelegateFactory));
+
+        // Delivers a message that reached an instance before its catch event subscribed, once the
+        // arming has committed (EarlyMessages, #8106).
+        config.setCustomJobHandlers(List.of(new EarlyMessageJobHandler()));
 
         return config;
     }

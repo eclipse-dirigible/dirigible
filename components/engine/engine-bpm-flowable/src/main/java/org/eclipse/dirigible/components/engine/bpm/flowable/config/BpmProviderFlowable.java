@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.TaskService;
+import org.eclipse.dirigible.components.engine.bpm.flowable.delegate.EarlyMessages;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ActivityStatusData;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessLabelKeys;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -81,6 +82,11 @@ public class BpmProviderFlowable implements BpmProvider {
     private static final String TASK_LABEL_CATALOG_PROPERTY = "taskLabelCatalog";
     /** The user-task property listing the actions its form completes the task with. */
     private static final String TASK_ACTIONS_PROPERTY = "taskActions";
+    /**
+     * How often a message is delivered again when keeping it lost to a transaction moving the instance
+     * - one per asynchronous step the instance can run through before it parks.
+     */
+    private static final int MESSAGE_DELIVERY_ATTEMPTS = 5;
     /** The user-task property listing the variables a completion may write besides its action. */
     private static final String TASK_WRITES_PROPERTY = "taskWrites";
     /** The user-task property listing the tasks of the same instance whose completer it keeps out. */
@@ -492,6 +498,68 @@ public class BpmProviderFlowable implements BpmProvider {
         }
 
         runtimeService.messageEventReceived(messageName, execution.getId(), variables);
+    }
+
+    /**
+     * Delivers a message to the instance's catch event, or keeps it for that catch event when the
+     * instance is running but has not reached it yet (dirigible #8106).
+     *
+     * A catch event subscribes only when the process reaches it, so a message arriving while the
+     * process still runs the steps before it used to be lost, and the instance then parked on a wait
+     * whose event had already happened. Kept, it is delivered once the catch event is armed - provided
+     * that catch event carries the {@link EarlyMessages} listeners, and no user task completes first
+     * (what arrived before a person acted is not an answer to what the process asks after it).
+     *
+     * @param processInstanceId the process instance id
+     * @param messageName the message name the catch event subscribes to
+     * @throws IllegalArgumentException if the instance is not running in the current tenant
+     */
+    public void deliverMessageEvent(String processInstanceId, String messageName) {
+        for (int attempt = 1;; attempt++) {
+            try {
+                correlateMessageEvent(processInstanceId, messageName, Map.of());
+                return;
+            } catch (IllegalArgumentException notParked) {
+                if (getProcessInstance(processInstanceId) == null) {
+                    throw notParked;
+                }
+            }
+            try {
+                keepMessageEvent(processInstanceId, messageName);
+                break;
+            } catch (FlowableOptimisticLockingException moved) {
+                // Keeping the message writes the instance, so it waited for the transaction moving the
+                // instance at that moment - an asynchronous step holds it until it commits - and lost
+                // to it. That transaction may well have parked the instance on the catch event: look
+                // again.
+                if (attempt == MESSAGE_DELIVERY_ATTEMPTS) {
+                    throw moved;
+                }
+                LOGGER.debug("Process instance [{}] moved while message [{}] was being kept for it - delivering again", processInstanceId,
+                        messageName, moved);
+            }
+        }
+        // The catch event may have been armed between the miss above and the keep, and the check it
+        // schedules may have read the instance before the keep committed - so try once more.
+        try {
+            correlateMessageEvent(processInstanceId, messageName, Map.of());
+        } catch (IllegalArgumentException stillNotParked) {
+            LOGGER.debug("Process instance [{}] is still not parked on message [{}] - its catch event delivers it when armed",
+                    processInstanceId, messageName, stillNotParked);
+        }
+    }
+
+    private void keepMessageEvent(String processInstanceId, String messageName) {
+        try {
+            processEngine.getRuntimeService()
+                         .setVariable(processInstanceId, EarlyMessages.variableName(messageName), Boolean.TRUE);
+        } catch (FlowableObjectNotFoundException ended) {
+            throw new IllegalArgumentException(
+                    "Process instance with id [" + processInstanceId + "] ended before message [" + messageName + "] could be kept for it",
+                    ended);
+        }
+        LOGGER.debug("Process instance [{}] is not parked on message [{}] yet - kept it for its catch event", processInstanceId,
+                messageName);
     }
 
     public List<ProcessDefinition> getProcessDefinitions(Optional<String> key) {
