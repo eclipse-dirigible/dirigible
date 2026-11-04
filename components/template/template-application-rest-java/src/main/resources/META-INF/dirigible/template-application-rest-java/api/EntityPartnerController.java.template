@@ -231,6 +231,11 @@ public class ${name}PartnerController {
 #if($hasReferenceValidations)
         validateReferences(checked);
 #end
+#if($slotMessageArgs)
+        // The slot picker's promise (intent `slots:`, #8097): an open day, inside the window, on the grid,
+        // in a slot nobody else holds.
+        repository.requireBookableSlot(checked);
+#end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
@@ -329,6 +334,11 @@ public class ${name}PartnerController {
         validate(checked);
 #if($hasReferenceValidations)
         validateReferences(checked);
+#end
+#if($slotMessageArgs)
+        // The slot picker's promise (intent `slots:`, #8097): an open day, inside the window, on the grid,
+        // in a slot nobody else holds.
+        repository.requireBookableSlot(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them

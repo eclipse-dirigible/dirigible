@@ -10,12 +10,16 @@
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.lessThan;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.LinkedHashMap;
@@ -31,10 +35,18 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WrapsDriver;
+import org.openqa.selenium.chromium.HasCdp;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.SelenideElement;
 import com.codeborne.selenide.WebDriverConditions;
+import com.codeborne.selenide.WebDriverRunner;
+
+import io.restassured.specification.RequestSpecification;
 
 /**
  * The generated slots page ({@code view: slots}) offers its open/close/step schedule on every day
@@ -48,6 +60,11 @@ import com.codeborne.selenide.WebDriverConditions;
  * A booked slot stays clickable and opens its booking (#7837). Harmonia renders such a slot as a
  * plain button rather than an {@code aria-disabled} one, so the page marks it {@code data-booking}
  * (#7919).
+ *
+ * <p>
+ * The window is read in the browser's zone on both sides (#8097): the picker draws it there, and
+ * the page names that zone on every write, so a browser far from the server's zone still books the
+ * slots it is offered.
  *
  * <p>
  * This needs a real browser because the schedule is laid out by Harmonia from the config the page
@@ -149,6 +166,102 @@ class SlotPickerHarmoniaIT extends UserInterfaceIntegrationTest {
                 .click();
         Selenide.webdriver()
                 .shouldHave(WebDriverConditions.urlContaining("/Appointment/" + bookingId + "/edit"), Duration.ofSeconds(30));
+    }
+
+    /**
+     * A deployment's server runs on UTC while its users sit in Europe/Sofia: the picker offers 09:00 in
+     * the browser's zone, and the server must read the write in that zone too, or the window's first
+     * slot is refused as before opening (#8097). The browser here is moved fourteen hours east of the
+     * server, picks the first slot of a day and creates the booking on the form the slot opens. A REST
+     * write before opening is still refused - in the server's zone, and in the zone it names.
+     */
+    @Test
+    void a_slot_picked_in_another_zone_than_the_servers_is_booked() {
+        generateAndPublish();
+        ide.openHomePage();
+
+        ZoneId server = ZoneId.systemDefault();
+        String zone = server.getRules()
+                            .getOffset(Instant.now())
+                            .getTotalSeconds() == 14 * 3600 ? "America/Los_Angeles" : "Pacific/Kiritimati";
+        overrideBrowserZone(zone);
+        try {
+            browser.openPath(APP + "/Appointment");
+            SelenideElement firstSlot = Selenide.$("[data-slot=slot-picker-cell][data-start='09:00']:not([data-booking])")
+                                                .shouldBe(Condition.visible, Duration.ofSeconds(60));
+            String date = firstSlot.getAttribute("data-date");
+            firstSlot.click();
+            Selenide.webdriver()
+                    .shouldHave(WebDriverConditions.urlContaining("/Appointment/create"), Duration.ofSeconds(30));
+            Selenide.$$("button[data-variant=primary]")
+                    .findBy(Condition.text("Create"))
+                    .click();
+
+            Instant nine = LocalDate.parse(date)
+                                    .atTime(9, 0)
+                                    .atZone(ZoneId.of(zone))
+                                    .toInstant();
+            int booking = awaitBookingAt(nine);
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .delete(API + "/" + booking)
+                                                     .then()
+                                                     .statusCode(lessThan(300)));
+        } finally {
+            overrideBrowserZone("");
+        }
+
+        LocalDate day = LocalDate.now(server)
+                                 .plusDays(7);
+        refusedBeforeOpening(day.atTime(8, 0)
+                                .atZone(server)
+                                .toInstant(),
+                null);
+        refusedBeforeOpening(day.atTime(8, 0)
+                                .atZone(ZoneId.of(zone))
+                                .toInstant(),
+                zone);
+    }
+
+    /** CDP's zone override for the browser's tab; an empty zone restores the machine's. */
+    private static void overrideBrowserZone(String zone) {
+        WebDriver driver = WebDriverRunner.getWebDriver();
+        while (driver instanceof WrapsDriver wrapper) {
+            driver = wrapper.getWrappedDriver();
+        }
+        ((HasCdp) driver).executeCdpCommand("Emulation.setTimezoneOverride", Map.of("timezoneId", zone));
+    }
+
+    /** The id of the one booking that starts at {@code at}, once the form's create has stored it. */
+    private int awaitBookingAt(Instant at) {
+        String body = "{\"conditions\":[{\"propertyName\":\"StartsAt\",\"operator\":\"GTE\",\"value\":\"" + at
+                + "\"},{\"propertyName\":\"StartsAt\",\"operator\":\"LT\",\"value\":\"" + at.plusSeconds(60) + "\"}]}";
+        AtomicReference<Integer> id = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body(body)
+                                                        .when()
+                                                        .post(API + "/search")
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .body("Id", hasSize(1))
+                                                        .extract()
+                                                        .path("Id[0]")),
+                60);
+        return id.get();
+    }
+
+    private void refusedBeforeOpening(Instant at, String zone) {
+        restAssuredExecutor.execute(() -> {
+            RequestSpecification request = given().contentType("application/json");
+            if (zone != null) {
+                request.header("X-Time-Zone", zone);
+            }
+            request.body("{\"StartsAt\":\"" + at + "\"}")
+                   .when()
+                   .post(API)
+                   .then()
+                   .statusCode(400)
+                   .body("message", equalTo("Appointment slots run from 09:00 to 12:00"));
+        });
     }
 
     /**

@@ -964,6 +964,21 @@ public final class IntentParser {
                                                      .toLowerCase())) {
                     issues.add("entity [" + name + "] slots.start [" + slotsCfg.getStart() + "] is not a declared date/timestamp field");
                 }
+                // The generated repository reads the window the picker draws (#8097): an hour it cannot
+                // read, a step that never advances or a resource without a column would break it.
+                for (String time : new String[] {slotsCfg.getOpen(), slotsCfg.getClose()}) {
+                    if (time != null && !time.isBlank() && !time.trim()
+                                                                .matches("\\d{1,2}:\\d{2}")) {
+                        issues.add("entity [" + name + "] slots time [" + time + "] is not HH:MM");
+                    }
+                }
+                if (slotsCfg.getStep() != null && slotsCfg.getStep() < 1) {
+                    issues.add("entity [" + name + "] slots.step [" + slotsCfg.getStep() + "] must be at least 1 minute");
+                }
+                if (slotsCfg.getResource() != null && CheckSupport.toOne(entity, slotsCfg.getResource()) == null) {
+                    issues.add(
+                            "entity [" + name + "] slots.resource [" + slotsCfg.getResource() + "] is not a manyToOne/oneToOne relation");
+                }
                 continue;
             }
             // calendar or range

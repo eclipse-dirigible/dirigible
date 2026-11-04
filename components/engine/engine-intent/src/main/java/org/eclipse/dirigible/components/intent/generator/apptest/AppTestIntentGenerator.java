@@ -329,7 +329,38 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (!relations.isEmpty()) {
             out.put("relations", relations);
         }
+        Map<String, Object> slots = slotsWindow(entity, edm);
+        if (slots != null) {
+            out.put("slots", slots);
+        }
         return out;
+    }
+
+    /**
+     * A slots view's window (#8097), which the generated controllers hold a user write to, so the
+     * runner's sample start lands on an open day, inside the hours and on the grid. Read off the
+     * {@code .model}, and only for a timestamp start - the one the server checks.
+     */
+    private static Map<String, Object> slotsWindow(EntityIntent entity, Map<String, Object> edm) {
+        String start = string(edm.get("slotStartProperty"));
+        boolean timestamp = entity.getFields()
+                                  .stream()
+                                  .anyMatch(field -> field.getName() != null && start.equals(IntentNaming.pascalCase(field.getName()))
+                                          && "timestamp".equals(field.getType()));
+        if (!"true".equals(string(edm.get("slotsView"))) || !timestamp) {
+            return null;
+        }
+        Map<String, Object> slots = new LinkedHashMap<>();
+        slots.put("start", start);
+        slots.put("open", string(edm.get("slotOpen")));
+        slots.put("close", string(edm.get("slotClose")));
+        slots.put("step", Integer.parseInt(string(edm.get("slotStep"))));
+        List<Integer> disabledDays = new ArrayList<>();
+        for (String day : csv(string(edm.get("slotDisabledDays")))) {
+            disabledDays.add(Integer.parseInt(day));
+        }
+        slots.put("disabledDays", disabledDays);
+        return slots;
     }
 
     /**

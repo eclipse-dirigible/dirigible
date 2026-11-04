@@ -777,6 +777,40 @@ class AppTestIntentGeneratorTest {
 
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
 
+    /**
+     * A slots view on a timestamp start (#8097) hands the runner its window, which the generated
+     * controllers refuse a write outside of, so the sample start can be placed inside it.
+     */
+    @Test
+    void describesTheSlotsWindowOfATimestampStart() {
+        String intent = """
+                name: clinic
+                entities:
+                  - name: Appointment
+                    view: slots
+                    slots: { start: at, open: "09:00", close: "18:00", step: 30, disabledDays: [0, 6] }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: at, type: timestamp, required: true }
+                """;
+        Map<String, Object> edmAppointment = edmEntity("Appointment", "Appointment", "Appointments", "MANAGE_LIST", "Appointments",
+                "clinic", "CLINIC_APPOINTMENT", false);
+        edmAppointment.put("slotsView", "true");
+        edmAppointment.put("slotStartProperty", "At");
+        edmAppointment.put("slotOpen", "09:00");
+        edmAppointment.put("slotClose", "18:00");
+        edmAppointment.put("slotStep", "30");
+        edmAppointment.put("slotDisabledDays", "0,6");
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Appointment", edmAppointment);
+
+        Map<String, Object> appointment =
+                entity(AppTestIntentGenerator.buildManifest("clinic", "clinic", IntentParser.parse(intent), edm), "Appointment");
+
+        assertEquals(Map.of("start", "At", "open", "09:00", "close", "18:00", "step", 30, "disabledDays", List.of(0, 6)),
+                appointment.get("slots"));
+    }
+
     private static Map<String, Map<String, Object>> edm() {
         Map<String, Map<String, Object>> byName = new LinkedHashMap<>();
         byName.put("Country",

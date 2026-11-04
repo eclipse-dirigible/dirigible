@@ -210,7 +210,22 @@ export function sampleRecord(entity) {
     for (const name of set.slice(1)) delete record[name];
   }
   steerCompares(entity, record);
+  if (entity.slots) record[entity.slots.start] = slotSample(entity.slots);
   return record;
+}
+
+// A slots entity's start (dirigible #8097): the server refuses one on a closed day, outside the
+// hours or off the grid, and a second booking of a slot. A random free-looking slot - an open day of
+// a far-future century, a grid start inside the hours - read in UTC, the zone the api fixture names.
+function slotSample({ open, close, step, disabledDays = [] }) {
+  const minutes = (hhmm) => hhmm.split(':').reduce((h, m) => Number(h) * 60 + Number(m));
+  const from = minutes(open);
+  const slots = Math.max(1, Math.ceil((minutes(close) - from) / step));
+  let day = new Date(Date.UTC(2100, 0, 1) + Math.floor(Math.random() * 36500) * 86400000);
+  while (disabledDays.includes(day.getUTCDay())) day = new Date(day.getTime() + 86400000);
+  const at = from + step * Math.floor(Math.random() * slots);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${day.toISOString().slice(0, 10)}T${pad(Math.floor(at / 60))}:${pad(at % 60)}:00Z`;
 }
 
 // A compare check relates the record's own field to a second value - another of its fields, or a

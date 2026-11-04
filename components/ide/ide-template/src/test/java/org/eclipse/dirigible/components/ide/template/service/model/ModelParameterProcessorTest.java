@@ -94,6 +94,45 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * #8097: a slots view on a timestamp start hands its repository the window in minutes, read as the
+     * picker reads it, and four refusals the en-US catalog carries; a date start, which the picker
+     * never marks booked, gets none.
+     */
+    @Test
+    void slotRulesBecomeCatalogKeysOnATimestampStartOnly() {
+        Map<String, Object> appointment = entity("Appointment", "Appointment", property("Id", "INTEGER"), property("At", "TIMESTAMP"));
+        appointment.put("entityLabel", "Appointment");
+        appointment.put("slotsView", "true");
+        appointment.put("slotStartProperty", "At");
+        appointment.put("slotOpen", "9:00");
+        appointment.put("slotClose", "18:00");
+        appointment.put("slotStep", "30");
+        appointment.put("slotResourceProperty", "Employee");
+        Map<String, Object> visit = entity("Visit", "Visit", property("Id", "INTEGER"), property("Day", "DATE"));
+        visit.put("slotsView", "true");
+        visit.put("slotStartProperty", "Day");
+        Map<String, Object> model = model(appointment, visit);
+        Map<String, Object> parameters = parameters();
+        parameters.put("filePath", "clinic.model");
+
+        ModelParameterProcessor.process(model, parameters);
+
+        assertEquals(540, appointment.get("slotOpenMinute"));
+        assertEquals(1080, appointment.get("slotCloseMinute"));
+        assertEquals(30, appointment.get("slotStepMinutes"));
+        Map<String, Object> args = (Map<String, Object>) appointment.get("slotMessageArgs");
+        assertEquals(
+                "\"bookstore:clinic-model.checks.Appointment_slots_booked\", \"This Appointment slot is already booked for this Employee\"",
+                args.get("booked"));
+        assertNull(visit.get("slotMessageArgs"));
+        Map<String, Object> catalog = ModelTranslations.checkMessages(model);
+        assertEquals("Appointment slots are closed on this day", catalog.get("Appointment_slots_closed"));
+        assertEquals("Appointment slots run from {open} to {close}", catalog.get("Appointment_slots_hours"));
+        assertEquals("Appointment slots start every {step} minutes from {open}", catalog.get("Appointment_slots_grid"));
+        assertFalse(catalog.containsKey("Visit_slots_closed"));
+    }
+
+    /**
      * #8101: a refusing single flag's conflict message is translated like a check's, and a demoting
      * flag, which refuses nothing, has no message to translate.
      */

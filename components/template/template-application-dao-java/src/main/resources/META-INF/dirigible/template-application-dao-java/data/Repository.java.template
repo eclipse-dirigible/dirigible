@@ -1490,6 +1490,68 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
     }
 #end
+#if($slotMessageArgs)
+
+    /**
+     * The slot picker's promise (intent {@code slots:}), held for a user write - the generated
+     * controllers ask it before they save; a system write (a create-from, an import, a process step)
+     * does not. The start must fall on an open weekday, from ${slotOpen} to ${slotClose}, on the
+     * ${slotStepMinutes}-minute grid, read in the writer's zone ({@link #slotZone()}) - a 400.
+     * No other ${name} may hold the same start#if($slotResourceProperty) for the same ${slotResourceProperty}#end, every row counting as
+     * on the picker - a 409. An update is asked only about what it changes, so a record kept where it
+     * is never collides with itself and one stored before the window stays editable.
+     *
+     * @param entity the record about to be written, carrying its id on an update
+     */
+## ponytail: two concurrent bookings of one free slot can both pass; a unique index on the start (and the
+## resource, when it is never null) closes that.
+    public void requireBookableSlot(${name}Entity entity) {
+        java.time.Instant start = entity.${slotStartProperty};
+        if (start == null) {
+            return;
+        }
+        ${name}Entity stored = entity.${pkPropertyName} == null ? null : findById(entity.${pkPropertyName});
+        boolean moved = stored == null || !start.equals(stored.${slotStartProperty});
+        if (moved) {
+            java.time.LocalDateTime local = java.time.LocalDateTime.ofInstant(start, slotZone());
+#if($slotDisabledDays)
+            // 0 = Sunday .. 6 = Saturday, as the picker counts a weekday.
+            if (java.util.List.of(${slotDisabledDays}).contains(local.getDayOfWeek().getValue() % 7)) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${slotMessageArgs.closed});
+            }
+#end
+            int minute = local.getHour() * 60 + local.getMinute();
+            if (minute < ${slotOpenMinute} || minute >= ${slotCloseMinute}) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${slotMessageArgs.hours}, "open", "${slotOpen}", "close", "${slotClose}");
+            }
+            if ((minute - ${slotOpenMinute}) % ${slotStepMinutes} != 0 || local.getSecond() != 0 || local.getNano() != 0) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${slotMessageArgs.grid}, "step", ${slotStepMinutes}, "open", "${slotOpen}");
+            }
+        }
+        if (moved#if($slotResourceProperty) || !java.util.Objects.equals(entity.${slotResourceProperty}, stored.${slotResourceProperty})#end) {
+            org.eclipse.dirigible.components.data.store.java.repository.Criteria taken = org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                    .eq("${slotStartProperty}", start)#if($slotResourceProperty)
+                    .eq("${slotResourceProperty}", entity.${slotResourceProperty})#end
+                    .ne("${pkPropertyName}", entity.${pkPropertyName});
+            if (count(taken) > 0) {
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        org.eclipse.dirigible.sdk.db.CheckMessages.message(${slotMessageArgs.booked}));
+            }
+        }
+    }
+
+    /**
+     * The zone a slot's wall-clock time is read in: the one the generated page sends as
+     * {@code X-Time-Zone} - the browser's, which its picker drew the slots in - else the server's.
+     * The caller names it, so a REST client may shift the window; that is a scheduling promise, not
+     * an access rule, and the booked check compares instants and does not depend on it.
+     */
+    private static java.time.ZoneId slotZone() {
+        String zone = org.eclipse.dirigible.sdk.http.Request.isValid() ? org.eclipse.dirigible.sdk.http.Request.getHeader("X-Time-Zone") : null;
+        return zone != null && java.time.ZoneId.getAvailableZoneIds().contains(zone.trim()) ? java.time.ZoneId.of(zone.trim())
+                : java.time.ZoneId.systemDefault();
+    }
+#end
 #if($entityStatusProperty != "")
 
     /**
