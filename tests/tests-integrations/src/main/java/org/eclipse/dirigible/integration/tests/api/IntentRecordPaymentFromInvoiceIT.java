@@ -227,6 +227,35 @@ class IntentRecordPaymentFromInvoiceIT extends IntegrationTest {
         assertAllocations(invoice, List.of(Map.of(recorded, "20")));
     }
 
+    /**
+     * A run that cannot start says so in its status (#8001): an invoice that does not exist is a 404, a
+     * request naming none a 400. Both were answered 200 with an error body, which a client checking
+     * {@code response.ok} - the action button included - read as a recorded payment. The body is
+     * asserted too, so the 404 is the create-from's and not a route that is not served yet.
+     */
+    @Test
+    void a_run_for_an_invoice_that_does_not_exist_is_a_404_that_writes_nothing() {
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int paymentsBefore = count(PAYMENTS);
+        assertRunRefused("{\"id\":987654}", 404, "source Invoice not found");
+        assertRunRefused("{}", 400, "missing source id");
+        assertEquals(paymentsBefore, count(PAYMENTS), "a refused run must create no payment");
+    }
+
+    private void assertRunRefused(String body, int status, String message) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(body)
+                                                 .when()
+                                                 .post(RECORD_PAYMENT)
+                                                 .then()
+                                                 .statusCode(status)
+                                                 .body(containsString(message)),
+                TIMEOUT_SECONDS);
+    }
+
     private void assertRefused(int invoice, String amount, String message) {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + invoice + ",\"values\":{\"Amount\":" + amount + "}}")
