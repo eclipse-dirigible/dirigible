@@ -49,6 +49,10 @@ import org.springframework.test.annotation.DirtiesContext;
  * document header used to fail its resum AFTER the line was stored (a 500, the line kept, the
  * footer short of it); the asynchronous roll-up answered 200 and then died on the parent column for
  * good.
+ *
+ * <p>
+ * A whole number is stored as sent or refused (#8178): a fraction for an integer field used to be
+ * cut, 2.9 stored as 2 with a 200.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentDecimalScaleIT extends IntegrationTest {
@@ -81,6 +85,8 @@ class IntentDecimalScaleIT extends IntegrationTest {
                   - { name: rate,   type: decimal, precision: 18, scale: 2 }
                   - { name: amount, type: decimal, precision: 18, scale: 2,
                       calculatedOnCreate: "Hours * Rate", calculatedOnUpdate: "Hours * Rate" }
+                  # #8178: a whole number, never cut from a fraction
+                  - { name: days,   type: integer }
               # #8193: an `ne` bound, and a calculation reading an input of another scale than its own.
               - name: Protocol
                 checks:
@@ -175,6 +181,33 @@ class IntentDecimalScaleIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("Hours", equalTo(2.01f))
                                                  .body("Amount", equalTo(201.0f)));
+    }
+
+    @Test
+    void a_fraction_for_an_integer_field_is_refused_on_create_and_update_never_cut() {
+        deployProject();
+
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Hours\":1,\"Rate\":1,\"Days\":2.9}")
+                                                 .when()
+                                                 .post(ALLOCATIONS)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Days' must be a whole number")),
+                TIMEOUT_SECONDS);
+        int allocation = create(ALLOCATIONS, "{\"Hours\":1,\"Rate\":1,\"Days\":2}");
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Hours\":1,\"Rate\":1,\"Days\":1.5}")
+                                                 .when()
+                                                 .put(ALLOCATIONS + "/" + allocation)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body("message", equalTo("The 'Days' must be a whole number")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(ALLOCATIONS + "/" + allocation)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Days", equalTo(2)));
     }
 
     @Test
