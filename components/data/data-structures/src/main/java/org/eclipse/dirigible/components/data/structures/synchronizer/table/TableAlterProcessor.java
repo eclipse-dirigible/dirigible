@@ -124,7 +124,8 @@ public class TableAlterProcessor {
                     }
                 }
             }
-            args += ColumnDefaultClause.of(type, defaultValue);
+            String defaultClause = ColumnDefaultClause.of(type, defaultValue);
+            args += defaultClause;
 
             modelColumnNames.add(name.toUpperCase());
 
@@ -139,6 +140,16 @@ public class TableAlterProcessor {
                             + " this database cannot rename a column in place", name, tableName, copyFrom);
                     isNullable = true;
                 }
+                // a NOT NULL column with a declared default is added as such, the existing rows taking
+                // the default (#8339); without one, the rows already in the table would hold NULL in it,
+                // which every database refuses - so it is added nullable, once, rather than failing the
+                // table on every pass
+                if (copyFrom == null && !isNullable && !isPrimaryKey && !declaresValue(defaultClause, defaultValue)
+                        && holdsRows(connection, tableName)) {
+                    logger.warn("Column [{}] of table [{}] is declared NOT NULL without a default and the table already holds rows"
+                            + " - it is added nullable; fill it and declare a default to have it enforced", name, tableName);
+                    isNullable = true;
+                }
 
                 AlterTableBuilder alterTableBuilder = SqlFactory.getNative(connection)
                                                                 .alter()
@@ -147,10 +158,6 @@ public class TableAlterProcessor {
                 alterTableBuilder.add()
                                  .column("\"" + name + "\"", type, isPrimaryKey, isNullable, isUnique, args);
 
-                if (!isNullable) {
-                    logger.error("Column Definitions: {}", columnDefinitions);
-                    throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "NOT NULL"));
-                }
                 if (isPrimaryKey) {
                     logger.error("Column Definitions: {}", columnDefinitions);
                     throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name, "PRIMARY KEY"));
@@ -185,6 +192,31 @@ public class TableAlterProcessor {
 
         reconcileUndeclaredColumns(connection, tableName, tableModel, modelColumnNames, liveNames, notNullColumns);
         reconcileUniqueConstraints(connection, tableName, tableModel);
+    }
+
+    /**
+     * Whether a column's DEFAULT clause gives the existing rows a value - a declared {@code NULL}
+     * default does not.
+     *
+     * @param defaultClause the rendered clause, empty when the column declares no default
+     * @param defaultValue the default as the model carries it
+     * @return whether the rows already in the table would get a value
+     */
+    private static boolean declaresValue(String defaultClause, String defaultValue) {
+        return !defaultClause.isEmpty() && !"NULL".equalsIgnoreCase(defaultValue.trim());
+    }
+
+    /**
+     * Whether the table holds at least one row.
+     *
+     * @param connection the connection
+     * @param quotedTableName the table name as the builders want it (quoted)
+     * @return whether the table holds rows
+     * @throws SQLException when the count fails
+     */
+    private static boolean holdsRows(Connection connection, String quotedTableName) throws SQLException {
+        return SqlFactory.deriveDialect(connection)
+                         .count(connection, DatabaseNameNormalizer.normalizeTableName(quotedTableName)) > 0;
     }
 
     /**

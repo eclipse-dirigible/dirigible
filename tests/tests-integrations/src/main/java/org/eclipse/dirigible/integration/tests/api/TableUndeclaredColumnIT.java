@@ -14,6 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -22,8 +23,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.readiness.PlatformReadiness;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.structures.domain.Schema;
+import org.eclipse.dirigible.components.data.structures.service.SchemaService;
 import org.eclipse.dirigible.components.data.structures.synchronizer.table.TableAlterProcessor;
 import org.eclipse.dirigible.components.engine.template.velocity.VelocityGenerationEngine;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
@@ -71,6 +75,9 @@ class TableUndeclaredColumnIT extends IntegrationTest {
 
     @Autowired
     private VelocityGenerationEngine velocityGenerationEngine;
+
+    @Autowired
+    private SchemaService schemaService;
 
     private LogsAsserter alterLogs;
 
@@ -139,6 +146,50 @@ class TableUndeclaredColumnIT extends IntegrationTest {
                                                                     .isFalse();
         assertThat(hasColumn(INVOICE_TABLE, "INVOICE_OLD_NOTE")).as("the dropped column is dropped")
                                                                 .isFalse();
+    }
+
+    /**
+     * #8339: a required column with a default, added by a re-publish to a table that holds rows, is
+     * added NOT NULL with its default, and the schema settles instead of staying FAILED.
+     */
+    @Test
+    void aRequiredColumnWithADefaultIsAddedToAPopulatedTableAndTheSchemaSettles() throws Exception {
+        publish(SCHEMA_PATH, invoiceSchema(""));
+        execute("INSERT INTO \"" + INVOICE_TABLE + "\" VALUES (1, '2026-10-05')");
+
+        publish(SCHEMA_PATH, invoiceSchema("""
+                ,
+                { "type": "BOOLEAN", "defaultValue": "false", "nullable": false, "name": "INVOICE_ZERO_RATED" }"""));
+
+        List<Schema> schemas = schemaService.findByLocation("/" + PROJECT + "/invoice.schema");
+        assertThat(schemas).hasSize(1);
+        assertThat(schemas.get(0)
+                          .getLifecycle()).as("the schema settles: %s", schemas.get(0)
+                                                                               .getError())
+                                          .isIn(ArtefactLifecycle.CREATED, ArtefactLifecycle.UPDATED);
+        assertThat(zeroRated()).as("the existing row takes the default")
+                               .isFalse();
+        assertThat(isNullable(INVOICE_TABLE, "INVOICE_ZERO_RATED")).as("the column is NOT NULL as declared")
+                                                                   .isFalse();
+    }
+
+    private static String invoiceSchema(String extraColumn) {
+        return """
+                {
+                    "schema": {
+                        "structures": [
+                            {
+                                "name": "UNDECLARED_INVOICE",
+                                "type": "TABLE",
+                                "columns": [
+                                    { "type": "INTEGER", "primaryKey": true, "name": "INVOICE_ID" },
+                                    { "type": "VARCHAR", "length": 20, "nullable": true, "name": "INVOICE_INVOICE_DATE" }%s
+                                ]
+                            }
+                        ]
+                    }
+                }
+                """.formatted(extraColumn);
     }
 
     private static String noteTable(String extraColumn) {
@@ -213,6 +264,30 @@ class TableUndeclaredColumnIT extends IntegrationTest {
                 ResultSet columns = connection.getMetaData()
                                               .getColumns(null, connection.getSchema(), table, column)) {
             return columns.next();
+        }
+    }
+
+    private Boolean zeroRated() throws Exception {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                Statement statement = connection.createStatement();
+                ResultSet rs =
+                        statement.executeQuery("SELECT \"INVOICE_ZERO_RATED\" FROM \"" + INVOICE_TABLE + "\" WHERE \"INVOICE_ID\" = 1")) {
+            assertThat(rs.next()).as("row 1 of %s", INVOICE_TABLE)
+                                 .isTrue();
+            boolean value = rs.getBoolean(1);
+            return rs.wasNull() ? null : value;
+        }
+    }
+
+    private boolean isNullable(String table, String column) throws Exception {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                ResultSet columns = connection.getMetaData()
+                                              .getColumns(null, connection.getSchema(), table, column)) {
+            assertThat(columns.next()).as("column %s of %s", column, table)
+                                      .isTrue();
+            return columns.getInt(11) != DatabaseMetaData.columnNoNulls;
         }
     }
 

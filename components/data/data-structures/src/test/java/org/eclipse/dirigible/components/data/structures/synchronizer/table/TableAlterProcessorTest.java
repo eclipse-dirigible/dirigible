@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraints;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import java.util.Map;
@@ -91,6 +92,66 @@ class TableAlterProcessorTest {
 
             assertEquals("web", value(connection, "CHANNEL"));
             assertEquals("Owner's copy", value(connection, "COPY"));
+        }
+    }
+
+    /**
+     * #8339: a required column with a default, added to a table that holds rows, is added NOT NULL with
+     * its default - the existing rows take the default - instead of failing the table on every pass.
+     */
+    @Test
+    void anAddedRequiredColumnWithADefaultIsNotNullAndFillsTheExistingRows() throws SQLException {
+        try (Connection connection = connect("alter_required_default")) {
+            createTable(connection, "\"A\" VARCHAR(20)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'a')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+            new TableColumn("ZERO_RATED", "BOOLEAN", null, false, false, "false", null, null, false, tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel), "a second run has nothing to add");
+
+            assertEquals("FALSE", value(connection, "ZERO_RATED").toUpperCase());
+            assertFalse(isNullable(connection, "ZERO_RATED"), "the column is NOT NULL as declared");
+            assertThrows(SQLException.class, () -> insert(connection, "INSERT INTO \"T_NOTES\" VALUES (2, 'b', NULL)"));
+            insert(connection, "INSERT INTO \"T_NOTES\" (\"ID\", \"A\") VALUES (3, 'c')");
+        }
+    }
+
+    /**
+     * #8339: a required column without a default cannot be NOT NULL over the rows a table already holds
+     * - it is added nullable, once, and the table is not failed.
+     */
+    @Test
+    void anAddedRequiredColumnWithoutADefaultOnAPopulatedTableIsAddedNullable() throws SQLException {
+        try (Connection connection = connect("alter_required_no_default")) {
+            createTable(connection, "\"A\" VARCHAR(20)");
+            insert(connection, "INSERT INTO \"T_NOTES\" VALUES (1, 'a')");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+            new TableColumn("CODE", "VARCHAR", "20", false, false, null, null, null, false, tableModel);
+
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel));
+            assertDoesNotThrow(() -> TableAlterProcessor.execute(connection, tableModel), "a second run has nothing to add");
+
+            assertTrue(isNullable(connection, "CODE"));
+        }
+    }
+
+    @Test
+    void anAddedRequiredColumnWithoutADefaultOnAnEmptyTableIsNotNull() throws SQLException {
+        try (Connection connection = connect("alter_required_empty")) {
+            createTable(connection, "\"A\" VARCHAR(20)");
+            Table tableModel = new Table("T_NOTES");
+            new TableColumn("ID", "INTEGER", null, tableModel);
+            new TableColumn("A", "VARCHAR", "20", tableModel);
+            new TableColumn("CODE", "VARCHAR", "20", false, false, null, null, null, false, tableModel);
+
+            TableAlterProcessor.execute(connection, tableModel);
+
+            assertFalse(isNullable(connection, "CODE"));
         }
     }
 
@@ -375,6 +436,14 @@ class TableAlterProcessorTest {
         try (ResultSet columns = connection.getMetaData()
                                            .getColumns(null, connection.getSchema(), "T_NOTES", column)) {
             return columns.next();
+        }
+    }
+
+    private static boolean isNullable(Connection connection, String column) throws SQLException {
+        try (ResultSet columns = connection.getMetaData()
+                                           .getColumns(null, connection.getSchema(), "T_NOTES", column)) {
+            assertTrue(columns.next(), "Missing column [" + column + "]");
+            return columns.getInt(11) != DatabaseMetaData.columnNoNulls;
         }
     }
 
