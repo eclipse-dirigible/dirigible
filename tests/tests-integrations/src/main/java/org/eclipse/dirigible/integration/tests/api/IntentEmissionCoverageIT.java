@@ -6073,6 +6073,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Name", equalTo("Repadded")));
+        // ...nor are the characters that only LOOK empty (#8110): a no-break space, a zero-width space
+        // or a byte-order mark alone is refused like spaces, on create and on update, and they are
+        // trimmed off a value's edges like spaces. The bodies carry them as JSON escapes.
+        for (String blank : List.of("\\u00a0", " \\u00a0 ", "\\u200b", "\\u200c\\u200d", "\\ufeff\\u2007")) {
+            restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                     .body("{\"Name\":\"" + blank + "\",\"UnitPrice\":1}")
+                                                     .when()
+                                                     .post(API + "/settings/UnitController")
+                                                     .then()
+                                                     .statusCode(400)
+                                                     .body("message", equalTo("The 'Name' property is required")));
+            restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                     .body("{\"Name\":\"" + blank + "\",\"Status\":1}")
+                                                     .when()
+                                                     .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                     .then()
+                                                     .statusCode(400)
+                                                     .body("message", equalTo("The 'Name' property is required")));
+        }
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"\\u200b\\u00a0Edged\\u00a0\\ufeff\",\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Edged")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Name\":\"" + "x".repeat(101) + "\"}")
                                                  .when()

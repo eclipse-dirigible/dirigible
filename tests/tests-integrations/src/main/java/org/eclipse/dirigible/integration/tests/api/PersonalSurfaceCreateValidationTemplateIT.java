@@ -168,7 +168,8 @@ class PersonalSurfaceCreateValidationTemplateIT {
     /**
      * A required string blank after trimming is as missing as a null one (#7719): every surface refuses
      * spaces alone with the required message, while a required value that is not text keeps the plain
-     * null test.
+     * null test. Every surface asks the one SDK blank test, which also counts a no-break or a
+     * zero-width space as blank (#8110) - {@code IntentEmissionCoverageIT} runs it.
      */
     @Test
     void aRequiredStringOfSpacesAloneIsRefusedLikeAMissingOne() throws Exception {
@@ -176,19 +177,20 @@ class PersonalSurfaceCreateValidationTemplateIT {
                 "EntityPartnerController.java.template")) {
             String rendered = render(template, context());
 
-            assertTrue(rendered.contains("if (entity.Title == null || entity.Title.isBlank()) {"),
+            assertTrue(rendered.contains("if (entity.Title == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Title)) {"),
                     template + " must refuse a blank required string: " + rendered);
             assertTrue(rendered.contains("if (entity.FromDate == null) {"), template + " must keep the null test on a non-text field");
         }
 
         String repository = render(DAO_BASE, "Repository.java.template", context());
-        assertTrue(repository.contains("if (entity.Title == null || entity.Title.isBlank()) {"),
+        assertTrue(repository.contains("if (entity.Title == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Title)) {"),
                 "the repository must refuse a blank required string on every write path: " + repository);
     }
 
     /**
      * Text input is trimmed on every write and before the controllers' checks read it (#7719): the text
-     * fields are stripped, the primary key is not, and each write path trims first.
+     * fields are trimmed by the SDK's Unicode-aware trim (#8110), the primary key is not, and each
+     * write path trims first.
      */
     @Test
     void everyWritePathTrimsTheTextFieldsButNotThePrimaryKey() throws Exception {
@@ -198,7 +200,8 @@ class PersonalSurfaceCreateValidationTemplateIT {
         assertTrue(trim >= 0, "the repository must declare the trim: " + repository);
         String body = repository.substring(trim, repository.indexOf("\n    }", trim));
         for (String field : List.of("Number", "Title", "Note")) {
-            assertTrue(body.contains("entity." + field + " = entity." + field + ".strip();"), field + " must be trimmed: " + body);
+            assertTrue(body.contains("entity." + field + " = org.eclipse.dirigible.sdk.db.Normalize.trim(entity." + field + ");"),
+                    field + " must be trimmed: " + body);
         }
         assertTrue(!body.contains("entity.Id"), "the primary key must not be touched: " + body);
 

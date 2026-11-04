@@ -994,7 +994,7 @@ public class ${name}MyController {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object requiredValue = ${check.valueExpression};
-            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+            if ((${check.guardJavaExpression}) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {
                 throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
@@ -1085,7 +1085,7 @@ public class ${name}MyController {
 #set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
 #if($requiredChecked)
 ## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
-        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || entity.${property.name}.isBlank()#end) {
+        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
         }
 #end

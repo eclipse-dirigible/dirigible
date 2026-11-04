@@ -372,7 +372,7 @@ field may declare:
 
 (Every write trims a text field's leading and trailing whitespace before it is checked or stored, and
 a `required` text field is refused when it is blank after that trim - spaces alone are no value,
-#7719. Nothing to declare.)
+#7719, and a no-break or zero-width space counts as one, #8110. Nothing to declare.)
 
 - `defaultValue: <value>` - the field's default, in four places at once: the **repository's create**
   (a create that leaves the field empty gets the default assigned BEFORE the create-time calculations,
