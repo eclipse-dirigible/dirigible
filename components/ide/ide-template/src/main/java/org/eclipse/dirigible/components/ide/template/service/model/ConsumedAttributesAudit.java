@@ -98,7 +98,9 @@ public class ConsumedAttributesAudit {
             "relationshipMasterDeleteRefused", "relationshipPartnerIdentityLabel", "relationshipPartnerIdentityProperty",
             "relationshipPartner", "relationshipPersonal", "relationshipPersonalReadOnly", "widgetDependsOnHeaderEntity",
             "widgetDependsOnValueBy", "widgetDependsOnValueByHeaderEntity", "widgetLength", "widgetOptionsEntityPerspectiveName",
-            "widgetOptionsFilterBy", "widgetOptionsFilterValue", "widgetOptionsFilterValueJs", "visibleWhen", "fixedWhenReferencedMessage");
+            "widgetOptionsFilterBy", "widgetOptionsFilterValue", "widgetOptionsFilterValueJs", "visibleWhen", "fixedWhenReferencedMessage",
+            // Read by the intent generator of ANOTHER model, off this one's .model (#8243).
+            "statusStages");
 
     /**
      * Attributes the entity editor owns: it keeps them in the model for its own authoring surface

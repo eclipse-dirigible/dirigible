@@ -62,6 +62,12 @@ import ch.qos.logback.classic.Level;
  * posted entry is red-stornoed - by the amounts it was POSTED with, not the source's last edit,
  * since the storno must net the original to zero.
  * </ol>
+ *
+ * <p>
+ * The same cross-model shape through a closed fiscal period (#7703, #8243), as the fleet's
+ * invoice-to-journal posting walks it: what the period refused is posted when it reopens - the
+ * invoice still standing ISSUED, the red storno of one voided while the period was closed, and one
+ * sent while it was closed.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentPostingFollowsSourceIT extends IntegrationTest {
@@ -81,6 +87,126 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
     private static final long TIMEOUT_SECONDS = 90;
     /** The posting handlers run off the source's topics, after the commit. */
     private static final long POSTING_TIMEOUT_SECONDS = 30;
+
+    /** Owns the invoices of the period walk; the model alias differs from the project on purpose. */
+    private static final String SALES = "reopen-sales";
+    /** Books them into a journal locked by its fiscal periods. */
+    private static final String BOOKS = "reopen-books";
+    private static final String INVOICES = "/services/java/" + SALES + "/gen/sales/api/invoice/InvoiceController";
+    private static final String SALES_EVENTS = "/services/java/" + SALES + "/gen/events/sales/";
+    private static final String BOOK_ENTRIES = "/services/java/" + BOOKS + "/gen/books/api/entry/EntryController";
+    private static final String BOOK_LINES = "/services/java/" + BOOKS + "/gen/books/api/entry/EntryLineController";
+    private static final String PERIODS = "/services/java/" + BOOKS + "/gen/books/api/fiscalperiod/FiscalPeriodController";
+    private static final String BOOKS_EVENTS = "/services/java/" + BOOKS + "/gen/events/books/";
+
+    /**
+     * The invoice, its statuses at the ids the fleet's sales invoice seeds them at, and its stages -
+     * the classification that tells the journal's reopen sweep a SENT invoice still holds its post.
+     */
+    private static final String SALES_INTENT = """
+            name: sales
+            description: posting reopen fixture - an invoice with an issue, send and void lifecycle
+
+            entities:
+              - name: InvoiceStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              - name: Invoice
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+
+            transitions:
+              - { name: IssueInvoice, forEntity: Invoice, from: [1], setStatus: 3, label: Issue }
+              - { name: SendInvoice,  forEntity: Invoice, from: [3], setStatus: 4, label: Send }
+              - { name: VoidInvoice,  forEntity: Invoice, from: [3, 4], setStatus: 9, label: Void }
+
+            seeds:
+              - name: invoice-statuses
+                entity: InvoiceStatus
+                rows:
+                  - { id: 1, name: DRAFT,     stage: draft }
+                  - { id: 2, name: APPROVED,  stage: draft }
+                  - { id: 3, name: ISSUED,    stage: live }
+                  - { id: 4, name: SENT,      stage: live }
+                  - { id: 8, name: CANCELLED, stage: cancelled }
+                  - { id: 9, name: VOIDED,    stage: void }
+            """;
+
+    /** The journal, shaped as the fleet's: a period register whose CLOSED rows are read-only. */
+    private static final String BOOKS_INTENT = """
+            name: books
+            description: posting reopen fixture - a journal locked by its fiscal periods
+
+            uses:
+              - { model: sales, project: reopen-sales }
+
+            entities:
+              - name: PeriodStatus
+                kind: setting
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+
+              - name: FiscalPeriod
+                period: { start: start, end: end, closedWhen: "Status == 2" }
+                immutableWhen: "Status == 2"
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: name,  type: string, length: 20 }
+                  - { name: start, type: date, required: true }
+                  - { name: end,   type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: PeriodStatus, function: EntityStatus, init: 1 }
+
+              - name: Entry
+                immutableInPeriod: { period: FiscalPeriod, date: date }
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: date, type: date }
+                relations:
+                  - { name: Invoice, kind: manyToOne, to: Invoice, model: sales }
+                  - { name: Storno,  kind: manyToOne, to: Entry }
+
+              - name: EntryLine
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: debit,  type: decimal, precision: 18, scale: 2 }
+                  - { name: credit, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
+
+            transitions:
+              - { name: ClosePeriod,  forEntity: FiscalPeriod, from: [1], setStatus: 2, label: Close }
+              - { name: ReopenPeriod, forEntity: FiscalPeriod, from: [2], setStatus: 1, label: Reopen }
+
+            postings:
+              - name: invoicePosting
+                event: { onTransition: Invoice, model: sales, when: "Status == 3" }
+                creates: Entry
+                backReference: Invoice
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
+              - name: invoiceStorno
+                event: { onTransition: Invoice, model: sales, when: "Status == 9" }
+                reverses: invoicePosting
+                storno: Storno
+
+            seeds:
+              - name: period-statuses
+                entity: PeriodStatus
+                rows:
+                  - { id: 1, name: OPEN }
+                  - { id: 2, name: CLOSED }
+            """;
 
     private static final String OWNER_INTENT = """
             name: pay
@@ -224,7 +350,7 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
 
     @BeforeEach
     void attachLogsAsserter() {
-        postingLogs = new LogsAsserter("app.gen.events", Level.ERROR);
+        postingLogs = new LogsAsserter("app.gen.events", Level.INFO);
     }
 
     @Test
@@ -302,6 +428,82 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
         }
     }
 
+    /**
+     * A cross-model posting refused by a closed period is posted when the period reopens (#7703, #8243)
+     * - the fleet's invoice-to-journal shape (base-journal#119): an invoice issued into the closed
+     * month and still ISSUED, the red storno of an invoice posted while the month was open and voided
+     * after it closed, and an invoice issued and then sent while it was closed. Each refusal is awaited
+     * before the walk moves on: a handler that ran only after the reopen would post on the event and
+     * prove nothing about the sweep.
+     */
+    @Test
+    void a_reopened_period_posts_the_cross_model_documents_it_refused() {
+        writeIntent(SALES, SALES_INTENT);
+        generateProject(SALES);
+        writeIntent(BOOKS, BOOKS_INTENT);
+        generateProject(BOOKS);
+        publishProject(SALES);
+        publishProject(BOOKS);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int period = create(PERIODS, "{\"Name\":\"2019-05\",\"Start\":\"2019-05-01\",\"End\":\"2019-05-31\",\"Status\":1}");
+        // Posted while the month is open; its storno is the one the closed month refuses.
+        int voided = create(INVOICES, "{\"Date\":\"2019-05-10\",\"Amount\":300}");
+        run(SALES_EVENTS, "IssueInvoice", voided);
+        int original = onlyBookEntryOf(voided, false);
+        awaitLines(BOOK_LINES, original, 300.0f);
+
+        run(BOOKS_EVENTS, "ClosePeriod", period);
+        run(SALES_EVENTS, "VoidInvoice", voided);
+        awaitRefusal(voided);
+        // base-journal#119's walk: issued into the closed month, and still ISSUED when it reopens.
+        int issued = create(INVOICES, "{\"Date\":\"2019-05-15\",\"Amount\":100}");
+        run(SALES_EVENTS, "IssueInvoice", issued);
+        awaitRefusal(issued);
+        // Issued into the closed month, then sent before it reopens.
+        int sent = create(INVOICES, "{\"Date\":\"2019-05-16\",\"Amount\":40}");
+        run(SALES_EVENTS, "IssueInvoice", sent);
+        awaitRefusal(sent);
+        run(SALES_EVENTS, "SendInvoice", sent);
+
+        run(BOOKS_EVENTS, "ReopenPeriod", period);
+
+        awaitLines(BOOK_LINES, onlyBookEntryOf(issued, false), 100.0f);
+        int storno = onlyBookEntryOf(voided, true);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(BOOK_ENTRIES + "/" + storno)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Storno", equalTo(original)),
+                POSTING_TIMEOUT_SECONDS);
+        awaitLines(BOOK_LINES, storno, -300.0f);
+        awaitLines(BOOK_LINES, onlyBookEntryOf(sent, false), 40.0f);
+    }
+
+    /** The posting said it left the invoice for the closed period to reopen. */
+    private void awaitRefusal(int invoice) {
+        Awaitility.await()
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .atMost(POSTING_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                  .until(() -> postingLogs.containsMessage("Invoice [" + invoice + "] stays unposted until it reopens", Level.WARN));
+    }
+
+    /** The single journal entry the invoice carries - the original or its red storno. */
+    private int onlyBookEntryOf(int invoice, boolean storno) {
+        String ofInvoice = "findAll { it.Invoice == " + invoice + " && it.Storno " + (storno ? "!=" : "==") + " null }";
+        AtomicInteger entry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> entry.set(given().when()
+                                                           .get(BOOK_ENTRIES)
+                                                           .then()
+                                                           .statusCode(200)
+                                                           .body(ofInvoice, hasSize(1))
+                                                           .extract()
+                                                           .jsonPath()
+                                                           .getInt(ofInvoice + "[0].Id")),
+                POSTING_TIMEOUT_SECONDS);
+        return entry.get();
+    }
+
     /** DELETE until it succeeds; a 409 is the collision's answer and may be repeated, a 500 never. */
     private void deleteRetryingConflicts(int payment) {
         AtomicInteger status = new AtomicInteger();
@@ -341,8 +543,12 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
 
     /** The balanced pair the posting derives: one debit line and one credit line, both the amount. */
     private void awaitLines(int entry, float amount) {
+        awaitLines(LINES, entry, amount);
+    }
+
+    private void awaitLines(String lines, int entry, float amount) {
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get(LINES + "?Entry=" + entry)
+                                                 .get(lines + "?Entry=" + entry)
                                                  .then()
                                                  .statusCode(200)
                                                  .body("", hasSize(2))
@@ -353,10 +559,14 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
     }
 
     private void transition(String name, int id) {
+        run(TRANSITIONS, name, id);
+    }
+
+    private void run(String events, String name, int id) {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + id + "}")
                                                  .when()
-                                                 .post(TRANSITIONS + name + "Transition/run")
+                                                 .post(events + name + "Transition/run")
                                                  .then()
                                                  .statusCode(200),
                 TIMEOUT_SECONDS);
@@ -424,7 +634,7 @@ class IntentPostingFollowsSourceIT extends IntegrationTest {
 
     @AfterEach
     void cleanup() {
-        for (String project : List.of(CONSUMER, OWNER)) {
+        for (String project : List.of(CONSUMER, OWNER, BOOKS, SALES)) {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete("/services/ide/publisher/" + WORKSPACE + "/" + project)
                                                      .then()

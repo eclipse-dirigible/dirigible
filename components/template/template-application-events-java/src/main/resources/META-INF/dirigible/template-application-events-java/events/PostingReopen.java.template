@@ -21,7 +21,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * unposted worklist by accident, and the books and the register disagree with nothing saying so.
  *
  * What it does NOT do: it never posts a document the posting itself would not. Each candidate goes
- * through ${className}Posting.post, so the status guard, the determination rule, the at-most-once
+ * through ${className}Posting.post, so the held-status guard, the determination rule, the at-most-once
  * back-reference and the period check all apply exactly as they do on the event - this only decides
  * WHICH documents are worth offering again.
  */
@@ -56,9 +56,10 @@ public class ${reopenClassName} implements MessageHandler {
         }
         Criteria candidates = Criteria.create();
 #if($guardProperty != "")
-        // The posting's own guard: only a ${sourceEntity} standing where the posting fires can have
-        // been refused by the period.
-        candidates.eq("${guardProperty}", ${guardValue});
+        // Where the posting HOLDS, not only where it fires (#8243): a ${sourceEntity} refused on its move
+        // into ${guardValue} may have moved on while the period was closed (issued, then sent or paid), and
+        // it is no less unposted for it. post() asks the same question again.
+        candidates.in("${guardProperty}", java.util.List.of(${heldStatusValues}));
 #end
 #if($periodSourceDateProperty != "")
         // ...dated inside the period that just reopened. The posting copies ${periodSourceDateProperty}
@@ -76,13 +77,13 @@ public class ${reopenClassName} implements MessageHandler {
         int reposted = 0;
         for (gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source :
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findAll(candidates)) {
-            // Already posted? The back-reference is the posting's own at-most-once key, so asking it
-            // here keeps the sweep off the documents that need nothing - and off rewriting a post that
-            // is already right.
-            if (!new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository()
-                    .findAll(Criteria.create()
-                                     .eq("${backRefProperty}", source.${sourceKeyField}))
-                    .isEmpty()) {
+            // Already posted? Asked of the posting itself, so the sweep keeps off the documents that
+            // need nothing - and off rewriting a post that is already right - by the very documents
+            // post() counts as its own (#8243): a reversal and the posting it reverses back-reference
+            // the same source and are told apart by the storno link, so "any entry of the source" - the
+            // original, always - would never let a storno through; and a rejected or reversed entry is
+            // history (#7959), so it does not stand for the source either.
+            if (posting.posted(source)) {
                 continue;
             }
             try {

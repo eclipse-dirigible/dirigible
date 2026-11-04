@@ -708,6 +708,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putInlineCreate(fkProperty, relation);
                 putStatusSteps(fkProperty, model, entity, relation);
                 putStatusVariants(fkProperty, model, relation);
+                putStatusStages(fkProperty, model, relation);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
@@ -2633,6 +2634,31 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                   .stream()
                                                   .map(e -> "\"" + e.getKey() + "\":\"" + e.getValue() + "\"")
                                                   .collect(Collectors.joining(",", "{", "}")));
+        }
+    }
+
+    /**
+     * Emit what each status MEANS to the lifecycle (#8243) as the {@code statusStages} attribute of the
+     * {@code DOCUMENT_STATUS} property: each declared stage with its seed ids in seed order,
+     * {@code live:3,4;void:9} ({@link LifecycleStages#stagesOf}). The {@code stage:} rows are seeds of
+     * THIS model, so a model that books the entity from another one can learn them only here - which is
+     * how a cross-model posting knows that a SENT invoice still holds the post its ISSUED status raised
+     * ({@code CrossModelSupport} reads it back). Nothing is written when no row declares a stage, or
+     * for a cross-model status whose seeds are not on this model, so such a model generates as before.
+     */
+    private static void putStatusStages(Map<String, Object> p, IntentModel model, RelationIntent relation) {
+        if (!relation.isEntityStatus() || relation.isCrossModel()) {
+            return;
+        }
+        Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, relation.getTo());
+        if (!stages.isEmpty()) {
+            p.put("statusStages", stages.entrySet()
+                                        .stream()
+                                        .map(e -> e.getKey() + ":" + e.getValue()
+                                                                      .stream()
+                                                                      .map(String::valueOf)
+                                                                      .collect(Collectors.joining(",")))
+                                        .collect(Collectors.joining(";")));
         }
     }
 

@@ -108,12 +108,18 @@ public final class CrossModelSupport {
      *        its {@code access.extraRoles} appended) - what a create-from in another model must demand
      *        of a caller who writes the target through it (issue #7913); {@code null} when the model
      *        was not resolved or records no gate
+     * @param statusStages the {@code stage:} classification of the target's status nomenclature (the
+     *        owner's {@code statusStages} on its {@code DOCUMENT_STATUS} property): each stage with its
+     *        seed ids in seed order, as {@code LifecycleStages.stagesOf} reads it in the owner. A
+     *        cross-model posting needs it to know which later statuses still hold its post (issue
+     *        #8243); empty when the owner classifies none or the model was not resolved
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
             java.util.Map<String, String> propertyWidgets, String statusProperty, java.util.Map<String, String> propertyRelations,
             java.util.Set<String> translatedProperties, java.util.Map<String, String> propertyTypes,
-            java.util.Set<String> draftNumberProperties, String hierarchyColumn, String writeRoles) {
+            java.util.Set<String> draftNumberProperties, String hierarchyColumn, String writeRoles,
+            java.util.Map<String, List<Integer>> statusStages) {
     }
 
     @SuppressWarnings("unchecked")
@@ -496,6 +502,7 @@ public final class CrossModelSupport {
                 java.util.Map<String, String> propertyTypes = null;
                 java.util.Map<String, String> propertyColumns = new java.util.LinkedHashMap<>();
                 String statusProperty = null;
+                java.util.Map<String, List<Integer>> statusStages = java.util.Map.of();
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
                     propertyWidgets = new java.util.LinkedHashMap<>();
@@ -531,6 +538,7 @@ public final class CrossModelSupport {
                             // so the owner's .model carries the fact without a new attribute.
                             if ("DOCUMENT_STATUS".equals(widget)) {
                                 statusProperty = propertyName;
+                                statusStages = statusStages(str(p.get("statusStages"), ""));
                             }
                         }
                     }
@@ -542,7 +550,7 @@ public final class CrossModelSupport {
                         hierarchyProperty, identityProperty, propertyWidgets, statusProperty, propertyRelations,
                         translatedProperties("true".equals(String.valueOf(entity.get("multilingual"))), properties), propertyTypes,
                         draftNumberProperties(properties), hierarchyProperty == null ? null : propertyColumns.get(hierarchyProperty),
-                        str(entity.get("roleWrite"), null));
+                        str(entity.get("roleWrite"), null), statusStages);
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", LoggedValue.of(modelPath),
@@ -627,7 +635,38 @@ public final class CrossModelSupport {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
         return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null, null,
-                java.util.Set.of(), null, java.util.Set.of(), null, null);
+                java.util.Set.of(), null, java.util.Set.of(), null, null, java.util.Map.of());
+    }
+
+    /**
+     * The owner's {@code statusStages} attribute read back into the shape
+     * {@code LifecycleStages.stagesOf} gives in the owner: {@code live:3,4;void:9} to each stage's seed
+     * ids in seed order. An absent attribute - an owner that classifies no status, or one generated
+     * before the attribute existed - reads as no classification.
+     *
+     * @param attribute the attribute value, empty when absent
+     * @return stage to seed ids, never {@code null}
+     */
+    static java.util.Map<String, List<Integer>> statusStages(String attribute) {
+        java.util.Map<String, List<Integer>> stages = new java.util.LinkedHashMap<>();
+        for (String stage : attribute.split(";")) {
+            int colon = stage.indexOf(':');
+            if (colon < 0) {
+                continue;
+            }
+            List<Integer> ids = new java.util.ArrayList<>();
+            for (String id : stage.substring(colon + 1)
+                                  .split(",")) {
+                if (id.trim()
+                      .matches("\\d+")) {
+                    ids.add(Integer.valueOf(id.trim()));
+                }
+            }
+            stages.put(stage.substring(0, colon)
+                            .trim(),
+                    ids);
+        }
+        return stages;
     }
 
     /**

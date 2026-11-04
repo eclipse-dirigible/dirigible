@@ -97,6 +97,23 @@ class GluePostingPeriodTest {
                   - { debit: "Net" }
             """;
 
+    /** The classified fixture: a live run ISSUED, SENT, PAID after the draft, then the void. */
+    private static final String CLASSIFIED = YAML.replace("- { id: 1, name: DRAFT }", "- { id: 1, name: DRAFT, stage: draft }")
+                                                 .replace("- { id: 2, name: ISSUED }", """
+                                                         - { id: 2, name: ISSUED, stage: live }
+                                                               - { id: 3, name: SENT,   stage: live }
+                                                               - { id: 4, name: PAID,   stage: live }
+                                                               - { id: 5, name: VOIDED, stage: void }""")
+                                                 .replace("- { name: SalesInvoice, kind: manyToOne, to: SalesInvoice }", """
+                                                         - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice }
+                                                               - { name: Storno,       kind: manyToOne, to: JournalEntry }""")
+            + """
+                      - name: salesInvoiceStorno
+                        event: { onTransition: SalesInvoice, when: "Status == 5" }
+                        reverses: salesInvoicePosting
+                        storno: Storno
+                    """;
+
     @Test
     void thePostingCarriesTheRegisterItsTargetIsLockedBy() {
         Map<String, Object> posting = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(YAML))
@@ -166,5 +183,48 @@ class GluePostingPeriodTest {
         assertEquals("SalesInvoicePosting", reopens.get(0)
                                                    .get("className"),
                 "the sweep renders from the posting it re-runs, so the two cannot disagree");
+    }
+
+    /**
+     * A nomenclature nobody classified says nothing about what a status means, so the posting holds in
+     * the status it fires on alone - what the sweep and post() tested before #8243.
+     */
+    @Test
+    void anUnclassifiedNomenclatureHoldsTheGuardStatusAlone() {
+        assertEquals("2", posting(YAML, "salesInvoicePosting").get("heldStatusValues"));
+    }
+
+    /**
+     * #8243: an invoice issued into a closed month and then sent or paid before it reopened stood in a
+     * later status, so a sweep keyed on the guard status never offered it again. The posting holds in
+     * every LIVE status seeded from its own on - and in nothing else: not the draft an invoice is sent
+     * back to, not the void a reversal answers for.
+     */
+    @Test
+    void aLivePostingHoldsInEveryLaterLiveStatus() {
+        assertEquals("2,3,4", posting(CLASSIFIED, "salesInvoicePosting").get("heldStatusValues"));
+    }
+
+    /** A live status seeded BEFORE the guard is not one the document reached through it. */
+    @Test
+    void anEarlierLiveStatusIsNotHeld() {
+        String yaml = CLASSIFIED.replace("when: \"Status == 2\"", "when: \"Status == 4\"");
+
+        assertEquals("4", posting(yaml, "salesInvoicePosting").get("heldStatusValues"),
+                "a posting on PAID must not book an invoice that is only ISSUED or SENT");
+    }
+
+    /** A reversal fires on a void status, which a document does not move on from. */
+    @Test
+    void aReversalHoldsInItsOwnStatusAlone() {
+        assertEquals("5", posting(CLASSIFIED, "salesInvoiceStorno").get("heldStatusValues"));
+    }
+
+    private static Map<String, Object> posting(String yaml, String name) {
+        return GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml))
+                                  .stream()
+                                  .filter(posting -> name.equals(posting.get("name")))
+                                  .findFirst()
+                                  .orElseThrow();
     }
 }
