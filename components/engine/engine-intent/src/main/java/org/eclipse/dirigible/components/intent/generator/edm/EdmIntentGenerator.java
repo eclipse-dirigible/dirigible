@@ -1893,6 +1893,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // the composite key over (partition, number) that buildUniqueConstraints synthesizes instead.
         if (field.isUnique() && !isPartitionedNumber(field)) {
             p.put("dataUnique", "true");
+            // A case-insensitive key (#8095): the column's UNIQUE still refuses an exact repeat, and the
+            // generated repository refuses a value another row holds in another letter case - the
+            // schema has no way to index LOWER(column), and H2 none to build one.
+            if (field.isUniqueIgnoringCase()) {
+                p.put("dataUniqueIgnoreCase", "true");
+            }
         }
         if (field.getDefaultValue() != null && !field.getDefaultValue()
                                                      .isBlank()) {
