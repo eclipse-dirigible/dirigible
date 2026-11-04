@@ -227,6 +227,17 @@ public class TestTenantContext implements TenantContext {
     }
 
     @Override
+    public <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachMaintainedTenant(
+            CallableResultAndException<Result, Exc> callable) throws Exc {
+        return executeForEachTenant(callable);
+    }
+
+    @Override
+    public boolean isSuspended(String tenantId) {
+        return false;
+    }
+
+    @Override
     public <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)
             throws Exc {
         return callable.call();

@@ -27,7 +27,9 @@ import org.springframework.stereotype.Component;
  * history - finished instances with their variables, activities and tasks. Process variables carry
  * business data, and a tenant registered again under the same id must not see them. The engine's
  * tenant id is the platform's ({@link BpmProviderFlowable} deploys under it). The process
- * definitions stay deployed: they are the application's, not the tenant's.
+ * definitions stay deployed: they are the application's, not the tenant's. The instances of a
+ * suspended tenant are suspended ({@link BpmTenantSuspension}); Flowable deletes a suspended
+ * instance, with its suspended jobs, like any other.
  */
 @Component
 class BpmTenantTeardown implements TenantTeardownParticipant {

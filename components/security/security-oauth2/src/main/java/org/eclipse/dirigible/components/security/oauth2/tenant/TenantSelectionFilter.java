@@ -231,12 +231,19 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             String onlyTenantId = assignments.tenantIds()
                                              .iterator()
                                              .next();
-            if (autoSelect(request, response, onlyTenantId, authentication)) {
+            TenantSelectionException refusal = autoSelect(request, response, onlyTenantId, authentication);
+            if (refusal == null) {
                 // The tenant scope of this request was opened before the selection existed, so it is
                 // still the default tenant's. Continuing in it would serve the request with the roles
                 // of the selected tenant and the data of another one - so the rest of the chain runs
                 // in the tenant just entered.
                 continueInTenant(onlyTenantId, request, response, chain);
+                return;
+            }
+            if (TenantSelectionException.Reason.SUSPENDED == refusal.getReason() && !prefersHtml(request)) {
+                // There is nothing to pick: a programmatic caller is told why, as a bearer request
+                // naming the tenant would be. A browser goes to the picker, which says the same.
+                refuse(response, refusal);
                 return;
             }
         }
@@ -345,15 +352,15 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
     }
 
     /**
-     * Answers a bearer request whose tenant cannot be entered, with the status and the body the
-     * selection endpoint answers a session's refused selection with.
+     * Answers a request whose tenant cannot be entered, with the status and the body the selection
+     * endpoint answers a session's refused selection with.
      *
      * @param response the response
      * @param refusal the refusal
      * @throws IOException Signals that an I/O exception has occurred.
      */
     private void refuse(HttpServletResponse response, TenantSelectionException refusal) throws IOException {
-        LOGGER.info("Refused the tenant [{}] a bearer request named: {}", refusal.getTenantId(), refusal.getMessage());
+        LOGGER.info("Refused the tenant [{}] of a request: {}", refusal.getTenantId(), refusal.getMessage());
         response.setStatus(refusal.getReason()
                                   .httpStatus()
                                   .value());
@@ -369,12 +376,13 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
      * @param response the response
      * @param tenantId the only tenant of the user
      * @param authentication the authenticated user
-     * @return true if the tenant was entered
+     * @return {@code null} if the tenant was entered, else why it was refused
      */
-    private boolean autoSelect(HttpServletRequest request, HttpServletResponse response, String tenantId, Authentication authentication) {
+    private TenantSelectionException autoSelect(HttpServletRequest request, HttpServletResponse response, String tenantId,
+            Authentication authentication) {
         try {
             tenantSelectionManager.selectTenant(request, response, tenantId);
-            return true;
+            return null;
         } catch (TenantSelectionException ex) {
             // A tenant this instance does not know is not a wait-and-retry: the user is left on a picker
             // holding one tile they can never press, and only an operator can resolve it.
@@ -383,7 +391,7 @@ public class TenantSelectionFilter extends OncePerRequestFilter {
             } else {
                 LOGGER.info("The only tenant [{}] of user [{}] cannot be entered: {}", tenantId, authentication.getName(), ex.getMessage());
             }
-            return false;
+            return ex;
         }
     }
 

@@ -185,14 +185,16 @@ class MigrationsSynchronizer extends BaseSynchronizer<Migration, Long> {
         }
 
         List<Migration> predecessors = predecessors(script, location);
-        List<Outcome> outcomes = script.scope() == Scope.SYSTEM
-                ? List.of(executor.apply(script, location, SYSTEM_TENANT, dataSourcesManager.getSystemDataSource(), predecessors))
-                : tenantContext.executeForEachTenant(() -> executor.apply(script, location, tenantContext.getCurrentTenant()
-                                                                                                         .getId(),
-                        dataSourcesManager.getDefaultDataSource(), predecessors))
-                               .stream()
-                               .map(TenantResult::getResult)
-                               .toList();
+        List<Outcome> outcomes =
+                script.scope() == Scope.SYSTEM
+                        ? List.of(executor.apply(script, location, SYSTEM_TENANT, dataSourcesManager.getSystemDataSource(), predecessors))
+                        : tenantContext.executeForEachMaintainedTenant(() -> executor.apply(script, location,
+                                tenantContext.getCurrentTenant()
+                                             .getId(),
+                                dataSourcesManager.getDefaultDataSource(), predecessors))
+                                       .stream()
+                                       .map(TenantResult::getResult)
+                                       .toList();
         if (script.scope() != Scope.SYSTEM) {
             recordTenantOutcomes(migration, outcomes, success);
         }

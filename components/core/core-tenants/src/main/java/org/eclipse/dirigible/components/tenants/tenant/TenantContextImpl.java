@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -33,7 +34,7 @@ class TenantContextImpl implements TenantContext {
 
     private static final ThreadLocal<Tenant> currentTenantHolder = new ThreadLocal<>();
 
-    /** The tenants {@link #executeForEachTenant} is restricted to on this thread, or null for all. */
+    /** The tenants every per-tenant fan-out is restricted to on this thread, or null for all. */
     private static final ThreadLocal<Set<String>> scopeHolder = new ThreadLocal<>();
 
     private final TenantService tenantService;
@@ -95,7 +96,24 @@ class TenantContextImpl implements TenantContext {
     @Override
     public <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachTenant(CallableResultAndException<Result, Exc> callable)
             throws Exc {
-        Set<Tenant> tenants = getProvisionedTenants();
+        return executeFor(tenantsIn(EnumSet.of(TenantStatus.PROVISIONED)), callable);
+    }
+
+    @Override
+    public <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachMaintainedTenant(
+            CallableResultAndException<Result, Exc> callable) throws Exc {
+        return executeFor(tenantsIn(EnumSet.of(TenantStatus.PROVISIONED, TenantStatus.SUSPENDED)), callable);
+    }
+
+    @Override
+    public boolean isSuspended(String tenantId) {
+        return tenantService.findById(tenantId)
+                            .filter(tenant -> TenantStatus.SUSPENDED == tenant.getStatus())
+                            .isPresent();
+    }
+
+    private <Result, Exc extends Throwable> List<TenantResult<Result>> executeFor(Set<Tenant> tenants,
+            CallableResultAndException<Result, Exc> callable) throws Exc {
         LOGGER.debug("Will execute code for [{}] tenants [{}]...", tenants.size(), tenants);
         List<TenantResult<Result>> results = new ArrayList<>(tenants.size());
 
@@ -123,11 +141,12 @@ class TenantContextImpl implements TenantContext {
         }
     }
 
-    private Set<Tenant> getProvisionedTenants() {
-        Set<Tenant> tenants = tenantService.findByStatus(TenantStatus.PROVISIONED)
-                                           .stream()
-                                           .map(TenantImpl::createFromEntity)
-                                           .collect(Collectors.toSet());
+    private Set<Tenant> tenantsIn(Set<TenantStatus> statuses) {
+        Set<Tenant> tenants = statuses.stream()
+                                      .flatMap(status -> tenantService.findByStatus(status)
+                                                                      .stream())
+                                      .map(TenantImpl::createFromEntity)
+                                      .collect(Collectors.toSet());
         Set<Tenant> allTenants = new HashSet<>(tenants);
         allTenants.add(TenantImpl.getDefaultTenant());
         allTenants.addAll(tenants);

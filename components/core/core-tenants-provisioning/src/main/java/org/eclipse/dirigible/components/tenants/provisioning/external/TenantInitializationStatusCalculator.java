@@ -92,7 +92,8 @@ class TenantInitializationStatusCalculator {
      * @return the state
      */
     TenantInitializationState calculate(Tenant tenant) {
-        if (TenantStatus.PROVISIONED != tenant.getStatus()) {
+        // a suspended tenant was activated: its initialization is what it was before the suspension
+        if (TenantStatus.PROVISIONED != tenant.getStatus() && TenantStatus.SUSPENDED != tenant.getStatus()) {
             return TenantInitializationState.of(InitializationStatus.NOT_STARTED);
         }
 

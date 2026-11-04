@@ -120,6 +120,10 @@ class TenantDataSourceRegistrationService {
             // a pool built now would hold connections into a schema that is about to be dropped
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Tenant [" + tenant.getId() + "] is being deprovisioned");
         }
+        if (TenantStatus.SUSPENDED == tenant.getStatus()) {
+            // nothing of a suspended tenant may change but its status; its pool stays as it is
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tenant [" + tenant.getId() + "] is suspended");
+        }
         String name = tenantDataSourceName(tenant);
         Optional<DataSource> existing = dataSourceService.findOptionalByName(name);
 

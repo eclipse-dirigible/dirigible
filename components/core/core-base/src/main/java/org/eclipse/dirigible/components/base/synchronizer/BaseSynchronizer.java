@@ -126,7 +126,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
 
         String error = artefact.getError();
         TenantContext tenantContext = BeanProvider.getTenantContext();
-        List<TenantResult<TenantOutcome>> results = tenantContext.executeForEachTenant(() -> {
+        List<TenantResult<TenantOutcome>> results = tenantContext.executeForEachMaintainedTenant(() -> {
             logger.debug("[{} will complete artefact with lifecycle [{}] in phase [{}]] for tenant [{}]...\\nArtefact:[{}]", this,
                     lifecycle, flow, tenantContext.getCurrentTenant(), artefact);
             artefact.setLifecycle(lifecycle);
@@ -297,7 +297,7 @@ public abstract class BaseSynchronizer<A extends Artefact, ID> implements Synchr
         ArtefactLifecycle lifecycle = artefact.getLifecycle();
 
         TenantContext tenantContext = BeanProvider.getTenantContext();
-        tenantContext.executeForEachTenant(() -> {
+        tenantContext.executeForEachMaintainedTenant(() -> {
             logger.debug("[{} will cleanup artefact [{}] for tenant [{}]", this, artefact, tenantContext.getCurrentTenant());
             artefact.setLifecycle(lifecycle);
             cleanupImpl(artefact);

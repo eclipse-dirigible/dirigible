@@ -21,6 +21,7 @@ import static org.mockito.Mockito.when;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.script.ScriptEngineUnavailableException;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
@@ -43,7 +44,7 @@ class JobsManagerWithoutScriptEngineTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner().withBean(Scheduler.class, () -> scheduler)
                                                                                          .withBean(TenantContext.class,
-                                                                                                 () -> mock(TenantContext.class))
+                                                                                                 JobsManagerWithoutScriptEngineTest::tenantContext)
                                                                                          .withBean(JobNameCreator.class,
                                                                                                  JobsManagerWithoutScriptEngineTest::jobNameCreator)
                                                                                          .withUserConfiguration(JobHandlerRunner.class,
@@ -72,6 +73,14 @@ class JobsManagerWithoutScriptEngineTest {
 
             verify(scheduler).scheduleJob(any(JobDetail.class), any(Trigger.class));
         });
+    }
+
+    private static TenantContext tenantContext() {
+        Tenant defaultTenant = mock(Tenant.class);
+        when(defaultTenant.isDefault()).thenReturn(true);
+        TenantContext tenantContext = mock(TenantContext.class);
+        when(tenantContext.getCurrentTenant()).thenReturn(defaultTenant);
+        return tenantContext;
     }
 
     private static JobNameCreator jobNameCreator() {

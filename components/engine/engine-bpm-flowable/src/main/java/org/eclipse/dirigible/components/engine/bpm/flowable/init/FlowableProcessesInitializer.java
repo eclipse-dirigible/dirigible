@@ -63,7 +63,7 @@ class FlowableProcessesInitializer implements ApplicationListener<ApplicationRea
         byte[] content = getResourceFileContent(systemBpmProcess.getResourcePath());
 
         // deploy for each tenant?
-        tenantContext.executeForEachTenant(() -> {
+        tenantContext.executeForEachMaintainedTenant(() -> {
             bpmService.deployProcess(deploymentKey, resourceName, new String(content, StandardCharsets.UTF_8));
             return null;
         });

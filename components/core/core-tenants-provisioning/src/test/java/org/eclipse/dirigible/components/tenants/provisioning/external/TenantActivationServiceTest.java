@@ -75,6 +75,21 @@ class TenantActivationServiceTest {
         verify(initializationService, never()).request(anyString());
     }
 
+    /**
+     * A suspended tenant is resumed through its status; activating it would leave its runtime stopped.
+     */
+    @Test
+    void aSuspendedTenantCannotBeActivated() {
+        Tenant tenant = tenant("acme", TenantStatus.SUSPENDED);
+
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class, () -> service.activate(tenant));
+
+        assertEquals(HttpStatus.CONFLICT, refused.getStatusCode());
+        assertEquals(TenantStatus.SUSPENDED, tenant.getStatus());
+        verify(tenantService, never()).save(any());
+        verify(initializationService, never()).request(anyString());
+    }
+
     @Test
     void activationMakesTheTenantProvisioned() {
         Tenant tenant = tenant("acme", TenantStatus.PENDING_ACTIVATION);

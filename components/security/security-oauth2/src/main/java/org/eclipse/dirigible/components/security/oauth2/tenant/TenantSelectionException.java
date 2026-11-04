@@ -36,20 +36,26 @@ public class TenantSelectionException extends RuntimeException {
          * refusal will not resolve itself by waiting.
          */
         UNKNOWN_HERE,
+        /**
+         * The tenant is suspended by its provisioner - a subscription whose payment failed, say. Not a
+         * wait-and-retry either: only the provisioner resuming the tenant ends it.
+         */
+        SUSPENDED,
         /** The request is not an interactive session that could hold a selection. */
         NOT_AN_INTERACTIVE_SESSION;
 
         /**
-         * The status a programmatic caller is answered with. {@code NOT_PROVISIONED_HERE} and
-         * {@code UNKNOWN_HERE} share one deliberately: the status is the contract, the reason is what tells
-         * the two apart - one ends by waiting and the other never does.
+         * The status a programmatic caller is answered with. {@code NOT_PROVISIONED_HERE},
+         * {@code UNKNOWN_HERE} and {@code SUSPENDED} share one deliberately - each is a state of the
+         * tenant: the status is the contract, the reason is what tells them apart - one ends by waiting,
+         * one only when the provisioner resumes the tenant, and one never.
          *
          * @return the HTTP status
          */
         public HttpStatus httpStatus() {
             return switch (this) {
                 case NOT_A_MEMBER -> HttpStatus.FORBIDDEN;
-                case NOT_PROVISIONED_HERE, UNKNOWN_HERE -> HttpStatus.CONFLICT;
+                case NOT_PROVISIONED_HERE, UNKNOWN_HERE, SUSPENDED -> HttpStatus.CONFLICT;
                 case NOT_AN_INTERACTIVE_SESSION -> HttpStatus.UNAUTHORIZED;
             };
         }

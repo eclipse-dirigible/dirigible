@@ -77,7 +77,7 @@ class BaseSynchronizerTenantOutcomesTest {
         when(applicationContext.getBean(TenantContext.class)).thenReturn(tenantContext);
         when(applicationContext.getBean(TenantArtefactLedger.class)).thenReturn(ledger);
         new BeanProvider().setApplicationContext(applicationContext);
-        when(tenantContext.executeForEachTenant(any())).thenAnswer(invocation -> {
+        when(tenantContext.executeForEachMaintainedTenant(any())).thenAnswer(invocation -> {
             CallableResultAndException<?, ?> callable = invocation.getArgument(0);
             List<TenantResult<?>> results = new ArrayList<>();
             for (String tenantId : tenants.keySet()) {

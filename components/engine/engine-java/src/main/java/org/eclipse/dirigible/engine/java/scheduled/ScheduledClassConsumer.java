@@ -23,6 +23,7 @@ import java.util.function.Consumer;
 
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
+import org.eclipse.dirigible.components.base.tenant.TenantSuspensionParticipant;
 import org.eclipse.dirigible.components.base.tenant.TenantTeardownParticipant;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
@@ -87,7 +88,8 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Order(400)
-public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean, TenantPostProvisioningStep, TenantTeardownParticipant {
+public class ScheduledClassConsumer
+        implements JavaClassConsumer, DisposableBean, TenantPostProvisioningStep, TenantTeardownParticipant, TenantSuspensionParticipant {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ScheduledClassConsumer.class);
 
@@ -461,6 +463,32 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         registrations.values()
                      .forEach(registration -> registration.forget(tenantId));
         reportedFailures.removeIf(key -> key.endsWith(KEY_SEPARATOR + tenantId));
+    }
+
+    /**
+     * Suspension (participant 100): forgets the tenant's registrations exactly as {@link #teardown}
+     * does. The tenant's Quartz jobs are paused by the jobs engine's own participant, and stay paused
+     * however often a top-up schedules them; forgetting is what has the top-up register a job a class
+     * declared while the tenant was suspended once it is resumed.
+     */
+    @Override
+    public void suspend(String tenantId) {
+        teardown(tenantId);
+    }
+
+    /**
+     * Marks the registrations incomplete, so the next {@link #reconcile()} - the one {@link #resumed}
+     * runs once the tenant is provisioned again - registers the tenant's jobs. Nothing is registered
+     * here: the tenant is still suspended, and the top-up reaches provisioned tenants only.
+     */
+    @Override
+    public void resume(String tenantId) {
+        registrationsIncomplete.set(true);
+    }
+
+    @Override
+    public void resumed() {
+        reconcile();
     }
 
     /** Unschedule + remove the Job rows a class previously registered (per tenant). */

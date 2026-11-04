@@ -14,13 +14,17 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 import java.util.List;
+import java.util.Map;
 
 import org.flowable.engine.HistoryService;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.RuntimeService;
 import org.flowable.engine.history.HistoricProcessInstance;
 import org.flowable.engine.history.HistoricProcessInstanceQuery;
+import org.flowable.engine.impl.cfg.StandaloneInMemProcessEngineConfiguration;
 import org.flowable.engine.runtime.ProcessInstance;
 import org.flowable.engine.runtime.ProcessInstanceQuery;
 import org.junit.jupiter.api.Test;
@@ -63,5 +67,48 @@ class BpmTenantTeardownTest {
              .processInstanceTenantId("acme");
         order.verify(history)
              .deleteHistoricProcessInstance("p1");
+    }
+
+    /**
+     * A suspended tenant can be deprovisioned (#8477): its instances are suspended, and the teardown
+     * deletes them with their history like any running one. Against a real in-memory Flowable, since
+     * whether the engine accepts the delete of a suspended instance is the engine's to say.
+     */
+    @Test
+    void deletesSuspendedInstances() {
+        StandaloneInMemProcessEngineConfiguration configuration = new StandaloneInMemProcessEngineConfiguration();
+        configuration.setJdbcUrl("jdbc:h2:mem:tenant-teardown-suspended-test;DB_CLOSE_DELAY=-1");
+        ProcessEngine engine = configuration.buildProcessEngine();
+        try {
+            engine.getRepositoryService()
+                  .createDeployment()
+                  .addString("reminder.bpmn20.xml", BpmTenantSuspensionTest.PROCESS_XML)
+                  .tenantId("acme")
+                  .deploy();
+            ProcessInstance instance = engine.getRuntimeService()
+                                             .startProcessInstanceByKeyAndTenantId(BpmTenantSuspensionTest.PROCESS_KEY, null, Map.of(),
+                                                     "acme");
+            new BpmTenantSuspension(engine).suspend("acme");
+
+            new BpmTenantTeardown(engine).teardown("acme");
+
+            assertEquals(0, engine.getRuntimeService()
+                                  .createProcessInstanceQuery()
+                                  .processInstanceTenantId("acme")
+                                  .count(),
+                    "no instance of the tenant is left");
+            assertEquals(0, engine.getManagementService()
+                                  .createSuspendedJobQuery()
+                                  .processInstanceId(instance.getId())
+                                  .count(),
+                    "nor a suspended job of it");
+            assertEquals(0, engine.getHistoryService()
+                                  .createHistoricProcessInstanceQuery()
+                                  .processInstanceTenantId("acme")
+                                  .count(),
+                    "nor its history");
+        } finally {
+            engine.close();
+        }
     }
 }

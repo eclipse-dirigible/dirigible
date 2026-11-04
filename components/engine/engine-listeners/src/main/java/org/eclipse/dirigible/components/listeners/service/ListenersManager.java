@@ -9,6 +9,10 @@
  */
 package org.eclipse.dirigible.components.listeners.service;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
+import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.listeners.domain.Listener;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -48,6 +52,12 @@ public class ListenersManager {
     /** The connection the artefacts share, closed once every listener is stopped. */
     private final SharedListenerConnection sharedConnection;
 
+    /** The listener artefacts. */
+    private final ListenerService listenerService;
+
+    /** The tenant scope a tenant's listeners are started in. */
+    private final TenantContext tenantContext;
+
     /**
      * Instantiates a new listeners manager.
      *
@@ -55,14 +65,18 @@ public class ListenersManager {
      * @param messageListenerManagerFactory the message listener manager factory
      * @param listenerCreator the listener creator
      * @param sharedConnection the connection the artefacts share in the shared mode
+     * @param listenerService the listener artefacts
+     * @param tenantContext the tenant scope a tenant's listeners are started in
      */
     @Autowired
     public ListenersManager(IRepository repository, ListenerManagerFactory messageListenerManagerFactory, ListenerCreator listenerCreator,
-            SharedListenerConnection sharedConnection) {
+            SharedListenerConnection sharedConnection, ListenerService listenerService, TenantContext tenantContext) {
         this.repository = repository;
         this.messageListenerManagerFactory = messageListenerManagerFactory;
         this.listenerCreator = listenerCreator;
         this.sharedConnection = sharedConnection;
+        this.listenerService = listenerService;
+        this.tenantContext = tenantContext;
     }
 
     /**
@@ -70,7 +84,7 @@ public class ListenersManager {
      *
      * @param listenerEntity the listener
      */
-    public void startListener(org.eclipse.dirigible.components.listeners.domain.Listener listenerEntity) {
+    public void startListener(Listener listenerEntity) {
         ListenerDescriptor listenerDescriptor = listenerCreator.fromEntity(listenerEntity);
         if (LISTENERS.containsKey(listenerDescriptor)) {
             if (DestinationNameManager.isGlobal(listenerEntity.getName())) {
@@ -85,6 +99,77 @@ public class ListenersManager {
             return;
 
         }
+        start(listenerDescriptor);
+    }
+
+    /**
+     * Registers a listener of a suspended tenant without starting it: it is refused exactly as
+     * {@link #startListener} refuses it, so a listener whose handler is missing stays failed, and
+     * nothing is subscribed. Resuming the tenant starts it ({@link #startTenantListeners}).
+     *
+     * @param listenerEntity the listener
+     */
+    public void registerListener(Listener listenerEntity) {
+        ListenerDescriptor listenerDescriptor = listenerCreator.fromEntity(listenerEntity);
+        refuseMissingHandler(listenerDescriptor);
+        LOGGER.info("Listener [{}] registered and not started - its tenant is suspended.", listenerDescriptor);
+    }
+
+    /**
+     * Starts the tenant's consumers of every listener artefact - the resume of a suspended tenant,
+     * whose listeners {@link #stopTenantListeners} stopped. Messages that arrived meanwhile stayed on
+     * the broker and are consumed now. Idempotent: a consumer already running is left alone. A listener
+     * bound to a global destination is skipped - its one subscription serves the whole deployment and
+     * was never stopped - and so is one the synchronizer holds failed: its retry starts it for every
+     * tenant once it can be started.
+     *
+     * @param tenantId the tenant id
+     * @return how many listeners were started
+     * @throws IllegalStateException naming every listener that could not be started, once all the
+     *         others are
+     */
+    public int startTenantListeners(String tenantId) {
+        List<Listener> listeners = listenerService.getAll()
+                                                  .stream()
+                                                  .filter(listener -> !DestinationNameManager.isGlobal(listener.getName()))
+                                                  .filter(listener -> ArtefactLifecycle.FAILED != listener.getLifecycle()
+                                                          && ArtefactLifecycle.FATAL != listener.getLifecycle())
+                                                  .toList();
+        List<String> failures = new ArrayList<>();
+        int started = tenantContext.execute(tenantId, () -> {
+            int count = 0;
+            for (Listener listener : listeners) {
+                ListenerDescriptor listenerDescriptor = listenerCreator.fromEntity(listener);
+                if (LISTENERS.containsKey(listenerDescriptor)) {
+                    continue;
+                }
+                try {
+                    start(listenerDescriptor);
+                    count++;
+                } catch (RuntimeException ex) {
+                    LOGGER.warn("Could not start listener [{}] of tenant [{}]: {}", listenerDescriptor, LogSanitizer.sanitize(tenantId),
+                            ex.getMessage(), ex);
+                    failures.add(listener.getName() + ": " + ex.getMessage());
+                }
+            }
+            return count;
+        });
+        if (!failures.isEmpty()) {
+            throw new IllegalStateException("Could not start the listener(s) of tenant [" + tenantId + "]: " + String.join("; ", failures));
+        }
+        return started;
+    }
+
+    private void start(ListenerDescriptor listenerDescriptor) {
+        refuseMissingHandler(listenerDescriptor);
+        ListenerManager listenerManager = messageListenerManagerFactory.create(listenerDescriptor);
+        listenerManager.startListener();
+
+        LISTENERS.put(listenerDescriptor, listenerManager);
+        LOGGER.info("Listener [{}] started.", listenerDescriptor);
+    }
+
+    private void refuseMissingHandler(ListenerDescriptor listenerDescriptor) {
         if (isMissingHandler(listenerDescriptor)) {
             // Thrown, not logged and swallowed: a normal return had the synchronizer record the
             // artefact as CREATED and running with nothing subscribed (#7248). The handler may
@@ -92,11 +177,6 @@ public class ListenersManager {
             throw new IllegalStateException("Listener " + listenerDescriptor + " cannot be started, because the handler ["
                     + listenerDescriptor.getHandlerPath() + "] does not exist");
         }
-        ListenerManager listenerManager = messageListenerManagerFactory.create(listenerDescriptor);
-        listenerManager.startListener();
-
-        LISTENERS.put(listenerDescriptor, listenerManager);
-        LOGGER.info("Listener [{}] started.", listenerDescriptor);
     }
 
     /**
@@ -133,7 +213,7 @@ public class ListenersManager {
      */
     /**
      * Stops every listener subscribed to one of the tenant's destinations ({@code <tenantId>###<name>})
-     * - the tenant's deprovisioning. The destinations themselves stay on the broker.
+     * - the tenant's deprovisioning or suspension. The destinations themselves stay on the broker.
      *
      * @param tenantId the tenant id
      * @return how many listeners were stopped
@@ -162,7 +242,7 @@ public class ListenersManager {
         return stopped.size();
     }
 
-    public void stopListener(org.eclipse.dirigible.components.listeners.domain.Listener listenerEntity) {
+    public void stopListener(Listener listenerEntity) {
         ListenerDescriptor listenerDescriptor = listenerCreator.fromEntity(listenerEntity);
         ListenerManager listenerManager = LISTENERS.get(listenerDescriptor);
         if (listenerManager != null) {

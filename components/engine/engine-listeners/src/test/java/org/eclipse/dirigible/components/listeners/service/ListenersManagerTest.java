@@ -9,6 +9,12 @@
  */
 package org.eclipse.dirigible.components.listeners.service;
 
+import java.util.List;
+
+import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
+import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.listeners.domain.ListenerKind;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -20,6 +26,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -77,6 +85,14 @@ class ListenersManagerTest {
     /** The listener descriptor 2. */
     @Mock
     private ListenerDescriptor listenerDescriptor2;
+
+    /** The listener artefacts. */
+    @Mock
+    private ListenerService listenerService;
+
+    /** The tenant scope a tenant's listeners are started in. */
+    @Mock
+    private TenantContext tenantContext;
 
     /**
      * Sets the up.
@@ -180,5 +196,78 @@ class ListenersManagerTest {
         org.junit.jupiter.api.Assertions.assertFalse(ListenersManager.LISTENERS.containsKey(acme));
         org.junit.jupiter.api.Assertions.assertTrue(ListenersManager.LISTENERS.containsKey(globex));
         org.junit.jupiter.api.Assertions.assertEquals(0, listenersManager.stopTenantListeners("acme"), "a second call finds nothing");
+    }
+
+    /**
+     * Resuming a suspended tenant starts its consumers of every listener artefact, computed in that
+     * tenant's scope - and nothing else: not one already running, not one bound to a global destination
+     * (its subscription serves the deployment and was never stopped), not one the synchronizer holds
+     * failed (#8477).
+     */
+    @Test
+    void startTenantListenersStartsOnlyTheTenantsOwn() throws Throwable {
+        String[] scope = {null};
+        when(tenantContext.execute(eq("acme"), any())).thenAnswer(invocation -> {
+            scope[0] = "acme";
+            try {
+                return invocation.<CallableResultAndException<?, ?>>getArgument(1)
+                                 .call();
+            } finally {
+                scope[0] = null;
+            }
+        });
+        when(listenerCreator.fromEntity(any())).thenAnswer(invocation -> {
+            org.eclipse.dirigible.components.listeners.domain.Listener entity = invocation.getArgument(0);
+            return new ListenerDescriptor(ListenerType.QUEUE, scope[0] + "###" + entity.getName(), HANDLER);
+        });
+        org.eclipse.dirigible.components.listeners.domain.Listener orders = listener("orders", ArtefactLifecycle.CREATED);
+        org.eclipse.dirigible.components.listeners.domain.Listener running = listener("running", ArtefactLifecycle.CREATED);
+        org.eclipse.dirigible.components.listeners.domain.Listener failed = listener("failed", ArtefactLifecycle.FAILED);
+        org.eclipse.dirigible.components.listeners.domain.Listener global = listener("global:events", ArtefactLifecycle.CREATED);
+        when(listenerService.getAll()).thenReturn(List.of(orders, running, failed, global));
+        ListenersManager.LISTENERS.put(new ListenerDescriptor(ListenerType.QUEUE, "acme###running", HANDLER), listenerManager2);
+        when(repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepositoryStructure.SEPARATOR + HANDLER)).thenReturn(
+                resource);
+        when(resource.exists()).thenReturn(true);
+        ListenerDescriptor acmeOrders = new ListenerDescriptor(ListenerType.QUEUE, "acme###orders", HANDLER);
+        when(messageListenerManagerFactory.create(acmeOrders)).thenReturn(listenerManager);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, listenersManager.startTenantListeners("acme"));
+
+        verify(listenerManager).startListener();
+        verify(listenerManager2, never()).startListener();
+        verify(messageListenerManagerFactory).create(acmeOrders);
+        verifyNoMoreInteractions(messageListenerManagerFactory);
+        org.junit.jupiter.api.Assertions.assertTrue(ListenersManager.LISTENERS.containsKey(acmeOrders));
+        org.junit.jupiter.api.Assertions.assertEquals(0, listenersManager.startTenantListeners("acme"), "a second call starts nothing");
+    }
+
+    /** A listener that cannot be started fails the resume, naming it, once the others are started. */
+    @Test
+    void startTenantListenersReportsTheListenersItCouldNotStart() throws Throwable {
+        when(tenantContext.execute(eq("acme"), any())).thenAnswer(invocation -> invocation.<CallableResultAndException<?, ?>>getArgument(1)
+                                                                                          .call());
+        when(listenerCreator.fromEntity(any())).thenAnswer(invocation -> new ListenerDescriptor(ListenerType.QUEUE,
+                "acme###" + invocation.<org.eclipse.dirigible.components.listeners.domain.Listener>getArgument(0)
+                                      .getName(),
+                HANDLER));
+        when(listenerService.getAll()).thenReturn(List.of(listener("orders", ArtefactLifecycle.CREATED)));
+        when(repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + IRepositoryStructure.SEPARATOR + HANDLER)).thenReturn(
+                resource);
+        when(resource.exists()).thenReturn(false);
+
+        IllegalStateException refusal = assertThrows(IllegalStateException.class, () -> listenersManager.startTenantListeners("acme"));
+
+        org.junit.jupiter.api.Assertions.assertTrue(refusal.getMessage()
+                                                           .contains("orders"),
+                refusal.getMessage());
+    }
+
+    private static org.eclipse.dirigible.components.listeners.domain.Listener listener(String name, ArtefactLifecycle lifecycle) {
+        org.eclipse.dirigible.components.listeners.domain.Listener listener =
+                new org.eclipse.dirigible.components.listeners.domain.Listener("/acme/" + name + ".listener", name, "", HANDLER,
+                        ListenerKind.QUEUE);
+        listener.setLifecycle(lifecycle);
+        return listener;
     }
 }

@@ -343,6 +343,42 @@ class TenantSelectionFilterTest {
         assertThat(response.getRedirectedUrl()).isEqualTo(TenantSelectionFilter.TENANT_SELECTION_PAGE);
     }
 
+    /** A user whose only tenant is suspended: a browser goes to the picker, which says so (#8477). */
+    @Test
+    void aBrowserWhoseOnlyTenantIsSuspendedIsSentToThePicker() throws Exception {
+        authenticate();
+        request.addHeader(HttpHeaders.ACCEPT, MediaType.TEXT_HTML_VALUE);
+        when(tenantSelectionManager.assignmentsOf(any())).thenReturn(assignments(Map.of(ACME, Set.of("Owner")), Set.of()));
+        doThrow(new TenantSelectionException(TenantSelectionException.Reason.SUSPENDED, ACME, "suspended")).when(tenantSelectionManager)
+                                                                                                           .selectTenant(any(), any(),
+                                                                                                                   eq(ACME));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(TenantSelectionFilter.TENANT_SELECTION_PAGE);
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    /**
+     * ...and a programmatic caller is told why, as a bearer request naming the tenant would be: there
+     * is nothing to pick (#8477).
+     */
+    @Test
+    void aProgrammaticCallerWhoseOnlyTenantIsSuspendedIsAnsweredWithTheReason() throws Exception {
+        authenticate();
+        request.addHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE);
+        when(tenantSelectionManager.assignmentsOf(any())).thenReturn(assignments(Map.of(ACME, Set.of("Owner")), Set.of()));
+        doThrow(new TenantSelectionException(TenantSelectionException.Reason.SUSPENDED, ACME, "suspended")).when(tenantSelectionManager)
+                                                                                                           .selectTenant(any(), any(),
+                                                                                                                   eq(ACME));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(409);
+        assertThat(response.getContentAsString()).contains("\"reason\":\"SUSPENDED\"");
+        assertThat(chain.getRequest()).isNull();
+    }
+
     @Test
     void aRequestThatIsNeitherASessionNorABearerPassesThrough() throws Exception {
         // No authentication at all - an anonymous request.
