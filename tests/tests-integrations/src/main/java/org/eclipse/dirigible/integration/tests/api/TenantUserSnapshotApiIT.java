@@ -11,13 +11,20 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.blankOrNullString;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +32,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.eclipse.dirigible.tests.framework.security.SecurityUtil;
@@ -33,6 +41,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.annotation.DirtiesContext;
 
 import io.restassured.http.ContentType;
@@ -69,6 +78,12 @@ class TenantUserSnapshotApiIT extends IntegrationTest {
 
     @Autowired
     private SecurityUtil securityUtil;
+
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
+
+    @LocalServerPort
+    private int port;
 
     @BeforeAll
     static void enableTheApi() {
@@ -151,6 +166,61 @@ class TenantUserSnapshotApiIT extends IntegrationTest {
         });
     }
 
+    /**
+     * An erasure: the tenant forgets one person for good - the tombstone, the platform user of that
+     * address in any case, and a live user's role rows - while the other users and the next snapshot's
+     * rules stay as they were. Revisions above 20 keep these users out of the other scenario's resync.
+     */
+    @Test
+    void aForgottenUserIsGoneForGoodTombstoneAndPlatformUserIncluded() throws SQLException {
+        securityUtil.createUser(TENANT_ID, "Dora@Example.com", PASSWORD);
+        asProvisioner(() -> {
+            // 1. two users, then one of them removed - a tombstone
+            sync(false, 31, user("dora@example.com", 30, "ASSIGNED", role("User", "GRANTED", OWNER, AT)),
+                    user("eve@example.com", 31, "ASSIGNED", role("User", "GRANTED", OWNER, AT), role("Owner", "GRANTED", OWNER, AT)));
+            sync(false, 32, user("dora@example.com", 32, "REMOVED"));
+            users(true).body("find { it.email == 'dora@example.com' }.status", equalTo("REMOVED"));
+
+            // 2. forgetting the tombstone: 204, and it is no longer listed, even with the tombstones
+            forget(TENANT_ID, "Dora@Example.com").statusCode(204);
+            users(true).body("find { it.email == 'dora@example.com' }", nullValue())
+                       .body("find { it.email == 'eve@example.com' }.roles", hasSize(2));
+
+            // 3. again: 204 - idempotent
+            forget(TENANT_ID, "dora@example.com").statusCode(204);
+
+            // 4. a snapshot naming the other user still applies by the usual rules
+            sync(false, 33,
+                    user("eve@example.com", 33, "ASSIGNED", role("User", "GRANTED", OWNER, AT), role("Owner", "GRANTED", OWNER, AT))).body(
+                            "applied", equalTo(1));
+        });
+        assertEquals(0, replicaRows("dora@example.com"));
+        assertEquals(0, platformUsers("dora@example.com"), "the platform user [Dora@Example.com] must be deleted, ignoring case");
+        assertEquals(1, replicaRows("eve@example.com"));
+
+        // a live user goes with its role rows
+        int roleRowsBefore = roleRows();
+        asProvisioner(() -> forget(TENANT_ID, "eve@example.com").statusCode(204));
+        assertEquals(0, replicaRows("eve@example.com"));
+        assertEquals(roleRowsBefore - 2, roleRows());
+
+        // the refusals, in the API's error body
+        asProvisioner(() -> {
+            forget("it-snap-unknown", "dora@example.com").statusCode(404)
+                                                         .body("status", equalTo(404));
+            forget(TENANT_ID, "not-an-email").statusCode(400)
+                                             .body("message", not(blankOrNullString()));
+            forget("default-tenant", "dora@example.com").statusCode(400);
+        });
+        securityUtil.ensureUserInDefaultTenant(PLAIN_USER, PASSWORD);
+        restAssuredExecutor.execute(() -> forget(TENANT_ID, "eve@example.com").statusCode(403), PLAIN_USER, PASSWORD);
+        given().port(port)
+               .when()
+               .delete(USERS_PATH + "/{email}", "eve@example.com")
+               .then()
+               .statusCode(401);
+    }
+
     @Test
     void anUnknownTenantIsNotFoundWithTheApisErrorBody() {
         asProvisioner(() -> given().contentType(ContentType.JSON)
@@ -199,6 +269,38 @@ class TenantUserSnapshotApiIT extends IntegrationTest {
                       .put(USERS_PATH)
                       .then()
                       .statusCode(200);
+    }
+
+    private static ValidatableResponse forget(String tenantId, String email) {
+        return given().when()
+                      .delete(TENANTS_PATH + tenantId + "/users/{email}", email)
+                      .then();
+    }
+
+    private int replicaRows(String email) throws SQLException {
+        return count("SELECT COUNT(*) FROM DIRIGIBLE_TENANT_USERS WHERE TENUSER_TENANT_ID = ? AND TENUSER_EMAIL = ?", TENANT_ID, email);
+    }
+
+    private int platformUsers(String email) throws SQLException {
+        return count("SELECT COUNT(*) FROM DIRIGIBLE_USERS WHERE USER_TENANT_ID = ? AND LOWER(USER_USERNAME) = ?", TENANT_ID, email);
+    }
+
+    private int roleRows() throws SQLException {
+        return count("SELECT COUNT(*) FROM DIRIGIBLE_TENANT_USER_ROLES");
+    }
+
+    private int count(String sql, String... parameters) throws SQLException {
+        try (Connection connection = dataSourcesManager.getSystemDataSource()
+                                                       .getConnection();
+                PreparedStatement statement = connection.prepareStatement(sql)) {
+            for (int i = 0; i < parameters.length; i++) {
+                statement.setString(i + 1, parameters[i]);
+            }
+            try (ResultSet resultSet = statement.executeQuery()) {
+                resultSet.next();
+                return resultSet.getInt(1);
+            }
+        }
     }
 
     private static ValidatableResponse users(boolean includeRemoved) {

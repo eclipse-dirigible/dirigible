@@ -93,4 +93,15 @@ public interface TenantUserRepository extends JpaRepository<TenantUser, Long> {
      */
     @Transactional
     long deleteByTenantId(String tenantId);
+
+    /**
+     * Deletes one user of a tenant, removed or not, and through the cascade its role rows - the
+     * provisioning system's erasure of one person.
+     *
+     * @param tenantId the tenant id
+     * @param email the email, normalized
+     * @return how many user rows were deleted
+     */
+    @Transactional
+    long deleteByTenantIdAndEmail(String tenantId, String email);
 }

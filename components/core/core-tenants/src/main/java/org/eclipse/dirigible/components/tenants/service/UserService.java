@@ -140,6 +140,23 @@ public class UserService {
     }
 
     /**
+     * Deletes the users of a tenant whose username equals the given one, ignoring case, with their role
+     * assignments - how a tenant forgets a person. Runs in the caller's transaction.
+     *
+     * @param tenantId the tenant id
+     * @param username the username
+     * @return how many users were deleted
+     */
+    public int deleteUsersByTenantIdAndUsernameIgnoreCase(String tenantId, String username) {
+        List<User> users = userRepository.findUsersByTenantIdAndUsernameIgnoreCase(tenantId, username);
+        users.forEach(user -> {
+            assignmentRepository.deleteAll(assignmentRepository.findByUser(user));
+            userRepository.delete(user);
+        });
+        return users.size();
+    }
+
+    /**
      * Find user by username and tenant id.
      *
      * @param username the username

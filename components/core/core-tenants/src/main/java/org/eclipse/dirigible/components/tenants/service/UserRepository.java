@@ -36,4 +36,13 @@ interface UserRepository extends JpaRepository<User, String> {
      * @return the list
      */
     List<User> findUsersByTenantId(String tenantId);
+
+    /**
+     * Find the users of a tenant whose username equals the given one, ignoring case.
+     *
+     * @param tenantId the tenant id
+     * @param username the username
+     * @return the list
+     */
+    List<User> findUsersByTenantIdAndUsernameIgnoreCase(String tenantId, String username);
 }

@@ -18,6 +18,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -28,6 +30,7 @@ import java.util.Optional;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
+import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -38,11 +41,13 @@ import org.springframework.web.server.ResponseStatusException;
 class TenantUserReplicaServiceTest {
 
     private static final String TENANT = "acme";
+    private static final String DEFAULT_TENANT = "default-tenant";
     private static final String SIGN_IN = "2026-09-29T08:00:00Z";
     private static final String GRANTED_AT = "2026-09-30T10:00:00Z";
 
     private TenantUserRepository users;
     private TenantService tenants;
+    private UserService platformUsers;
     private TenantUserReplicaService service;
 
     @BeforeEach
@@ -52,8 +57,12 @@ class TenantUserReplicaServiceTest {
         when(tenants.findById(TENANT)).thenReturn(Optional.of(mock(Tenant.class)));
         when(users.findForUpdateByTenantIdAndEmail(any(), any())).thenReturn(Optional.empty());
         when(users.findByTenantIdAndStatusNotOrderByEmail(TENANT, TenantUserStatus.REMOVED)).thenReturn(List.of());
+        platformUsers = mock(UserService.class);
+        org.eclipse.dirigible.components.base.tenant.Tenant defaultTenant = mock(org.eclipse.dirigible.components.base.tenant.Tenant.class);
+        when(defaultTenant.getId()).thenReturn(DEFAULT_TENANT);
+        when(tenants.findById(DEFAULT_TENANT)).thenReturn(Optional.of(mock(Tenant.class)));
         // A mock manager runs every TransactionTemplate callback inline.
-        service = new TenantUserReplicaService(users, tenants, mock(PlatformTransactionManager.class));
+        service = new TenantUserReplicaService(users, tenants, platformUsers, defaultTenant, mock(PlatformTransactionManager.class));
     }
 
     @Test
@@ -256,6 +265,71 @@ class TenantUserReplicaServiceTest {
         TenantUserSync.Result result = service.apply(TENANT, changed(user("ann@example.com", 4, "INVITED")));
 
         assertEquals(42L, result.storedRevision());
+    }
+
+    @Test
+    void forgetDeletesALiveRowWithItsRoles() {
+        when(users.deleteByTenantIdAndEmail(TENANT, "ann@example.com")).thenReturn(1L);
+
+        service.forget(TENANT, " Ann@Example.com ");
+
+        // the role rows go through the entity's cascade, which TenantUserSnapshotApiIT asserts on the table
+        verify(users).deleteByTenantIdAndEmail(TENANT, "ann@example.com");
+        verify(platformUsers).deleteUsersByTenantIdAndUsernameIgnoreCase(TENANT, "ann@example.com");
+    }
+
+    @Test
+    void forgetDeletesATombstone() {
+        when(users.deleteByTenantIdAndEmail(TENANT, "ben@example.com")).thenReturn(1L);
+
+        service.forget(TENANT, "ben@example.com");
+
+        // deleted by tenant and email, whatever the status - never filtered on the live rows
+        verify(users).deleteByTenantIdAndEmail(TENANT, "ben@example.com");
+        verify(platformUsers).deleteUsersByTenantIdAndUsernameIgnoreCase(TENANT, "ben@example.com");
+    }
+
+    @Test
+    void forgetOfAnUnknownEmailIsANoOp() {
+        when(users.deleteByTenantIdAndEmail(TENANT, "ghost@example.com")).thenReturn(0L);
+
+        service.forget(TENANT, "ghost@example.com");
+
+        verify(users).deleteByTenantIdAndEmail(TENANT, "ghost@example.com");
+    }
+
+    @Test
+    void forgetLeavesOtherUsersAndTheRevision() {
+        service.forget(TENANT, "ann@example.com");
+
+        verify(users).deleteByTenantIdAndEmail(TENANT, "ann@example.com");
+        // no other row is read, written or re-stamped, and no revision is recomputed
+        verifyNoMoreInteractions(users);
+        verify(platformUsers).deleteUsersByTenantIdAndUsernameIgnoreCase(TENANT, "ann@example.com");
+        verifyNoMoreInteractions(platformUsers);
+    }
+
+    @Test
+    void forgetRefusesADeprovisioningTenant() {
+        Tenant deprovisioning = mock(Tenant.class);
+        when(deprovisioning.getStatus()).thenReturn(TenantStatus.DEPROVISIONING);
+        when(tenants.findById(TENANT)).thenReturn(Optional.of(deprovisioning));
+
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class, () -> service.forget(TENANT, "ann@example.com"));
+
+        assertEquals(HttpStatus.CONFLICT, refused.getStatusCode());
+        verifyNoInteractions(users, platformUsers);
+    }
+
+    @Test
+    void forgetRefusesAnUnknownTenantTheDefaultTenantAndANonEmail() {
+        assertEquals(HttpStatus.NOT_FOUND,
+                assertThrows(ResponseStatusException.class, () -> service.forget("nowhere", "ann@example.com")).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST,
+                assertThrows(ResponseStatusException.class, () -> service.forget(DEFAULT_TENANT, "ann@example.com")).getStatusCode());
+        assertEquals(HttpStatus.BAD_REQUEST,
+                assertThrows(ResponseStatusException.class, () -> service.forget(TENANT, "not-an-email")).getStatusCode());
+        verifyNoInteractions(users, platformUsers);
     }
 
     private TenantUser stored(String email, long revision, TenantUserStatus status) {

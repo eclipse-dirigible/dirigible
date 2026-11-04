@@ -13,16 +13,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.security.service.RoleService;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.User;
+import org.eclipse.dirigible.components.tenants.domain.UserRoleAssignment;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 class UserServiceTest {
@@ -30,8 +34,9 @@ class UserServiceTest {
     private final TenantService tenantService = mock(TenantService.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-    private final UserService service = new UserService(tenantService, mock(RoleService.class), userRepository, passwordEncoder,
-            mock(UserRoleAssignmentRepository.class));
+    private final UserRoleAssignmentRepository assignmentRepository = mock(UserRoleAssignmentRepository.class);
+    private final UserService service =
+            new UserService(tenantService, mock(RoleService.class), userRepository, passwordEncoder, assignmentRepository);
 
     private User stored;
 
@@ -73,5 +78,31 @@ class UserServiceTest {
                                   .getPassword());
         assertEquals(hash, service.updateUser("u1", "jane", "  ", "default-tenant")
                                   .getPassword());
+    }
+
+    /**
+     * Forgetting a person: every matching user goes, each after its role assignments (no FK cascade).
+     */
+    @Test
+    void deletingByUsernameRemovesEachMatchAfterItsAssignments() {
+        User upper = new User(stored.getTenant(), "Ann@Example.com", "hash");
+        List<UserRoleAssignment> assignments = List.of(new UserRoleAssignment());
+        when(userRepository.findUsersByTenantIdAndUsernameIgnoreCase("default-tenant", "ann@example.com")).thenReturn(List.of(upper));
+        when(assignmentRepository.findByUser(upper)).thenReturn(assignments);
+
+        assertEquals(1, service.deleteUsersByTenantIdAndUsernameIgnoreCase("default-tenant", "ann@example.com"));
+
+        InOrder order = inOrder(assignmentRepository, userRepository);
+        order.verify(assignmentRepository)
+             .deleteAll(assignments);
+        order.verify(userRepository)
+             .delete(upper);
+    }
+
+    @Test
+    void deletingAnUnknownUsernameDeletesNothing() {
+        when(userRepository.findUsersByTenantIdAndUsernameIgnoreCase("default-tenant", "ghost@example.com")).thenReturn(List.of());
+
+        assertEquals(0, service.deleteUsersByTenantIdAndUsernameIgnoreCase("default-tenant", "ghost@example.com"));
     }
 }
