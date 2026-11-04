@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.base.tenant.TenantPostProvisioningStep;
+import org.eclipse.dirigible.components.base.tenant.TenantSuspensionParticipant;
 import org.eclipse.dirigible.components.base.tenant.TenantTeardownParticipant;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
@@ -144,7 +145,8 @@ import jakarta.jms.Topic;
  */
 @Component
 @Order(500)
-public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvisioningStep, TenantTeardownParticipant {
+public class ListenerClassConsumer
+        implements JavaClassConsumer, TenantPostProvisioningStep, TenantTeardownParticipant, TenantSuspensionParticipant {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerClassConsumer.class);
 
@@ -838,10 +840,11 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
     }
 
     /**
-     * Deprovisioning (participant 100): closes every subscription open for the tenant, and the tenant's
-     * shared connection in the shared mode. Its status already keeps the top-up and the reconciliation
-     * pass from opening them again. The closing happens outside the monitor, as in {@link #shutdown()}.
-     * The broker's durable subscriptions and destinations stay.
+     * Deprovisioning and suspension (participant 100 of both): closes every subscription open for the
+     * tenant, and the tenant's shared connection in the shared mode. Its status already keeps the
+     * top-up and the reconciliation pass from opening them again. The closing happens outside the
+     * monitor, as in {@link #shutdown()}. The broker's durable subscriptions and destinations stay, so
+     * a suspended tenant's messages wait there for its resume.
      */
     @Override
     public int order() {
@@ -850,6 +853,30 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
 
     @Override
     public void teardown(String tenantId) {
+        closeTenant(tenantId, "deprovisioned");
+    }
+
+    @Override
+    public void suspend(String tenantId) {
+        closeTenant(tenantId, "suspended");
+    }
+
+    /**
+     * Marks the subscriptions incomplete, so the next {@link #reconcile()} - the one {@link #resumed}
+     * runs once the tenant is provisioned again - opens the tenant's subscriptions. Nothing is opened
+     * here: the tenant is still suspended, and the top-up reaches provisioned tenants only.
+     */
+    @Override
+    public void resume(String tenantId) {
+        markIncomplete();
+    }
+
+    @Override
+    public void resumed(String tenantId) {
+        reconcile();
+    }
+
+    private void closeTenant(String tenantId, String why) {
         List<AutoCloseable> open = new ArrayList<>();
         synchronized (this) {
             registrations.values()
@@ -860,10 +887,10 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             }
         }
         for (AutoCloseable handle : open) {
-            closeQuietly("deprovisioned tenant [" + tenantId + "]", handle);
+            closeQuietly(why + " tenant [" + tenantId + "]", handle);
         }
         if (!open.isEmpty()) {
-            LOGGER.info("Closed [{}] Java listener subscription handle(s) of deprovisioned tenant [{}].", open.size(),
+            LOGGER.info("Closed [{}] Java listener subscription handle(s) of {} tenant [{}].", open.size(), why,
                     LogSanitizer.sanitize(tenantId));
         }
     }

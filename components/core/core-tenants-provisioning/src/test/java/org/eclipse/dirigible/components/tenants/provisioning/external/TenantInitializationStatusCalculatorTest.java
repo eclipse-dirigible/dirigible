@@ -105,6 +105,14 @@ class TenantInitializationStatusCalculatorTest {
         assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.PROVISIONED).status());
     }
 
+    /**
+     * A suspended tenant was activated: it keeps the initialization it had, not NOT_STARTED (#8477).
+     */
+    @Test
+    void aSuspendedTenantKeepsItsInitialization() {
+        assertEquals(InitializationStatus.COMPLETED, calculate(TenantStatus.SUSPENDED).status());
+    }
+
     @Test
     void aDefinitionThatCannotBeParsedIsAFailure() {
         Definition broken = definition("table", DefinitionState.BROKEN);

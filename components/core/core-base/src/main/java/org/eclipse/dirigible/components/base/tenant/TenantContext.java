@@ -79,11 +79,38 @@ public interface TenantContext {
             throws Exc;
 
     /**
-     * Executes callable.call() on the calling thread with {@link #executeForEachTenant} restricted to
-     * the given tenants: every per-tenant fan-out the callable reaches, however deep, visits only the
-     * provisioned tenants among them. This is how the initialization of a newly activated tenant runs
-     * the per-tenant artefacts for that tenant alone, leaving the already initialized tenants
-     * untouched.
+     * This method will execute callable.call() for each tenant whose definitions are maintained: the
+     * provisioned tenants and the suspended ones. A suspended tenant runs nothing, but a new
+     * application version still has to reach its schema, or it would resume with stale tables - so
+     * every synchronizer phase that fans out over tenants uses this, while every runtime caller (a
+     * relay, a top-up, a reconciliation pass) keeps {@link #executeForEachTenant}. Honours
+     * {@link #executeScopedTo} like {@link #executeForEachTenant} does.
+     *
+     * @param callable the callable
+     * @param <Result> result type
+     * @param <Exc> exception type which is thrown by the callable
+     * @return the results of the tenant executions
+     * @throws Exc the exception which is thrown by the callable
+     */
+    <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachMaintainedTenant(
+            CallableResultAndException<Result, Exc> callable) throws Exc;
+
+    /**
+     * Whether the tenant is suspended - maintained by the synchronizers, but running nothing. A
+     * synchronizer that starts runtime work reached through {@link #executeForEachMaintainedTenant}
+     * asks this to register the work without starting it.
+     *
+     * @param tenantId the tenant id
+     * @return true when the tenant exists and is suspended
+     */
+    boolean isSuspended(String tenantId);
+
+    /**
+     * Executes callable.call() on the calling thread with {@link #executeForEachTenant} and
+     * {@link #executeForEachMaintainedTenant} restricted to the given tenants: every per-tenant fan-out
+     * the callable reaches, however deep, visits only the tenants among them it would visit anyway.
+     * This is how the initialization of a newly activated tenant runs the per-tenant artefacts for that
+     * tenant alone, leaving the already initialized tenants untouched.
      *
      * @param tenantIds the ids of the tenants the fan-out is restricted to
      * @param callable the callable

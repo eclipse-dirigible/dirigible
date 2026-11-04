@@ -117,6 +117,9 @@
                   <template x-if="selectedTenantId && tenant.id === selectedTenantId">
                     <span x-h-badge>Current</span>
                   </template>
+                  <template x-if="tenant.state === 'SUSPENDED'">
+                    <span x-h-badge data-variant="warning">Suspended</span>
+                  </template>
                 </span>
                 <!-- The id is only worth a line of its own when it is not what the name already says. -->
                 <span class="text-sm text-muted-foreground" x-show="tenant.name && tenant.name !== tenant.id"
@@ -129,7 +132,12 @@
                 <span x-show="tenant.state === 'PREPARING'" class="text-sm text-muted-foreground">
                   Being prepared. Try again in a few minutes.
                 </span>
-                <span x-show="!tenant.provisionedHere && tenant.state !== 'PREPARING'"
+                <!-- A third reason: neither waiting nor an administrator of this application ends a
+                     suspension - only the tenant's owner settling it with the provider does. -->
+                <span x-show="tenant.state === 'SUSPENDED'" class="text-sm text-muted-foreground">
+                  This tenant is suspended. Contact its owner.
+                </span>
+                <span x-show="!tenant.provisionedHere && tenant.state !== 'PREPARING' && tenant.state !== 'SUSPENDED'"
                       class="text-sm text-muted-foreground">
                   Not available. Contact your administrator.
                 </span>
@@ -251,9 +259,11 @@
                       case 401: return 'Your session has expired. Reload the page to sign in again.';
                       case 403: return 'You are no longer assigned to this tenant.';
                       case 404: return 'This application does not let users select a tenant.';
-                      case 409: return refusal && refusal.reason === 'UNKNOWN_HERE'
-                          ? 'This tenant is not available. Contact your administrator.'
-                          : 'This tenant is still being prepared. Try again in a few minutes.';
+                      case 409:
+                          if (refusal && refusal.reason === 'SUSPENDED') return 'This tenant is suspended. Contact its owner.';
+                          return refusal && refusal.reason === 'UNKNOWN_HERE'
+                              ? 'This tenant is not available. Contact your administrator.'
+                              : 'This tenant is still being prepared. Try again in a few minutes.';
                       default: return fallback;
                   }
               },

@@ -146,7 +146,7 @@ class MigrationsSynchronizerTest {
 
         assertThat(synchronizer.completeImpl(wrap(migration), ArtefactPhase.CREATE)).isTrue();
 
-        verify(tenantContext, never()).executeForEachTenant(any());
+        verify(tenantContext, never()).executeForEachMaintainedTenant(any());
         verify(callback).registerState(eq(synchronizer), any(TopologyWrapper.class), eq(ArtefactLifecycle.CREATED));
     }
 
@@ -235,7 +235,7 @@ class MigrationsSynchronizerTest {
     private void givenTenants(String... ids) throws Exception {
         AtomicReference<Tenant> current = new AtomicReference<>();
         when(tenantContext.getCurrentTenant()).thenAnswer(invocation -> current.get());
-        when(tenantContext.executeForEachTenant(any())).thenAnswer(invocation -> {
+        when(tenantContext.executeForEachMaintainedTenant(any())).thenAnswer(invocation -> {
             CallableResultAndException<Object, ?> callable = invocation.getArgument(0);
             List<TenantResult<Object>> results = new ArrayList<>();
             for (String id : ids) {

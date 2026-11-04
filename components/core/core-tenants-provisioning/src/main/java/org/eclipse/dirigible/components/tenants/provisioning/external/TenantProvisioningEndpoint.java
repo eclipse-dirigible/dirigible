@@ -51,18 +51,23 @@ class TenantProvisioningEndpoint extends BaseEndpoint {
     /** The deprovisioning service. */
     private final TenantDeprovisioningService deprovisioningService;
 
+    /** The suspension service. */
+    private final TenantSuspensionService suspensionService;
+
     /**
      * Instantiates a new tenant provisioning endpoint.
      *
      * @param registrationService the registration service
      * @param activationService the activation service
      * @param deprovisioningService the deprovisioning service
+     * @param suspensionService the suspension service
      */
     TenantProvisioningEndpoint(TenantRegistrationService registrationService, TenantActivationService activationService,
-            TenantDeprovisioningService deprovisioningService) {
+            TenantDeprovisioningService deprovisioningService, TenantSuspensionService suspensionService) {
         this.registrationService = registrationService;
         this.activationService = activationService;
         this.deprovisioningService = deprovisioningService;
+        this.suspensionService = suspensionService;
     }
 
     /**
@@ -98,6 +103,27 @@ class TenantProvisioningEndpoint extends BaseEndpoint {
         deprovisioningService.deprovision(tenantId);
         return ResponseEntity.noContent()
                              .build();
+    }
+
+    /**
+     * Suspends the tenant ({@code {"status":"SUSPENDED"}}) or resumes it
+     * ({@code {"status":"PROVISIONED"}}), without touching its data.
+     *
+     * <p>
+     * Synchronous: when it answers, a suspended tenant's people and integration clients are refused and
+     * nothing runs for it, and a resumed one runs exactly as before. Suspending a suspended tenant and
+     * resuming a provisioned one run that half again, which is how a run that failed half way is
+     * finished.
+     *
+     * @param tenantId the tenant id
+     * @param parameter the requested status
+     * @return 200 with the tenant; 409 for a tenant that is neither provisioned nor suspended, 404 for
+     *         an unknown one, 400 for an invalid id, the default tenant or another status
+     */
+    @PutMapping("/{tenantId}/status")
+    ResponseEntity<TenantProvisioningState> changeTenantStatus(@PathVariable("tenantId") String tenantId,
+            @RequestBody TenantStatusParameter parameter) {
+        return ResponseEntity.ok(suspensionService.changeStatus(tenantId, parameter.status()));
     }
 
     /**

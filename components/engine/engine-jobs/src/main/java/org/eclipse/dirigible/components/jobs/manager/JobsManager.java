@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.jobs.manager;
 
 import org.apache.commons.lang3.StringUtils;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.jobs.handler.JobHandler;
 import org.eclipse.dirigible.components.jobs.handler.JobHandlerRunner;
@@ -87,6 +88,7 @@ public class JobsManager {
             TriggerKey triggerKey = createTriggerKey(jobDefinition);
             if (scheduler.checkExists(jobKey) && scheduler.checkExists(triggerKey)) {
                 LOGGER.debug("Job [{}] already exists and will not be scheduled.", jobDefinition);
+                pauseIfTenantSuspended(jobDefinition, jobKey);
                 return;
             }
             JobDetail job = isInternalJob(jobDefinition) ? createInternalJob(jobDefinition, jobKey) : createUserJob(jobDefinition, jobKey);
@@ -94,12 +96,35 @@ public class JobsManager {
             scheduler.scheduleJob(job, trigger);
 
             LOGGER.info("Scheduled Job: [{}] of group: [{}] at: [{}]", jobKey.getName(), jobKey.getGroup(), jobDefinition.getExpression());
+            pauseIfTenantSuspended(jobDefinition, jobKey);
         } catch (ObjectAlreadyExistsException e) {
             LOGGER.warn(e.getMessage());
         } catch (ClassNotFoundException e) {
             throw new Exception("Invalid class name [" + jobDefinition.getClazz() + "] for the job", e);
         } catch (org.quartz.SchedulerException e) {
             throw new Exception("Failed to schedule a job for " + jobDefinition, e);
+        }
+    }
+
+    /**
+     * A suspended tenant is still maintained by the synchronizers, so its jobs are scheduled like any
+     * other tenant's - and paused at once, so nothing of it runs until it is resumed (#8477). Also on
+     * the "already exists" path, which is how a job a half-done suspension left running is paused by
+     * the next pass.
+     *
+     * @param jobDefinition the job definition
+     * @param jobKey the job's key in the current tenant
+     * @throws org.quartz.SchedulerException if the scheduler refuses the pause
+     */
+    private void pauseIfTenantSuspended(org.eclipse.dirigible.components.jobs.domain.Job jobDefinition, JobKey jobKey)
+            throws org.quartz.SchedulerException {
+        if (isInternalJob(jobDefinition)) {
+            return;
+        }
+        Tenant tenant = tenantContext.getCurrentTenant();
+        if (!tenant.isDefault() && tenantContext.isSuspended(tenant.getId())) {
+            scheduler.pauseJob(jobKey);
+            LOGGER.info("Paused Job: [{}] of group: [{}] - tenant [{}] is suspended", jobKey.getName(), jobKey.getGroup(), tenant.getId());
         }
     }
 

@@ -13,13 +13,14 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.artefact.ArtefactPhase;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.listeners.domain.Listener;
 import org.eclipse.dirigible.components.listeners.domain.ListenerKind;
 import org.eclipse.dirigible.components.listeners.service.ListenerService;
 import org.eclipse.dirigible.components.listeners.service.ListenersManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.HashMap;
 
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -54,6 +56,12 @@ class ListenerSynchronizerRetryTest {
     /** The callback, persisting state the way the synchronization processor does. */
     private SynchronizerCallback callback;
 
+    /** The tenant the listener is being completed for. */
+    private Tenant tenant;
+
+    /** Tells whether that tenant is suspended. */
+    private TenantContext tenantContext;
+
     /**
      * Wires the synchronizer over a manager double and a callback that writes the registered state onto
      * the artefact, as the synchronization processor does.
@@ -64,9 +72,12 @@ class ListenerSynchronizerRetryTest {
         when(listenerService.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         listenersManager = mock(ListenersManager.class);
 
-        synchronizer = new ListenerSynchronizer();
-        ReflectionTestUtils.setField(synchronizer, "listenerService", listenerService);
-        ReflectionTestUtils.setField(synchronizer, "listenersManager", listenersManager);
+        tenant = mock(Tenant.class);
+        when(tenant.getId()).thenReturn("acme");
+        tenantContext = mock(TenantContext.class);
+        when(tenantContext.getCurrentTenant()).thenReturn(tenant);
+
+        synchronizer = new ListenerSynchronizer(listenerService, listenersManager, tenantContext);
 
         callback = mock(SynchronizerCallback.class);
         doAnswer(invocation -> {
@@ -156,6 +167,38 @@ class ListenerSynchronizerRetryTest {
         assertTrue(synchronizer.completeImpl(wrapper, ArtefactPhase.START));
         verify(listenersManager, times(0)).startListener(any());
         assertEquals(ArtefactLifecycle.CREATED, listener.getLifecycle());
+    }
+
+    /**
+     * A suspended tenant is maintained, not run (#8477): its listener is registered and recorded as the
+     * start would have recorded it, but nothing is subscribed - resuming the tenant starts it.
+     */
+    @Test
+    void aSuspendedTenantsListenerIsRegisteredAndNotStarted() {
+        when(tenantContext.isSuspended("acme")).thenReturn(true);
+        Listener listener = listener(ArtefactLifecycle.NEW);
+
+        assertTrue(synchronizer.completeImpl(wrapper(listener), ArtefactPhase.CREATE));
+
+        verify(listenersManager).registerListener(listener);
+        verify(listenersManager, never()).startListener(any());
+        assertEquals(ArtefactLifecycle.CREATED, listener.getLifecycle());
+    }
+
+    /**
+     * A suspended tenant's listener whose handler is missing stays failed, exactly as a start would.
+     */
+    @Test
+    void aSuspendedTenantsUnstartableListenerStaysFailed() {
+        when(tenantContext.isSuspended("acme")).thenReturn(true);
+        Listener listener = listener(ArtefactLifecycle.FAILED);
+        doThrow(new IllegalStateException("missing handler")).when(listenersManager)
+                                                             .registerListener(listener);
+
+        assertFalse(synchronizer.completeImpl(wrapper(listener), ArtefactPhase.START));
+
+        assertEquals(ArtefactLifecycle.FAILED, listener.getLifecycle());
+        verify(listenersManager, never()).startListener(any());
     }
 
     private static Listener listener(ArtefactLifecycle lifecycle) {

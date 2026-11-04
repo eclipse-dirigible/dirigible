@@ -19,7 +19,7 @@ package org.eclipse.dirigible.components.security.oauth2.tenant;
  *        {@code state == State#READY}, kept because it is the field the picker was first written
  *        against
  * @param state why the tenant can or cannot be entered - {@code provisionedHere} only says that it
- *        cannot, and the two reasons need different words
+ *        cannot, and the reasons need different words
  */
 public record TenantOption(String id, String name, boolean provisionedHere, State state) {
 
@@ -35,6 +35,11 @@ public record TenantOption(String id, String name, boolean provisionedHere, Stat
         READY,
         /** Registered here, provisioning not finished. Waiting is the correct advice. */
         PREPARING,
+        /**
+         * Suspended by its provisioner. Waiting will not help either - only the provisioner resuming it
+         * does, so the user is told to contact the tenant's owner.
+         */
+        SUSPENDED,
         /**
          * Not registered here at all. Nothing in this instance is preparing it, so waiting will not help -
          * the group says the user belongs to a tenant this application has never been told about, which is

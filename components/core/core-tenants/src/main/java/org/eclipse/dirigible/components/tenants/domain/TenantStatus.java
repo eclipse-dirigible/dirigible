@@ -32,6 +32,19 @@ public enum TenantStatus {
      */
     PENDING_ACTIVATION,
     /**
+     * Paused by an external provisioner - a subscription whose payment failed, say. Its people and
+     * integration clients are refused, and nothing runs for it: its jobs are paused, its listeners
+     * stopped, its process instances suspended, and {@code executeForEachTenant} - which queries
+     * {@link #PROVISIONED} only - skips it, so no relay, top-up or reconciliation pass reaches it
+     * either. Its data, its data source, its user replica and its client registry stay as they are.
+     *
+     * <p>
+     * It is still maintained: {@code executeForEachMaintainedTenant} visits it, so an application
+     * version published meanwhile reaches its schema. The status is the only marker - there is no
+     * in-memory one - and resuming moves the tenant back to {@link #PROVISIONED}.
+     */
+    SUSPENDED,
+    /**
      * Being removed through the tenant provisioning API's deprovisioning.
      *
      * <p>

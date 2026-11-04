@@ -24,6 +24,7 @@ import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.tenant.TenantAccessRefusedEvent;
@@ -78,6 +79,9 @@ public class TenantSelectionManager {
 
     private final ApplicationEventPublisher events;
 
+    /** The tenant the current request was opened in - the selected one, when it is provisioned. */
+    private final TenantContext tenantContext;
+
     /**
      * Instantiates a new tenant selection manager. Annotated because the class carries a second
      * constructor for the tests, so the injectable one has to be named.
@@ -85,10 +89,12 @@ public class TenantSelectionManager {
      * @param groupsClaim the claim the user groups are read from
      * @param tenantService the tenant registry of this instance
      * @param events where a tenant entered is announced
+     * @param tenantContext the tenant scope of the current request
      */
     @Autowired
-    public TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService, ApplicationEventPublisher events) {
-        this(groupsClaim, tenantService, new HttpSessionSecurityContextRepository(), events);
+    public TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService, ApplicationEventPublisher events,
+            TenantContext tenantContext) {
+        this(groupsClaim, tenantService, new HttpSessionSecurityContextRepository(), events, tenantContext);
     }
 
     /**
@@ -98,13 +104,15 @@ public class TenantSelectionManager {
      * @param tenantService the tenant registry of this instance
      * @param securityContextRepository where the rebuilt authentication is persisted
      * @param events where a tenant entered is announced
+     * @param tenantContext the tenant scope of the current request
      */
     TenantSelectionManager(TenantGroupsClaim groupsClaim, TenantService tenantService, SecurityContextRepository securityContextRepository,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events, TenantContext tenantContext) {
         this.groupsClaim = groupsClaim;
         this.tenantService = tenantService;
         this.securityContextRepository = securityContextRepository;
         this.events = events;
+        this.tenantContext = tenantContext;
     }
 
     /**
@@ -298,6 +306,10 @@ public class TenantSelectionManager {
             throw new TenantSelectionException(TenantSelectionException.Reason.UNKNOWN_HERE, tenantId,
                     "Tenant [" + tenantId + "] is not registered in this application");
         }
+        if (isSuspended(tenant)) {
+            throw new TenantSelectionException(TenantSelectionException.Reason.SUSPENDED, tenantId,
+                    "Tenant [" + tenantId + "] is suspended. Contact its owner.");
+        }
         if (!isProvisioned(tenant)) {
             throw new TenantSelectionException(TenantSelectionException.Reason.NOT_PROVISIONED_HERE, tenantId,
                     "Tenant [" + tenantId + "] is not provisioned in this application yet");
@@ -345,6 +357,16 @@ public class TenantSelectionManager {
             events.publishEvent(new TenantSelectionRevokedEvent(selectedTenantId, authentication.getName(), Instant.now()));
             return false;
         }
+        if (isSuspendedSelection(selectedTenantId)) {
+            // The scope of this request was not opened in the tenant (a suspended tenant is never
+            // resolved), and no later one may be: the selection goes, whatever the session's age.
+            LOGGER.info("The selected tenant [{}] of user [{}] is suspended. Dropping the selection.", selectedTenantId,
+                    authentication.getName());
+            request.getSession()
+                   .removeAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE);
+            reauthenticate(oauth2Authentication, assignments.globalRoles(), request, response);
+            return false;
+        }
         Set<String> expectedRoles = rolesOf(assignments, selectedTenantId);
         Set<String> currentRoles = new LinkedHashSet<>(AuthoritiesUtil.toRoleNames(authentication.getAuthorities()));
         if (!currentRoles.equals(expectedRoles)) {
@@ -390,6 +412,28 @@ public class TenantSelectionManager {
     }
 
     /**
+     * Whether the selected tenant is suspended. Asked on every request that holds a selection, so the
+     * registry is read only when it can be: the request's scope was opened from the selection by the
+     * tenant extractor, which resolves a provisioned tenant only - a request running in the selected
+     * tenant cannot have a suspended one.
+     *
+     * @param selectedTenantId the selected tenant
+     * @return true when the selected tenant is suspended
+     */
+    private boolean isSuspendedSelection(String selectedTenantId) {
+        if (tenantContext.isInitialized() && selectedTenantId.equals(tenantContext.getCurrentTenant()
+                                                                                  .getId())) {
+            return false;
+        }
+        return isSuspended(tenantService.findById(selectedTenantId));
+    }
+
+    private boolean isSuspended(Optional<Tenant> tenant) {
+        return tenant.filter(found -> TenantStatus.SUSPENDED == found.getStatus())
+                     .isPresent();
+    }
+
+    /**
      * What this instance knows about a tenant a user's groups grant them.
      *
      * @param tenant the registration, empty when there is none
@@ -401,6 +445,9 @@ public class TenantSelectionManager {
         if (tenant.isEmpty()) {
             warnUnknownTenant(tenantId, user);
             return TenantOption.State.UNKNOWN;
+        }
+        if (isSuspended(tenant)) {
+            return TenantOption.State.SUSPENDED;
         }
         return isProvisioned(tenant) ? TenantOption.State.READY : TenantOption.State.PREPARING;
     }

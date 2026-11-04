@@ -69,6 +69,19 @@ final class SingleTenantContext implements TenantContext {
         });
     }
 
+    /** The slice has the default tenant only, which is maintained like any provisioned tenant. */
+    @Override
+    public <Result, Exc extends Throwable> List<TenantResult<Result>> executeForEachMaintainedTenant(
+            CallableResultAndException<Result, Exc> callable) throws Exc {
+        return executeForEachTenant(callable);
+    }
+
+    /** The default tenant is never suspended. */
+    @Override
+    public boolean isSuspended(String tenantId) {
+        return false;
+    }
+
     /** The slice has the default tenant only, and runs as it whatever scope a caller names. */
     @Override
     public <Result, Exc extends Throwable> Result executeScopedTo(Set<String> tenantIds, CallableResultAndException<Result, Exc> callable)

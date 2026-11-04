@@ -115,6 +115,18 @@ class TenantDataSourceRegistrationServiceTest {
                                    .getValue());
     }
 
+    /** A suspended tenant's data source, and its pool, stay exactly as they were (#8477). */
+    @Test
+    void aSuspendedTenantsDataSourceIsNotRegistered() {
+        tenant.setStatus(TenantStatus.SUSPENDED);
+
+        ResponseStatusException refused = assertThrows(ResponseStatusException.class, () -> service.register(tenant, parameter()));
+
+        assertEquals(HttpStatus.CONFLICT, refused.getStatusCode());
+        verify(dataSourceService, never()).save(any());
+        verify(dataSourceInitializer, never()).removeInitializedDataSource(any());
+    }
+
     /** Re-registration replaces the definition in place - two rows would be two data sources. */
     @Test
     void reRegistrationUpdatesTheExistingDefinition() {

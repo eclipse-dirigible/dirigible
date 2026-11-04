@@ -25,6 +25,8 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.base.synchronizer.MultitenantBaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.listeners.domain.Listener;
 import org.eclipse.dirigible.components.listeners.domain.ListenerKind;
 import org.eclipse.dirigible.components.listeners.parser.ListenerMetadata;
@@ -34,7 +36,6 @@ import org.eclipse.dirigible.components.listeners.service.ListenersManager;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -57,14 +58,28 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
     private SynchronizerCallback callback;
 
     /** The listener service. */
-    @Autowired
-    private ListenerService listenerService;
+    private final ListenerService listenerService;
 
-    /** The Scheduler manager. */
-    @Autowired
-    private ListenersManager listenersManager;
+    /** The listeners manager. */
+    private final ListenersManager listenersManager;
+
+    /** Tells a suspended tenant, whose listeners are registered and not started. */
+    private final TenantContext tenantContext;
 
     private final ListenerParser listenerParser = new ListenerParser();
+
+    /**
+     * Instantiates a new listener synchronizer.
+     *
+     * @param listenerService the listener service
+     * @param listenersManager the listeners manager
+     * @param tenantContext the tenant context
+     */
+    ListenerSynchronizer(ListenerService listenerService, ListenersManager listenersManager, TenantContext tenantContext) {
+        this.listenerService = listenerService;
+        this.listenersManager = listenersManager;
+        this.tenantContext = tenantContext;
+    }
 
     /**
      * Checks if is accepted.
@@ -191,7 +206,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
             case CREATE:
                 if (ArtefactLifecycle.NEW.equals(listener.getLifecycle())) {
                     try {
-                        listenersManager.startListener(listener);
+                        startUnlessTenantSuspended(listener);
                         listener.setRunning(true);
                         getService().save(listener);
                         callback.registerState(this, wrapper, ArtefactLifecycle.CREATED);
@@ -211,7 +226,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
                         listenersManager.stopListener(listener);
                         listener.setRunning(false);
                         getService().save(listener);
-                        listenersManager.startListener(listener);
+                        startUnlessTenantSuspended(listener);
                         listener.setRunning(true);
                         getService().save(listener);
                         callback.registerState(this, wrapper, ArtefactLifecycle.UPDATED);
@@ -250,7 +265,7 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
                 // manager is idempotent per tenant, so a tenant already subscribed is a no-op.
                 if (ArtefactLifecycle.FAILED.equals(listener.getLifecycle()) || listener.getRunning() == null || !listener.getRunning()) {
                     try {
-                        listenersManager.startListener(listener);
+                        startUnlessTenantSuspended(listener);
                         listener.setRunning(true);
                         getService().save(listener);
                         if (ArtefactLifecycle.FAILED.equals(listener.getLifecycle())) {
@@ -278,6 +293,23 @@ public class ListenerSynchronizer extends MultitenantBaseSynchronizer<Listener, 
         }
 
         return true;
+    }
+
+    /**
+     * Starts the listener in the tenant being completed - unless that tenant is suspended. The
+     * synchronizers still maintain a suspended tenant, so its listener is registered (refused as a
+     * start would be, should its handler be missing) and not started; resuming the tenant starts it
+     * (#8477).
+     *
+     * @param listener the listener
+     */
+    private void startUnlessTenantSuspended(Listener listener) {
+        Tenant tenant = tenantContext.getCurrentTenant();
+        if (!tenant.isDefault() && tenantContext.isSuspended(tenant.getId())) {
+            listenersManager.registerListener(listener);
+            return;
+        }
+        listenersManager.startListener(listener);
     }
 
     /**

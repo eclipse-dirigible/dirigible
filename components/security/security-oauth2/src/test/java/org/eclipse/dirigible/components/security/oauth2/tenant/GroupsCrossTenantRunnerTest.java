@@ -97,8 +97,8 @@ class GroupsCrossTenantRunnerTest {
     void setUp() throws Exception {
         DirigibleConfig.TENANT_GROUPS_CLAIM.setStringValue(GROUPS_CLAIM);
         DirigibleConfig.APP_ID.setStringValue(APP_ID);
-        TenantSelectionManager manager =
-                new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository, events);
+        TenantSelectionManager manager = new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository,
+                events, org.mockito.Mockito.mock(TenantContext.class));
         runner = new GroupsCrossTenantRunner(manager, tenantContext, events);
         when(tenantContext.execute(anyString(), any(CallableResultAndException.class))).thenAnswer(invocation -> {
             openedTenants.add(invocation.getArgument(0));

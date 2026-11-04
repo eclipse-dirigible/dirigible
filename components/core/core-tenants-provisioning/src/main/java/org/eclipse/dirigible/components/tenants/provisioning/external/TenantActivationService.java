@@ -127,6 +127,11 @@ class TenantActivationService implements ApplicationListener<ApplicationReadyEve
         if (TenantStatus.DEPROVISIONING == tenant.getStatus()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Tenant [" + tenant.getId() + "] is being deprovisioned");
         }
+        if (TenantStatus.SUSPENDED == tenant.getStatus()) {
+            // activating would make it PROVISIONED with its runtime still stopped; a resume restarts it
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Tenant [" + tenant.getId() + "] is suspended - resume it through its status instead");
+        }
         if (!dataSourceRegistrationService.isRegistered(tenant)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Tenant [" + tenant.getId() + "] cannot be activated before its data source ["

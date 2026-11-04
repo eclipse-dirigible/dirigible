@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.base.tenant.clients.IntegrationClient;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.security.oauth2.resourceserver.IntegrationClientAuthenticationToken;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
 import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionConstants;
@@ -44,6 +45,7 @@ import org.eclipse.dirigible.components.tenants.tenant.TenantAccessRefusedEvent;
 import org.eclipse.dirigible.components.tenants.tenant.TenantEnteredEvent;
 import org.eclipse.dirigible.components.tenants.tenant.TenantSelectionRevokedEvent;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
@@ -83,6 +85,9 @@ class TenantSelectionManagerTest {
     @Mock
     private ApplicationEventPublisher events;
 
+    @Mock
+    private TenantContext tenantContext;
+
     private TenantSelectionManager manager;
     private MockHttpServletRequest request;
     private MockHttpServletResponse response;
@@ -91,7 +96,7 @@ class TenantSelectionManagerTest {
     void setUp() {
         DirigibleConfig.TENANT_GROUPS_CLAIM.setStringValue(GROUPS_CLAIM);
         DirigibleConfig.APP_ID.setStringValue(APP_ID);
-        manager = new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository, events);
+        manager = new TenantSelectionManager(new TenantGroupsClaim(), tenantService, securityContextRepository, events, tenantContext);
         request = new MockHttpServletRequest();
         request.setSession(new MockHttpSession());
         response = new MockHttpServletResponse();
@@ -435,6 +440,80 @@ class TenantSelectionManagerTest {
                         .tenantId()).isEqualTo(ACME);
         assertThat(event.getValue()
                         .principal()).isEqualTo(USER);
+    }
+
+    /**
+     * A suspended tenant is a state of the tenant, refused with its own reason on every way in (#8477).
+     */
+    @Test
+    void aSuspendedTenantIsRefusedForItsOwnReasonOnEveryWayIn() {
+        authenticate("acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.SUSPENDED)));
+
+        assertThatThrownBy(() -> manager.selectTenant(request, response, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                               .extracting("reason")
+                                                                               .isEqualTo(TenantSelectionException.Reason.SUSPENDED);
+        assertThat(request.getSession()
+                          .getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE)).isNull();
+        assertThatThrownBy(
+                () -> manager.enterTenant(bearer(Set.of(), "acme.library.Owner"), ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                                        .extracting("reason")
+                                                                                        .isEqualTo(
+                                                                                                TenantSelectionException.Reason.SUSPENDED);
+        IntegrationClientAuthenticationToken client = integrationClient(ACME, "base-vacations.Vacations.VacationRequestReadOnly");
+        assertThatThrownBy(() -> manager.enterTenantAsClient(client, ACME)).isInstanceOf(TenantSelectionException.class)
+                                                                           .extracting("reason")
+                                                                           .isEqualTo(TenantSelectionException.Reason.SUSPENDED);
+        assertThat(TenantSelectionException.Reason.SUSPENDED.httpStatus()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
+    void aSuspendedTenantIsOfferedAsSuspended() {
+        authenticate("acme.library.Owner");
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.SUSPENDED)));
+
+        List<TenantOption> tenants = manager.availableTenants(SecurityContextHolder.getContext()
+                                                                                   .getAuthentication());
+
+        assertThat(tenants).containsExactly(new TenantOption(ACME, "Acme Ltd", false, TenantOption.State.SUSPENDED));
+    }
+
+    /**
+     * A selection held in a session is dropped once its tenant is suspended, as one whose group was
+     * revoked is - whatever the session's age (#8477).
+     */
+    @Test
+    void aHeldSelectionOfASuspendedTenantIsDropped() {
+        authenticate(Set.of("DEVELOPER", "Owner"), "acme.library.Owner", "DEVELOPER");
+        request.getSession()
+               .setAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE, ACME);
+        when(tenantService.findById(ACME)).thenReturn(Optional.of(tenant(ACME, "Acme Ltd", TenantStatus.SUSPENDED)));
+
+        assertThat(manager.ensureConsistent(request, response)).isFalse();
+
+        assertThat(request.getSession()
+                          .getAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE)).isNull();
+        assertThat(currentRoleNames()).containsExactly("DEVELOPER");
+    }
+
+    /**
+     * The status is read only when it can matter: a request already running in the selected tenant was
+     * resolved from it as a provisioned tenant, so no request of a working session pays a lookup.
+     */
+    @Test
+    void aSelectionTheRequestRunsInIsNotLookedUp() {
+        authenticate(Set.of("DEVELOPER", "Owner"), "acme.library.Owner", "DEVELOPER");
+        request.getSession()
+               .setAttribute(TenantSelectionConstants.SELECTED_TENANT_ID_SESSION_ATTRIBUTE, ACME);
+        org.eclipse.dirigible.components.base.tenant.Tenant current =
+                org.mockito.Mockito.mock(org.eclipse.dirigible.components.base.tenant.Tenant.class);
+        when(current.getId()).thenReturn(ACME);
+        when(tenantContext.isInitialized()).thenReturn(true);
+        when(tenantContext.getCurrentTenant()).thenReturn(current);
+
+        assertThat(manager.ensureConsistent(request, response)).isTrue();
+
+        verify(tenantService, never()).findById(any());
     }
 
     @Test

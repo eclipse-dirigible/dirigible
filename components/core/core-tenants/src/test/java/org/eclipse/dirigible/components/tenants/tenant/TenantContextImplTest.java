@@ -18,6 +18,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
@@ -97,6 +98,58 @@ class TenantContextImplTest {
                                                                                         .getId())));
 
         assertTrue(visited.isEmpty(), "visited " + visited);
+    }
+
+    /**
+     * A suspended tenant runs nothing: the runtime fan-out - the outbox relay, the client-Java top-up,
+     * every reconciliation pass - never reaches it (#8477).
+     */
+    @Test
+    void executeForEachTenantSkipsSuspendedTenants() {
+        when(tenantService.findByStatus(TenantStatus.PROVISIONED)).thenReturn(Set.of(tenant("acme", TenantStatus.PROVISIONED)));
+        when(tenantService.findByStatus(TenantStatus.SUSPENDED)).thenReturn(Set.of(tenant("globex", TenantStatus.SUSPENDED)));
+
+        Set<String> visited = new HashSet<>();
+        tenantContext.executeForEachTenant(() -> visited.add(tenantContext.getCurrentTenant()
+                                                                          .getId()));
+
+        assertFalse(visited.contains("globex"), "visited " + visited);
+        assertTrue(visited.contains("acme"));
+    }
+
+    /**
+     * A suspended tenant is still maintained: the synchronizers' fan-out reaches it, so an application
+     * version published while it is suspended reaches its schema - and it honours a scope (#8477).
+     */
+    @Test
+    void maintainedFanOutIncludesSuspendedTenants() {
+        when(tenantService.findByStatus(TenantStatus.PROVISIONED)).thenReturn(Set.of(tenant("acme", TenantStatus.PROVISIONED)));
+        when(tenantService.findByStatus(TenantStatus.SUSPENDED)).thenReturn(Set.of(tenant("globex", TenantStatus.SUSPENDED)));
+        when(tenantService.findByStatus(TenantStatus.PENDING_ACTIVATION)).thenReturn(
+                Set.of(tenant("initech", TenantStatus.PENDING_ACTIVATION)));
+
+        Set<String> visited = new HashSet<>();
+        tenantContext.executeForEachMaintainedTenant(() -> visited.add(tenantContext.getCurrentTenant()
+                                                                                    .getId()));
+        assertEquals(Set.of("acme", "globex", TenantImpl.getDefaultTenant()
+                                                        .getId()),
+                visited);
+
+        Set<String> scoped = new HashSet<>();
+        tenantContext.executeScopedTo(Set.of("globex"),
+                () -> tenantContext.executeForEachMaintainedTenant(() -> scoped.add(tenantContext.getCurrentTenant()
+                                                                                                 .getId())));
+        assertEquals(Set.of("globex"), scoped);
+    }
+
+    @Test
+    void onlyASuspendedTenantIsSuspended() {
+        when(tenantService.findById("globex")).thenReturn(Optional.of(tenant("globex", TenantStatus.SUSPENDED)));
+        when(tenantService.findById("acme")).thenReturn(Optional.of(tenant("acme", TenantStatus.PROVISIONED)));
+
+        assertTrue(tenantContext.isSuspended("globex"));
+        assertFalse(tenantContext.isSuspended("acme"));
+        assertFalse(tenantContext.isSuspended("unknown"));
     }
 
     @Test
