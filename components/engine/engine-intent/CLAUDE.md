@@ -207,10 +207,15 @@ worth knowing before you name things here: a method whose name contains `auth` (
 in the same effort — never offered as an optional follow-up. **Three** repositories, because the
 specification and its website split in mid-2026:
 
-1. **`IntentFile/intent-specification`** — THE normative spec. A new construct or changed semantics
-   is a *specification change*: a PR against the current `versions/<version>.md` **including its
-   *Appendix A: DSL index* row**. (A larger design may start as a `proposals/` document.) Mark
-   rules a conforming file/generator must follow as **Normative**.
+1. **`IntentFile/intent-specification`** — THE normative spec, **proposal-first** since
+   2026-08-17: a new construct, a changed meaning or a behaviour the generator now decides is a new
+   `proposals/NNNN-<slug>.md` (next free number — check for a duplicate, the folder has had them)
+   carrying the `Specification text`, its `Anchor` and the `DSL index` row, on a branch
+   `proposal/NNNN-<slug>`, PR body `Closes #<issue>`. **Never edit `versions/`** — a release folds the
+   accepted proposals into the next version document. A `[proposal]` *issue* there is a bookmark,
+   not the deliverable: in October 2026 seven issues (#131-#137) sat as "done" for two weeks, and
+   six site pages shipped with no proposal at all, until an audit filed #138-#166 for a month of
+   changes. Mark rules a conforming file/generator must follow as **Normative**.
 2. **`IntentFile/intentfile.github.io`** — the rendered site (`intentfile.org`). Mirror the change
    into `docs/spec/<chapter>.md` + `docs/reference.md`. The site's chapters sit one heading level
    shallower than the spec's and use `::: info Normative` containers instead of blockquotes.
@@ -221,7 +226,12 @@ Author two wordings — neutral for both IntentFile repos (NO vendor/platform na
 `CLAUDE.md` / `MEMORY.md` or any AI/meta file there), branded for `dirigible.io`. Open a PR to each.
 **Merge the `dirigible.io` PR; leave both IntentFile PRs OPEN** for the maintainer to review/merge.
 This module (`engine-intent`) is the spec's reference implementation, so the PR bodies should link
-the platform PR that proves the construct out.
+the platform PR that proves the construct out — and the platform PR body names its three doc PRs.
+**A change is a DSL change by what it touches, not by how its issue is titled:** a fix that adds or
+changes a key read by `IntentParser` / an `*Intent` class, that changes a refusal or a default the
+generated application makes, or that edits `intent-dsl-features.md` or the assistant guide, carries
+the three doc PRs even when it came in as a bug. The `.claude/docs/take-this-workflow.md` chain has
+this as its own step.
 
 Both sites are VitePress: symlink the sibling checkout's `node_modules` into your worktree and run
 `npm run docs:build` — then **grep the built HTML for your new anchors** rather than trusting the
