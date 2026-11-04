@@ -113,6 +113,25 @@ class CompositionChildrenTest {
                                     .get(0))).containsEntry("refuse", "true");
     }
 
+    /**
+     * A child whose own delete is refused is marked, so the master's cascade asks its rows first - and
+     * only then: a child with nothing to refuse generates as before (dirigible #8114).
+     */
+    @Test
+    void aChildRefusingItsOwnDeleteIsMarked() {
+        Map<String, Object> master = entity("Folder", "PRIMARY", "folders");
+        Map<String, Object> locked = child("Note", "folders", "Folder", "Folder", false);
+        Map<String, Object> plain = child("Tag", "folders", "Folder", "Folder", false);
+        locked.put("hasDeleteRefusals", Boolean.TRUE);
+        List<Map<String, Object>> entities = new ArrayList<>(List.of(master, locked, plain));
+
+        CompositionChildren.annotate(entities);
+
+        List<Object> owned = ModelValues.asList(master.get("compositionChildren"));
+        assertThat(asMap(owned.get(0))).containsEntry("deleteRefusals", "true");
+        assertThat(asMap(owned.get(1))).containsEntry("deleteRefusals", "false");
+    }
+
     /** An entity with no composition parent is not anybody's child. */
     @Test
     void anEntityWithoutAMasterIsNotIndexed() {

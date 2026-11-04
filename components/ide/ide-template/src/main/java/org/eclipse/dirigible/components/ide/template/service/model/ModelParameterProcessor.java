@@ -89,6 +89,7 @@ final class ModelParameterProcessor {
             // Before the master-lock pass: a child inherits its master's period guard along with the
             // status one, so the master's own must be resolved first.
             resolvePeriodLock(entities, parameters);
+            markDeleteRefusals(entities);
             inheritMasterLock(entities, parameters);
             inheritPersonalScope(entities, parameters);
             resolveDocumentItemsScope(entities);
@@ -429,11 +430,10 @@ final class ModelParameterProcessor {
                     // well, and the gate rides along with it rather than routing it elsewhere: a delete
                     // is nobody's transition (no process step deletes a record, and `whenDeleted:` only
                     // REACTS to one), so there is no repository-side write for a gated check to sit on.
-                    // Keeping it out of the repository is also what leaves the composition cascade alone:
-                    // a master sweeping its own children away goes through their repositories, and
-                    // whether THAT delete is allowed is `whenMasterDeleted:`'s question, not a child
-                    // check's. A rule scoped away from the delete (#7710) - "no new allocation onto a PAID
-                    // invoice", which must still let a wrong allocation be removed - stays out of it.
+                    // The repository renders the same list into requireDeleteAllowed, which a cascade asks
+                    // before it deletes the row (#8114). A rule scoped away from the delete (#7710) - "no
+                    // new allocation onto a PAID invoice", which must still let a wrong allocation be
+                    // removed - stays out of it.
                     if (verbs == null || verbs.contains("delete")) {
                         deleteChecks.add(check);
                     }
@@ -1549,6 +1549,19 @@ final class ModelParameterProcessor {
             level.put("period", master.get("periodLock"));
         }
         return level;
+    }
+
+    /**
+     * Flags an entity whose own delete meets a refusal - its lock, or a {@code checks: forbidWhen} over
+     * the delete - so its generated repository carries {@code requireDeleteAllowed} and a cascade that
+     * deletes its rows asks that first (#8114). The flag covers exactly the refusals the method holds.
+     */
+    private static void markDeleteRefusals(List<Map<String, Object>> entities) {
+        for (Map<String, Object> entity : entities) {
+            if (locks(entity) || !asMaps(entity.get("deleteChecks")).isEmpty()) {
+                entity.put("hasDeleteRefusals", Boolean.TRUE);
+            }
+        }
     }
 
     /** Whether the entity declares a lock of its own: append-only, a status scope or a period. */

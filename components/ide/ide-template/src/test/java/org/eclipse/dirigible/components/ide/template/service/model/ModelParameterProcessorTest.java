@@ -1103,6 +1103,30 @@ class ModelParameterProcessorTest {
     }
 
     /**
+     * An entity whose own delete is refused - a forbidWhen over the delete, a status lock - is flagged
+     * so a cascade asks it first; an entity with nothing to refuse is not (#8114).
+     */
+    @Test
+    void aRefusedDeleteIsFlaggedForTheCascades() {
+        Map<String, Object> forbid = new LinkedHashMap<>();
+        forbid.put("kind", "forbidWhen");
+        forbid.put("verbs", List.of("delete"));
+        Map<String, Object> guarded = entity("Note", "Notes", property("Text", "VARCHAR"));
+        guarded.put("checks", List.of(forbid));
+        Map<String, Object> frozen = entity("Payout", "Payouts", property("Amount", "DECIMAL"));
+        frozen.put("immutableStatusProperty", "Status");
+        Map<String, Object> plain = entity("Tag", "Tags", property("Label", "VARCHAR"));
+        Map<String, Object> parameters = parameters();
+        parameters.put("javaRuntime", Boolean.TRUE);
+
+        ModelParameterProcessor.process(model(guarded, frozen, plain), parameters);
+
+        assertEquals(Boolean.TRUE, guarded.get("hasDeleteRefusals"));
+        assertEquals(Boolean.TRUE, frozen.get("hasDeleteRefusals"));
+        assertNull(plain.get("hasDeleteRefusals"));
+    }
+
+    /**
      * A warning (#7466) is asked of the person saving and refuses nothing, so it reaches the
      * repository's {@code warnings()} list alone - not {@code validate()}, not the delete verb, not the
      * master-detail guard - whatever its kind; its code gets the escaped twin the Java sites read.
