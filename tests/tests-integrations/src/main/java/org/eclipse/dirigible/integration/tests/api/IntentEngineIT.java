@@ -5874,6 +5874,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(manifest.contains("\"pattern\": \"^[^@\\\\s]+@[^@\\\\s]+\\\\.[A-Za-z]{2,}$\""),
                 "the SalesRep email field should carry its input-format regex");
         assertFalse(manifest.contains("### ###"), "a numeric display format is not an input guard and must not be emitted");
+        // Order.Country copies the chosen customer's country, which narrows its picker to that one row:
+        // without the valueFrom the runner sampled the first Country and the walk timed out (#7957)
+        assertTrue(manifest.replaceAll("\\s", "")
+                           .contains("\"dependsOn\":{\"relation\":\"Customer\",\"valueFrom\":\"Country\"}"),
+                "the Order.Country relation should carry the valueFrom it copies off its Customer: " + manifest);
     }
 
     /**

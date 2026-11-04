@@ -89,7 +89,10 @@ picked in the UI. A relation fixed after create (`fixedAfterCreate: true`) carri
 picked on create and never changed by an edit, which the generated app answers with a 409. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
-marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
+marker, so the controller's 400 names the field. A `dependsOn` relation is sampled to match its
+trigger, as the form narrows it: with `filterBy` alone the trigger is the row the dependent's `filterBy`
+names; with `valueFrom` the dependent is the row whose `filterBy` (or key) equals the trigger row's
+`valueFrom`. Relations an `agree` check names are picked so
 their targets agree; a composite `uniqueKeys` entry is given a relation combination no live row
 carries, and the rest and crud flows skip with the key named when every combination tried is taken.
 A slots entity's start (the manifest's `slots` window) is a random grid start inside the hours, on

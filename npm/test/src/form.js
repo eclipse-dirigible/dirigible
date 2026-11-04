@@ -66,6 +66,7 @@ export async function pickDropdown(page, relation, optionText) {
 // - a dependsOn cascade forces CONSISTENT samples: the dependent row is chosen first and
 //   its filterBy FK becomes the trigger sibling's sample (independent first rows would
 //   pick e.g. Country=Afghanistan + City=Sofia, and the cascade then offers no options);
+//   a valueFrom dependent is the row the form narrows it to once the trigger is picked;
 // - a relation an agree check or a composite unique key names keeps a page of candidate rows, so
 //   agreeing rows can be chosen here and a free key combination by freshUniqueKeys;
 // - a target labelled by a stampOn: issue number (labelDocumentNumber) prefers a stamped row: the
@@ -148,6 +149,20 @@ export async function resolveRelationSamples(request, manifest, entity) {
   // cascade consistency: re-point each dependsOn trigger at the row the dependent's choice implies
   for (const sample of samples) {
     const dependsOn = sample.relation.dependsOn;
+    if (dependsOn?.valueFrom) {
+      // The form copies the trigger row's valueFrom and offers only the rows whose filterBy (default:
+      // the key) holds it, so the dependent is that row, not its own first one (#7957).
+      const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
+      const value = trigger?.row[dependsOn.valueFrom];
+      const path = sample.relation.apiAbsolute ?? (sample.relation.api ? manifest.restBase + sample.relation.api : null);
+      if (value == null || !path) continue; // nothing copied: the picker offers every row
+      const [row] = (await api.searchPath(path, [{ propertyName: dependsOn.filterBy ?? idProperty, operator: 'EQ', value }])) ?? [];
+      if (!row) continue;
+      sample.use(row);
+      sample.rows = [row];
+      trigger.rows = [trigger.row];
+      continue;
+    }
     if (!dependsOn?.filterBy) continue;
     const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
     // a cascade pair is chosen together - neither side may be swapped for a candidate later
