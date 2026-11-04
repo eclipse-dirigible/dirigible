@@ -829,14 +829,8 @@ document.addEventListener('alpine:init', () => {
         return [...this.filteredItems].sort((a, b) =>
           sign * collator.compare(this.exportCell(a, relation), this.exportCell(b, relation)));
       }
-      return [...this.filteredItems].sort((a, b) => {
-        let va = a[col] ?? '', vb = b[col] ?? '';
-        if (typeof va === 'string') va = va.toLowerCase();
-        if (typeof vb === 'string') vb = vb.toLowerCase();
-        if (va < vb) return dir === 'asc' ? -1 : 1;
-        if (va > vb) return dir === 'asc' ?  1 : -1;
-        return 0;
-      });
+      // A date column sorts chronologically however the controller serialised it (issue #8433).
+      return [...this.filteredItems].sort((a, b) => this.compareSortValues(a[col], b[col], dir));
     },
 
     get totalPages() { return Math.max(1, Math.ceil(this.sortedItems.length / this.pageSize)); },

@@ -66,6 +66,59 @@ function basePage() {
     },
 
     /**
+     * Compare two cell values of a list column, for a list sorted by a column that is not a relation
+     * (those sort by their label through textCollator). `dir` is 'asc' or 'desc'; an empty value sorts
+     * as the empty string, i.e. first ascending.
+     *
+     * Both sides go through sortKey first, so a temporal column sorts chronologically however the
+     * controller serialised it (issue #8433): a Java LocalDate written as the array [2025, 10, 6] -
+     * before #8083, or with DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS=true - compared as the string
+     * "2025,10,6" and sorted after "2025,10,16".
+     */
+    compareSortValues(a, b, dir) {
+      const ka = this.sortKey(a);
+      const kb = this.sortKey(b);
+      const sign = dir === 'asc' ? 1 : -1;
+      if (ka < kb) return -sign;
+      if (ka > kb) return sign;
+      return 0;
+    },
+
+    /**
+     * The comparable form of one cell value: a temporal value - a Date, or the integer array Jackson
+     * writes for a LocalDate / LocalDateTime / LocalTime - becomes its zero-padded ISO text, the shape
+     * the controller writes when dates are not timestamps; text is lower-cased so case does not decide
+     * the order; numbers and booleans stay as they are; null and undefined become ''.
+     */
+    sortKey(value) {
+      if (value === null || value === undefined) return '';
+      let key = value;
+      if (value instanceof Date) {
+        key = isNaN(value.getTime()) ? '' : value.toISOString();
+      } else if (Array.isArray(value) && value.length >= 2 && value.every(Number.isInteger)) {
+        key = this.isoFromTemporalParts(value);
+      }
+      return typeof key === 'string' ? key.toLowerCase() : key;
+    },
+
+    /**
+     * ISO text of a Jackson temporal array: [year, month, day] (LocalDate), [year, month, day, hour,
+     * minute, second?, nano?] (LocalDateTime) or [hour, minute, second?, nano?] (LocalTime). Jackson
+     * drops a trailing zero second and nano, so the time parts are filled to their full width - 10:00
+     * and 10:00:15 of one column then compare as the same shape. A date's first part is a year and a
+     * time's an hour (0-23), which is what tells a three-part date from a three-part time.
+     */
+    isoFromTemporalParts(parts) {
+      const pad = (n, width) => String(n).padStart(width, '0');
+      const time = (t) => `${pad(t[0] || 0, 2)}:${pad(t[1] || 0, 2)}:${pad(t[2] || 0, 2)}.${pad(t[3] || 0, 9)}`;
+      if (parts.length >= 3 && parts[0] > 23) {
+        const date = `${pad(parts[0], 4)}-${pad(parts[1], 2)}-${pad(parts[2], 2)}`;
+        return parts.length > 3 ? `${date}T${time(parts.slice(3))}` : date;
+      }
+      return time(parts);
+    },
+
+    /**
      * The target rows of a relation whose label property `text` is a `number: { stampOn: issue }` field,
      * with that label shown as the draft marker until the number is stamped (issue #7722) - so a picker
      * option, a lookup cell or a register label reads "(draft)", never the placeholder UUID. The rows

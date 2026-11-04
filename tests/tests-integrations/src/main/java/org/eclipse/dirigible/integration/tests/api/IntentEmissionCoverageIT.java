@@ -4068,6 +4068,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertEquals("10,12,11",
                 pageSortOrder(campaignListPage, "CampaignManageListPage", campaignLookups, campaignRows, "Channels", "asc"),
                 "a subset column must sort by its joined labels (Email; Phone; Web, Email), not by the key list");
+        // ...and a date column sorts chronologically however the controller serialised it (#8433): the
+        // LocalDate arrays [2025,10,6] etc. compared as the strings "2025,10,6", which sorted the 6th of
+        // a month after the 16th and July after December. The ISO strings must keep the same order.
+        String entrySortPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
+        String entryDateArrays = "[{ Id: 1, Date: [2025,10,16] }, { Id: 2, Date: [2025,10,24] }, { Id: 3, Date: [2025,10,6] },"
+                + " { Id: 4, Date: [2025,12,6] }, { Id: 5, Date: [2025,7,16] }, { Id: 6, Date: [2025,7,6] }, { Id: 7, Date: null }]";
+        assertEquals("7,6,5,3,1,2,4", pageSortOrder(entrySortPage, "EntryManageListPage", "{}", entryDateArrays, "Date", "asc"),
+                "a date column serialised as LocalDate arrays must sort chronologically, an empty date first");
+        assertEquals("4,2,1,3,5,6,7", pageSortOrder(entrySortPage, "EntryManageListPage", "{}", entryDateArrays, "Date", "desc"),
+                "a descending date sort must reverse the chronological order");
+        assertEquals("6,5,3,1,2,4", pageSortOrder(entrySortPage, "EntryManageListPage", "{}",
+                "[{ Id: 1, Date: '2025-10-16' }, { Id: 2, Date: '2025-10-24' }, { Id: 3, Date: '2025-10-06' },"
+                        + " { Id: 4, Date: '2025-12-06' }, { Id: 5, Date: '2025-07-16' }, { Id: 6, Date: '2025-07-06' }]",
+                "Date", "asc"), "a date column serialised as ISO text must sort in the same chronological order");
         // #8374: a link may carry filters in the URL - a report row opening the records it counts. The
         // list reads them once before its first load: a relation by its exact label (one key EQ, two
         // keys sharing the label IN, no key = the chip and no rows without a query), a boolean by
