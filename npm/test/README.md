@@ -96,7 +96,10 @@ A relation carrying `pickable` is sampled only from the rows its rule admits —
 other, so a record built from one would never save — and one carrying `forbiddenTarget` only from
 rows the record's own `forbidWhen` does not refuse, which is what the REST flow needs, having no
 picker to read. When no row is left, a required relation fails naming the rule's own message rather
-than "no rows".
+than "no rows". A relation whose target is labelled by a `stampOn: issue` number carries
+`labelDocumentNumber`: the picker shows every row not issued yet as the same "(draft)", so the sample
+is a stamped row, picked by its number; with none stamped yet an optional relation is left unset and
+a required one picks "(draft)".
 
 ## Custom UI hooks
 

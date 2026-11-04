@@ -505,6 +505,13 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (notBlank(relation.getCalculatedActionOnUpdate()) || rendersReadOnly(properties.get(String.valueOf(out.get("name"))))) {
                 out.put("readOnly", true);
             }
+            // A target labelled by a `number: { stampOn: issue }` field: the picker shows a row not
+            // issued yet as the draft marker rather than its UUID placeholder (#7722), so the runner
+            // cannot pick that row by its raw label and prefers a stamped one (#7823).
+            if ("true".equals(string(properties.getOrDefault(name, Map.of())
+                                               .get("widgetDropDownDocumentNumber")))) {
+                out.put("labelDocumentNumber", true);
+            }
             // fixedAfterCreate (#7903): the New form offers the picker, the Edit form renders it
             // read-only and the controller refuses a changed value - so a flow picks it on create and
             // never on edit. A composition parent is fixed the same way without declaring it (#8306).
