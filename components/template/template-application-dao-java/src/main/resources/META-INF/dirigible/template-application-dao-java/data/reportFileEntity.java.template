@@ -48,6 +48,12 @@ public class ${name}Repository {
     private static final Map<String, String> OPERATORS =
             Map.of("EQ", "=", "NE", "<>", "GT", ">", "GTE", ">=", "LT", "<", "LTE", "<=", "LIKE", "LIKE");
 
+    /**
+     * A case-insensitive substring of a column - what the report page's text filter ("contains") sends:
+     * a plain LIKE is case-sensitive on PostgreSQL, so "acme" missed "Acme Corporation" (#8431).
+     */
+    private static final String CONTAINS = "CONTAINS";
+
     /** The column types {@link #sum(String, Map)} accepts - anything else has no meaningful total. */
     private static final Set<String> NUMERIC_COLUMN_TYPES =
             Set.of("TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "DECIMAL", "NUMERIC", "DOUBLE",
@@ -152,14 +158,20 @@ public class ${name}Repository {
             if (type == null) {
                 throw new IllegalArgumentException("Unknown report filter column: " + column);
             }
-            String operator = OPERATORS.get(stringValue(condition.get("operator")));
-            if (operator == null) {
-                throw new IllegalArgumentException("Unknown report filter operator: " + condition.get("operator"));
-            }
+            String requested = stringValue(condition.get("operator"));
             if (i > 0) {
                 sql.append(" AND ");
             }
             String marker = "reportFilter" + i;
+            if (CONTAINS.equals(requested)) {
+                sql.append("LOWER(\"").append(column).append("\") LIKE :").append(marker).append(" ESCAPE '!'");
+                parameters.add(parameter(marker, "VARCHAR", containsPattern(condition.get("value"))));
+                continue;
+            }
+            String operator = OPERATORS.get(requested);
+            if (operator == null) {
+                throw new IllegalArgumentException("Unknown report filter operator: " + condition.get("operator"));
+            }
             sql.append("\"").append(column).append("\" ").append(operator).append(" :").append(marker);
             parameters.add(parameter(marker, parameterType(type), condition.get("value")));
         }
@@ -179,6 +191,19 @@ public class ${name}Repository {
             return result;
         }
         return List.of();
+    }
+
+    /**
+     * The LIKE pattern of a CONTAINS condition: the value lower-cased, its wildcards escaped with
+     * {@code !}, between two {@code %} - so a typed {@code %} or {@code _} matches itself.
+     */
+    private static String containsPattern(Object value) {
+        String text = value == null ? "" : value.toString()
+                                                .toLowerCase(Locale.ROOT);
+        return "%" + text.replace("!", "!!")
+                         .replace("%", "!%")
+                         .replace("_", "!_")
+                + "%";
     }
 
     /** The named-parameter type for a report column type. */
