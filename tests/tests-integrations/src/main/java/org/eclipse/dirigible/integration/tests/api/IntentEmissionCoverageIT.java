@@ -4617,15 +4617,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
         // #8315: the create form is editable while its options load, so a value typed or picked in that
         // window is the user's - the defaults and the URL prefill fill only the fields still blank.
-        assertEquals("2026-10-28|1|web|true|2", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
+        assertEquals("2026-10-28|1|web|true|2|2026-10-28", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
                 "an untouched create form must still open holding its defaults");
-        assertEquals("2026-09-06|7|web|true|2",
+        assertEquals("2026-09-06|7|web|true|2|2026-10-28",
                 pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06', Unit: '7' }", "{}"),
                 "a date typed and a relation picked while the options loaded must survive the defaults");
-        assertEquals("2026-09-06|9|mail|true|2",
+        assertEquals("2026-09-06|9|mail|true|2|2026-10-28",
                 pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06' }",
                         "{ OrderedOn: '2026-01-01', Unit: '9', Channel: 'mail' }"),
                 "the URL prefill must fill the untouched fields and leave the typed one alone");
+        // #8340: a date or date-time picker binds the form through its popup and takes the text typed into
+        // its input only on that input's change, so a date typed but not yet committed is on screen and not
+        // in the form - the default and the URL prefill must leave that picker alone as well.
+        assertEquals("|1|web|true|2|",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{ OrderedOn: '2026-01-01' }",
+                        "{ f_OrderedOn: '2026-09-06', f_RecordedAt: '2026-09-06 09:30' }"),
+                "a date typed into a picker but not committed must not be replaced by the default or the URL prefill");
+        assertEquals("2026-10-28|1|web|true|2|2026-10-28",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}", "{ f_OrderedOn: '  ', f_Unit: '7' }"),
+                "a blank picker input, or text in an input that is no picker, is not a typed date");
+        assertTrue(
+                contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
+                        "if (String((document.getElementById('f_Date') || {}).value || '').trim() !== '') touched.add('Date');"),
+                "...and the plain form's date picker counts as touched the same way");
         // #8344: an opened record requests all of its independent option lists at once and the record
         // itself alongside them - not one list per round trip with the record queued behind the last.
         // Every list stays pending here, so a page still loading them in series has asked for one.
@@ -9387,19 +9401,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
     }
 
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+        return pageCreateDuringLoad(pageScript, componentName, typed, query, "{}");
+    }
+
     /**
      * Run a generated document page's create-mode {@code init()} (#8315) over the shipped shell runtime
      * while the user types during the awaited option load: {@code typed} is assigned to the form from
-     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. Today is 2026-10-28.
-     * Answers the Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies} once init settled.
+     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. {@code pickerText} maps
+     * an input id to the text typed into it in the same window but not committed to the form, as a date
+     * picker holds it until its input's {@code change} (#8340). Today is 2026-10-28. Answers the
+     * Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies|RecordedAt} once init settled.
      */
-    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query, String pickerText) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
             context.eval("js",
-                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
-                            + " var document = { addEventListener: (event, callback) => callback() };"
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null }; var __inputs = {};"
+                            + " var document = { addEventListener: (event, callback) => callback(),"
+                            + " getElementById: (id) => id in __inputs ? { value: __inputs[id] } : null };"
                             + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
                             + " window.location = { hash: '#/Reorder/create' }; window.PineconeRouter = { context: { params: {} } };"
                             + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
@@ -9409,13 +9430,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             }
             context.eval("js", "App.utils = { todayAs: () => '2026-10-28' }; App.detailsFor = () => []; App.relatedFor = () => [];");
             context.eval("js", pageScript);
-            context.eval("js", "var page = pages['" + componentName + "'](); var __query = " + query + ";"
-                    + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
-                    + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
-                    + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
-                    + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + "); };" + " page.init();");
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); var __query = " + query + ";"
+                            + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
+                            + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
+                            + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
+                            + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + ");"
+                            + " Object.assign(__inputs, " + pickerText + "); }; page.init();");
             return context.eval("js",
-                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies].join('|')")
+                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies, page.form.RecordedAt].join('|')")
                           .asString();
         }
     }
