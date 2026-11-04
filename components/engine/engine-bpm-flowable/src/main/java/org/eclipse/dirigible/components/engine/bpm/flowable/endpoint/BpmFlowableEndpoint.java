@@ -55,6 +55,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -381,7 +382,12 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
     @PostMapping(value = "/bpm-processes/tasks/{id}")
     public ResponseEntity<String> executeTaskAction(@PathVariable("id") String id, @RequestBody TaskActionData actionData) {
         verifyCurrentUserHasPermissionForTask(id);
+        // The same race as the Inbox's (issue #8104): a request losing it to another one acting on the
+        // task is answered 409.
+        return TaskActionConflict.unlessTaskGone(id, bpmService, () -> performTaskAction(id, actionData));
+    }
 
+    private ResponseEntity<String> performTaskAction(String id, TaskActionData actionData) {
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
             bpmService.claimTask(id, UserFacade.getName());
@@ -398,6 +404,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             bpmService.completeTask(id, actionData.getData());
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
         return ResponseEntity.ok()
@@ -494,6 +501,7 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
             return retryJob(id);
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
     }

@@ -25,6 +25,7 @@ import org.flowable.task.api.Task;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -267,7 +268,12 @@ public class BpmInboxEndpoint extends BaseEndpoint {
     @PostMapping(value = "/tasks/{id}")
     public ResponseEntity<String> executeTaskAction(@PathVariable("id") String taskId, @RequestBody TaskActionData actionData) {
         verifyCurrentUserHasPermissionForTask(taskId);
+        // A second request acting on the task at the same moment (a double click) loses the race inside
+        // the engine: answered 409, not the engine's optimistic-lock failure (issue #8104).
+        return TaskActionConflict.unlessTaskGone(taskId, bpmService, () -> performTaskAction(taskId, actionData));
+    }
 
+    private ResponseEntity<String> performTaskAction(String taskId, TaskActionData actionData) {
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
             bpmService.claimTask(taskId, claimantFor(taskId));
@@ -285,6 +291,7 @@ public class BpmInboxEndpoint extends BaseEndpoint {
             String unoffered = unofferedAction(taskId, actionData.getData());
             if (unoffered != null) {
                 return ResponseEntity.badRequest()
+                                     .contentType(MediaType.TEXT_PLAIN)
                                      .body(unoffered);
             }
             try {
@@ -302,10 +309,12 @@ public class BpmInboxEndpoint extends BaseEndpoint {
                 // reason from the default error payload, and the task form reads the body.
                 logger.debug("Completion of task [{}] was rejected: {}", taskId, rejection, ex);
                 return ResponseEntity.badRequest()
+                                     .contentType(MediaType.TEXT_PLAIN)
                                      .body(rejection);
             }
         } else {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                                 .contentType(MediaType.TEXT_PLAIN)
                                  .body("Invalid action id provided [" + actionData.getAction() + "]");
         }
         return ResponseEntity.ok()
