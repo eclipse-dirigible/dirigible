@@ -15,9 +15,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.TenantStatus;
 import org.eclipse.dirigible.components.tenants.service.TenantService;
+import org.eclipse.dirigible.components.tenants.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -31,7 +33,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Applies the provisioning system's user snapshots to the replica - the only way it changes, apart
- * from the application's own last sign-in. The rules are the users snapshot contract's:
+ * from the application's own last sign-in and the provisioning system's erasure of one person
+ * ({@link #forget(String, String)}). The rules are the users snapshot contract's:
  *
  * <ol>
  * <li>a snapshot whose revision is not higher than the stored one is ignored;</li>
@@ -60,6 +63,12 @@ class TenantUserReplicaService {
     /** The tenants. */
     private final TenantService tenants;
 
+    /** The tenants' platform users, which an erasure deletes with the replica row. */
+    private final UserService platformUsers;
+
+    /** The default tenant's id, which has no replica. */
+    private final String defaultTenantId;
+
     /** One new transaction per user, whatever the caller runs in. */
     private final TransactionTemplate writes;
 
@@ -71,12 +80,17 @@ class TenantUserReplicaService {
      *
      * @param users the replica
      * @param tenants the tenants
+     * @param platformUsers the tenants' platform users
+     * @param defaultTenant the default tenant
      * @param transactionManager the SystemDB transaction manager
      */
-    TenantUserReplicaService(TenantUserRepository users, TenantService tenants,
+    TenantUserReplicaService(TenantUserRepository users, TenantService tenants, UserService platformUsers,
+            @DefaultTenant org.eclipse.dirigible.components.base.tenant.Tenant defaultTenant,
             @Qualifier("transactionManager") PlatformTransactionManager transactionManager) {
         this.users = users;
         this.tenants = tenants;
+        this.platformUsers = platformUsers;
+        this.defaultTenantId = defaultTenant.getId();
         this.writes = new TransactionTemplate(transactionManager);
         this.writes.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         this.reads = new TransactionTemplate(transactionManager);
@@ -110,6 +124,33 @@ class TenantUserReplicaService {
         logger.info("Tenant users snapshot for tenant [{}]: complete [{}], applied [{}], ignored [{}], removed [{}], stored revision [{}]",
                 LogSanitizer.sanitize(tenantId), body.isComplete(), applied, ignored, removed, storedRevision);
         return new TenantUserSync.Result(applied, ignored, removed, storedRevision);
+    }
+
+    /**
+     * Makes a tenant forget one person for good - the provisioning system's erasure, after it erased
+     * the person on its side. In one transaction it deletes the replica row of that email, live or
+     * tombstone, with its roles, and the tenant's platform users whose username is that email, ignoring
+     * case. No tombstone is left, so nothing guards this person's ordering any more: no later snapshot
+     * is expected to name them. Finding nothing is success, and the tenant's revision is untouched.
+     *
+     * @param tenantId the tenant id
+     * @param email the email
+     */
+    void forget(String tenantId, String email) {
+        requireTenant(tenantId);
+        if (defaultTenantId.equals(tenantId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The default tenant has no tenant users");
+        }
+        String normalized = email == null ? null : TenantUserRules.normalize(email);
+        if (!TenantUserRules.isEmail(normalized)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "[" + email + "] is not an email address");
+        }
+        writes.executeWithoutResult(status -> {
+            long replicaRows = users.deleteByTenantIdAndEmail(tenantId, normalized);
+            int platformRows = platformUsers.deleteUsersByTenantIdAndUsernameIgnoreCase(tenantId, normalized);
+            logger.info("Tenant [{}] forgot [{}]: deleted [{}] replica user(s) and [{}] platform user(s)", LogSanitizer.sanitize(tenantId),
+                    LogSanitizer.sanitize(normalized), replicaRows, platformRows);
+        });
     }
 
     /**

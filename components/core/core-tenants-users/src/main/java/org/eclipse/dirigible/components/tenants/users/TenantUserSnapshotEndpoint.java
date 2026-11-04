@@ -17,6 +17,7 @@ import org.eclipse.dirigible.components.tenants.provisioning.external.TenantProv
 import org.springframework.context.annotation.Conditional;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -79,5 +80,20 @@ class TenantUserSnapshotEndpoint extends BaseEndpoint {
     ResponseEntity<List<TenantUserView>> list(@PathVariable("tenantId") String tenantId,
             @RequestParam(name = "includeRemoved", defaultValue = "false") boolean includeRemoved) {
         return ResponseEntity.ok(replica.list(tenantId, includeRemoved));
+    }
+
+    /**
+     * Makes the tenant forget one person: the replica row, tombstone included, and the tenant's
+     * platform user of that email. Answers 204 whether anything was found or not.
+     *
+     * @param tenantId the tenant id
+     * @param email the email
+     * @return no content
+     */
+    @DeleteMapping("/{email}")
+    ResponseEntity<Void> forget(@PathVariable("tenantId") String tenantId, @PathVariable("email") String email) {
+        replica.forget(tenantId, email);
+        return ResponseEntity.noContent()
+                             .build();
     }
 }
