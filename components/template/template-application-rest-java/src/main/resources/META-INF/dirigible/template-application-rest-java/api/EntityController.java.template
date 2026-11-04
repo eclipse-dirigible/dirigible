@@ -274,6 +274,12 @@ public class ${name}Controller {
     @Post
     @Documentation("Create ${name}")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($attachmentReadOnly)
+        // Its rows are written by the system only - an export run, a snapshot mint - each with the file
+        // it stored (#8098): a row made over REST is a record no run produced, with no file to serve.
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be created over REST");
+#else
 #if($needsRoles)
         checkPermissions("write");
 #end
@@ -323,6 +329,7 @@ public class ${name}Controller {
         ${name}Entity saved = repository.save(entity);
 #end
         return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
+#end
     }
 #if($attachmentEntity)
 #if(!$attachmentReadOnly)
@@ -373,6 +380,10 @@ public class ${name}Controller {
 #end
         ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        if (entity.StoragePath == null) {
+            // A row that stored no file - a FAILED export run - has nothing to serve (#8098).
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} " + id + " has no stored file");
+        }
         org.eclipse.dirigible.sdk.http.Response.setContentType(entity.ContentType != null ? entity.ContentType : "application/octet-stream");
         // inline lets a stored PDF open (and print) in a browser tab; anything else stays a download
         String dispositionType = "inline".equals(disposition) ? "inline" : "attachment";

@@ -1,6 +1,9 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,6 +16,7 @@ import org.eclipse.dirigible.sdk.db.Database;
 import org.eclipse.dirigible.sdk.security.User;
 #end
 import org.eclipse.dirigible.sdk.utils.Json;
+import org.eclipse.dirigible.sdk.utils.LenientJavaTime;
 
 /**
  * Generated repository for the ${name} report. Executes the report query against the configured data
@@ -65,14 +69,22 @@ public class ${name}Repository {
             Set.of("TINYINT", "SMALLINT", "INT", "INTEGER", "BIGINT", "DECIMAL", "NUMERIC", "DOUBLE",
                     "DOUBLE PRECISION", "FLOAT", "REAL");
 
+    /** The other column types a pattern (LIKE, CONTAINS) does not apply to - see {@link #textual(String)}. */
+    private static final Set<String> TEMPORAL_AND_BOOLEAN_COLUMN_TYPES = Set.of("DATE", "TIME", "TIMESTAMP", "BOOLEAN");
+
+    /** A timestamp as the named-parameter binder reads it. */
+    private static final DateTimeFormatter TIMESTAMP_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS");
+
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
         StringBuilder sql = new StringBuilder(filteredQuery(filter, parameters));
-        if (limit != null) {
+        // A negative page bound is ignored, as the entity controllers ignore it - in the SQL it failed
+        // the whole report (#7828).
+        if (limit != null && limit.intValue() >= 0) {
             sql.append(" LIMIT ").append(limit.intValue());
         }
-        if (offset != null) {
+        if (offset != null && offset.intValue() >= 0) {
             sql.append(" OFFSET ").append(offset.intValue());
         }
         try {
@@ -148,6 +160,15 @@ public class ${name}Repository {
     }
 
     /**
+     * Reads the request's declared parameters as their types without running the report, refusing an
+     * unreadable one with an {@link IllegalArgumentException} - what an export over this report calls
+     * before it records a run, so a refused request leaves no FAILED filing behind (#8098).
+     */
+    public static void checkParameters(Map<String, Object> filter) {
+        baseParameters(filter);
+    }
+
+    /**
      * The report query, wrapped with the request's per-column conditions when present. Each condition
      * binds a named parameter typed from the column's report metadata.
      */
@@ -169,6 +190,10 @@ public class ${name}Repository {
                 sql.append(" AND ");
             }
             String marker = "reportFilter" + i;
+            if ((CONTAINS.equals(requested) || "LIKE".equals(requested)) && !textual(type)) {
+                throw new IllegalArgumentException(
+                        "Report filter operator " + requested + " does not apply to column [" + column + "] of type " + type);
+            }
             if (CONTAINS.equals(requested)) {
                 sql.append("LOWER(\"").append(column).append("\") LIKE :").append(marker).append(" ESCAPE '!'");
                 parameters.add(parameter(marker, "VARCHAR", containsPattern(condition.get("value"))));
@@ -179,7 +204,9 @@ public class ${name}Repository {
                 throw new IllegalArgumentException("Unknown report filter operator: " + condition.get("operator"));
             }
             sql.append("\"").append(column).append("\" ").append(operator).append(" :").append(marker);
-            parameters.add(parameter(marker, parameterType(type), condition.get("value")));
+            Object value = condition.get("value");
+            parameters.add(parameter(marker, parameterType(type),
+                    value == null ? null : typed(type, value, "Report filter value of column [" + column + "]")));
         }
         if (!ORDER_BY.isEmpty()) {
             sql.append(" ORDER BY ").append(ORDER_BY);
@@ -220,6 +247,54 @@ public class ${name}Repository {
         return "CHARACTER VARYING".equalsIgnoreCase(columnType) ? "VARCHAR" : columnType;
     }
 
+    /** Whether a pattern (LIKE, CONTAINS) applies to a column of the type - it matches characters (#8177). */
+    private static boolean textual(String columnType) {
+        String type = columnType.toUpperCase(Locale.ROOT);
+        return !NUMERIC_COLUMN_TYPES.contains(type) && !TEMPORAL_AND_BOOLEAN_COLUMN_TYPES.contains(type);
+    }
+
+    /**
+     * A request's value read as the SQL type it is bound with, so a value that is not one is refused
+     * here, naming it, rather than failing the query inside the binder as a 500 (#7828, #8098, #8177):
+     * a number exactly (an integer outside its type is refused, never wrapped), a date or timestamp in
+     * the near-ISO shapes the generated REST layer accepts. Text, and any other type, binds as given.
+     *
+     * @param subject what the value is, for the refusal
+     * @throws IllegalArgumentException when the value does not read as the type
+     */
+    private static Object typed(String type, Object value, String subject) {
+        Object converted = converted(type.toUpperCase(Locale.ROOT), String.valueOf(value).trim(), value);
+        if (converted == null) {
+            throw new IllegalArgumentException(subject + " is not a valid " + type + ": " + value);
+        }
+        return converted;
+    }
+
+    /** The value converted to its type, or null when the text does not read as one. */
+    private static Object converted(String type, String text, Object value) {
+        try {
+            return switch (type) {
+                case "TINYINT" -> new BigDecimal(text).byteValueExact();
+                case "SMALLINT" -> new BigDecimal(text).shortValueExact();
+                case "INT", "INTEGER" -> new BigDecimal(text).intValueExact();
+                case "BIGINT" -> new BigDecimal(text).longValueExact();
+                case "DECIMAL", "NUMERIC", "DOUBLE", "DOUBLE PRECISION", "FLOAT", "REAL" -> new BigDecimal(text);
+                case "DATE" -> {
+                    LocalDate date = LenientJavaTime.parseLocalDate(text);
+                    yield date == null ? null : date.toString();
+                }
+                case "TIMESTAMP" -> {
+                    LocalDateTime timestamp = LenientJavaTime.parseLocalDateTime(text);
+                    yield timestamp == null ? null : timestamp.format(TIMESTAMP_FORMAT);
+                }
+                default -> value;
+            };
+        } catch (NumberFormatException | ArithmeticException notANumberOfTheType) {
+            // Not a number, or not one the type holds: refused by the caller, as an unreadable date is.
+            return null;
+        }
+    }
+
     private static String stringValue(Object value) {
         return value == null ? null : value.toString();
     }
@@ -232,9 +307,9 @@ public class ${name}Repository {
 #foreach($parameter in $parameters)
 #if($parameter.type == "DATE" && $parameter.initial == "CURRENT_DATE")
         // initial: CURRENT_DATE - the day the report is run, resolved per request.
-        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", java.time.LocalDate.now().toString())));
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", java.time.LocalDate.now().toString())));
 #else
-        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initialJavaLiteral}")));
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.type}", "${parameter.initialJavaLiteral}")));
 #end
 #end
         return parameters;
@@ -266,9 +341,10 @@ public class ${name}Repository {
         return parameter;
     }
 
-    private static Object value(Map<String, Object> filter, String name, Object initial) {
+    /** A declared parameter's value: the caller's, read as the parameter's type - else its initial. */
+    private static Object value(Map<String, Object> filter, String name, String type, Object initial) {
         if (filter != null && filter.get(name) != null) {
-            return filter.get(name);
+            return typed(type, filter.get(name), "Report parameter [" + name + "]");
         }
         return initial;
     }

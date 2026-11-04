@@ -3813,7 +3813,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // carries none, bound by the repository, and exposed as query parameters by the controller.
         assertTrue(claimsByUnitReport.contains("\"name\": \"minTotal\"") && claimsByUnitReport.contains("\"initial\": \"0\""),
                 "an authored report parameter must be declared on the .report with its initial value: " + claimsByUnitReport);
-        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"0\"))"),
+        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"DECIMAL\", \"0\"))"),
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
@@ -3832,7 +3832,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryAgingRepository = contentOf("gen/entryaging/data/reports/EntryAgingRepository.java");
         assertTrue(
                 entryAgingRepository.contains(
-                        "parameter(\"asOf\", \"DATE\", value(filter, \"asOf\", java.time.LocalDate.now().toString()))"),
+                        "parameter(\"asOf\", \"DATE\", value(filter, \"asOf\", \"DATE\", java.time.LocalDate.now().toString()))"),
                 "the aging report must bind its as-of date to today when the request carries none: " + entryAgingRepository);
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
@@ -5733,7 +5733,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("gen/events/emission/ShipmentFlowDispatch.java").contains("\"DISPATCHED \\\"in full\\\"\""),
                 "a setField value must reach the setter delegate escaped");
         String claimNotesRepository = contentOf("gen/claimnotes/data/reports/ClaimNotesRepository.java");
-        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"O'Neil \\\"the\\\" note\")"),
+        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"CHARACTER VARYING\", \"O'Neil \\\"the\\\" note\")"),
                 "an authored report parameter initial must be bound escaped: " + claimNotesRepository);
 
         // A workflow setter/writer targeted write keeps the stored display Name current: the label

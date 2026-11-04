@@ -57,6 +57,7 @@ class IntentExportIT extends IntegrationTest {
     private static final String API = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api";
     private static final String EXPORTS = "/services/java/" + PROJECT + "/gen/events/" + PROJECT;
     private static final String LEDGER = API + "/exportrun/ExportRunController";
+    private static final String REPORT = "/services/java/" + PROJECT + "/gen/purchasesbysupplier/api/reports/PurchasesBySupplierController";
     private static final Charset WINDOWS_1251 = Charset.forName("windows-1251");
 
     private static final String INTENT_YAML = """
@@ -87,6 +88,7 @@ class IntentExportIT extends IntegrationTest {
                 measures: [sum(taxBase), count(*)]
                 parameters:
                   - { name: fromDate, target: documentDate, op: ge }
+                  - { name: fromId,   target: id, op: ge, initial: "0" }
 
             exports:
               - name: VatPurchaseLedger
@@ -123,6 +125,7 @@ class IntentExportIT extends IntegrationTest {
                 root: Purchases
                 parameters:
                   - { name: fromDate }
+                  - { name: fromId }
                 records:
                   - type: header
                     element: Period
@@ -305,6 +308,71 @@ class IntentExportIT extends IntegrationTest {
                          .contains("[INVOICE-LONG] is 12 characters, wider than its 6"),
                 String.valueOf(failed.get("ErrorMessage")));
         assertNull(failed.get("StoragePath"), "a failed run stores no file");
+
+        // A report parameter is read as its type before the report runs: a value that is not one, or an
+        // integer beyond its type, is a 400 naming the parameter and the type - on the report and on the
+        // export over it, which then records nothing (#7828, #8098).
+        assertAnswered(REPORT + "?fromDate=abc", null, 400, "Report parameter [fromDate] is not a valid DATE: abc");
+        assertAnswered(REPORT + "?fromId=99999999999", null, 400, "Report parameter [fromId] is not a valid INTEGER: 99999999999");
+        assertAnswered(REPORT + "/count?fromId=abc", null, 400, "Report parameter [fromId] is not a valid INTEGER: abc");
+        int beforeRefusedRuns = ledgerRuns().size();
+        assertAnswered(EXPORTS + "/SupplierPurchasesExport/download?fromId=abc", null, 400,
+                "Report parameter [fromId] is not a valid INTEGER: abc");
+        assertAnswered(EXPORTS + "/SupplierPurchasesExport/download?fromDate=2026-13-45", null, 400,
+                "Report parameter [fromDate] is not a valid DATE: 2026-13-45");
+        assertEquals(beforeRefusedRuns, ledgerRuns().size(), "a parameter refused before the run must not record one");
+        // A negative page bound is ignored, as the entity controllers ignore it (#7828).
+        assertEquals(2, reportRows(REPORT + "?$limit=-1&$offset=-1", null).size(), "a negative $limit/$offset is ignored");
+
+        // A /search condition is read as its column's type: a word in a decimal, a pattern on a number
+        // and an integer beyond its type are 400s naming the column and the value (#8177) ...
+        assertAnswered(REPORT + "/search", conditions("Sum Tax Base", "GT", "abc"), 400,
+                "Report filter value of column [Sum Tax Base] is not a valid DECIMAL: abc");
+        assertAnswered(REPORT + "/search", conditions("Sum Tax Base", "LIKE", "1%"), 400,
+                "Report filter operator LIKE does not apply to column [Sum Tax Base]");
+        assertAnswered(REPORT + "/search", conditions("Count", "GT", "1e99"), 400, "Report filter value of column [Count]");
+        // ... while a condition of the right type still filters: Beta's three invoices, Alfa's one.
+        assertEquals(1, reportRows(REPORT + "/search", conditions("Count", "GTE", "2")).size(), "a typed condition filters");
+
+        // The ledger is written by export runs only: a run nobody made is refused over REST, and a FAILED
+        // run, which stored no file, has none to serve (#8098).
+        int beforeCreateRuns = ledgerRuns().size();
+        assertAnswered(LEDGER, "{\"Export\":\"SupplierPurchases\",\"Outcome\":\"SUCCEEDED\",\"RecordCount\":5}", 405,
+                "cannot be created over REST");
+        assertEquals(beforeCreateRuns, ledgerRuns().size(), "a ledger row made over REST must not be stored");
+        assertAnswered(LEDGER + "/" + failed.get("Id") + "/download", null, 404, "has no stored file");
+    }
+
+    /** A GET (no body) or a JSON POST answered with the status and a reason containing the text. */
+    private void assertAnswered(String url, String body, int status, String reason) {
+        restAssuredExecutor.execute(() -> request(url, body).then()
+                                                            .statusCode(status)
+                                                            .body(containsString(reason)),
+                90);
+    }
+
+    private List<Map<String, Object>> reportRows(String url, String body) {
+        AtomicReference<List<Map<String, Object>>> rows = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> rows.set(request(url, body).then()
+                                                                     .statusCode(200)
+                                                                     .extract()
+                                                                     .jsonPath()
+                                                                     .getList("$")),
+                90);
+        return rows.get();
+    }
+
+    private static Response request(String url, String body) {
+        return body == null ? given().when()
+                                     .get(url)
+                : given().contentType("application/json")
+                         .body(body)
+                         .when()
+                         .post(url);
+    }
+
+    private static String conditions(String column, String operator, String value) {
+        return "{\"conditions\":[{\"column\":\"" + column + "\",\"operator\":\"" + operator + "\",\"value\":\"" + value + "\"}]}";
     }
 
     private Map<String, Object> assertLedgerRun(Response download, String export, int rows) {
