@@ -176,6 +176,53 @@ final class ModelTranslations {
     }
 
     /**
+     * The catalog key of a slot rule's refusal (#8097): {@code <Entity>_slots_<rule>}.
+     *
+     * @param entity the entity
+     * @param rule one of the keys {@link #slotMessages} returns
+     * @return the key, relative to the catalog's {@code checks} sub-object
+     */
+    static String slotMessageKey(Map<String, Object> entity, String rule) {
+        return str(entity, "name") + "_slots_" + rule;
+    }
+
+    /**
+     * The default-language refusals of the slot picker's promise, which the generated repository holds
+     * a user write to (#8097): a start on a closed weekday ({@code closed}), outside the opening hours
+     * ({@code hours}), off the step grid ({@code grid}), and in a slot another record holds
+     * ({@code booked}). {@code {open}}, {@code {close}} and {@code {step}} are filled when one fires.
+     * Empty unless the entity has a slots view whose start is a timestamp - a date start has no time to
+     * place on the grid, and the picker never marks one booked.
+     *
+     * @param entity the entity
+     * @return rule to message, in check order
+     */
+    static Map<String, String> slotMessages(Map<String, Object> entity) {
+        if (!"true".equals(str(entity, "slotsView")) || !isTimestamp(entity, str(entity, "slotStartProperty"))) {
+            return Map.of();
+        }
+        String label = strOr(entity, "entityLabel", NamingHelper.humanizeIdentifier(str(entity, "name")));
+        String resource = str(entity, "slotResourceProperty");
+        Map<String, String> messages = new LinkedHashMap<>();
+        messages.put("closed", label + " slots are closed on this day");
+        messages.put("hours", label + " slots run from {open} to {close}");
+        messages.put("grid", label + " slots start every {step} minutes from {open}");
+        messages.put("booked", "This " + label + " slot is already booked"
+                + (resource == null ? "" : " for this " + NamingHelper.humanizeIdentifier(resource)));
+        return messages;
+    }
+
+    private static boolean isTimestamp(Map<String, Object> entity, String propertyName) {
+        for (Map<String, Object> property : asMaps(entity.get("properties"))) {
+            if (propertyName != null && propertyName.equals(str(property, "name"))) {
+                return "java.time.Instant".equals(ModelDataTypes.parse(str(property, "dataType"))
+                                                                .javaClass());
+            }
+        }
+        return false;
+    }
+
+    /**
      * The default-language refusal of a derived total its column cannot hold (#8096), naming the
      * largest value the column stores; {@code {value}} is the total the write would have produced.
      *
@@ -379,6 +426,7 @@ final class ModelTranslations {
                     messages.put(singleFlagMessageKey(entity, flag), message);
                 }
             }
+            slotMessages(entity).forEach((rule, message) -> messages.put(slotMessageKey(entity, rule), message));
             for (Map<String, Object> property : asMaps(entity.get("properties"))) {
                 for (String flag : FIXED_FLAGS) {
                     String fixedKey = fixedMessageKey(entity, property, flag);

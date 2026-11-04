@@ -76,4 +76,22 @@ class FunctionCalendarTest {
                         .contains("reserved for an upcoming template"),
                 error.getMessage());
     }
+
+    /** The generated repository reads the slots window (#8097), so one it cannot read is refused. */
+    @Test
+    void aSlotsWindowTheServerCannotReadIsRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse(entity("""
+                    view: slots
+                    slots: { start: startsAt, open: "9am", step: 0, resource: subject }
+                """)));
+        assertTrue(error.getMessage()
+                        .contains("slots time [9am] is not HH:MM"),
+                error.getMessage());
+        assertTrue(error.getMessage()
+                        .contains("slots.step [0] must be at least 1 minute"),
+                error.getMessage());
+        assertTrue(error.getMessage()
+                        .contains("slots.resource [subject] is not a manyToOne/oneToOne relation"),
+                error.getMessage());
+    }
 }

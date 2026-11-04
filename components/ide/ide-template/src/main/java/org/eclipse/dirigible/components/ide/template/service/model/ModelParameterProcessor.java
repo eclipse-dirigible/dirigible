@@ -148,6 +148,7 @@ final class ModelParameterProcessor {
             // A refusing single flag's conflict message (#8101), resolved for the reader's language.
             resolveMessageCatalog(flag, ModelTranslations.singleFlagMessageKey(entity, flag), parameters);
         }
+        resolveSlotRules(entity, parameters);
         resolveLifecycleStatusNames(entity);
         resolveDataOrder(entity);
         resolveOrderBy(entity);
@@ -625,6 +626,39 @@ final class ModelParameterProcessor {
             fixed.add(entry);
         }
         return fixed;
+    }
+
+    /**
+     * Hands a slots entity whose start is a timestamp what its repository's {@code requireBookableSlot}
+     * holds a user write to (#8097): {@code slotMessageArgs}, each rule's catalog key and
+     * default-language text by rule, and the window in minutes of the day - read as the picker reads
+     * it, so 09:00-18:00 by 30 means the same grid on both sides.
+     *
+     * @param entity the entity
+     * @param parameters the generation parameters (project name and model file path)
+     */
+    private static void resolveSlotRules(Map<String, Object> entity, Map<String, Object> parameters) {
+        Map<String, Object> args = new LinkedHashMap<>();
+        for (Map.Entry<String, String> rule : ModelTranslations.slotMessages(entity)
+                                                               .entrySet()) {
+            String messageKey = ModelTranslations.slotMessageKey(entity, rule.getKey());
+            String catalogKey = ModelTranslations.catalogKey(parameters, ModelTranslations.CHECKS_CATALOG + "." + messageKey);
+            args.put(rule.getKey(), "\"" + JavaLiterals.escape(catalogKey) + "\", \"" + JavaLiterals.escape(rule.getValue()) + "\"");
+        }
+        if (args.isEmpty()) {
+            return;
+        }
+        entity.put("slotMessageArgs", args);
+        entity.put("slotOpenMinute", minuteOfDay(strOr(entity, "slotOpen", "08:00")));
+        entity.put("slotCloseMinute", minuteOfDay(strOr(entity, "slotClose", "18:00")));
+        entity.put("slotStepMinutes", Integer.parseInt(strOr(entity, "slotStep", "30").trim()));
+    }
+
+    /** {@code HH:MM} as minutes since midnight, split as the picker splits it. */
+    private static int minuteOfDay(String time) {
+        String[] parts = time.trim()
+                             .split(":");
+        return Integer.parseInt(parts[0].trim()) * 60 + Integer.parseInt(parts[1].trim());
     }
 
     /**

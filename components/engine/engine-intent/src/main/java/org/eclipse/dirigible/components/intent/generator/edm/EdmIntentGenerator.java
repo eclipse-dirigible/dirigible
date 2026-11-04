@@ -381,6 +381,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     if (notBlank(slotsCfg.getStart())) {
                         entityMap.put("slotStartProperty", IntentNaming.pascalCase(slotsCfg.getStart()));
                     }
+                    // A slot is booked per value of this to-one (#8097): the FK the server's check
+                    // matches alongside the start.
+                    RelationIntent slotResource = CheckSupport.toOne(entity, slotsCfg.getResource());
+                    if (slotResource != null) {
+                        entityMap.put("slotResourceProperty", IntentNaming.pascalCase(slotResource.getName()));
+                    }
                     entityMap.put("slotOpen", notBlank(slotsCfg.getOpen()) ? slotsCfg.getOpen()
                                                                                      .trim()
                             : "08:00");

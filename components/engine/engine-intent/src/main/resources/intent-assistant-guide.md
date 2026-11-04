@@ -1801,10 +1801,18 @@ process tasks.
       close: "18:00"         # exclusive end of the day (default 18:00)
       step: 30               # slot length in minutes (default 30)
       disabledDays: [0, 6]   # weekdays always closed (0 = Sunday .. 6 = Saturday)
+      resource: Employee     # optional to-one: a slot is booked per value of it
   ```
+  The generated controllers hold every user write to what the picker offers: a timestamp start on a
+  closed weekday, outside `open`-`close` or off the `step` grid is refused 400, and a start another
+  record already holds (for the same `resource`, when declared) 409 - so do not restate the window in
+  `checks:` or as a `unique:` on the start. The window is read in the server's time zone. Every record
+  holds its slot, a cancelled one too, until it is deleted or moved. System writes (a create-from, an
+  import, a process step) are not checked.
 
 **Rules:** `view` is one of `calendar` / `range` / `slots`. `calendar.start` (calendar/range) and
-`slots.start` (slots) are required and must name a declared `date`/`timestamp` field; `calendar.end`
+`slots.start` (slots) are required and must name a declared `date`/`timestamp` field (`slots.open` /
+`close` are `HH:MM`, `step` at least 1, `resource` a declared to-one relation); `calendar.end`
 likewise when set; `calendar.title`/`color` must be a declared field or relation; `calendar.scope` a
 declared to-one relation. `function: Calendar` cannot be combined with a different `view:`.
 
