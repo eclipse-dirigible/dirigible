@@ -12,11 +12,13 @@ package org.eclipse.dirigible.engine.java.controller;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
@@ -37,9 +39,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
 
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.cfg.DateTimeFeature;
 import tools.jackson.databind.cfg.MapperBuilder;
+import tools.jackson.databind.exc.InvalidFormatException;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -53,6 +57,10 @@ import jakarta.servlet.http.HttpServletResponse;
 public class ControllerInvoker {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ControllerInvoker.class);
+
+    /** The field types a JSON number with a fraction is refused for (#8178). */
+    private static final Set<Class<?>> WHOLE_NUMBER_TYPES =
+            Set.of(Integer.class, int.class, Long.class, long.class, Short.class, short.class, Byte.class, byte.class, BigInteger.class);
 
     private final ObjectMapper objectMapper;
 
@@ -85,12 +93,16 @@ public class ControllerInvoker {
         // DIRIGIBLE_JAVA_CONTROLLER_DATES_AS_TIMESTAMPS restores the Jackson timestamps (decimal epoch
         // seconds, [y, m, d] arrays) controllers answered before, for clients that read the numbers;
         // binding accepts both shapes either way.
+        //
+        // A JSON number written with a fraction or an exponent is refused for a whole-number field
+        // instead of truncated (#8178): Jackson's default cut 2.9 to 2 and stored it with a 200.
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new)
                                                 .rebuild()
                                                 .addModules(MapperBuilder.findModules())
                                                 .addModule(new LenientJavaTimeModule())
                                                 .configure(DateTimeFeature.WRITE_DATES_AS_TIMESTAMPS,
                                                         DirigibleConfig.JAVA_CONTROLLER_DATES_AS_TIMESTAMPS.getBooleanValue())
+                                                .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT)
                                                 .build();
     }
 
@@ -250,6 +262,12 @@ public class ControllerInvoker {
                     // as a 500 instead of the 400 a bad request owes the caller. ControllerInvokerBindingTest
                     // caught exactly that.
                 } catch (IOException | JacksonException e) {
+                    String fractionField = fractionRefusedField(e);
+                    if (fractionField != null) {
+                        // Named in the generated controllers' own shape ("The 'Name' property is
+                        // required"), which the generated UI reads to mark the field it names.
+                        throw new BindingException("The '" + fractionField + "' must be a whole number", e);
+                    }
                     throw new BindingException("Failed to parse request body as " + binding.targetType()
                                                                                            .getSimpleName()
                             + ": " + e.getMessage(), e);
@@ -291,6 +309,24 @@ public class ControllerInvoker {
             default:
                 throw new BindingException("Unknown parameter binding kind: " + binding.kind());
         }
+    }
+
+    /**
+     * The field a body sent a fractional number for where it declares a whole number (#8178), or
+     * {@code null} when the failure is anything else or names no field.
+     */
+    private static String fractionRefusedField(Exception e) {
+        if (!(e instanceof InvalidFormatException refused) || !(refused.getValue() instanceof Number)
+                || !WHOLE_NUMBER_TYPES.contains(refused.getTargetType())) {
+            return null;
+        }
+        String field = null;
+        for (JacksonException.Reference reference : refused.getPath()) {
+            if (reference.getPropertyName() != null) {
+                field = reference.getPropertyName();
+            }
+        }
+        return field;
     }
 
     /**
