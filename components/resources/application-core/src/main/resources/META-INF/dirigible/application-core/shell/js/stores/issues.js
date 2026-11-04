@@ -26,6 +26,13 @@
  * The dialog is ONE fragment (shell/views/_report-issue.html) fetched into `markup` and mounted with
  * x-html by every shell, like the tenant chip. Shells generated before this store existed never load
  * it; shared code that reaches for it must check Alpine.store('issues') first.
+ *
+ * A distribution may ship without the issues engine (engine-issues), and then nothing answers
+ * /services/issues (#7991). The branding script every shell loads states whether it is deployed
+ * (top.PlatformIssues), so `available` is known before anything renders and costs no request - a
+ * probe of /services/issues would print a 404 to the console on every shell load. While it is false
+ * the shells leave out "Report an issue" and the Issues entry, the Issues page says the instance
+ * does not offer it, and the store sends nothing.
  */
 document.addEventListener('alpine:init', () => {
   const ISSUES_URL = '/services/issues';
@@ -71,7 +78,19 @@ document.addEventListener('alpine:init', () => {
     }
   }
 
+  // Whether the issues engine is deployed, as the branding script states it. A page that did not load
+  // the script says nothing, and the engine is assumed, as it was before the flag existed.
+  function engineDeployed() {
+    try {
+      return top.PlatformIssues !== false;
+    } catch (e) {
+      return true; // a cross-origin top
+    }
+  }
+
   Alpine.store('issues', {
+    /** Whether this instance answers /services/issues at all (#7991). */
+    available: engineDeployed(),
     /** The report dialog's markup. */
     markup: '',
     /** Whether the report dialog is open. */
@@ -139,7 +158,7 @@ document.addEventListener('alpine:init', () => {
       const failures = this.failures().slice(0, FAILURES_IN_REPORT);
       const requestIds = [...new Set([given.requestId, ...failures.map((f) => f.requestId)].filter(Boolean))];
       this.draft = { subject: given.subject || '', description: '', severity: 'MEDIUM' };
-      this.error = '';
+      this.error = this.available ? '' : this.unavailableMessage();
       this.showBundle = false;
       this.excerpt = [];
       this.context = {
@@ -186,7 +205,7 @@ document.addEventListener('alpine:init', () => {
 
     async loadExcerpt() {
       const requestIds = this.context.requestIds || [];
-      if (requestIds.length === 0) return;
+      if (requestIds.length === 0 || !this.available) return;
       const response = await this.call('POST', ISSUES_URL + '/excerpt', { requestIds: requestIds });
       if (response) this.excerpt = response;
     },
@@ -205,6 +224,10 @@ document.addEventListener('alpine:init', () => {
     /** Sends the report. */
     async submit() {
       if (!this.draft.subject.trim()) return;
+      if (!this.available) {
+        this.error = this.unavailableMessage();
+        return;
+      }
       const issue = await this.call('POST', ISSUES_URL, {
         subject: this.draft.subject,
         description: this.draft.description,
@@ -221,6 +244,7 @@ document.addEventListener('alpine:init', () => {
 
     /** Entering the Issues page: the list, and the report dialog when the link asks for it (?report=1, the Workbench's entry). */
     enterPage() {
+      if (!this.available) return;
       this.loadList();
       const query = new URLSearchParams(window.location.hash.split('?')[1] || '');
       if (query.get('report') === '1') this.report();
@@ -308,7 +332,11 @@ document.addEventListener('alpine:init', () => {
         const text = await response.text();
         const parsed = text ? safeParse(text) : null;
         if (!response.ok) {
-          this.error = this.messageFor(response.status, parsed);
+          // Only an issue's own URLs answer 404 for a thread that does not exist or is not the caller's. A
+          // 404 on the collection means nothing answers /services/issues: no issues engine (#7991).
+          const noEngine = response.status === 404 && (url === ISSUES_URL || url === ISSUES_URL + '/excerpt');
+          if (noEngine) this.available = false;
+          this.error = noEngine ? this.unavailableMessage() : this.messageFor(response.status, parsed);
           return null;
         }
         return parsed;
@@ -328,6 +356,10 @@ document.addEventListener('alpine:init', () => {
       if (status === 404) return this.t('shell.issues.notFound', 'This issue does not exist, or is not yours.');
       if (status === 0) return this.t('shell.issues.offline', 'The server could not be reached. Try again in a moment.');
       return this.t('shell.issues.failed', 'That did not work. Try again in a moment.');
+    },
+
+    unavailableMessage() {
+      return this.t('shell.issues.unavailable', 'Issue reporting is not available on this instance.');
     },
 
     announce(message) {

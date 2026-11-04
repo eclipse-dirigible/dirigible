@@ -104,6 +104,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ResolveIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.generator.report.ReportMoments;
 import org.eclipse.dirigible.components.intent.model.ReportAgingIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
@@ -963,6 +964,21 @@ public final class IntentParser {
                                                      .trim()
                                                      .toLowerCase())) {
                     issues.add("entity [" + name + "] slots.start [" + slotsCfg.getStart() + "] is not a declared date/timestamp field");
+                }
+                // The generated repository reads the window the picker draws (#8097): an hour it cannot
+                // read, a step that never advances or a resource without a column would break it.
+                for (String time : new String[] {slotsCfg.getOpen(), slotsCfg.getClose()}) {
+                    if (time != null && !time.isBlank() && !time.trim()
+                                                                .matches("\\d{1,2}:\\d{2}")) {
+                        issues.add("entity [" + name + "] slots time [" + time + "] is not HH:MM");
+                    }
+                }
+                if (slotsCfg.getStep() != null && slotsCfg.getStep() < 1) {
+                    issues.add("entity [" + name + "] slots.step [" + slotsCfg.getStep() + "] must be at least 1 minute");
+                }
+                if (slotsCfg.getResource() != null && CheckSupport.toOne(entity, slotsCfg.getResource()) == null) {
+                    issues.add(
+                            "entity [" + name + "] slots.resource [" + slotsCfg.getResource() + "] is not a manyToOne/oneToOne relation");
                 }
                 continue;
             }
@@ -2176,6 +2192,7 @@ public final class IntentParser {
                 issues.add("duplicate rollup [" + name + "]");
             }
             validateRollupMembershipAndTiming(rollup, name, byName, issues);
+            validateRollupEnforce(rollup, name, byName, issues);
             if (rollup.isCrossModelChild()) {
                 validateCrossModelChildRollup(rollup, name, byName, usesAliases, issues);
                 continue;
@@ -6875,6 +6892,36 @@ public final class IntentParser {
         return null;
     }
 
+    /**
+     * Validate {@code enforce:} (issue #7904): it switches the capacity guard, so it needs a
+     * {@code capacity:}; {@code enforce: false} leaves no guard for {@code guardAt:} to gate or
+     * {@code message:} to word; and it needs a LOCAL parent, because the balance follows an edit of the
+     * capacity in the parent's own repository, which a cross-model parent's owner generates.
+     */
+    private static void validateRollupEnforce(RollupIntent rollup, String name, Map<String, EntityIntent> byName, List<String> issues) {
+        if (rollup.getEnforce() == null) {
+            return;
+        }
+        if (isBlank(rollup.getCapacity())) {
+            issues.add("rollup [" + name + "] declares enforce [" + rollup.getEnforce()
+                    + "] with no capacity - enforce switches the CAPACITY guard, so there is nothing to switch");
+            return;
+        }
+        if (rollup.isEnforced()) {
+            return;
+        }
+        if (!isBlank(rollup.getGuardAt()) || !isBlank(rollup.getMessage())) {
+            issues.add("rollup [" + name + "] declares enforce: false with guardAt / message - both belong to the capacity guard,"
+                    + " which enforce: false does not emit");
+        }
+        EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
+        RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+        if (via != null && !isBlank(via.getModel())) {
+            issues.add("rollup [" + name + "] declares enforce: false on a cross-model parent [" + via.getModel() + ":" + via.getTo()
+                    + "] - the balance follows an edit of the capacity in the parent's own repository, which the owner model generates");
+        }
+    }
+
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             java.util.List<EntityIntent> entities, List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates,
             List<String> issues) {
@@ -7848,9 +7895,19 @@ public final class IntentParser {
      */
     @SuppressWarnings("unchecked")
     private static void normalizeOrderBy(Object tree) {
-        if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
+        if (!(tree instanceof Map<?, ?> root)) {
             return;
         }
+        // A report's orderBy (dirigible #8435) takes the same three spellings.
+        for (String section : List.of("entities", "reports")) {
+            if (root.get(section) instanceof List<?> nodes) {
+                normalizeOrderByOf(nodes);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void normalizeOrderByOf(List<?> entities) {
         for (Object entityNode : entities) {
             if (!(entityNode instanceof Map<?, ?> entity) || !entity.containsKey("orderBy")) {
                 continue;
@@ -11364,7 +11421,7 @@ public final class IntentParser {
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
-            validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+            validateGeneratesReopen(g, name, source, crossModelSource, byName, crossModel, model, issues);
         }
     }
 
@@ -11483,7 +11540,8 @@ public final class IntentParser {
      * cannot fire is exactly the silence this feature exists to remove: the at-most-once guard steps
      * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
      * author is left with a model that reads as automatic and is not. So the hook must exist to be
-     * inverted, the inverse must be a different status, the target must be one whose retirement is
+     * inverted, the inverse must be a different status, the map must copy the source's key onto the
+     * back-reference the reopen reads the source through, the target must be one whose retirement is
      * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
      * an appending create-from - which keeps no guard and no slot - is refused outright.
      *
@@ -11492,8 +11550,8 @@ public final class IntentParser {
      * in {@link #validateStatusWritesAgainstLifecycle}: the source stands at {@code sourceStatus} when
      * the retirement arrives, so the graph must declare that exact edge back.
      */
-    private static void validateGeneratesReopen(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
-            IntentModel model, List<String> issues) {
+    private static void validateGeneratesReopen(GeneratesIntent g, String name, EntityIntent source, boolean crossModelSource,
+            Map<String, EntityIntent> byName, boolean crossModel, IntentModel model, List<String> issues) {
         if (!g.hasReopen()) {
             return;
         }
@@ -11526,6 +11584,15 @@ public final class IntentParser {
         // hook blocks the button exactly as the guard blocks the trigger, and the declared inverse is
         // the move back in both shapes. What stays refused is a button create-from with no hook at all,
         // which the sourceStatus check above has already returned on.
+        // In both shapes the reopen reaches its source through the map's back-reference (#7985). An
+        // event-driven rule without one is refused with its event; a button one is refused here, or its
+        // reopen rendered an empty `target.`. A cross-model source's key is checked at generation.
+        if (!g.isEventDriven() && !crossModelSource && source != null && !g.getMap()
+                                                                           .containsValue(seedIdField(source))) {
+            issues.add(subject + " declares sourceStatusOnRetire, so its map must copy the source's [" + seedIdField(source)
+                    + "] onto the target's back-reference to it (e.g. `map: { " + g.getFrom() + ": " + seedIdField(source)
+                    + " }`) - the reopen reaches the source it returns through that back-reference");
+        }
         if (crossModel) {
             issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
                     + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
@@ -12902,6 +12969,60 @@ public final class IntentParser {
             validateAgingReport(model, report, issues);
             validateReportScope(model, report, issues);
             validateSubsetReportReferences(model, report, issues);
+            validateReportOrderBy(report, issues);
+            for (String problem : ReportMoments.problems(report.getFilter())) {
+                issues.add("report [" + report.getName() + "] filter " + problem);
+            }
+        }
+    }
+
+    /**
+     * A report's {@code orderBy:} (dirigible #8435) names its own output: each term must be one of the
+     * report's dimensions or measures as authored (compared ignoring case and whitespace), no term may
+     * repeat, and the direction is asc or desc. A statement or an account analysis carries its own
+     * order - line order, the running balance - so neither takes one.
+     */
+    private static void validateReportOrderBy(ReportIntent report, List<String> issues) {
+        List<OrderByIntent> orderBy = report.getOrderBy();
+        if (orderBy == null || orderBy.isEmpty()) {
+            return;
+        }
+        String prefix = "report [" + report.getName() + "]";
+        if (report.isStatement() || report.isLedger()) {
+            issues.add(prefix + " declares orderBy but a " + report.getKind()
+                                                                   .trim()
+                    + " report carries its own row order");
+            return;
+        }
+        Set<String> known = new LinkedHashSet<>();
+        List<String> authored = new ArrayList<>();
+        for (List<String> expressions : List.of(report.getDimensions(), report.getMeasures())) {
+            for (String expression : expressions) {
+                if (expression != null && !expression.isBlank()) {
+                    known.add(normalizeExpression(expression));
+                    authored.add(expression.trim());
+                }
+            }
+        }
+        Set<String> seen = new HashSet<>();
+        for (OrderByIntent term : orderBy) {
+            String field = term == null ? null : term.getField();
+            if (field == null || field.isBlank()) {
+                issues.add(prefix + " orderBy has an entry without a field");
+                continue;
+            }
+            String key = normalizeExpression(field);
+            if (!seen.add(key)) {
+                issues.add(prefix + " orderBy names [" + field + "] more than once");
+            }
+            if (!known.contains(key)) {
+                issues.add(
+                        prefix + " orderBy references [" + field + "] which is not one of the report's dimensions or measures " + authored);
+            }
+            String dir = term.getDir();
+            if (dir != null && !"asc".equalsIgnoreCase(dir.trim()) && !"desc".equalsIgnoreCase(dir.trim())) {
+                issues.add(prefix + " orderBy [" + field + "] has dir [" + dir + "] - it is asc or desc");
+            }
         }
     }
 

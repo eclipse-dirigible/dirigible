@@ -33,6 +33,7 @@ import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.QueryParam;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -187,6 +188,36 @@ class ControllerInvokerBindingTest {
                 response.body());
     }
 
+    /**
+     * A fraction sent for a whole-number field is refused naming the field, never truncated (#8178).
+     * Built through the Spring constructor, which is where production configures the mapper.
+     */
+    @Test
+    void a_fraction_for_a_whole_number_field_yields_400_naming_the_field() {
+        ControllerInvoker springInvoker = new ControllerInvoker(new StaticListableBeanFactory().getBeanProvider(ObjectMapper.class));
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("count"))
+                           .findFirst()
+                           .orElseThrow();
+
+        for (String fraction : List.of("2.9", "1.5", "2.0", "1e1")) {
+            FakeResponse response = new FakeResponse();
+            springInvoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest("{\"count\":" + fraction + "}"), response);
+            assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatus(), fraction + ": " + response.body());
+            assertTrue(response.body()
+                               .contains("\"message\":\"The 'count' must be a whole number\""),
+                    response.body());
+        }
+
+        FakeResponse whole = new FakeResponse();
+        springInvoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest("{\"count\":3}"), whole);
+        assertEquals("count=3", whole.body());
+    }
+
     @Test
     void method_throwing_yields_500() {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
@@ -334,6 +365,11 @@ class ControllerInvokerBindingTest {
             return "name=" + payload.name;
         }
 
+        @Post("/count")
+        public String count(@Body Payload payload) {
+            return "count=" + payload.count;
+        }
+
         @Get("/boom")
         public String boom() {
             throw new RuntimeException("kaboom");
@@ -378,6 +414,7 @@ class ControllerInvokerBindingTest {
 
     static class Payload {
         public String name;
+        public Integer count;
     }
 
     // --- HTTP test plumbing ----------------------------------------------------------------------

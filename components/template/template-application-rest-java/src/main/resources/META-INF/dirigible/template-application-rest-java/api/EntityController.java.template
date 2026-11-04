@@ -274,6 +274,12 @@ public class ${name}Controller {
     @Post
     @Documentation("Create ${name}")
     public ${name}Entity create(@Body ${name}Entity entity) {
+#if($attachmentReadOnly)
+        // Its rows are written by the system only - an export run, a snapshot mint - each with the file
+        // it stored (#8098): a row made over REST is a record no run produced, with no file to serve.
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED,
+                "${name} records are written by the system only - they cannot be created over REST");
+#else
 #if($needsRoles)
         checkPermissions("write");
 #end
@@ -297,6 +303,11 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(checked);
 #end
+#if($slotMessageArgs)
+        // The slot picker's promise (intent `slots:`, #8097): an open day, inside the window, on the grid,
+        // in a slot nobody else holds.
+        repository.requireBookableSlot(checked);
+#end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
@@ -318,6 +329,7 @@ public class ${name}Controller {
         ${name}Entity saved = repository.save(entity);
 #end
         return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
+#end
     }
 #if($attachmentEntity)
 #if(!$attachmentReadOnly)
@@ -368,6 +380,10 @@ public class ${name}Controller {
 #end
         ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        if (entity.StoragePath == null) {
+            // A row that stored no file - a FAILED export run - has nothing to serve (#8098).
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} " + id + " has no stored file");
+        }
         org.eclipse.dirigible.sdk.http.Response.setContentType(entity.ContentType != null ? entity.ContentType : "application/octet-stream");
         // inline lets a stored PDF open (and print) in a browser tab; anything else stays a download
         String dispositionType = "inline".equals(disposition) ? "inline" : "attachment";
@@ -453,6 +469,11 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(checked);
 #end
+#if($slotMessageArgs)
+        // The slot picker's promise (intent `slots:`, #8097): an open day, inside the window, on the grid,
+        // in a slot nobody else holds.
+        repository.requireBookableSlot(checked);
+#end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
         // until the request confirms their codes - and only then persisted.
@@ -475,6 +496,11 @@ public class ${name}Controller {
         validate(checked);
 #if($hasReferenceValidations)
         validateReferences(checked);
+#end
+#if($slotMessageArgs)
+        // The slot picker's promise (intent `slots:`, #8097): an open day, inside the window, on the grid,
+        // in a slot nobody else holds.
+        repository.requireBookableSlot(checked);
 #end
 #if($warningChecks && $warningChecks.size() > 0)
         // The soft checks (severity: warn, #7466): asked of the person saving - a 428 listing them
@@ -1475,7 +1501,7 @@ public class ${name}Controller {
                             hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
 #end
             Object requiredValue = ${check.valueExpression};
-            if ((${check.guardJavaExpression}) && (requiredValue == null || String.valueOf(requiredValue).isBlank())) {
+            if ((${check.guardJavaExpression}) && (requiredValue == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(String.valueOf(requiredValue)))) {
                 throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
         }
@@ -1566,7 +1592,7 @@ public class ${name}Controller {
 #set($requiredChecked = $property.isRequiredProperty && !$property.dataDefaultValue && !$property.numberStampOnCreate && !$property.generatedUuid)
 #if($requiredChecked)
 ## A whitespace-only text value is no value (#7719) - the repository trims it to empty on the write.
-        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || entity.${property.name}.isBlank()#end) {
+        if (entity.${property.name} == null#if($property.dataTypeJavaClass == "String") || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.${property.name})#end) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
         }
 #end

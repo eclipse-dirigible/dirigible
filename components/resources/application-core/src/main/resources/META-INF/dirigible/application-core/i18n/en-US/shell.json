@@ -481,6 +481,7 @@
       "notFound": "This issue does not exist, or is not yours.",
       "offline": "The server could not be reached. Try again in a moment.",
       "failed": "That did not work. Try again in a moment.",
+      "unavailable": "Issue reporting is not available on this instance.",
       "status": {
         "NEW": "New",
         "OPEN": "Open",

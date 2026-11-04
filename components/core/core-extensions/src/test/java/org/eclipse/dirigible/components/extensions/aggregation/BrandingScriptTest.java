@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The branding values are written as string literals, whatever a tenant administrator put in them,
- * and the script states whether the JavaScript engine is deployed.
+ * and the script states whether the JavaScript engine and the issues engine are deployed.
  */
 class BrandingScriptTest {
 
@@ -29,7 +29,7 @@ class BrandingScriptTest {
 
     @Test
     void writes_the_defaults_as_string_literals() {
-        String script = BrandingScript.render(false);
+        String script = BrandingScript.render(false, false);
 
         assertTrue(script.contains("name: \"Dirigible\","), script);
         assertTrue(script.contains("theme: \"blimpkit-auto\","), script);
@@ -39,17 +39,26 @@ class BrandingScriptTest {
     void keeps_a_hostile_value_inside_its_string() {
         Configuration.set(DirigibleConfig.BRANDING_NAME.getKey(), "x'; alert(1); \"</script>\n");
 
-        String script = BrandingScript.render(false);
+        String script = BrandingScript.render(false, false);
 
         assertTrue(script.contains("name: \"x'; alert(1); \\\"\\u003c/script>\\n\","), script);
     }
 
     @Test
     void states_whether_the_javascript_engine_is_deployed() {
-        String withEngine = BrandingScript.render(true);
-        String withoutEngine = BrandingScript.render(false);
+        String withEngine = BrandingScript.render(true, false);
+        String withoutEngine = BrandingScript.render(false, false);
 
-        assertTrue(withEngine.endsWith("\ntop.PlatformScriptEngine = true;"), withEngine);
-        assertTrue(withoutEngine.endsWith("\ntop.PlatformScriptEngine = false;"), withoutEngine);
+        assertTrue(withEngine.contains("\ntop.PlatformScriptEngine = true;\n"), withEngine);
+        assertTrue(withoutEngine.contains("\ntop.PlatformScriptEngine = false;\n"), withoutEngine);
+    }
+
+    @Test
+    void states_whether_the_issues_engine_is_deployed() {
+        String withEngine = BrandingScript.render(false, true);
+        String withoutEngine = BrandingScript.render(false, false);
+
+        assertTrue(withEngine.endsWith("\ntop.PlatformIssues = true;"), withEngine);
+        assertTrue(withoutEngine.endsWith("\ntop.PlatformIssues = false;"), withoutEngine);
     }
 }

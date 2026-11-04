@@ -131,7 +131,10 @@ public class ${className}Generate {
             Response.setStatus(403);
             return "{\"error\": \"forbidden\"}";
         }
+        // A refusal carries its status (issue #8001): answered 200, a client or a UI checking
+        // `response.ok` could not tell a refused run from a created document.
         if (req == null || req.id == null) {
+            Response.setStatus(400);
             return "{\"error\": \"missing source id\"}";
         }
 #foreach($p in $promptFields)
@@ -174,6 +177,7 @@ public class ${className}Generate {
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved = create(req.id#if($hasPrompt), req.values#end);
 #end
         if (saved == null) {
+            Response.setStatus(404);
             return "{\"error\": \"source ${fromEntity} not found\"}";
         }
         return Json.stringify(saved);

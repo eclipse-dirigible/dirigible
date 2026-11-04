@@ -22,7 +22,9 @@ import org.springframework.stereotype.Component;
  * current at send time and stamping that tenant onto the message. See
  * {@link DestinationNameManager} for the destination-naming contract this shares with
  * {@link MessageConsumer} and with the subscribing sides - including the global destination, which
- * is scoped to no tenant and therefore carries the default tenant's stamp instead.
+ * is scoped to no tenant and therefore carries the default tenant's stamp instead. A tenant-scoped
+ * message also carries the {@link OriginatingUserProperty originating user}, when the sending
+ * thread has one.
  */
 @Component
 public class MessageProducer {
@@ -85,6 +87,9 @@ public class MessageProducer {
                 tenantPropertyManager.setDefaultTenant(textMessage);
             } else {
                 tenantPropertyManager.setCurrentTenant(textMessage);
+                // A user is a name in this deployment's tenant, so it travels with tenant-scoped
+                // messages only - a global destination reaches consumers that have never heard of it.
+                OriginatingUserProperty.stamp(textMessage);
             }
 
             producer.send(textMessage);

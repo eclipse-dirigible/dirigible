@@ -23,6 +23,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.ClassUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,7 +33,7 @@ import jakarta.servlet.http.HttpServletRequest;
  * What a shell reads to bootstrap: the aggregated extensions (perspectives, views, shells, menus,
  * editors, themes, projections, locales), the current user's name, the application languages and
  * country, the reports the user may read, and the branding script, which also tells whether the
- * JavaScript engine is deployed - answered without running a script.
+ * JavaScript engine and the issues engine are deployed - answered without running a script.
  *
  * <p>
  * Each is served at its canonical path under {@code /services/platform/} and at the script URL that
@@ -71,6 +72,13 @@ class ShellBootstrapEndpoint {
     private static final String GUEST = "guest";
 
     private static final MediaType JAVASCRIPT = MediaType.parseMediaType("text/javascript;charset=UTF-8");
+
+    /**
+     * Whether the issues engine (engine-issues) is deployed: a distribution may leave it out, and then
+     * nothing answers {@code /services/issues} (#7991).
+     */
+    private static final boolean ISSUES_ENGINE = ClassUtils.isPresent("org.eclipse.dirigible.components.engine.issues.IssuesEndpoint",
+            ShellBootstrapEndpoint.class.getClassLoader());
 
     private final PerspectivesAggregator perspectives;
 
@@ -254,7 +262,7 @@ class ShellBootstrapEndpoint {
         return ResponseEntity.ok()
                              .header(HttpHeaders.CACHE_CONTROL, CACHE_CONTROL)
                              .contentType(JAVASCRIPT)
-                             .body(BrandingScript.render(scriptEngine.isAvailable()) + "\n");
+                             .body(BrandingScript.render(scriptEngine.isAvailable(), ISSUES_ENGINE) + "\n");
     }
 
     private static ResponseEntity<Object> json(Object body) {

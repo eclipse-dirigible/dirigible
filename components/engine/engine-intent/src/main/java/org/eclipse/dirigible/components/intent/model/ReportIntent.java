@@ -110,7 +110,20 @@ public class ReportIntent {
      * per bucket beside the dimensions (aged receivables / payables). See {@link ReportAgingIntent}.
      */
     private ReportAgingIntent aging;
+    /**
+     * The predicate the report's rows satisfy. Besides field comparisons it accepts the relative
+     * moments of {@link org.eclipse.dirigible.components.intent.generator.report.ReportMoments} -
+     * {@code CURRENT_DATE-P30D}, {@code START_OF_YEAR} - so a report can cover "this year" or "the last
+     * 30 days" without a parameter (dirigible #8435).
+     */
     private String filter;
+    /**
+     * The order of the report's rows: each term names one of the report's {@link #dimensions} or
+     * {@link #measures} exactly as authored ({@code customer.name}, {@code sum(quantity)}), optionally
+     * with {@code dir: desc}. Absent, a report with a {@code month(x)} / {@code year(x)} dimension is
+     * ordered by it ascending, and any other report keeps the database's order (dirigible #8435).
+     */
+    private List<OrderByIntent> orderBy = new ArrayList<>();
     /**
      * Which lifecycle rows of the source this report counts, when the source carries a
      * {@code function: EntityStatus}: a {@link LifecycleStages stage} name ({@code live} - the safe
@@ -274,6 +287,14 @@ public class ReportIntent {
 
     public List<String> getMeasures() {
         return measures;
+    }
+
+    public List<OrderByIntent> getOrderBy() {
+        return orderBy;
+    }
+
+    public void setOrderBy(List<OrderByIntent> orderBy) {
+        this.orderBy = orderBy == null ? new ArrayList<>() : orderBy;
     }
 
     /**

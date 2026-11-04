@@ -329,7 +329,38 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (!relations.isEmpty()) {
             out.put("relations", relations);
         }
+        Map<String, Object> slots = slotsWindow(entity, edm);
+        if (slots != null) {
+            out.put("slots", slots);
+        }
         return out;
+    }
+
+    /**
+     * A slots view's window (#8097), which the generated controllers hold a user write to, so the
+     * runner's sample start lands on an open day, inside the hours and on the grid. Read off the
+     * {@code .model}, and only for a timestamp start - the one the server checks.
+     */
+    private static Map<String, Object> slotsWindow(EntityIntent entity, Map<String, Object> edm) {
+        String start = string(edm.get("slotStartProperty"));
+        boolean timestamp = entity.getFields()
+                                  .stream()
+                                  .anyMatch(field -> field.getName() != null && start.equals(IntentNaming.pascalCase(field.getName()))
+                                          && "timestamp".equals(field.getType()));
+        if (!"true".equals(string(edm.get("slotsView"))) || !timestamp) {
+            return null;
+        }
+        Map<String, Object> slots = new LinkedHashMap<>();
+        slots.put("start", start);
+        slots.put("open", string(edm.get("slotOpen")));
+        slots.put("close", string(edm.get("slotClose")));
+        slots.put("step", Integer.parseInt(string(edm.get("slotStep"))));
+        List<Integer> disabledDays = new ArrayList<>();
+        for (String day : csv(string(edm.get("slotDisabledDays")))) {
+            disabledDays.add(Integer.parseInt(day));
+        }
+        slots.put("disabledDays", disabledDays);
+        return slots;
     }
 
     /**
@@ -505,15 +536,22 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (notBlank(relation.getCalculatedActionOnUpdate()) || rendersReadOnly(properties.get(String.valueOf(out.get("name"))))) {
                 out.put("readOnly", true);
             }
+            // A target labelled by a `number: { stampOn: issue }` field: the picker shows a row not
+            // issued yet as the draft marker rather than its UUID placeholder (#7722), so the runner
+            // cannot pick that row by its raw label and prefers a stamped one (#7823).
+            if ("true".equals(string(properties.getOrDefault(name, Map.of())
+                                               .get("widgetDropDownDocumentNumber")))) {
+                out.put("labelDocumentNumber", true);
+            }
             // fixedAfterCreate (#7903): the New form offers the picker, the Edit form renders it
             // read-only and the controller refuses a changed value - so a flow picks it on create and
             // never on edit. A composition parent is fixed the same way without declaring it (#8306).
             if (relation.isFixedOnceCreated()) {
                 out.put("readOnlyOnEdit", true);
             }
-            // dependsOn cascade: the option list narrows to target rows whose filterBy equals the
-            // trigger sibling's value - the runner must pick MATCHING samples (the dependent row
-            // first, then its FK as the trigger's sample), not independent first rows.
+            // dependsOn cascade: the option list narrows to target rows whose filterBy (default: the
+            // key) equals the trigger row's valueFrom (default: its key) - the runner must pick
+            // MATCHING samples, not independent first rows (#7957).
             if (relation.getDependsOn() != null) {
                 Map<String, Object> dependsOn = new LinkedHashMap<>();
                 dependsOn.put("relation", IntentNaming.pascalCase(relation.getDependsOn()
@@ -522,6 +560,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                             .getFilterBy() != null) {
                     dependsOn.put("filterBy", IntentNaming.pascalCase(relation.getDependsOn()
                                                                               .getFilterBy()));
+                }
+                if (relation.getDependsOn()
+                            .getValueFrom() != null) {
+                    dependsOn.put("valueFrom", IntentNaming.pascalCase(relation.getDependsOn()
+                                                                               .getValueFrom()));
                 }
                 out.put("dependsOn", dependsOn);
             }

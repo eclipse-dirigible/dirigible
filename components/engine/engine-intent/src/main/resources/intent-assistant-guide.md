@@ -372,7 +372,7 @@ field may declare:
 
 (Every write trims a text field's leading and trailing whitespace before it is checked or stored, and
 a `required` text field is refused when it is blank after that trim - spaces alone are no value,
-#7719. Nothing to declare.)
+#7719, and a no-break or zero-width space counts as one, #8110. Nothing to declare.)
 
 - `defaultValue: <value>` - the field's default, in four places at once: the **repository's create**
   (a create that leaves the field empty gets the default assigned BEFORE the create-time calculations,
@@ -525,6 +525,19 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
   The field may be an own `date`/`timestamp` or a one-hop `relation.field`; thresholds must ascend and be positive.
   Prefer equal-digit thresholds - the bucket is a text label and sorts lexicographically.
+- `orderBy:` (on a report) - **the order of the report's rows**: `orderBy: [{ field: "sum(quantity)", dir: desc }]`
+  names one of the report's own `dimensions` / `measures` exactly as written, `dir` is `asc` (the default) or `desc`,
+  and `orderBy: product.name` is the one-term shorthand. A dashboard `kind: list` tile takes the FIRST rows, so a
+  "top 5" tile needs a descending `orderBy` over its measure. Absent, a report with a `month(x)` / `year(x)` dimension
+  is chronological (ascending); any other report comes back in no particular order - give a document list (overdue
+  invoices, open orders) `orderBy` over its date and a by-product list `orderBy` over the name. Not on
+  `kind: statement` / `kind: ledger`, which carry their own order.
+- relative moments in a report `filter:` - **a period without a parameter**: `CURRENT_DATE`, the period starts
+  `START_OF_YEAR` / `START_OF_QUARTER` / `START_OF_MONTH`, each optionally with one signed ISO-8601 date period -
+  `filter: "issuedOn >= START_OF_YEAR"` (year to date), `"issuedOn >= CURRENT_DATE-P30D"` (the last 30 days),
+  `"issuedOn >= START_OF_YEAR-P1Y and issuedOn < START_OF_YEAR"` (last year). Years, months, weeks and days only
+  (`PT1H` is refused). Say the period in the report's label or description ("Sales by product, year to date") -
+  the rows do not show it.
 - `aging:` (on a report) - **aged receivables / payables**: one row per dimension (the counterparty), one
   COLUMN per bucket of days past due, summing each open document's open amount as of a report date:
   `aging: { due: due, amount: "total - paid", buckets: [30, 60, 90], date: issuedOn }` yields `Not Yet Due` /
@@ -1805,10 +1818,19 @@ process tasks.
       close: "18:00"         # exclusive end of the day (default 18:00)
       step: 30               # slot length in minutes (default 30)
       disabledDays: [0, 6]   # weekdays always closed (0 = Sunday .. 6 = Saturday)
+      resource: Employee     # optional to-one: a slot is booked per value of it
   ```
+  The generated controllers hold every user write to what the picker offers: a timestamp start on a
+  closed weekday, outside `open`-`close` or off the `step` grid is refused 400, and a start another
+  record already holds (for the same `resource`, when declared) 409 - so do not restate the window in
+  `checks:` or as a `unique:` on the start. The window is read in the writer's time zone (the browser's,
+which the generated pages send; the server's for a REST call that names none). Every record
+  holds its slot, a cancelled one too, until it is deleted or moved. System writes (a create-from, an
+  import, a process step) are not checked.
 
 **Rules:** `view` is one of `calendar` / `range` / `slots`. `calendar.start` (calendar/range) and
-`slots.start` (slots) are required and must name a declared `date`/`timestamp` field; `calendar.end`
+`slots.start` (slots) are required and must name a declared `date`/`timestamp` field (`slots.open` /
+`close` are `HH:MM`, `step` at least 1, `resource` a declared to-one relation); `calendar.end`
 likewise when set; `calendar.title`/`color` must be a declared field or relation; `calendar.scope` a
 declared to-one relation. `function: Calendar` cannot be combined with a different `view:`.
 
@@ -5104,6 +5126,20 @@ free to exceed the ceiling while it is still being edited. It requires `capacity
 
 Both are refused on a cross-model CHILD: those rows are written by the owner's repository, which is
 also where their guard would have to be emitted.
+
+**A capacity measured, never enforced (`enforce: false`).** A guard is right for money that must not
+be over-allocated, and wrong for budget against actual hours - hours booked past a project's budget are
+information, not an error. `enforce: false` keeps the balance and refuses nothing:
+```yaml
+rollups:
+  # Project.actualHours = the booked hours; remainingHours = budgetHours - actualHours, negative when
+  # the project runs over, null while it has no budget.
+  - { name: projectActualHours, entity: ProjectTimesheet, via: Project, field: actualHours, op: sum,
+      of: approvedHours, capacity: budgetHours, balance: remainingHours, enforce: false }
+```
+The balance follows an edit of the capacity on the parent as well as every child change, and a parent
+with no capacity has no balance (null, not minus the sum). It needs `capacity:`, takes no `guardAt:` /
+`message:` (they word the guard it removes), and needs a parent this model owns.
 
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum

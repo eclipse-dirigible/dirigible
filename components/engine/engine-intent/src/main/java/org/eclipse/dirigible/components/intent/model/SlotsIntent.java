@@ -26,7 +26,12 @@ import java.util.List;
  *   close: "18:00"       # exclusive end of the day (default 18:00)
  *   step: 30             # slot length in minutes (default 30)
  *   disabledDays: [0, 6] # weekdays always closed (0 = Sunday .. 6 = Saturday)
+ *   resource: Employee   # optional to-one: a slot is booked per value of it (#8097)
  * </pre>
+ *
+ * The generated controllers hold a user write to the same promise (#8097): a start on a closed day,
+ * outside open..close or off the step grid is refused 400, and a start another record already holds
+ * (for the same {@code resource}, when declared) 409.
  */
 public class SlotsIntent {
 
@@ -40,6 +45,8 @@ public class SlotsIntent {
     private Integer step;
     /** Weekdays always closed ({@code 0} = Sunday .. {@code 6} = Saturday). */
     private List<Integer> disabledDays = new ArrayList<>();
+    /** A to-one relation a slot is booked per - two records may share a start for different values. */
+    private String resource;
 
     public String getStart() {
         return start;
@@ -79,5 +86,13 @@ public class SlotsIntent {
 
     public void setDisabledDays(List<Integer> disabledDays) {
         this.disabledDays = disabledDays == null ? new ArrayList<>() : disabledDays;
+    }
+
+    public String getResource() {
+        return resource;
+    }
+
+    public void setResource(String resource) {
+        this.resource = resource;
     }
 }

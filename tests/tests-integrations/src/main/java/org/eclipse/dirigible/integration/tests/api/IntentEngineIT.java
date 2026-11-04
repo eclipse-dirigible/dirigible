@@ -5180,6 +5180,11 @@ class IntentEngineIT extends IntegrationTest {
                 contentOf("gen/drafts/js/components/pages/Payment/PaymentFormPage.js").contains(
                         "text: window.HarmoniaFormat.documentNumber(e.Number)"),
                 "the payment's invoice picker must label its options the same way");
+        // ...and the app-test manifest says so, or the generic crud flow waits for an option named by
+        // the UUID the picker no longer shows (#7823)
+        String manifest = contentOf("drafts.test").replaceAll("\\s", "");
+        assertTrue(manifest.matches("(?s).*\"name\":\"Invoice\",[^{}]*\"labelDocumentNumber\":true[^{}]*\"labelFrom\":\"Number\".*"),
+                "the manifest must mark the invoice relation's label as a document number: " + manifest);
 
         // The generated pages, run over the shipped shell runtime: an unissued invoice reads as the
         // marker in the invoice list's export and in the payment list's lookup, a stamped one by its
@@ -5869,6 +5874,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(manifest.contains("\"pattern\": \"^[^@\\\\s]+@[^@\\\\s]+\\\\.[A-Za-z]{2,}$\""),
                 "the SalesRep email field should carry its input-format regex");
         assertFalse(manifest.contains("### ###"), "a numeric display format is not an input guard and must not be emitted");
+        // Order.Country copies the chosen customer's country, which narrows its picker to that one row:
+        // without the valueFrom the runner sampled the first Country and the walk timed out (#7957)
+        assertTrue(manifest.replaceAll("\\s", "")
+                           .contains("\"dependsOn\":{\"relation\":\"Customer\",\"valueFrom\":\"Country\"}"),
+                "the Order.Country relation should carry the valueFrom it copies off its Customer: " + manifest);
     }
 
     /**

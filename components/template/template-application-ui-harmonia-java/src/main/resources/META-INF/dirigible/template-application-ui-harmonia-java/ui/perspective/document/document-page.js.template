@@ -345,6 +345,14 @@ document.addEventListener('alpine:init', () => {
         // prefill only fills a field still holding its blank value, never overwrites an entry (#8315).
         const touched = new Set(Object.keys(this.form)
             .filter(key => JSON.stringify(this.form[key]) !== JSON.stringify(blankForm[key])));
+        // A date, date-time, month or week picker binds the form through its popup, which takes the text
+        // typed into the picker's input only on that input's `change` (Enter or leaving it): until then a
+        // typed date is on screen but not in the form. A picker whose input holds text is touched (#8340).
+#foreach($property in $properties)
+#if($property.widgetType == "DATE" || $property.widgetType == "DATETIME-LOCAL" || $property.widgetType == "MONTH" || $property.widgetType == "WEEK")
+        if (String((document.getElementById('f_${property.name}') || {}).value || '').trim() !== '') touched.add('${property.name}');
+#end
+#end
 #foreach($property in $properties)
 #if($property.dataDefaultNowShape)
         // `defaultValue: now`: a new document is dated today, in the field's own shape; a query-param

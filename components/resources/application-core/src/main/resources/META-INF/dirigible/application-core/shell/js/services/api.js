@@ -118,6 +118,11 @@ App.services.api = {
     return locale.value || null;
   },
 
+  // The browser's IANA time zone ('Europe/Sofia'), or null where Intl cannot name it.
+  timeZone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; }
+  },
+
   // request(method, url, body, opts?) — opts selects the base URL for this call:
   //   { baseUrl } explicit override, or { base } named entry in baseUrls.
   async request(method, url, body, opts = {}) {
@@ -142,6 +147,12 @@ App.services.api = {
     if (language) headers['Accept-Language'] = language;
     // The warning codes the user already confirmed for THIS write (the repeat below, #7466).
     if (opts.confirmWarnings && opts.confirmWarnings.length) headers['X-Confirm-Warnings'] = opts.confirmWarnings.join(',');
+    // The zone this page draws wall-clock times in (#8097): a server rule that reads one - a slots
+    // window, 09:00-18:00 - reads it in the zone the picker showed it in, not the server's. Sent only
+    // to a relative URL: on a cross-origin call a custom header needs the CORS preflight to grant it,
+    // and there the server's own zone applies.
+    const timeZone = this.timeZone();
+    if (timeZone && !/^([a-z][a-z0-9+.-]*:)?\/\//i.test(`${baseUrl}${url}`)) headers['X-Time-Zone'] = timeZone;
 
     let r;
     try {

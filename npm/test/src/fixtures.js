@@ -5,7 +5,8 @@ import { login } from './session.js';
 // Pre-authenticated Playwright test:
 // - authState: worker-scoped form login, one session per worker
 // - storageState: every page starts logged in
-// - api: an APIRequestContext carrying the same session, for REST-level checks
+// - api: an APIRequestContext carrying the same session, for REST-level checks; its writes name UTC as
+//   their zone, the one a sample slot start is computed in (dirigible #8097)
 export const test = base.extend({
   authState: [
     async ({ browser }, use) => {
@@ -20,6 +21,7 @@ export const test = base.extend({
     const request = await playwright.request.newContext({
       baseURL: BASE_URL,
       storageState: authState,
+      extraHTTPHeaders: { 'X-Time-Zone': 'UTC' },
     });
     await use(request);
     await request.dispose();

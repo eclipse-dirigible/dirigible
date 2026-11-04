@@ -55,4 +55,42 @@ public final class Normalize {
         }
         return result;
     }
+
+    /**
+     * Removes a text value's leading and trailing blank characters (issue #8110): whitespace, and also
+     * the Unicode space separators {@link String#strip()} keeps (U+00A0, U+2007, U+202F) and the
+     * zero-width characters U+200B..U+200D and U+FEFF. A value made only of them becomes empty.
+     *
+     * @param value the value, may be null
+     * @return the value without its blank edges, or null for a null value
+     */
+    public static String trim(String value) {
+        if (value == null) {
+            return null;
+        }
+        int start = 0;
+        int end = value.length();
+        while (start < end && isBlankChar(value.charAt(start))) {
+            start++;
+        }
+        while (end > start && isBlankChar(value.charAt(end - 1))) {
+            end--;
+        }
+        return value.substring(start, end);
+    }
+
+    /**
+     * Whether a text value is no value: null, or made only of the blank characters {@link #trim}
+     * removes - so a no-break or a zero-width space alone is as missing as spaces are.
+     *
+     * @param value the value, may be null
+     * @return true when the value is null or blank
+     */
+    public static boolean isBlank(String value) {
+        return value == null || trim(value).isEmpty();
+    }
+
+    private static boolean isBlankChar(char c) {
+        return Character.isWhitespace(c) || Character.isSpaceChar(c) || (c >= 0x200B && c <= 0x200D) || c == 0xFEFF;
+    }
 }

@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -113,6 +114,9 @@ public class BpmProviderFlowable implements BpmProvider {
 
     /** The pause before the second delete attempt; every further attempt waits that much longer. */
     static final long DELETE_PROCESS_RETRY_PAUSE_MILLIS = 50;
+
+    /** The SQL states of a transaction the database rolled back to break a deadlock. */
+    private static final Set<String> DEADLOCK_SQL_STATES = Set.of("40001", "40P01");
 
     /** The repository. */
     private final IRepository repository;
@@ -355,10 +359,12 @@ public class BpmProviderFlowable implements BpmProvider {
     /**
      * Deletes (cancels) a running process instance.
      * <p>
-     * A delete that loses the optimistic lock to a transaction moving the instance on - a task being
-     * completed at the same moment - is retried against the instance's new state until it is gone
-     * (issue #8108). Without that, the one attempt failed, the completion committed, and the next task
-     * was handed out for a record whose delete was supposed to have retired the flow.
+     * A delete that loses to a transaction moving the instance on - a task being completed at the same
+     * moment - is retried against the instance's new state until it is gone (issue #8108). Without
+     * that, the one attempt failed, the completion committed, and the next task was handed out for a
+     * record whose delete was supposed to have retired the flow. The loss surfaces as Flowable's lost
+     * optimistic lock where the database serializes the two (H2), and as a deadlock the database broke
+     * by rolling the delete back where it does not (PostgreSQL, issue #8463) - both are retried.
      *
      * @param processInstanceId the processInstanceId
      * @param reason the reason
@@ -377,7 +383,11 @@ public class BpmProviderFlowable implements BpmProvider {
                              .deleteProcessInstance(processInstanceId, reason);
                 LOGGER.info("Deleted process instance [{}], reason [{}]", processInstanceId, reason);
                 return;
-            } catch (FlowableOptimisticLockingException e) {
+            } catch (RuntimeException e) {
+                if (!isLostToConcurrentTransaction(e)) {
+                    LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
+                    return;
+                }
                 if (getProcessInstance(processInstanceId) == null) {
                     LOGGER.info("Process instance [{}] ended while it was being deleted, reason [{}]", processInstanceId, reason, e);
                     return;
@@ -389,11 +399,28 @@ public class BpmProviderFlowable implements BpmProvider {
                 }
                 LOGGER.debug("Process instance [{}] was moved on by another transaction while it was being deleted - retrying",
                         processInstanceId, e);
-            } catch (Exception e) {
-                LOGGER.error("Failed to delete process with processInstanceId [{}], reason [{}]", processInstanceId, reason, e);
-                return;
             }
         }
+    }
+
+    /**
+     * Whether a delete failed because a concurrent transaction on the same instance won: Flowable's
+     * lost optimistic lock, or the database rolling the delete back to break a deadlock - SQLSTATE
+     * {@code 40001} (H2, and the standard's serialization failure, which MySQL and SQL Server report a
+     * deadlock as) or PostgreSQL's {@code 40P01}. A lock-wait timeout is not one: repeating it would
+     * only double the wait.
+     *
+     * @param failure the failure of the delete
+     * @return true when the delete is worth repeating against the instance's new state
+     */
+    static boolean isLostToConcurrentTransaction(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            if (cause instanceof FlowableOptimisticLockingException
+                    || (cause instanceof SQLException sql && DEADLOCK_SQL_STATES.contains(sql.getSQLState()))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

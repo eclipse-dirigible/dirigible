@@ -30,7 +30,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
         trimText(entity);
         roundDecimals(entity);
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
-        if (entity.Description == null || entity.Description.isBlank()) {
+        if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -106,7 +106,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
             }
         }
         entity.VatAmount = Beans.get(LineVatAction.class).calculate(entity);
-        if (entity.Description == null || entity.Description.isBlank()) {
+        if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -133,7 +133,7 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
     public InvoiceLineEntity updateWithoutEvent(InvoiceLineEntity entity) {
         trimText(entity);
         roundDecimals(entity);
-        if (entity.Description == null || entity.Description.isBlank()) {
+        if (entity.Description == null || org.eclipse.dirigible.sdk.db.Normalize.isBlank(entity.Description)) {
             throw new ValidationException("InvoiceLine.Description is required");
         }
         if (entity.Quantity == null) {
@@ -250,16 +250,15 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
 
     /**
      * Trims the text fields of a record about to be written (#7719) - leading and trailing whitespace
-     * is never meaningful in a business field, and a value of spaces alone is no value. Applied by
-     * every write path and by the controllers' pre-write reads, so a check, a required field and the
-     * stored row all see the same value. The primary key is not touched.
+     * is never meaningful in a business field, and a value of spaces alone is no value. A no-break or
+     * a zero-width space counts as one (#8110). Applied by every write path and by the controllers'
+     * pre-write reads, so a check, a required field and the stored row all see the same value. The
+     * primary key is not touched.
      *
      * @param entity the record, changed in place
      */
     public static void trimText(InvoiceLineEntity entity) {
-        if (entity.Description != null) {
-            entity.Description = entity.Description.strip();
-        }
+        entity.Description = org.eclipse.dirigible.sdk.db.Normalize.trim(entity.Description);
     }
 
     /**

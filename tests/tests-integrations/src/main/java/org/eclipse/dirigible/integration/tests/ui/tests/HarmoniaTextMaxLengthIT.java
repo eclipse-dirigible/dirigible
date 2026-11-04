@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
@@ -27,6 +28,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.openqa.selenium.Keys;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.codeborne.selenide.Selenide;
@@ -42,6 +44,12 @@ import com.codeborne.selenide.Selenide;
  * carry none. The browser leg types past the limit into a real form and checks the field stopped
  * there and says why: at the limit the field's description reads "Maximum 30 characters", and only
  * then.
+ *
+ * <p>
+ * #8340: a date typed into a new document's date picker while the form's option lists still load
+ * stays. The picker takes the text typed into its input only on that input's {@code change}, so
+ * until then the date is on screen and not in the form - the defaults pass that runs once the
+ * options arrive used to read the field as untouched and put today over it.
  */
 class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
 
@@ -69,8 +77,11 @@ class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
                   - { name: capacity, type: integer }
               - name: Receipt
                 fields:
-                  - { name: id,   type: integer, primaryKey: true, generated: true }
-                  - { name: note, type: string, length: 120 }
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: note,     type: string, length: 120 }
+                  - { name: issuedOn, type: date, defaultValue: now }
+                relations:
+                  - { name: store, kind: manyToOne, to: Store }
               - name: ReceiptItem
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
@@ -89,6 +100,28 @@ class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
             var field = document.getElementById('%s').closest('[x-h-field]');
             var hint = Array.from(field.querySelectorAll('[x-h-field-description]')).find(p => p.checkVisibility());
             return hint ? hint.textContent.trim() : '';
+            """;
+
+    /**
+     * Holds the Store option list a Receipt form asks for until {@code window.__releaseStores()} - the
+     * window in which the user types into a create form whose options are still loading.
+     */
+    private static final String HOLD_STORE_OPTIONS = """
+            var fetchNow = window.fetch;
+            window.__heldStores = [];
+            window.fetch = function (url, options) {
+              if (String(url).indexOf('/StoreController') < 0) return fetchNow.apply(this, arguments);
+              return new Promise(resolve => window.__heldStores.push(() => resolve(fetchNow(url, options))));
+            };
+            window.__releaseStores = function () { window.fetch = fetchNow; window.__heldStores.splice(0).forEach(go => go()); };
+            """;
+
+    /** The Receipt form's state, what its Issued On input shows and what its form holds for it. */
+    private static final String ISSUED_ON = """
+            var input = document.getElementById('f_IssuedOn');
+            if (!input || !window.Alpine) return 'not-rendered';
+            var page = Alpine.$data(input);
+            return page.state + '|' + input.value + '|' + page.form.IssuedOn + '|' + (window.__heldStores.length ? 'held' : 'free');
             """;
 
     @Autowired
@@ -130,6 +163,35 @@ class HarmoniaTextMaxLengthIT extends UserInterfaceIntegrationTest {
         assertEquals("Maximum 30 characters", poll(String.format(LENGTH_HINT, "f_Code"), "Maximum 30 characters"),
                 "a field that reached its length must say so");
         assertEquals("", Selenide.executeJavaScript(String.format(LENGTH_HINT, "f_Name")), "a field below its length shows no hint");
+    }
+
+    @Test
+    void a_date_typed_while_the_options_load_is_not_replaced_by_the_default() {
+        generateAndPublish();
+        // A day the default can never produce, in the instance's default (ISO) display order.
+        String typed = LocalDate.now()
+                                .minusDays(40)
+                                .toString();
+
+        ide.openHomePage();
+        browser.openPath(APP + "/Store/create");
+        assertEquals("", poll(CODE_VALUE, ""), "the application must render");
+        Selenide.executeJavaScript(HOLD_STORE_OPTIONS);
+        Selenide.executeJavaScript("location.hash = '#/Receipt/create'");
+        assertEquals("ready|||held", poll(ISSUED_ON, "ready|||held"), "the new Receipt must render while its Store options load");
+
+        // Typed, not committed: no Enter, no leaving the field - the picker has not taken it yet.
+        Selenide.$("#f_IssuedOn")
+                .sendKeys(typed);
+        Selenide.executeJavaScript("window.__releaseStores()");
+        String settled = poll(ISSUED_ON, "empty-form|" + typed + "||free");
+        assertTrue(settled.startsWith("empty-form|" + typed + "|"), "the defaults must leave the typed date on screen, got: " + settled);
+
+        // Leaving the field commits it: the form holds the typed date, not today.
+        Selenide.$("#f_IssuedOn")
+                .sendKeys(Keys.TAB);
+        String expected = "empty-form|" + typed + "|" + typed + "|free";
+        assertEquals(expected, poll(ISSUED_ON, expected), "the typed date must be what the form holds");
     }
 
     /** The element a marker opens, up to its end - the generated attributes wrap. */

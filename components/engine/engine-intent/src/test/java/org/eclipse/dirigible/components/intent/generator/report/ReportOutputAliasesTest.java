@@ -60,7 +60,10 @@ class ReportOutputAliasesTest {
 
         List<String> generated = new ArrayList<>();
         for (Object column : (List<?>) document.get("columns")) {
-            generated.add(String.valueOf(((Map<?, ?>) column).get("alias")));
+            // `customer` also groups by the customer's key, which no row carries (#8102).
+            if (!Boolean.FALSE.equals(((Map<?, ?>) column).get("select"))) {
+                generated.add(String.valueOf(((Map<?, ?>) column).get("alias")));
+            }
         }
         Map<String, String> aliases = ReportIntentGenerator.outputAliases(report);
 

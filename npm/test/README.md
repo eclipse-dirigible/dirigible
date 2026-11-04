@@ -89,14 +89,24 @@ picked in the UI. A relation fixed after create (`fixedAfterCreate: true`) carri
 picked on create and never changed by an edit, which the generated app answers with a 409. A field declaring a
 `pattern:` gets a value of that shape rather than the marker string. An optional `pattern:` field
 whose shape none of the sample candidates has (an IBAN, say) is left empty; a required one keeps the
-marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
+marker, so the controller's 400 names the field. A `dependsOn` relation is sampled to match its
+trigger, as the form narrows it: with `filterBy` alone the trigger is the row the dependent's `filterBy`
+names; with `valueFrom` the dependent is the row whose `filterBy` (or key) equals the trigger row's
+`valueFrom`. Relations an `agree` check names are picked so
 their targets agree; a composite `uniqueKeys` entry is given a relation combination no live row
 carries, and the rest and crud flows skip with the key named when every combination tried is taken.
+A slots entity's start (the manifest's `slots` window) is a random grid start inside the hours, on
+an open weekday of a far-future day, so the server's slot rules (a 400 off the window, a 409 for a
+booked slot) never refuse it; the REST requests name `UTC` as their `X-Time-Zone`, the zone it is
+computed in.
 A relation carrying `pickable` is sampled only from the rows its rule admits — the chooser offers no
 other, so a record built from one would never save — and one carrying `forbiddenTarget` only from
 rows the record's own `forbidWhen` does not refuse, which is what the REST flow needs, having no
 picker to read. When no row is left, a required relation fails naming the rule's own message rather
-than "no rows".
+than "no rows". A relation whose target is labelled by a `stampOn: issue` number carries
+`labelDocumentNumber`: the picker shows every row not issued yet as the same "(draft)", so the sample
+is a stamped row, picked by its number; with none stamped yet an optional relation is left unset and
+a required one picks "(draft)".
 
 ## Custom UI hooks
 

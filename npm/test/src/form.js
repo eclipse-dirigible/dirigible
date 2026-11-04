@@ -66,8 +66,11 @@ export async function pickDropdown(page, relation, optionText) {
 // - a dependsOn cascade forces CONSISTENT samples: the dependent row is chosen first and
 //   its filterBy FK becomes the trigger sibling's sample (independent first rows would
 //   pick e.g. Country=Afghanistan + City=Sofia, and the cascade then offers no options);
+//   a valueFrom dependent is the row the form narrows it to once the trigger is picked;
 // - a relation an agree check or a composite unique key names keeps a page of candidate rows, so
-//   agreeing rows can be chosen here and a free key combination by freshUniqueKeys.
+//   agreeing rows can be chosen here and a free key combination by freshUniqueKeys;
+// - a target labelled by a stampOn: issue number (labelDocumentNumber) prefers a stamped row: the
+//   picker shows every unstamped one as the same draft marker (#7722, #7823).
 export async function resolveRelationSamples(request, manifest, entity) {
   const api = makeApi(request, manifest);
   const idProperty = manifest.idProperty ?? 'Id';
@@ -87,7 +90,12 @@ export async function resolveRelationSamples(request, manifest, entity) {
     // a filtered picker needs a matching candidate, so fetch a page and filter client-side; a
     // constrained relation needs alternatives to choose from
     const wide =
-      relation.where || relation.leafOnly || relation.pickable || relation.forbiddenTarget || constrained.has(relation.name);
+      relation.where ||
+      relation.leafOnly ||
+      relation.pickable ||
+      relation.forbiddenTarget ||
+      relation.labelDocumentNumber ||
+      constrained.has(relation.name);
     const { rows: fetched, labelFrom } = await fetchRows(relation, wide ? 200 : 1);
     let rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
     // A picker rule narrows what the chooser OFFERS (dirigible #7663) and the child's own
@@ -105,6 +113,12 @@ export async function resolveRelationSamples(request, manifest, entity) {
       const prop = relation.leafOnly.hierarchyProperty;
       const idProp = manifest.idProperty ?? 'Id';
       rows = rows.filter((row) => !fetched.some((other) => other[prop] === row[idProp]));
+    }
+    if (rows?.length && relation.labelDocumentNumber) {
+      // an optional relation with no stamped row is left unset; a required one picks "(draft)"
+      const stamped = rows.filter((row) => !isDraftNumber(row[labelFrom]));
+      if (stamped.length) rows = stamped;
+      else if (!relation.required) continue;
     }
     if (!rows?.length) {
       // a required FK cannot be satisfied - fail loudly; an optional one is simply left unset
@@ -124,7 +138,8 @@ export async function resolveRelationSamples(request, manifest, entity) {
       use(row) {
         this.row = row;
         this.id = row[idProperty];
-        this.label = row[labelFrom] ?? String(row[idProperty]);
+        this.label =
+          relation.labelDocumentNumber && isDraftNumber(row[labelFrom]) ? DRAFT_MARKER : (row[labelFrom] ?? String(row[idProperty]));
       },
     };
     sample.use(rows[0]);
@@ -134,6 +149,20 @@ export async function resolveRelationSamples(request, manifest, entity) {
   // cascade consistency: re-point each dependsOn trigger at the row the dependent's choice implies
   for (const sample of samples) {
     const dependsOn = sample.relation.dependsOn;
+    if (dependsOn?.valueFrom) {
+      // The form copies the trigger row's valueFrom and offers only the rows whose filterBy (default:
+      // the key) holds it, so the dependent is that row, not its own first one (#7957).
+      const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
+      const value = trigger?.row[dependsOn.valueFrom];
+      const path = sample.relation.apiAbsolute ?? (sample.relation.api ? manifest.restBase + sample.relation.api : null);
+      if (value == null || !path) continue; // nothing copied: the picker offers every row
+      const [row] = (await api.searchPath(path, [{ propertyName: dependsOn.filterBy ?? idProperty, operator: 'EQ', value }])) ?? [];
+      if (!row) continue;
+      sample.use(row);
+      sample.rows = [row];
+      trigger.rows = [trigger.row];
+      continue;
+    }
     if (!dependsOn?.filterBy) continue;
     const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
     // a cascade pair is chosen together - neither side may be swapped for a candidate later
@@ -145,10 +174,8 @@ export async function resolveRelationSamples(request, manifest, entity) {
     if (!path) continue;
     const row = await api.getPath(`${path}/${impliedId}`);
     if (!row) continue;
-    trigger.row = row;
+    trigger.use(row);
     trigger.rows = [row];
-    trigger.id = impliedId;
-    trigger.label = row[trigger.relation.labelFrom ?? 'Name'];
   }
   alignAgreeing(entity, samples);
   return samples;
@@ -188,6 +215,14 @@ export async function fillForm(page, manifest, entity, record, relationSamples, 
   const triggers = pickable.filter((s) => !s.relation.dependsOn);
   const dependents = pickable.filter((s) => s.relation.dependsOn);
   for (const sample of [...triggers, ...dependents]) await pickDropdown(page, sample.relation, sample.label);
+}
+
+// The option text the picker gives a stampOn: issue number (HarmoniaFormat.documentNumber): a UUID
+// placeholder - a document not issued yet - reads as the draft marker, any other value as itself.
+// The marker is the English default; a walk in another UI language would need the translated one.
+const DRAFT_MARKER = '(draft)';
+function isDraftNumber(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value));
 }
 
 // One term of a picker rule or of a forbidWhen reaching through a relation, as the manifest writes

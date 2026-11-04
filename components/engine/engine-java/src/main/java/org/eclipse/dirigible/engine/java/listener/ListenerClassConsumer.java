@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -34,6 +35,7 @@ import org.eclipse.dirigible.components.configurations.tenant.TenantConfiguratio
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
 import org.eclipse.dirigible.components.listeners.config.ListenerConnectionMode;
 import org.eclipse.dirigible.components.listeners.service.DestinationNameManager;
+import org.eclipse.dirigible.components.listeners.service.OriginatingUserProperty;
 import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
@@ -951,6 +953,10 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             LOGGER.debug("@Listener [{}] message carries no tenant; using the default tenant. {}", label, e.getMessage(), e);
             tenantId = defaultTenant.getId();
         }
+        // The user whose write raised the event, stamped by the platform's producer from the outbox
+        // row: bound for the handler, so the rows it writes are attributed to that user rather than to
+        // the guest fallback of a thread without a request (#8228). Absent, the handler runs as before.
+        String user = originatingUserOf(msg, label);
         try {
             tenantContext.execute(tenantId, () -> {
                 // Re-establishing the tenant's identity above is not enough: Configuration's tenant
@@ -960,7 +966,7 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
                 // (e.g. a generated notification's {appUrl} token) - load it here the same way, and clear
                 // it so it never leaks onto the pooled broker thread.
                 Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
-                try {
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
                     dispatcher.onMessage(text);
                 } finally {
                     Configuration.removeThreadConfiguration();
@@ -981,6 +987,15 @@ public class ListenerClassConsumer implements JavaClassConsumer, TenantPostProvi
             // redelivery - could never run their repair. Throwing hands the message back so the
             // redelivery policy configured above retries it, and dead-letters it once exhausted.
             throw new IllegalStateException("@Listener [" + label + "] failed handling a message", cause);
+        }
+    }
+
+    private static String originatingUserOf(Message msg, String label) {
+        try {
+            return OriginatingUserProperty.read(msg);
+        } catch (JMSException e) {
+            LOGGER.debug("@Listener [{}] message has an unreadable originating user; handling it without one.", label, e);
+            return null;
         }
     }
 

@@ -2038,6 +2038,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         measures: ["count(*)"]
                         parameters:
                           - { name: search, target: note, op: like, initial: 'O''Neil "the" note' }
+                      # A to-one dimension shows the party's name but groups by its key too: two parties
+                      # sharing a name are two rows, never one crediting each with the other's coupons (#8102).
+                      - name: CouponsByParty
+                        source: Coupon
+                        dimensions: [party]
+                        measures: ["count(*)"]
                       # aging (#7888): the open amount (debit - credit) of every live entry, bucketed by days
                       # past its date as of the report's own asOf parameter - which defaults to the day the
                       # report is run, resolved per request by the generated repository.
@@ -2094,6 +2100,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         account: LedgerAccount
                         columns: [LedgerAccount.code]
                         correspondence: LedgerAccount.code
+                      # orderBy + a relative-period filter (#8435): the debit turnover per account, largest
+                      # first, over a window spelt in moments - the seeded vouchers (2026-02) fall inside
+                      # it on any run date, so the figures are fixed while the moment SQL really runs.
+                      - name: DebitByAccount
+                        source: CashVoucherLine
+                        dimensions: [LedgerAccount.code]
+                        measures: ["sum(debit)"]
+                        filter: "debit > 0 and CashVoucher.bookedOn >= START_OF_YEAR-P100Y and CashVoucher.bookedOn < CURRENT_DATE+P1D"
+                        orderBy: [{ field: "sum(debit)", dir: desc }]
 
                     seeds:
                       - name: people
@@ -2676,6 +2691,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertRuntimeEnforcement();
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
+        assertRelationDimensionGroupsByKeyRuntime();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertUniqueIgnoringCaseRuntime();
@@ -3303,6 +3319,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Party", equalTo(party)));
     }
 
+    /**
+     * A report dimension on a to-one relation, compiled and running (#8102): two parties sharing a name
+     * are two rows of one coupon each, where grouping by the name alone merged them into one row of
+     * two. The party's key is grouped by but never selected, so a row still carries exactly the name
+     * and the count, and the search, count and total over the rows agree with the new grouping.
+     */
+    private void assertRelationDimensionGroupsByKeyRuntime() {
+        String twin = "Twin Party 8102";
+        for (int i = 0; i < 2; i++) {
+            int party = createRecord("/party/PartyController", "{\"Name\":\"" + twin + "\"}");
+            createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        }
+        String report = "/services/java/" + PROJECT + "/gen/couponsbyparty/api/reports/CouponsByPartyController";
+        String twins = "{\"conditions\":[{\"column\":\"Party\",\"operator\":\"EQ\",\"value\":\"" + twin + "\"}]";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + "}")
+                                                 .when()
+                                                 .post(report + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("Party", everyItem(equalTo(twin)))
+                                                 .body("Count", everyItem(equalTo(1.0F)))
+                                                 .body("[0].size()", equalTo(2)),
+                30);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + "}")
+                                                 .when()
+                                                 .post(report + "/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(2)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + ",\"column\":\"Count\"}")
+                                                 .when()
+                                                 .post(report + "/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("sum", equalTo(2.0F)));
+        // The key is no column of the rows, so it is no filter either.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Party Id\",\"operator\":\"EQ\",\"value\":1}]}")
+                                                 .when()
+                                                 .post(report + "/search")
+                                                 .then()
+                                                 .statusCode(400));
+    }
+
     /** POSTs a record to a generated controller and answers its generated id. */
     private int createRecord(String controller, String body) {
         AtomicReference<Integer> id = new AtomicReference<>();
@@ -3802,7 +3866,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // carries none, bound by the repository, and exposed as query parameters by the controller.
         assertTrue(claimsByUnitReport.contains("\"name\": \"minTotal\"") && claimsByUnitReport.contains("\"initial\": \"0\""),
                 "an authored report parameter must be declared on the .report with its initial value: " + claimsByUnitReport);
-        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"0\"))"),
+        assertTrue(claimsByUnitRepository.contains("parameter(\"minTotal\", \"DECIMAL\", value(filter, \"minTotal\", \"DECIMAL\", \"0\"))"),
                 "the report repository must bind each authored parameter, typed from its target field");
         assertTrue(contentOf("gen/claimsbyunit/api/reports/ClaimsByUnitController.java").contains("@QueryParam(\"minTotal\")"),
                 "the report controller must expose each authored parameter as a query parameter");
@@ -3821,7 +3885,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryAgingRepository = contentOf("gen/entryaging/data/reports/EntryAgingRepository.java");
         assertTrue(
                 entryAgingRepository.contains(
-                        "parameter(\"asOf\", \"DATE\", value(filter, \"asOf\", java.time.LocalDate.now().toString()))"),
+                        "parameter(\"asOf\", \"DATE\", value(filter, \"asOf\", \"DATE\", java.time.LocalDate.now().toString()))"),
                 "the aging report must bind its as-of date to today when the request carries none: " + entryAgingRepository);
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
@@ -4606,15 +4670,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 reorderDoc.indexOf("this.form.Unit = '1';")), "a query-param prefill must still win over a declared default");
         // #8315: the create form is editable while its options load, so a value typed or picked in that
         // window is the user's - the defaults and the URL prefill fill only the fields still blank.
-        assertEquals("2026-10-28|1|web|true|2", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
+        assertEquals("2026-10-28|1|web|true|2|2026-10-28", pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}"),
                 "an untouched create form must still open holding its defaults");
-        assertEquals("2026-09-06|7|web|true|2",
+        assertEquals("2026-09-06|7|web|true|2|2026-10-28",
                 pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06', Unit: '7' }", "{}"),
                 "a date typed and a relation picked while the options loaded must survive the defaults");
-        assertEquals("2026-09-06|9|mail|true|2",
+        assertEquals("2026-09-06|9|mail|true|2|2026-10-28",
                 pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{ OrderedOn: '2026-09-06' }",
                         "{ OrderedOn: '2026-01-01', Unit: '9', Channel: 'mail' }"),
                 "the URL prefill must fill the untouched fields and leave the typed one alone");
+        // #8340: a date or date-time picker binds the form through its popup and takes the text typed into
+        // its input only on that input's change, so a date typed but not yet committed is on screen and not
+        // in the form - the default and the URL prefill must leave that picker alone as well.
+        assertEquals("|1|web|true|2|",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{ OrderedOn: '2026-01-01' }",
+                        "{ f_OrderedOn: '2026-09-06', f_RecordedAt: '2026-09-06 09:30' }"),
+                "a date typed into a picker but not committed must not be replaced by the default or the URL prefill");
+        assertEquals("2026-10-28|1|web|true|2|2026-10-28",
+                pageCreateDuringLoad(reorderDoc, "ReorderDocumentPage", "{}", "{}", "{ f_OrderedOn: '  ', f_Unit: '7' }"),
+                "a blank picker input, or text in an input that is no picker, is not a typed date");
+        assertTrue(
+                contentOf("gen/emission/js/components/pages/Payment/PaymentFormPage.js").contains(
+                        "if (String((document.getElementById('f_Date') || {}).value || '').trim() !== '') touched.add('Date');"),
+                "...and the plain form's date picker counts as touched the same way");
         // #8344: an opened record requests all of its independent option lists at once and the record
         // itself alongside them - not one list per round trip with the record queued behind the last.
         // Every list stays pending here, so a page still loading them in series has asked for one.
@@ -5708,7 +5786,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(contentOf("gen/events/emission/ShipmentFlowDispatch.java").contains("\"DISPATCHED \\\"in full\\\"\""),
                 "a setField value must reach the setter delegate escaped");
         String claimNotesRepository = contentOf("gen/claimnotes/data/reports/ClaimNotesRepository.java");
-        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"O'Neil \\\"the\\\" note\")"),
+        assertTrue(claimNotesRepository.contains("value(filter, \"search\", \"CHARACTER VARYING\", \"O'Neil \\\"the\\\" note\")"),
                 "an authored report parameter initial must be bound escaped: " + claimNotesRepository);
 
         // A workflow setter/writer targeted write keeps the stored display Name current: the label
@@ -6126,6 +6204,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Name", equalTo("Repadded")));
+        // ...nor are the characters that only LOOK empty (#8110): a no-break space, a zero-width space
+        // or a byte-order mark alone is refused like spaces, on create and on update, and they are
+        // trimmed off a value's edges like spaces. The bodies carry them as JSON escapes.
+        for (String blank : List.of("\\u00a0", " \\u00a0 ", "\\u200b", "\\u200c\\u200d", "\\ufeff\\u2007")) {
+            restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                     .body("{\"Name\":\"" + blank + "\",\"UnitPrice\":1}")
+                                                     .when()
+                                                     .post(API + "/settings/UnitController")
+                                                     .then()
+                                                     .statusCode(400)
+                                                     .body("message", equalTo("The 'Name' property is required")));
+            restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                     .body("{\"Name\":\"" + blank + "\",\"Status\":1}")
+                                                     .when()
+                                                     .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                     .then()
+                                                     .statusCode(400)
+                                                     .body("message", equalTo("The 'Name' property is required")));
+        }
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"\\u200b\\u00a0Edged\\u00a0\\ufeff\",\"Status\":1}")
+                                                 .when()
+                                                 .put(API + "/campaign/CampaignController/" + trimmedCampaign.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Name", equalTo("Edged")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Name\":\"" + "x".repeat(101) + "\"}")
                                                  .when()
@@ -6288,6 +6392,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(-40.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(0.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
+
+        // orderBy + relative moments, end to end (#8435). The debit turnover per account is 1050 (5030),
+        // 400 (5010), 200 (2040) and 120 (4010): the report answers it largest first. The per-column
+        // filter wraps the query in a derived table, which does not keep an inner ORDER BY - the
+        // repository re-applies it outside - and the dashboard list tile's $limit then takes a real
+        // top N rather than any N rows.
+        String debitByAccount = "/services/java/" + PROJECT + "/gen/debitbyaccount/api/reports/DebitByAccountController";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(debitByAccount)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(1050.0F, 400.0F, 200.0F, 120.0F)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Sum Debit\",\"operator\":\"GT\",\"value\":150}],\"$limit\":2}")
+                                                 .when()
+                                                 .post(debitByAccount + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(1050.0F, 400.0F)));
 
         // kind: ledger, end to end (#7887): the card of the GROUP 50 over [2026-02-06, 2026-12-31].
         // Before the window the desk took +300 and the bank -120, so the card opens at 180; the five
@@ -9357,19 +9480,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         }
     }
 
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+        return pageCreateDuringLoad(pageScript, componentName, typed, query, "{}");
+    }
+
     /**
      * Run a generated document page's create-mode {@code init()} (#8315) over the shipped shell runtime
      * while the user types during the awaited option load: {@code typed} is assigned to the form from
-     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. Today is 2026-10-28.
-     * Answers the Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies} once init settled.
+     * inside {@code loadOptions}, and {@code query} answers {@code queryParam}. {@code pickerText} maps
+     * an input id to the text typed into it in the same window but not committed to the form, as a date
+     * picker holds it until its input's {@code change} (#8340). Today is 2026-10-28. Answers the
+     * Reorder fixture's {@code OrderedOn|Unit|Channel|Rush|Copies|RecordedAt} once init settled.
      */
-    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query) {
+    private static String pageCreateDuringLoad(String pageScript, String componentName, String typed, String query, String pickerText) {
         try (Context context = Context.newBuilder("js")
                                       .option("engine.WarnInterpreterOnly", "false")
                                       .build()) {
             context.eval("js",
-                    "var window = this; var pages = {}; var localStorage = { getItem: () => null };"
-                            + " var document = { addEventListener: (event, callback) => callback() };"
+                    "var window = this; var pages = {}; var localStorage = { getItem: () => null }; var __inputs = {};"
+                            + " var document = { addEventListener: (event, callback) => callback(),"
+                            + " getElementById: (id) => id in __inputs ? { value: __inputs[id] } : null };"
                             + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: () => ({}) };"
                             + " window.location = { hash: '#/Reorder/create' }; window.PineconeRouter = { context: { params: {} } };"
                             + " window.HarmoniaFormat = { toDateInput: (v) => v, toPayload: (v) => v, value: (v) => v };");
@@ -9379,13 +9509,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
             }
             context.eval("js", "App.utils = { todayAs: () => '2026-10-28' }; App.detailsFor = () => []; App.relatedFor = () => [];");
             context.eval("js", pageScript);
-            context.eval("js", "var page = pages['" + componentName + "'](); var __query = " + query + ";"
-                    + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
-                    + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
-                    + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
-                    + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + "); };" + " page.init();");
+            context.eval("js",
+                    "var page = pages['" + componentName + "'](); var __query = " + query + ";"
+                            + " page.$watch = () => {}; page.$nextTick = (f) => f && f(); page.watchViewport = () => {};"
+                            + " page.onActionDone = () => {}; page.onTasksChanged = () => {};"
+                            + " page.queryParam = (key) => key in __query ? String(__query[key]) : null;"
+                            + " page.loadOptions = async () => { await null; Object.assign(page.form, " + typed + ");"
+                            + " Object.assign(__inputs, " + pickerText + "); }; page.init();");
             return context.eval("js",
-                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies].join('|')")
+                    "[page.form.OrderedOn, page.form.Unit, page.form.Channel, page.form.Rush, page.form.Copies, page.form.RecordedAt].join('|')")
                           .asString();
         }
     }

@@ -260,6 +260,47 @@ class AppTestIntentGeneratorTest {
         assertEquals("Name", currency.get("labelFrom"));
     }
 
+    /**
+     * dirigible #7957: a dependsOn relation that copies a value off its trigger's row narrows its
+     * picker to the rows carrying that value, so the runner needs the {@code valueFrom} to sample that
+     * row.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void carriesTheValueADependsOnRelationCopiesFromItsTrigger() {
+        String intent = """
+                name: purchases
+                entities:
+                  - name: Supplier
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100 }
+                    relations:
+                      - { name: Supplier, kind: manyToOne, to: Supplier, required: true }
+                  - name: PurchaseCreditNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reason, type: string, length: 200 }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice, required: true }
+                      - { name: Supplier, kind: manyToOne, to: Supplier, dependsOn: { relation: PurchaseInvoice, valueFrom: Supplier } }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        for (String name : List.of("Supplier", "PurchaseInvoice", "PurchaseCreditNote")) {
+            edm.put(name, edmEntity(name, name, name + "s", "MANAGE_LIST", "Purchases", "purchases", "KF_MOD_PURCHASES_" + name, false));
+        }
+
+        Map<String, Object> note = entity(AppTestIntentGenerator.buildManifest("purchases", "purchases", IntentParser.parse(intent), edm),
+                "PurchaseCreditNote");
+        Map<String, Object> supplier = ((List<Map<String, Object>>) note.get("relations")).get(1);
+
+        assertEquals(Map.of("relation", "PurchaseInvoice", "valueFrom", "Supplier"), supplier.get("dependsOn"));
+    }
+
     @Test
     void skipsProjectionAndDetailEntities() {
         Map<String, Map<String, Object>> edm = edm();
@@ -545,6 +586,50 @@ class AppTestIntentGeneratorTest {
     }
 
     /**
+     * dirigible #7823: a target labelled by a {@code stampOn: issue} number shows a row not issued yet
+     * as the draft marker in the picker, so the relation says so and the runner prefers a stamped row.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksARelationWhosePickerShowsADocumentNumber() {
+        String intent = """
+                name: drafts
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100, number: { series: Sales Invoice, stampOn: issue } }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string, length: 200 }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: SalesInvoice }
+                      - { name: Refund, kind: manyToOne, to: Payment }
+                """;
+        Map<String, Object> paymentEdm =
+                edmEntity("Payment", "Payment", "Payments", "MANAGE_LIST", "Payments", "sales", "KF_MOD_DRAFTS_PAYMENT", false);
+        // what the EDM generator emits for a dropdown whose label is a stampOn: issue number (#7722)
+        paymentEdm.put("properties", List.of(property("Id", Map.of("dataPrimaryKey", "true")),
+                property("Invoice", Map.of("widgetDropDownDocumentNumber", "true")), property("Refund", Map.of())));
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("SalesInvoice",
+                edmEntity("SalesInvoice", "Sales Invoice", "Sales Invoices", "MANAGE_LIST", "Sales", "sales", "KF_MOD_DRAFTS_SI", false));
+        edm.put("Payment", paymentEdm);
+
+        Map<String, Object> payment =
+                entity(AppTestIntentGenerator.buildManifest("drafts", "drafts", IntentParser.parse(intent), edm), "Payment");
+        List<Map<String, Object>> relations = (List<Map<String, Object>>) payment.get("relations");
+
+        assertEquals("Number", relations.get(0)
+                                        .get("labelFrom"));
+        assertEquals(Boolean.TRUE, relations.get(0)
+                                            .get("labelDocumentNumber"));
+        assertNull(relations.get(1)
+                            .get("labelDocumentNumber"));
+    }
+
+    /**
      * dirigible #7903: a relation fixed after create is picked on the New form and read-only on edit -
      * marked for the edit only, so the create flow still picks it.
      */
@@ -732,6 +817,40 @@ class AppTestIntentGeneratorTest {
     }
 
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
+
+    /**
+     * A slots view on a timestamp start (#8097) hands the runner its window, which the generated
+     * controllers refuse a write outside of, so the sample start can be placed inside it.
+     */
+    @Test
+    void describesTheSlotsWindowOfATimestampStart() {
+        String intent = """
+                name: clinic
+                entities:
+                  - name: Appointment
+                    view: slots
+                    slots: { start: at, open: "09:00", close: "18:00", step: 30, disabledDays: [0, 6] }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: at, type: timestamp, required: true }
+                """;
+        Map<String, Object> edmAppointment = edmEntity("Appointment", "Appointment", "Appointments", "MANAGE_LIST", "Appointments",
+                "clinic", "CLINIC_APPOINTMENT", false);
+        edmAppointment.put("slotsView", "true");
+        edmAppointment.put("slotStartProperty", "At");
+        edmAppointment.put("slotOpen", "09:00");
+        edmAppointment.put("slotClose", "18:00");
+        edmAppointment.put("slotStep", "30");
+        edmAppointment.put("slotDisabledDays", "0,6");
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Appointment", edmAppointment);
+
+        Map<String, Object> appointment =
+                entity(AppTestIntentGenerator.buildManifest("clinic", "clinic", IntentParser.parse(intent), edm), "Appointment");
+
+        assertEquals(Map.of("start", "At", "open", "09:00", "close", "18:00", "step", 30, "disabledDays", List.of(0, 6)),
+                appointment.get("slots"));
+    }
 
     private static Map<String, Map<String, Object>> edm() {
         Map<String, Map<String, Object>> byName = new LinkedHashMap<>();

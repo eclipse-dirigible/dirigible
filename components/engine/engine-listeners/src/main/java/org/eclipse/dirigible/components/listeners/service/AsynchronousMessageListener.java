@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.listeners.service;
 import java.util.Map;
 import java.util.TreeMap;
 
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.tracing.TaskState;
 import org.eclipse.dirigible.components.tracing.TaskType;
@@ -79,8 +80,10 @@ class AsynchronousMessageListener implements MessageListener {
             throw new IllegalStateException(msg);
         }
         String tenantId = null;
+        String originatingUser = null;
         try {
             tenantId = tenantPropertyManager.getCurrentTenantId(message);
+            originatingUser = OriginatingUserProperty.read(message);
             LOGGER.debug("Processing message WITH context for tenant [{}].", tenantId);
         } catch (JMSException e) {
             throw new IllegalStateException("Failed to handle message: " + message, e);
@@ -103,8 +106,11 @@ class AsynchronousMessageListener implements MessageListener {
         // }
         // }
         try {
+            String user = originatingUser;
             tenantContext.execute(tenantId, () -> {
-                executeOnMessageHandler(textMsg);
+                try (OriginatingUser.Binding binding = OriginatingUser.bind(user)) {
+                    executeOnMessageHandler(textMsg);
+                }
                 return null;
             });
             LOGGER.trace("Done processing the received message in [{}] by [{}]", listenerDescriptor.getDestination(),
