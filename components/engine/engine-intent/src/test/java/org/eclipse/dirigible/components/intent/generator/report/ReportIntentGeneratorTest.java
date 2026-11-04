@@ -448,6 +448,68 @@ class ReportIntentGeneratorTest {
                 correspondence: account.code
             """);
 
+    /**
+     * #8102 across the split: a bare-relation dimension AND a bare-relation correspondence axis each
+     * show the account's name, so the view exposes each one's key and the thin query groups by it
+     * without selecting it - two accounts sharing a name stay two rows on both axes.
+     */
+    @Test
+    void correspondenceGroupsBareRelationAxesByTheirKey() {
+        IntentModel model = IntentParser.parse(GENERAL_LEDGER_INTENT.replace("""
+                    dimensions: [account.code, account.name]
+                    correspondence: account.code
+                """, """
+                    dimensions: [account]
+                    correspondence: account
+                """));
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String view = ReportIntentGenerator.buildViewsForTest(TestContexts.context(model), model.getReports()
+                                                                                                .get(0))
+                                           .get("LEDGER_TRIAL_BALANCE_CORRESPONDENCE");
+        assertTrue(view.contains("Account_.\"ACCOUNT_ID\" as \"ACCOUNT_KEY\""), view);
+        assertTrue(view.contains("AccountCorrespondent.\"ACCOUNT_ID\" as \"CORRESPONDENT_ACCOUNT_KEY\""), view);
+        String query = (String) document.get("query");
+        assertTrue(query.endsWith("\nGROUP BY JournalEntryItem.\"ACCOUNT\", JournalEntryItem.\"CORRESPONDENT_ACCOUNT\", "
+                + "JournalEntryItem.\"ACCOUNT_KEY\", JournalEntryItem.\"CORRESPONDENT_ACCOUNT_KEY\""), query);
+        assertFalse(query.substring(0, query.indexOf("\nFROM "))
+                         .contains("_KEY"),
+                query);
+    }
+
+    /** #8102 for a cross-model target: its key comes from the owner model, like its table and label. */
+    @Test
+    void aCrossModelRelationDimensionGroupsByTheOwnersKey() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                uses:
+                  - { model: crm }
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: crm }
+                reports:
+                  - name: OrdersByCustomer
+                    source: Order
+                    dimensions: [Customer]
+                    measures: ["count(*)"]
+                  - name: OrderList
+                    source: Order
+                    dimensions: [Customer]
+                """);
+        String query = (String) ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                     .get(0))
+                                                     .get("query");
+        assertTrue(query.startsWith("SELECT Customer.\"CUSTOMER_NAME\" as \"Customer\", COUNT(*) as \"Count\"\n"), query);
+        assertTrue(query.endsWith("\nGROUP BY Customer.\"CUSTOMER_NAME\", Customer.\"CUSTOMER_ID\""), query);
+        // A listing groups by nothing, so it carries no key column at all.
+        Map<String, Object> listing = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                           .get(1));
+        assertEquals(1, ((List<?>) listing.get("columns")).size(), String.valueOf(listing.get("columns")));
+    }
+
     @Test
     @SuppressWarnings("unchecked")
     void balanceReportEmitsTheWindowedTotalsQueryAndTheDateParameters() {
