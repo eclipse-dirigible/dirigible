@@ -1388,6 +1388,9 @@ class GlueGenerator {
         context.put("javaPerspective", sanitize(item, "perspective"));
         context.put("itemsJavaPerspective", sanitize(item, "itemsPerspective"));
         context.put("hasCrossModel", Boolean.TRUE.equals(item.get("hasCrossModel")));
+        // The role gate of the endpoint (issue #7921), as for a click (#7913): a .glue written before the
+        // key existed renders an empty gate that no caller satisfies, never the ungated endpoint.
+        context.put("readRolesJavaLiteral", JavaLiterals.escape(strOr(item, "readRoles", "")));
         context.put("itemNodes", feederNodes(item.get("itemNodes"), parameters, false));
         context.put("nodes", feederNodes(item.get("nodes"), parameters, true));
     }

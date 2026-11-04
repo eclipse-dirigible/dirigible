@@ -77,7 +77,7 @@ class PrintFeederSupportTest {
         IntentGenerationContext context = new IntentGenerationContext(model, "/proj", "proj", "workspace", "app", null);
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
         List<Map<String, Object>> feeders =
-                PrintFeederSupport.buildPrintFeeders(model, byName, IntentEntities.compositionParents(model), context);
+                PrintFeederSupport.buildPrintFeeders(model, byName, IntentEntities.compositionParents(model), null, context);
         assertEquals(1, feeders.size(), "one feeder per document master");
         return feeders.get(0);
     }
@@ -230,8 +230,74 @@ class PrintFeederSupportTest {
                       - { name: name, type: string }
                 """);
         List<Map<String, Object>> feeders = PrintFeederSupport.buildPrintFeeders(local, IntentEntities.byName(local),
-                IntentEntities.compositionParents(local), TestContexts.context(local));
+                IntentEntities.compositionParents(local), null, TestContexts.context(local));
         assertEquals(Boolean.FALSE, feeders.get(0)
                                            .get("hasCrossModel"));
+    }
+
+    /**
+     * Without grants the endpoint demands the document's convention read gate, which its writers pass
+     * too (#7921).
+     */
+    @Test
+    void withoutGrantsTheFeederDemandsTheConventionReadGate() {
+        assertEquals("proj.SalesInvoice.SalesInvoiceReadOnly,proj.SalesInvoice.SalesInvoiceFullAccess", feeder().get("readRoles"));
+    }
+
+    /**
+     * Authored grants gate the endpoint, with the deployment's extra roles appended as the controller's
+     * are (#7921).
+     */
+    @Test
+    void authoredGrantsAndExtraRolesGateTheFeeder() {
+        IntentModel local = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                permissions:
+                  - { role: Viewer, can: [SalesInvoice:read] }
+                  - { role: Clerk, can: [SalesInvoice:write] }
+                """);
+        IntentSettings settings =
+                IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
+        List<Map<String, Object>> feeders = PrintFeederSupport.buildPrintFeeders(local, IntentEntities.byName(local),
+                IntentEntities.compositionParents(local), settings, TestContexts.context(local));
+        assertEquals("Viewer,Clerk,Owner,Auditor", feeders.get(0)
+                                                          .get("readRoles"));
+    }
+
+    /**
+     * An exclusive grant keeps the deployment's extra roles off the print, as off the controller
+     * (#8112).
+     */
+    @Test
+    void anExclusiveGrantKeepsTheExtraRolesOffTheFeeder() {
+        IntentModel local = IntentParser.parse("""
+                name: payroll
+                entities:
+                  - name: Salary
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: SalaryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Salary, kind: manyToOne, to: Salary, composition: true, required: true }
+                permissions:
+                  - { role: Payroll, can: [Salary:write], exclusive: true }
+                """);
+        IntentSettings settings =
+                IntentSettings.parse("{\"access\": {\"extraRoles\": [\"Owner\"], \"extraRolesReadOnly\": [\"Auditor\"]}}");
+        List<Map<String, Object>> feeders = PrintFeederSupport.buildPrintFeeders(local, IntentEntities.byName(local),
+                IntentEntities.compositionParents(local), settings, TestContexts.context(local));
+        assertEquals("Payroll", feeders.get(0)
+                                       .get("readRoles"));
     }
 }

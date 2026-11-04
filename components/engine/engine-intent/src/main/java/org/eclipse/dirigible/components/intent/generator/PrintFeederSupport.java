@@ -76,15 +76,33 @@ final class PrintFeederSupport {
      * @param model the parsed intent model
      * @param byName entities indexed by name
      * @param compositionParents each entity's transitive composition parent (perspective resolution)
+     * @param settings the project settings (the {@code access.extraRoles} of the read gate), or
+     *        {@code null}
      * @param context the generation context (for cross-model {@code .model} resolution)
      * @return the {@code printFeeders} collection (possibly empty)
      */
     static List<Map<String, Object>> buildPrintFeeders(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentGenerationContext context) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        PermissionSupport.Gates gates = PermissionSupport.gates(model, settings);
+        // The same project name the EDM generator prefixes the entities' convention roles with.
+        String contextProject = context == null ? null : context.getProjectName();
+        String projectName = contextProject != null && !contextProject.isBlank() ? contextProject : model.getName();
         List<Map<String, Object>> feeders = new ArrayList<>();
         for (Map.Entry<EntityIntent, EntityIntent> entry : PrintIntentGenerator.documentMasters(model)
                                                                                .entrySet()) {
-            feeders.add(buildFeeder(entry.getKey(), entry.getValue(), model, byName, compositionParents, context));
+            Map<String, Object> feeder = buildFeeder(entry.getKey(), entry.getValue(), model, byName, compositionParents, context);
+            // The role gate of the endpoint (issue #7921): whoever the document's own controller lets read
+            // it - its read gate or its write gate. Reading the document reads what it prints, so the
+            // related records are not gated one by one.
+            String entity = entry.getKey()
+                                 .getName();
+            String rolePerspective = IntentEntities.compositionPerspective(entity, compositionParents);
+            Set<String> readRoles = new LinkedHashSet<>(List.of(gates.readGate(projectName, rolePerspective, entity)
+                                                                     .split(",")));
+            readRoles.addAll(List.of(gates.writeGate(projectName, rolePerspective, entity)
+                                          .split(",")));
+            feeder.put("readRoles", String.join(",", readRoles));
+            feeders.add(feeder);
         }
         return feeders;
     }

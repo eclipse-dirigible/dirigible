@@ -143,7 +143,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> resolves = buildResolves(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
+        List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> snapshots =
                 SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);

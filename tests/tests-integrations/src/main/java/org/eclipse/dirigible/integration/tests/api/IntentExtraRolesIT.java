@@ -74,6 +74,7 @@ class IntentExtraRolesIT extends IntegrationTest {
     private static final String TICKETS = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/ticket/TicketController";
     private static final String REPORT = "/services/java/" + PROJECT + "/gen/tickettotals/api/reports/TicketTotalsController";
     private static final String SALARIES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/salary/SalaryController";
+    private static final String SALARY_PRINT = "/services/java/" + PROJECT + "/gen/events/" + PROJECT + "/SalaryPrintFeeder/";
     private static final String LEAVES = "/services/java/" + PROJECT + "/gen/" + PROJECT + "/api/leaverequest/LeaveRequestController";
     private static final String TASKS = "/services/inbox/tasks";
     private static final long TIMEOUT_SECONDS = 90;
@@ -104,6 +105,12 @@ class IntentExtraRolesIT extends IntegrationTest {
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: integer }
+              - name: SalaryItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: integer }
+                relations:
+                  - { name: Salary, kind: manyToOne, to: Salary, composition: true, required: true }
               - name: LeaveRequest
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -206,9 +213,19 @@ class IntentExtraRolesIT extends IntegrationTest {
                                                      .body(salary)
                                                      .post(SALARIES));
         assertStatus(COLLEAGUE, 403, () -> given().get(SALARIES));
-        assertStatus(PAYROLL, 200, () -> given().contentType("application/json")
-                                                .body(salary)
-                                                .post(SALARIES));
+        AtomicInteger payslip = new AtomicInteger();
+        restAssuredExecutor.execute(() -> payslip.set(given().contentType("application/json")
+                                                             .body(salary)
+                                                             .when()
+                                                             .post(SALARIES)
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")),
+                PAYROLL, PASSWORD, TIMEOUT_SECONDS);
+        // Its print demands the same read gate (#7921), so the deployment's role is refused there too.
+        assertStatus(TENANT_OWNER, 403, () -> given().get(SALARY_PRINT + payslip.get()));
+        assertStatus(PAYROLL, 200, () -> given().get(SALARY_PRINT + payslip.get()));
 
         // The submit task names a role: the deployment's tenant roles are not its candidates, so a
         // colleague cannot submit somebody else's request.
