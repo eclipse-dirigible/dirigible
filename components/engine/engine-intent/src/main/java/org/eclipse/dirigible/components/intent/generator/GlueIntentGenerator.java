@@ -1430,7 +1430,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardProperty", "");
             e.put("guardValue", "");
             e.put("guardCondition", "");
-            e.put("backRefProperty", "");
+            // A BUTTON create-from may declare the reopen too (#7647), and GenerateReopen reads the source
+            // back through this property in both shapes - left empty here it rendered `target.` (#7985).
+            e.put("backRefProperty", g.hasReopen() ? backReference(g, fromPk) : "");
             return;
         }
         boolean isCreate = g.getEvent()
@@ -1448,6 +1450,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         // every delivery of the event creates a row. It is the absence of a guard, not another guard.
         e.put("appendMode", g.isAppendMode());
         putGeneratesGuard(g, e, source, context);
+        e.put("backRefProperty", backReference(g, fromPk));
+    }
+
+    /**
+     * The target property the {@code map} copies the source's primary key onto, refused when there is
+     * none - an event-driven create-from guards on it and a reopen finds its source through it.
+     */
+    private static String backReference(GeneratesIntent g, String fromPk) {
         String backReference = "";
         for (Map.Entry<String, String> mapping : g.getMap()
                                                   .entrySet()) {
@@ -1456,12 +1466,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         if (backReference.isEmpty()) {
-            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates [" + g.getName()
-                    + "] is event-driven but its map copies no source key onto a back-reference: add the target's to-one back to ["
-                    + g.getFrom() + "] to the map (the source's [" + fromPk
-                    + "] as its value) - it is the at-most-once guard against an event redelivery"));
+            throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                    List.of("generates [" + g.getName() + "] " + (g.isEventDriven() ? "is event-driven" : "declares sourceStatusOnRetire")
+                            + " but its map copies no source key onto a back-reference: add the target's to-one back to [" + g.getFrom()
+                            + "] to the map (the source's [" + fromPk + "] as its value) - "
+                            + (g.isEventDriven() ? "it is the at-most-once guard against an event redelivery"
+                                    : "the reopen reaches the source it returns through it")));
         }
-        e.put("backRefProperty", backReference);
+        return backReference;
     }
 
     /** One entry of a `when` guard: the numeric status comparison, or a string-field comparison. */

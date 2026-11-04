@@ -11373,7 +11373,7 @@ public final class IntentParser {
             validateGeneratesItemLines(g, name, source, byName, model.getEntities(), crossModel, issues);
             validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
-            validateGeneratesReopen(g, name, byName, crossModel, model, issues);
+            validateGeneratesReopen(g, name, source, crossModelSource, byName, crossModel, model, issues);
         }
     }
 
@@ -11492,7 +11492,8 @@ public final class IntentParser {
      * cannot fire is exactly the silence this feature exists to remove: the at-most-once guard steps
      * over a retired target (issue #6814) and frees the source's slot, and if nothing can refill it the
      * author is left with a model that reads as automatic and is not. So the hook must exist to be
-     * inverted, the inverse must be a different status, the target must be one whose retirement is
+     * inverted, the inverse must be a different status, the map must copy the source's key onto the
+     * back-reference the reopen reads the source through, the target must be one whose retirement is
      * recognisable HERE (a local target whose nomenclature classifies a retiring {@code stage:}), and
      * an appending create-from - which keeps no guard and no slot - is refused outright.
      *
@@ -11501,8 +11502,8 @@ public final class IntentParser {
      * in {@link #validateStatusWritesAgainstLifecycle}: the source stands at {@code sourceStatus} when
      * the retirement arrives, so the graph must declare that exact edge back.
      */
-    private static void validateGeneratesReopen(GeneratesIntent g, String name, Map<String, EntityIntent> byName, boolean crossModel,
-            IntentModel model, List<String> issues) {
+    private static void validateGeneratesReopen(GeneratesIntent g, String name, EntityIntent source, boolean crossModelSource,
+            Map<String, EntityIntent> byName, boolean crossModel, IntentModel model, List<String> issues) {
         if (!g.hasReopen()) {
             return;
         }
@@ -11535,6 +11536,15 @@ public final class IntentParser {
         // hook blocks the button exactly as the guard blocks the trigger, and the declared inverse is
         // the move back in both shapes. What stays refused is a button create-from with no hook at all,
         // which the sourceStatus check above has already returned on.
+        // In both shapes the reopen reaches its source through the map's back-reference (#7985). An
+        // event-driven rule without one is refused with its event; a button one is refused here, or its
+        // reopen rendered an empty `target.`. A cross-model source's key is checked at generation.
+        if (!g.isEventDriven() && !crossModelSource && source != null && !g.getMap()
+                                                                           .containsValue(seedIdField(source))) {
+            issues.add(subject + " declares sourceStatusOnRetire, so its map must copy the source's [" + seedIdField(source)
+                    + "] onto the target's back-reference to it (e.g. `map: { " + g.getFrom() + ": " + seedIdField(source)
+                    + " }`) - the reopen reaches the source it returns through that back-reference");
+        }
         if (crossModel) {
             issues.add(subject + " cannot reopen for a cross-model target (uses [" + g.getUses() + "]) - what RETIRES a [" + g.getTo()
                     + "] is the `stage:` classification of its status nomenclature, seeded in the owner model and not resolvable here;"
