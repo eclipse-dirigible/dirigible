@@ -2192,6 +2192,7 @@ public final class IntentParser {
                 issues.add("duplicate rollup [" + name + "]");
             }
             validateRollupMembershipAndTiming(rollup, name, byName, issues);
+            validateRollupEnforce(rollup, name, byName, issues);
             if (rollup.isCrossModelChild()) {
                 validateCrossModelChildRollup(rollup, name, byName, usesAliases, issues);
                 continue;
@@ -6884,6 +6885,36 @@ public final class IntentParser {
             }
         }
         return null;
+    }
+
+    /**
+     * Validate {@code enforce:} (issue #7904): it switches the capacity guard, so it needs a
+     * {@code capacity:}; {@code enforce: false} leaves no guard for {@code guardAt:} to gate or
+     * {@code message:} to word; and it needs a LOCAL parent, because the balance follows an edit of the
+     * capacity in the parent's own repository, which a cross-model parent's owner generates.
+     */
+    private static void validateRollupEnforce(RollupIntent rollup, String name, Map<String, EntityIntent> byName, List<String> issues) {
+        if (rollup.getEnforce() == null) {
+            return;
+        }
+        if (isBlank(rollup.getCapacity())) {
+            issues.add("rollup [" + name + "] declares enforce [" + rollup.getEnforce()
+                    + "] with no capacity - enforce switches the CAPACITY guard, so there is nothing to switch");
+            return;
+        }
+        if (rollup.isEnforced()) {
+            return;
+        }
+        if (!isBlank(rollup.getGuardAt()) || !isBlank(rollup.getMessage())) {
+            issues.add("rollup [" + name + "] declares enforce: false with guardAt / message - both belong to the capacity guard,"
+                    + " which enforce: false does not emit");
+        }
+        EntityIntent child = rollup.isCrossModelChild() ? null : byName.get(rollup.getEntity());
+        RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+        if (via != null && !isBlank(via.getModel())) {
+            issues.add("rollup [" + name + "] declares enforce: false on a cross-model parent [" + via.getModel() + ":" + via.getTo()
+                    + "] - the balance follows an edit of the capacity in the parent's own repository, which the owner model generates");
+        }
     }
 
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,

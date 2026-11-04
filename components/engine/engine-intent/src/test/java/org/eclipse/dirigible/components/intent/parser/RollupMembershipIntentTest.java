@@ -155,4 +155,44 @@ class RollupMembershipIntentTest {
                 """;
         assertTrue(refusalOf(yaml).contains("where / guardAt are not supported"));
     }
+
+    /**
+     * {@code enforce: false} (#7904) keeps the balance without the guard, so it needs a capacity, and
+     * leaves no guard for {@code guardAt:} / {@code message:}.
+     */
+    @Test
+    void anUnenforcedCapacityParsesAndItsContradictionsAreRefused() {
+        String unenforced = YAML.replace("    guardAt: ISSUED\n", "")
+                                .replace("    message: \"Only {remaining} of {capacity} left.\"\n", "    enforce: false\n");
+        assertEquals(false, IntentParser.parse(unenforced)
+                                        .getRollups()
+                                        .get(0)
+                                        .isEnforced());
+        assertTrue(refusalOf(unenforced.replace("    capacity: ceiling\n", "")).contains("enforce switches the CAPACITY guard"));
+        assertTrue(refusalOf(YAML.replace("    guardAt: ISSUED\n", "    guardAt: ISSUED\n    enforce: false\n")).contains(
+                "which enforce: false does not emit"));
+    }
+
+    /**
+     * A foreign parent's repository is its owner's, so nothing here can follow an edit of its capacity.
+     */
+    @Test
+    void anUnenforcedCapacityOnACrossModelParentIsRefused() {
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: hours, type: decimal }
+                    relations:
+                      - { name: Project, kind: manyToOne, to: Project, model: projects }
+                rollups:
+                  - { name: projectHours, entity: Timesheet, via: Project, field: actualHours, op: sum, of: hours,
+                      capacity: budgetHours, balance: remainingHours, enforce: false }
+                """;
+        assertTrue(refusalOf(yaml).contains("enforce: false on a cross-model parent"));
+    }
 }

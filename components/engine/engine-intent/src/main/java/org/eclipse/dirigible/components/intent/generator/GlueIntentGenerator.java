@@ -691,7 +691,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // `status` relation to whenFull/whenPartial at the thresholds. Empty string / -1 = not set.
             boolean withCapacity = sum && rollup.getCapacity() != null && !rollup.getCapacity()
                                                                                  .isBlank();
-            if (withCapacity && crossModelChild) {
+            // enforce: false (#7904) asks for no guard, so its absence on a foreign child is no news.
+            if (withCapacity && crossModelChild && rollup.isEnforced()) {
                 // The balance and the status ARE maintained (both are writes on the local parent), but the
                 // capacity GUARD - the check that refuses a child row overdrawing the parent - is emitted
                 // into the child's own DAO, which the owner model generates. Said out loud, because a
@@ -708,6 +709,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             }
             base.put("capacityField", withCapacity ? IntentNaming.pascalCase(rollup.getCapacity()) : "");
+            // Unenforced (#7904): the balance is a measurement, so a parent with no capacity has none -
+            // null, not -sum. Only such a roll-up carries the key, so every other renders as before.
+            if (withCapacity && !rollup.isEnforced()) {
+                base.put("enforce", false);
+            }
             base.put("balanceField", withCapacity && rollup.getBalance() != null && !rollup.getBalance()
                                                                                            .isBlank()
                                                                                                    ? IntentNaming.pascalCase(

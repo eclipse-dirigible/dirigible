@@ -77,6 +77,18 @@ class RollupAggregatesTest {
     }
 
     /**
+     * An unenforced capacity (#7904) is a measurement: no capacity, no balance - not the negated sum.
+     */
+    @Test
+    void anUnenforcedCapacityLeavesNoBalanceWithoutACapacity() {
+        Map<String, Object> rollup = sumRollup("Budget", "Remaining", "");
+        rollup.put("enforce", false);
+
+        assertThat(RollupAggregates.render(rollup, "rows")).contains(
+                "parent.Remaining = parent.Budget == null ? null : capacity.subtract(sum);");
+    }
+
+    /**
      * The status moves in BOTH directions (#7016): a sum that returns to zero must give back the status
      * the roll-up set, and give it back to what it displaced - not to a declared constant, which is
      * wrong for a parent that entered the roll-up's region from another status.

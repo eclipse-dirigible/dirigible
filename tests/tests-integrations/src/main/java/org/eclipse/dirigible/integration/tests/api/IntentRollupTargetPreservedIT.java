@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.nullValue;
@@ -27,6 +28,7 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +48,12 @@ import org.springframework.test.annotation.DirtiesContext;
  * repository {@code update()}), each with a body that omits the targets and one that carries bogus
  * values; the count, sum and capacity-balance targets must all keep what the roll-up computed. A
  * payment afterwards must still move them: the roll-up's targeted write is not a user update.
+ *
+ * <p>
+ * The same model carries a balance kept against a capacity that is measured but not enforced
+ * ({@code enforce: false}, dirigible #7904): budget against actual hours, where hours booked past
+ * the budget are stored and the balance goes negative, an edit of the budget moves the balance, and
+ * an unbudgeted project has no balance. A capacity left enforced on the same child still refuses.
  */
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class IntentRollupTargetPreservedIT extends IntegrationTest {
@@ -60,6 +68,8 @@ class IntentRollupTargetPreservedIT extends IntegrationTest {
     private static final String BILLS = API + "/bill/BillController";
     private static final String PARTNER_BILLS = API + "/bill/BillPartnerController";
     private static final String BILL_PAYMENTS = API + "/billpayment/BillPaymentController";
+    private static final String PROJECTS = API + "/project/ProjectController";
+    private static final String TIMESHEETS = API + "/timesheet/TimesheetController";
     private static final long TIMEOUT_SECONDS = 90;
     /** The roll-up runs off the child's topics, after the commit. */
     private static final long ROLLUP_TIMEOUT_SECONDS = 30;
@@ -110,11 +120,35 @@ class IntentRollupTargetPreservedIT extends IntegrationTest {
                 relations:
                   - { name: Bill, kind: manyToOne, to: Bill, required: true }
 
+              - name: Project
+                fields:
+                  - { name: id,             type: integer, primaryKey: true, generated: true }
+                  - { name: name,           type: string, length: 40 }
+                  - { name: budgetHours,    type: decimal, precision: 18, scale: 2 }
+                  - { name: actualHours,    type: decimal, precision: 18, scale: 2 }
+                  - { name: remainingHours, type: decimal, precision: 18, scale: 2 }
+                  - { name: costCeiling,    type: decimal, precision: 18, scale: 2 }
+                  - { name: actualCost,     type: decimal, precision: 18, scale: 2 }
+
+              - name: Timesheet
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: hours, type: decimal, precision: 18, scale: 2 }
+                  - { name: cost,  type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Project, kind: manyToOne, to: Project, required: true }
+
             rollups:
               - { name: invoicePaid, entity: Payment, via: Invoice, field: paid, op: sum, of: amount,
                   capacity: total, balance: balance }
               - { name: invoicePayments, entity: Payment, via: Invoice, field: paymentCount }
               - { name: billPaid, entity: BillPayment, via: Bill, field: paid, op: sum, of: amount }
+              # Budget versus actual (#7904): measured against the budget, never refused...
+              - { name: projectActualHours, entity: Timesheet, via: Project, field: actualHours, op: sum, of: hours,
+                  capacity: budgetHours, balance: remainingHours, enforce: false }
+              # ...while a capacity left enforced on the same child still refuses.
+              - { name: projectActualCost, entity: Timesheet, via: Project, field: actualCost, op: sum, of: cost,
+                  capacity: costCeiling }
 
             seeds:
               - name: customers
@@ -169,6 +203,54 @@ class IntentRollupTargetPreservedIT extends IntegrationTest {
         assertBill(bill, "B", 40.0f);
         put(PARTNER_BILLS, bill, "{\"Name\":\"C\",\"Paid\":999}");
         assertBill(bill, "C", 40.0f);
+    }
+
+    @Test
+    void an_unenforced_capacity_keeps_the_balance_and_refuses_nothing() {
+        writeIntent();
+        generateProject();
+        publishProject();
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        // Hours booked past the budget are all stored, and the balance goes negative.
+        int project = create(PROJECTS, "{\"Name\":\"P\",\"BudgetHours\":10,\"CostCeiling\":1000}");
+        create(TIMESHEETS, "{\"Hours\":6,\"Cost\":100,\"Project\":" + project + "}");
+        create(TIMESHEETS, "{\"Hours\":7,\"Cost\":100,\"Project\":" + project + "}");
+        assertProject(project, 13.0f, -3.0f, ROLLUP_TIMEOUT_SECONDS);
+
+        // An edit of the budget moves the balance, with no timesheet event behind it...
+        put(PROJECTS, project, "{\"Name\":\"P\",\"BudgetHours\":20,\"CostCeiling\":1000}");
+        assertProject(project, 13.0f, 7.0f, TIMEOUT_SECONDS);
+        // ...and a project left without a budget has no balance, not minus what was booked.
+        put(PROJECTS, project, "{\"Name\":\"P\",\"CostCeiling\":1000}");
+        assertProject(project, 13.0f, null, TIMEOUT_SECONDS);
+
+        // The roll-up's own write agrees: an unbudgeted project's hours are summed, its balance stays null.
+        int unbudgeted = create(PROJECTS, "{\"Name\":\"Q\",\"CostCeiling\":1000}");
+        create(TIMESHEETS, "{\"Hours\":5,\"Cost\":10,\"Project\":" + unbudgeted + "}");
+        assertProject(unbudgeted, 5.0f, null, ROLLUP_TIMEOUT_SECONDS);
+
+        // The enforced capacity on the same child still refuses: 200 booked and 900 more past a 1000
+        // ceiling.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Hours\":1,\"Cost\":900,\"Project\":" + project + "}")
+                                                 .when()
+                                                 .post(TIMESHEETS)
+                                                 .then()
+                                                 .statusCode(400)
+                                                 .body(containsString("Project capacity exceeded")),
+                TIMEOUT_SECONDS);
+    }
+
+    private void assertProject(int project, float actualHours, Float remainingHours, long timeoutSeconds) {
+        Matcher<?> remaining = remainingHours == null ? nullValue() : equalTo(remainingHours);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(PROJECTS + "/" + project)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("ActualHours", equalTo(actualHours))
+                                                 .body("RemainingHours", remaining),
+                timeoutSeconds);
     }
 
     private void awaitInvoice(int invoice, float paid, float balance, int payments) {

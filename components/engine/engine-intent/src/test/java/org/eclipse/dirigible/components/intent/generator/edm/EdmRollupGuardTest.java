@@ -97,6 +97,33 @@ class EdmRollupGuardTest {
         assertEquals("", guard.get("parentGenFolder"));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void anUnenforcedCapacityStampsNoCapacityGuardAndLetsTheParentKeepItsBalance() {
+        // #7904: budget against actual - measured, never refused. The fit guard (#8096) bounds the
+        // column and stays; the capacity guard is gone; the parent's balance property names what its
+        // repository recomputes it from, so an edit of the capacity moves it.
+        String yaml = LOCAL.replace("balance: balance }", "balance: balance, enforce: false }");
+        assertNull(guardsOf(yaml, "SalesInvoicePayment"), "enforce: false must emit no capacity guard");
+        assertEquals("Paid", allGuardsOf(yaml, "SalesInvoicePayment").get(0)
+                                                                     .get("fitField"),
+                "the column-size fit guard is not a capacity guard and stays");
+        Map<String, Object> json = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "test");
+        Map<String, Object> balance = null;
+        for (Map<String, Object> entity : (List<Map<String, Object>>) ((Map<String, Object>) json.get("model")).get("entities")) {
+            for (Map<String, Object> property : (List<Map<String, Object>>) entity.get("properties")) {
+                if ("SalesInvoice".equals(entity.get("name")) && "Balance".equals(property.get("name"))) {
+                    balance = property;
+                }
+            }
+        }
+        assertNotNull(balance);
+        assertEquals("Total", balance.get("balanceCapacity"));
+        assertEquals("Paid", balance.get("balanceSum"));
+        // An enforced capacity keeps its guard and leaves the balance to the roll-up alone.
+        assertNotNull(guardOf(LOCAL, "SalesInvoicePayment"));
+    }
+
     private static final String CROSS_MODEL_PARENT = """
             name: sales-invoices
             uses:
