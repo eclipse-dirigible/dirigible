@@ -14,11 +14,13 @@ import static java.text.MessageFormat.format;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
 import org.eclipse.dirigible.components.api.http.HttpSessionFacade;
 import org.eclipse.dirigible.components.base.context.ContextException;
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.context.ThreadContextFacade;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
@@ -136,17 +138,31 @@ public class UserFacade {
      * @return the user name
      */
     public static final String getName() {
+        return findName().orElse(GUEST);
+    }
+
+    /**
+     * Gets the user name when one is known: the request's user, else the user whose action raised the
+     * event the current thread is handling ({@link OriginatingUser}), else the anonymous user.
+     * {@link #getName()} answers the same, falling back to {@code guest} where this answers nothing.
+     *
+     * @return the user name, or empty when no user is known on the current thread
+     */
+    public static final Optional<String> findName() {
         // HTTP case
-        String userName = null;
-        userName = getRemoteUser();
+        String userName = getRemoteUser();
+
+        // Event case - a handler running off an event raised by a user's write
+        if (userName == null) {
+            userName = OriginatingUser.get()
+                                      .orElse(null);
+        }
 
         // Anonymous case
         if (userName == null) {
             userName = getAnonymousUser();
         }
-
-        // Return HTTP, Anonymous or Local case
-        return userName != null ? userName : GUEST;
+        return Optional.ofNullable(userName);
     }
 
     /**

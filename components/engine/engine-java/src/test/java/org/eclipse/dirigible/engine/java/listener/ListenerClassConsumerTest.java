@@ -25,7 +25,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.callable.CallableResultAndException;
+import org.eclipse.dirigible.components.base.context.OriginatingUser;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
@@ -66,6 +68,7 @@ class ListenerClassConsumerTest {
     static class RecordingHandler implements MessageHandler {
 
         Map<String, String> observedDuringDispatch;
+        String userDuringDispatch;
         RuntimeException failWith;
         final List<String> reportedErrors = new ArrayList<>();
 
@@ -77,6 +80,7 @@ class ListenerClassConsumerTest {
         @Override
         public void onMessage(String message) {
             observedDuringDispatch = Configuration.getThreadConfiguration();
+            userDuringDispatch = UserFacade.getName();
             if (failWith != null) {
                 throw failWith;
             }
@@ -263,5 +267,37 @@ class ListenerClassConsumerTest {
     @Test
     void theSubscriptionBoundsItsRetriesLikeTheJavaScriptListenerPath() {
         verify(connectionFactory).configureRedeliveryPolicy(connection, queue);
+    }
+
+    /**
+     * The rows a posting or a reaction writes are attributed to the user whose write raised the event:
+     * the handler runs with the user the platform's producer stamped bound, and the pooled broker
+     * thread does not keep it (#8228).
+     */
+    @Test
+    void theHandlerRunsAsTheUserWhoseWriteRaisedTheEvent() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+        when(message.getObjectProperty("dirigible_originating_user")).thenReturn("alice");
+
+        capturedListener.onMessage(message);
+
+        assertEquals("alice", handler.userDuringDispatch);
+        assertTrue(OriginatingUser.get()
+                                  .isEmpty(),
+                "the broker thread must not keep the previous message's user");
+    }
+
+    /** A message without one - a job's write, a foreign producer - is handled exactly as before. */
+    @Test
+    void aMessageWithoutAnOriginatingUserIsHandledAsBefore() throws Exception {
+        when(tenantConfigurationService.resolveInjectableForCurrentTenant()).thenReturn(Map.of());
+        TextMessage message = mock(TextMessage.class);
+        when(message.getText()).thenReturn("{}");
+
+        capturedListener.onMessage(message);
+
+        assertEquals("guest", handler.userDuringDispatch);
     }
 }
