@@ -92,7 +92,7 @@
                             x-text="$store.processTasks.tasks.length"></span>
                     </button>
                   </li>
-                  <li x-h-sidebar-menu-item>
+                  <li x-h-sidebar-menu-item x-show="$store.issues.available">
                     <button id="shell-nav-issues" x-h-sidebar-menu-nav :data-active="isActive('/issues')" @click="navigate('/issues')">
                       <svg role="presentation" x-h-lucide data-lucide="message-square-warning"></svg><span x-text="T('application-core:shell.nav.issues', 'Issues')"></span>
                     </button>
@@ -295,10 +295,12 @@
                 <span x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></span>
               </div>
               <div x-h-menu-separator></div>
-              <li x-h-menu-item id="user-menu-report-issue" @click="$store.issues.report()">
-                <svg role="presentation" x-h-lucide data-lucide="message-square-warning"></svg> <span x-text="T('application-core:shell.user.reportIssue', 'Report an issue')"></span>
-              </li>
-              <div x-h-menu-separator></div>
+              <template x-if="$store.issues.available">
+                <li x-h-menu-item id="user-menu-report-issue" @click="$store.issues.report()">
+                  <svg role="presentation" x-h-lucide data-lucide="message-square-warning"></svg> <span x-text="T('application-core:shell.user.reportIssue', 'Report an issue')"></span>
+                </li>
+              </template>
+              <div x-h-menu-separator x-show="$store.issues.available"></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
                 <svg role="presentation" x-h-lucide data-lucide="log-out"></svg> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>

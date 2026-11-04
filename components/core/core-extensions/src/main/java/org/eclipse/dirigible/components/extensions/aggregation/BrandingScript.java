@@ -21,7 +21,9 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>
  * It also sets {@code top.PlatformScriptEngine}, whether the JavaScript engine is deployed, so the
- * IDE's pages know without a request of their own whether to offer what only runs there.
+ * IDE's pages know without a request of their own whether to offer what only runs there, and
+ * {@code top.PlatformIssues}, whether the issues engine is, so the shells leave out "Report an
+ * issue" and the Issues page where nothing answers {@code /services/issues} (#7991).
  *
  * <p>
  * Every value is written as a JSON string literal: a tenant administrator sets these values, and
@@ -53,9 +55,10 @@ final class BrandingScript {
      * Renders the script for the current configuration.
      *
      * @param scriptEngineAvailable whether the JavaScript engine is deployed
+     * @param issuesAvailable whether the issues engine is deployed
      * @return the script
      */
-    static String render(boolean scriptEngineAvailable) {
+    static String render(boolean scriptEngineAvailable, boolean issuesAvailable) {
         return "if (!top.hasOwnProperty('PlatformBranding')) top.PlatformBranding = {\n" //
                 + "    name: " + value(DirigibleConfig.BRANDING_NAME, NAME_DEFAULT) + ",\n" //
                 + "    subtitle: " + value(DirigibleConfig.BRANDING_SUBTITLE, "") + ",\n" //
@@ -68,7 +71,8 @@ final class BrandingScript {
                 + "    theme: " + value(DirigibleConfig.BRANDING_THEME, THEME_DEFAULT) + ",\n" //
                 + "    prefix: " + value(DirigibleConfig.BRANDING_PREFIX, PREFIX_DEFAULT) + "\n" //
                 + "};\n" //
-                + "top.PlatformScriptEngine = " + scriptEngineAvailable + ";";
+                + "top.PlatformScriptEngine = " + scriptEngineAvailable + ";\n" //
+                + "top.PlatformIssues = " + issuesAvailable + ";";
     }
 
     private static String value(DirigibleConfig key, String defaultValue) {

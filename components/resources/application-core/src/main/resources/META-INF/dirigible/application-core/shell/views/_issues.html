@@ -14,21 +14,29 @@
 <!-- Built-in Issues (#7948) - the issues the user reported, the sibling of the Process Inbox: the list on
      the left, the selected issue's conversation with the support team on the right. Everything is read
      from the shared `issues` store, which reads /services/issues - the user's own issues in the current
-     tenant, nothing else. -->
+     tenant, nothing else. On an instance without the issues engine (#7991) the page says so instead, and
+     the store sends no request. -->
 <div id="issues-page" x-data class="vbox size-full" x-init="$store.issues.enterPage()">
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="text-2xl font-semibold tracking-tight" x-text="$store.issues.t('shell.nav.issues', 'Issues')"></span>
-    <span x-h-badge data-variant="information" x-text="$store.issues.items.length"></span>
+    <span x-h-badge data-variant="information" x-show="$store.issues.available" x-text="$store.issues.items.length"></span>
     <div x-h-toolbar-spacer></div>
-    <button x-h-button data-variant="outline" data-size="sm" @click="$store.issues.loadList()">
+    <button x-h-button data-variant="outline" data-size="sm" x-show="$store.issues.available" @click="$store.issues.loadList()">
       <svg role="presentation" x-h-lucide data-lucide="refresh-cw"></svg><span x-text="$store.issues.t('shell.issues.refresh', 'Refresh')"></span>
     </button>
-    <button x-h-button data-variant="primary" data-size="sm" id="issues-page-report" @click="$store.issues.report()">
+    <button x-h-button data-variant="primary" data-size="sm" id="issues-page-report" x-show="$store.issues.available" @click="$store.issues.report()">
       <svg role="presentation" x-h-lucide data-lucide="message-square-warning"></svg><span x-text="$store.issues.t('shell.issues.reportTitle', 'Report an issue')"></span>
     </button>
   </div>
 
-  <div x-h-split class="flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-show="!$store.issues.available" x-h-info-page class="p-4" id="issues-page-unavailable">
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg x-h-lucide data-lucide="message-square" role="img" aria-label="issues"></svg></div>
+      <div x-h-info-page-title x-text="$store.issues.unavailableMessage()"></div>
+    </div>
+  </div>
+
+  <div x-h-split class="flex-1" x-show="$store.issues.available" data-orientation="horizontal" data-variant="border">
     <div x-h-split-panel data-size="30%" data-min="280">
       <div x-show="$store.issues.loaded && $store.issues.items.length === 0" x-h-info-page class="p-4">
         <div x-h-info-page-header>
