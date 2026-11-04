@@ -176,7 +176,7 @@ class TenantSuspensionService {
         }
         for (TenantSuspensionParticipant participant : participants) {
             try {
-                participant.resumed(tenantId);
+                participant.resumed();
             } catch (RuntimeException ex) {
                 // The tenant is running again; what this participant did not pick up now, its own
                 // reconciliation picks up on its next pass.

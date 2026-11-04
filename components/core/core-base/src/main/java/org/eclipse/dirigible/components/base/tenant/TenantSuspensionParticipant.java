@@ -59,12 +59,10 @@ public interface TenantSuspensionParticipant {
 
     /**
      * Runs once the resumed tenant is {@code PROVISIONED} again, for the work that reaches tenants
-     * through the provisioned fan-out only and would otherwise wait for its next pass. Nothing by
-     * default.
-     *
-     * @param tenantId the id of the resumed tenant
+     * through the provisioned fan-out only and would otherwise wait for its next pass - a reconcile of
+     * every tenant, which picks the resumed one up. Nothing by default.
      */
-    default void resumed(String tenantId) {
+    default void resumed() {
         // most participants restart everything in resume
     }
 }

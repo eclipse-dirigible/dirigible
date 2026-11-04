@@ -487,7 +487,7 @@ public class ScheduledClassConsumer
     }
 
     @Override
-    public void resumed(String tenantId) {
+    public void resumed() {
         reconcile();
     }
 

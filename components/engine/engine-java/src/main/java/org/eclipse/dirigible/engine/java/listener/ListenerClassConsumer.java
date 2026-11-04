@@ -872,7 +872,7 @@ public class ListenerClassConsumer
     }
 
     @Override
-    public void resumed(String tenantId) {
+    public void resumed() {
         reconcile();
     }
 

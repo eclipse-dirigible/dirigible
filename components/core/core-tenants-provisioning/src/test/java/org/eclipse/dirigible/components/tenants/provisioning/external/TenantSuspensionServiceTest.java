@@ -245,7 +245,7 @@ class TenantSuspensionServiceTest {
         }
 
         @Override
-        public void resumed(String tenantId) {
+        public void resumed() {
             calls.add("resumed " + name);
             if (failResumed) {
                 throw new IllegalStateException("the reconciler is away");
