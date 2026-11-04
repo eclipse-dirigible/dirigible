@@ -22,6 +22,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 @Controller
 @Component("${javaGenFolderName}_${name}Controller")
@@ -44,7 +45,7 @@ public class ${name}Controller {
             filter.put("${parameter.name}", ${parameter.name});
         }
 #end
-        return repository.findAll(limit, offset, filter);
+        return badRequestOnInvalid(() -> repository.findAll(limit, offset, filter));
     }
 
     @Get("/count")
@@ -59,7 +60,7 @@ public class ${name}Controller {
             filter.put("${parameter.name}", ${parameter.name});
         }
 #end
-        return Map.of("count", repository.count(filter));
+        return badRequestOnInvalid(() -> Map.of("count", repository.count(filter)));
     }
 
     @Post("/count")
@@ -113,6 +114,19 @@ public class ${name}Controller {
         try {
             // Exports honor the same per-column conditions the table shows.
             return repository.exportCsv(filter);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * A GET read whose parameter does not read as its type answers 400, not 500 (#7828). A helper rather
+     * than a try/catch in the GET methods: a catch variable would share their scope with the report's
+     * declared parameters, whose names are the author's.
+     */
+    private static <T> T badRequestOnInvalid(Supplier<T> read) {
+        try {
+            return read.get();
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }

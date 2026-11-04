@@ -277,12 +277,16 @@ public class ${className}Export {
     }
 #if($reportSource)
 
-    /** The report's parameters, as its generated repository reads them - as text. */
+    /**
+     * The report's parameters, as its generated repository reads them - as text, each read as its type
+     * here, before the run: an unreadable one is the caller's error, refused without a FAILED filing.
+     */
     private static Map<String, Object> filter(Map<String, Object> arguments) {
         Map<String, Object> filter = new LinkedHashMap<>();
         for (Map.Entry<String, Object> argument : arguments.entrySet()) {
             filter.put(argument.getKey(), String.valueOf(argument.getValue()));
         }
+        gen.${reportGenFolder}.data.${reportPerspective}.${report}Repository.checkParameters(filter);
         return filter;
     }
 #else
