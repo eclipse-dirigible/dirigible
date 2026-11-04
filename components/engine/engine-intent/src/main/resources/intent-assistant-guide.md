@@ -5101,6 +5101,20 @@ free to exceed the ceiling while it is still being edited. It requires `capacity
 Both are refused on a cross-model CHILD: those rows are written by the owner's repository, which is
 also where their guard would have to be emitted.
 
+**A capacity measured, never enforced (`enforce: false`).** A guard is right for money that must not
+be over-allocated, and wrong for budget against actual hours - hours booked past a project's budget are
+information, not an error. `enforce: false` keeps the balance and refuses nothing:
+```yaml
+rollups:
+  # Project.actualHours = the booked hours; remainingHours = budgetHours - actualHours, negative when
+  # the project runs over, null while it has no budget.
+  - { name: projectActualHours, entity: ProjectTimesheet, via: Project, field: actualHours, op: sum,
+      of: approvedHours, capacity: budgetHours, balance: remainingHours, enforce: false }
+```
+The balance follows an edit of the capacity on the parent as well as every child change, and a parent
+with no capacity has no balance (null, not minus the sum). It needs `capacity:`, takes no `guardAt:` /
+`message:` (they word the guard it removes), and needs a parent this model owns.
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and

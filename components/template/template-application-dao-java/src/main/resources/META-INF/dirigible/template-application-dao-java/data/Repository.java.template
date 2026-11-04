@@ -185,6 +185,18 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 #end
+## The balance an unenforced capacity roll-up keeps (#7904): capacity minus the summed target, recomputed
+## on every write of the row, so an edit of the capacity moves it without waiting for a child event (the
+## roll-up handler recomputes it when the sum moves). update() has carried the stored sum over by the time
+## this runs. No capacity, no balance - null, not the negated sum.
+#macro(measuredBalances)
+#foreach($property in $properties)
+#if($property.balanceCapacity)
+        entity.${property.name} = entity.${property.balanceCapacity} == null ? null
+                : entity.${property.balanceCapacity}.subtract(entity.${property.balanceSum} == null ? java.math.BigDecimal.ZERO : entity.${property.balanceSum});
+#end
+#end
+#end
 ## Fit guard (#8096): a sum roll-up's total must fit the parent column it is written into. The roll-up
 ## is recomputed asynchronously after this write commits, so a total the column cannot hold killed that
 ## handler for good while this write answered 200 and the parent kept a stale total. So the sum is
@@ -573,6 +585,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($documentMaster)
         recalculate(entity);
 #end
+#measuredBalances()
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
 #end
@@ -775,6 +788,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
 #end
 #end
+#measuredBalances()
 #rollupFitCheck()
 #if($documentChecks && $documentChecks.size() > 0)
         enforceChecks(entity);
@@ -907,6 +921,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #if($periodLock)
         requirePeriodOpen(entity.${periodLock.dateProperty});
 #end
+#measuredBalances()
 #if($documentChecks && $documentChecks.size() > 0)
         // The workflow transition (e.g. the setter flipping the status to POSTED) comes through here -
         // the gate check makes an unbalanced document fail the transition, not silently post.

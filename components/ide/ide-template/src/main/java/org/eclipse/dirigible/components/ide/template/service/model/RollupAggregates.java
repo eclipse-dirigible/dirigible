@@ -171,9 +171,17 @@ final class RollupAggregates {
                .append(capacityField)
                .append(";\n");
             if (!balanceField.isEmpty()) {
+                // An unenforced capacity is a measurement (#7904): a parent with none has no balance,
+                // where an enforced one keeps reading a missing capacity as zero.
                 out.append("                parent.")
                    .append(balanceField)
-                   .append(" = capacity.subtract(sum);\n");
+                   .append(" = ");
+                if ("false".equals(str(rollup, "enforce"))) {
+                    out.append("parent.")
+                       .append(capacityField)
+                       .append(" == null ? null : ");
+                }
+                out.append("capacity.subtract(sum);\n");
                 out.append("                derived.put(\"")
                    .append(balanceField)
                    .append("\", parent.")

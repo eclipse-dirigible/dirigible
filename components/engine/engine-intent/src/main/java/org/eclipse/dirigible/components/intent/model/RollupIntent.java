@@ -130,6 +130,16 @@ public class RollupIntent {
      */
     private String message;
 
+    /**
+     * Optional (requires {@link #capacity}): {@code false} keeps the {@link #balance} against the
+     * capacity WITHOUT the guard that refuses a child overdrawing it (issue #7904). Budget against
+     * actual hours is the case: hours booked past a project's budget are information, not an error, so
+     * the balance simply goes negative. The balance then also follows an edit of the capacity on the
+     * parent, and a parent with no capacity has no balance (null, not {@code -sum}). Absent or
+     * {@code true}, the capacity is enforced as before.
+     */
+    private Boolean enforce;
+
     public String getName() {
         return name;
     }
@@ -273,5 +283,22 @@ public class RollupIntent {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public Boolean getEnforce() {
+        return enforce;
+    }
+
+    public void setEnforce(Boolean enforce) {
+        this.enforce = enforce;
+    }
+
+    /**
+     * Whether the capacity guard is emitted - unless {@code enforce: false} says otherwise.
+     *
+     * @return false only for an authored {@code enforce: false}
+     */
+    public boolean isEnforced() {
+        return !Boolean.FALSE.equals(enforce);
     }
 }

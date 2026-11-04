@@ -216,6 +216,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Set<String> normalisingLedgers = ExportSupport.normalisingLedgers(model);
         Map<String, List<String>> displacedStatuses = displacedStatusProperties(model, byName);
         Map<String, Set<String>> rollupTargets = rollupTargetProperties(model, byName);
+        Map<String, Map<String, RollupIntent>> measuredBalances = measuredBalanceProperties(model, byName);
         // The status ids a button or a workflow step moves each entity to - what an ungated, status-
         // conditioned requiredWhen takes its gate from (#7595), read through the same rule the BPMN
         // generator reads it through.
@@ -593,6 +594,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (rollupTargets.getOrDefault(name, Set.of())
                                  .contains(IntentNaming.pascalCase(field.getName()))) {
                     property.put("isReadOnlyProperty", "true");
+                }
+                // The balance of an unenforced capacity roll-up (#7904) is also recomputed by the
+                // parent's own repository, so an edit of the capacity moves it without a child event.
+                RollupIntent measured = measuredBalances.getOrDefault(name, Map.of())
+                                                        .get(IntentNaming.pascalCase(field.getName()));
+                if (measured != null) {
+                    property.put("balanceCapacity", IntentNaming.pascalCase(measured.getCapacity()));
+                    property.put("balanceSum", IntentNaming.pascalCase(measured.getField()));
                 }
                 // A scalar field with dependsOn is auto-populated from the trigger's target record
                 // (no filterBy - there is no option list to narrow).
@@ -1110,7 +1119,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     forChild.add(fit);
                 }
             }
-            if (!withCapacity) {
+            // enforce: false (#7904) measures the sum against the capacity and never refuses: the fit
+            // guard above bounds the column, but no capacity guard is emitted.
+            if (!withCapacity || !rollup.isEnforced()) {
                 continue;
             }
             Map<String, Object> guard = new LinkedHashMap<>();
@@ -2057,6 +2068,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             if ("sum".equals(rollup.getOp()) && notBlank(rollup.getCapacity()) && notBlank(rollup.getBalance())) {
                 targets.add(IntentNaming.pascalCase(rollup.getBalance()));
+            }
+        }
+        return byParent;
+    }
+
+    /**
+     * The balance fields of each LOCAL parent kept by an {@code enforce: false} capacity sum (#7904),
+     * by parent entity name and then balance property. With no guard behind it the balance is a
+     * measurement, so it must follow the capacity too, not only the sum: the parent's repository
+     * recomputes it on every write of the row, where the capacity is edited.
+     */
+    private static Map<String, Map<String, RollupIntent>> measuredBalanceProperties(IntentModel model, Map<String, EntityIntent> byName) {
+        Map<String, Map<String, RollupIntent>> byParent = new LinkedHashMap<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            String parentName = rollup.isEnforced() || !"sum".equals(rollup.getOp()) || !notBlank(rollup.getCapacity())
+                    || !notBlank(rollup.getBalance()) ? null : localRollupParent(rollup, byName);
+            if (parentName != null) {
+                byParent.computeIfAbsent(parentName, ignored -> new LinkedHashMap<>())
+                        .put(IntentNaming.pascalCase(rollup.getBalance()), rollup);
             }
         }
         return byParent;
