@@ -151,6 +151,36 @@ class ReportEditorRoundTripTest {
                                                                                                       .get("expression"));
     }
 
+    /**
+     * A bare to-one dimension shows the target's label and groups by its key too, so two customers
+     * sharing a name stay two rows (#8102). The key is a {@code select: false} grouping column - the
+     * editor's own flag - so the rows keep their columns and the report still opens structured. A
+     * {@code relation.field} path and a plain field group by exactly what they name.
+     */
+    @Test
+    void aRelationDimensionGroupsByTheTargetKeyWithoutSelectingIt() {
+        Map<String, Object> document = document("""
+                  - name: InvoicesByCustomer
+                    source: Invoice
+                    dimensions: [Customer, Currency, Customer.country, issuedOn]
+                    measures: ["count(*)"]
+                """);
+        assertRoundTrips(document);
+        String query = (String) document.get("query");
+        String label = "COALESCE(Currency_LANG.\"Name\", Currency.\"CURRENCY_NAME\")";
+        assertTrue(query.startsWith("SELECT Customer.\"CUSTOMER_NAME\" as \"Customer\", " + label + " as \"Currency\", "
+                + "Customer.\"CUSTOMER_COUNTRY\" as \"Customer Country\", Invoice.\"INVOICE_ISSUED_ON\" as \"Issued On\", COUNT(*) as \"Count\"\n"),
+                query);
+        assertTrue(query.endsWith("\nGROUP BY Customer.\"CUSTOMER_NAME\", " + label + ", Customer.\"CUSTOMER_COUNTRY\", "
+                + "Invoice.\"INVOICE_ISSUED_ON\", Customer.\"CUSTOMER_ID\", Currency.\"CURRENCY_ID\""), query);
+        List<Map<String, Object>> columns = columns(document);
+        assertEquals(List.of(true, true, true, true, true, false, false), columns.stream()
+                                                                                 .map(column -> column.get("select"))
+                                                                                 .toList());
+        assertEquals("Customer Id", columns.get(5)
+                                           .get("alias"));
+    }
+
     /** A computed dimension lives only in the query string unless the column carries its expression. */
     @Test
     void computedDimensionsCarryTheirExpression() {

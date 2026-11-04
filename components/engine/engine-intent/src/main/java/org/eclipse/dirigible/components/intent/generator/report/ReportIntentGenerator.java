@@ -285,11 +285,18 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    /** The columns the assembled {@code .report} document carries, empty when it declares none. */
+    /**
+     * The columns the assembled {@code .report} document SELECTs, empty when it declares none - a
+     * grouping-only key (#8102) is no column of the report's rows.
+     */
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> columnsOf(Map<String, Object> document) {
         Object columns = document.get("columns");
-        return columns instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+        return columns instanceof List<?> list ? ((List<Map<String, Object>>) list).stream()
+                                                                                   .filter(column -> !Boolean.FALSE.equals(
+                                                                                           column.get("select")))
+                                                                                   .toList()
+                : List.of();
     }
 
     /**
@@ -482,6 +489,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 }
             }
             AgingQuery aging = report.isAging() ? addAgingMeasures(context, model, source, baseAlias, report, joins, columns) : null;
+            // Last, so every output column keeps its place: the keys are grouped by, never selected.
+            for (ResolvedDimension dimension : plainDimensions) {
+                if (aggregated && dimension.bucket() == null && dimension.ref().key != null) {
+                    columns.add(dimension.ref().key);
+                }
+            }
 
             String filter = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
             Map<String, Object> scope = scopeCondition(context, model, source, baseAlias, report, aggregated);
@@ -586,8 +599,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * <li>over a same-model source with a browse route of its own (not a composition child, not an
      * extension);</li>
      * <li>with at least one dimension, every one a column of the source's list and either a bare
-     * same-model to-one relation, matched by its label (the report groups by the label, so the faithful
-     * filter is every key carrying it), or an integer, decimal or boolean field, matched by value.</li>
+     * same-model to-one relation, matched by its label (the row carries no key - it is grouped by but
+     * not selected, #8102 - so a label two targets share opens both), or an integer, decimal or boolean
+     * field, matched by value.</li>
      * </ul>
      *
      * @return the drill block, or {@code null} when the report's rows do not drill
@@ -1022,6 +1036,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /** The suffix of a view column exposing the key a translated dimension's language join matches. */
     private static final String LANGUAGE_KEY_SUFFIX = "_LANGUAGE_KEY";
 
+    /** The suffix of a view column exposing the key a relation dimension groups by (#8102). */
+    private static final String KEY_SUFFIX = "_KEY";
+
     /** The prefix of a view column exposing an authored parameter's comparison target. */
     private static final String PARAMETER_COLUMN_PREFIX = "PARAM_";
 
@@ -1093,7 +1110,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> columns = new ArrayList<>();
         Map<String, WidgetDimension> dimensionColumns = new LinkedHashMap<>();
         Map<String, Join> repoJoins = new LinkedHashMap<>();
-        Map<String, String> exposedLanguageKeys = new LinkedHashMap<>();
+        Map<String, String> exposedKeys = new LinkedHashMap<>();
+        List<Map<String, Object>> keyColumns = new ArrayList<>();
         // The fixed structural columns claim their names first, so a dimension that happens to
         // humanize to one of them takes a suffixed name instead of colliding.
         Set<String> usedNames = new LinkedHashSet<>(List.of(VIEW_ENTRY_DATE, VIEW_ALLOCATED_DEBIT, VIEW_ALLOCATED_CREDIT));
@@ -1108,7 +1126,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 // The view exposes the BASE value plus the key the translation joins on; the .report
                 // re-applies the overlay over them, so :language stays where named parameters belong.
                 viewSelects.add(ref.qualified() + " as " + quote(viewColumn));
-                String keyColumn = exposedLanguageKeys.computeIfAbsent(ref.languageKey, key -> {
+                String keyColumn = exposedKeys.computeIfAbsent(ref.languageKey, key -> {
                     String name = uniqueName(usedNames, viewColumn + LANGUAGE_KEY_SUFFIX);
                     viewSelects.add(key + " as " + quote(name));
                     return name;
@@ -1129,6 +1147,19 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             Map<String, Object> column = column(baseAlias, alias, viewColumn, (String) emitted.get("type"), "NONE", true, repoExpression);
             columns.add(column);
+            if (ref.key != null) {
+                // A relation's key (#8102): the view exposes it - shared with the language join when that
+                // matches on the same key - and the .report groups by it without selecting it.
+                String keyColumn = exposedKeys.computeIfAbsent(columnTerm(ref.key), key -> {
+                    String name = uniqueName(usedNames, viewColumn + KEY_SUFFIX);
+                    viewSelects.add(key + " as " + quote(name));
+                    return name;
+                });
+                Map<String, Object> grouped =
+                        column(baseAlias, (String) ref.key.get("alias"), keyColumn, (String) ref.key.get("type"), "NONE", true);
+                grouped.put("select", Boolean.FALSE);
+                keyColumns.add(grouped);
+            }
             if (dimension.declared() != null) {
                 dimensionColumns.put(expressionKey(dimension.declared()), new WidgetDimension(column, dimension.bucket()));
             }
@@ -1150,6 +1181,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_CREDIT, period, creditColumn, "Credit"));
         columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_DEBIT, closing, debitColumn, "Closing Debit"));
         columns.add(windowColumn(baseAlias, VIEW_ALLOCATED_CREDIT, closing, creditColumn, "Closing Credit"));
+        columns.addAll(keyColumns);
 
         List<Map<String, Object>> parameters = balanceParameters();
         List<Map<String, Object>> conditions = new ArrayList<>();
@@ -2598,6 +2630,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             ref.reportType = info != null ? "CHARACTER VARYING" : reportType(labeled == null ? null : labeled.getType());
             ref.displayAlias = humanize(reference);
             ref.join = join(context, model, source, relation, target, targetName, targetAlias, baseAlias, joinType);
+            // The label names the target without identifying it - two customers may share a name - so
+            // an aggregated report also groups by the target's key, which it never selects (#8102).
+            FieldIntent targetKey = info != null || target == null ? null : primaryKeyOf(target);
+            String keyName = info != null ? info.keyField() : (targetKey == null ? "id" : targetKey.getName());
+            String keyColumn = info != null ? info.keyColumn() : column(targetName, keyName);
+            if (!keyColumn.equals(ref.physicalColumn)) {
+                ref.key = column(targetAlias, humanize(reference + " " + keyName), keyColumn,
+                        info != null ? info.fkType() : reportType(targetKey == null ? "integer" : targetKey.getType()), "NONE", true);
+                ref.key.put("select", Boolean.FALSE);
+            }
             // The label of a multilingual nomenclature is exactly the value a list page shows
             // translated - this is the column the issue was raised about (dirigible #6544).
             translate(context, ref, target, info, labelField);
@@ -2899,7 +2941,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         for (Map<String, Object> column : columns) {
             String term = columnTerm(column);
             String aggregate = (String) column.get("aggregate");
-            selectParts.add(("NONE".equals(aggregate) ? term : aggregate + "(" + term + ")") + " as \"" + column.get("alias") + "\"");
+            if (!Boolean.FALSE.equals(column.get("select"))) {
+                selectParts.add(("NONE".equals(aggregate) ? term : aggregate + "(" + term + ")") + " as \"" + column.get("alias") + "\"");
+            }
             if (Boolean.TRUE.equals(column.get("grouping"))) {
                 groupParts.add(term);
             }
@@ -3582,6 +3626,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private String languageTable;
         /** The qualified base key the language join matches on - {@code <alias>."<KEY>"}. */
         private String languageKey;
+        /**
+         * A bare to-one relation's key as a {@code select: false} grouping column: an aggregated report
+         * groups by it beside the label it shows, so two targets sharing a label stay two rows (#8102).
+         */
+        private Map<String, Object> key;
 
         private String qualified() {
             return tableAlias + "." + quote(physicalColumn);

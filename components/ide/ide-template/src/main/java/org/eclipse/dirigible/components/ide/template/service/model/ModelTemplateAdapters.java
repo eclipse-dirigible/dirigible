@@ -275,6 +275,11 @@ final class ModelTemplateAdapters {
      */
     private static PreparedModel report(String modelText, Map<String, Object> parameters) {
         Map<String, Object> model = ModelJson.parseObject(modelText);
+        // A column the query groups by but does not select (a relation dimension's key, #8102) is no
+        // column of the report's rows - not to show, filter, total or export.
+        if (model.get("columns") instanceof List<?> columns) {
+            columns.removeIf(column -> column instanceof Map<?, ?> map && "false".equals(String.valueOf(map.get("select"))));
+        }
         for (Map<String, Object> column : asMaps(model.get("columns"))) {
             ModelDataTypes.DataType dataType = ModelDataTypes.parse(str(column, "type"));
             column.put("typeJava", dataType.java());

@@ -2038,6 +2038,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         measures: ["count(*)"]
                         parameters:
                           - { name: search, target: note, op: like, initial: 'O''Neil "the" note' }
+                      # A to-one dimension shows the party's name but groups by its key too: two parties
+                      # sharing a name are two rows, never one crediting each with the other's coupons (#8102).
+                      - name: CouponsByParty
+                        source: Coupon
+                        dimensions: [party]
+                        measures: ["count(*)"]
                       # aging (#7888): the open amount (debit - credit) of every live entry, bucketed by days
                       # past its date as of the report's own asOf parameter - which defaults to the day the
                       # report is run, resolved per request by the generated repository.
@@ -2665,6 +2671,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertRuntimeEnforcement();
         assertNowDefaultRuntime();
         assertAgreeGuardsTheParentsRuntime();
+        assertRelationDimensionGroupsByKeyRuntime();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
         assertTimedWaitRuntime();
@@ -3248,6 +3255,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Party", equalTo(party)));
+    }
+
+    /**
+     * A report dimension on a to-one relation, compiled and running (#8102): two parties sharing a name
+     * are two rows of one coupon each, where grouping by the name alone merged them into one row of
+     * two. The party's key is grouped by but never selected, so a row still carries exactly the name
+     * and the count, and the search, count and total over the rows agree with the new grouping.
+     */
+    private void assertRelationDimensionGroupsByKeyRuntime() {
+        String twin = "Twin Party 8102";
+        for (int i = 0; i < 2; i++) {
+            int party = createRecord("/party/PartyController", "{\"Name\":\"" + twin + "\"}");
+            createRecord("/coupon/CouponController", "{\"Party\":" + party + "}");
+        }
+        String report = "/services/java/" + PROJECT + "/gen/couponsbyparty/api/reports/CouponsByPartyController";
+        String twins = "{\"conditions\":[{\"column\":\"Party\",\"operator\":\"EQ\",\"value\":\"" + twin + "\"}]";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + "}")
+                                                 .when()
+                                                 .post(report + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("Party", everyItem(equalTo(twin)))
+                                                 .body("Count", everyItem(equalTo(1.0F)))
+                                                 .body("[0].size()", equalTo(2)),
+                30);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + "}")
+                                                 .when()
+                                                 .post(report + "/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("count", equalTo(2)));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(twins + ",\"column\":\"Count\"}")
+                                                 .when()
+                                                 .post(report + "/sum")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("sum", equalTo(2.0F)));
+        // The key is no column of the rows, so it is no filter either.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"conditions\":[{\"column\":\"Party Id\",\"operator\":\"EQ\",\"value\":1}]}")
+                                                 .when()
+                                                 .post(report + "/search")
+                                                 .then()
+                                                 .statusCode(400));
     }
 
     /** POSTs a record to a generated controller and answers its generated id. */
