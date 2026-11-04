@@ -255,6 +255,35 @@ public class ${name}PartnerController {
     @Put("/{id}")
     @Documentation("Update my ${name} by id")
     public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#set($lockedUpdate = $workflowStatusProperty || $immutableStatusProperty)
+#if($lockedUpdate)
+        // The record is locked for the whole request (#8109): the checks below compare the payload with
+        // the STORED status - the one the workflow owns, the one immutableWhen reads - and a stored row
+        // read without the lock is a snapshot. A process step committing between that read and the
+        // write (Resolve moving a ticket out of IN PROCESS) was reverted by a PUT carrying back the
+        // status it had read, and the ended flow left the record open with no task. Locked, the step
+        // either committed before the checks read the row - and the stale status is refused as any
+        // direct edit of it is - or waits for this write and lands after it.
+#if($hasDuplicateKeys)
+        try {
+            return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+                repository.lockForUpdate(id);
+                return updateLocked(id, entity);
+            });
+        } catch (RuntimeException e) {
+            // Outside the unit: a duplicate business key is raised by its commit.
+            throw duplicateOrRethrow(e);
+        }
+#else
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> {
+            repository.lockForUpdate(id);
+            return updateLocked(id, entity);
+        });
+#end
+    }
+
+    private ${name}Entity updateLocked(#foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, ${name}Entity entity) {
+#end
         ${name}Entity existing = requireMine(id);
 #if($immutableAlways || $immutableStatusProperty || $periodLock)
         requireMutable(existing);
@@ -306,7 +335,7 @@ public class ${name}PartnerController {
         // until the request confirms their codes - and only then persisted.
         org.eclipse.dirigible.sdk.http.Warnings.requireConfirmed(repository.warnings(checked));
 #end
-#if($hasDuplicateKeys)
+#if($hasDuplicateKeys && !$lockedUpdate)
         try {
             return scrub(repository.update(entity));
         } catch (RuntimeException e) {

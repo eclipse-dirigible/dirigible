@@ -60,6 +60,21 @@ public class InvoiceLineRepository extends JavaRepository<InvoiceLineEntity> {
 
     @Override
     public InvoiceLineEntity update(InvoiceLineEntity entity) {
+        // One unit with the header total(s) it moves - see save() (#8096) - and with the row lock the
+        // carried-over system-owned columns are read under (#8109).
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.call(() -> updateInUnit(entity));
+    }
+
+    private InvoiceLineEntity updateInUnit(InvoiceLineEntity entity) {
+        // The row is locked BEFORE anything below reads it, and stays locked until this write commits
+        // (#8109): the system-owned values are carried over from the stored row, and a stored row read
+        // without the lock is a snapshot - a process stamp (ProcessIds) or a roll-up target committed
+        // between that read and this write went back to its stale value. Locked, such a targeted write
+        // either committed before the read below and is carried over, or waits for this commit and
+        // lands after it.
+        if (entity.Id != null) {
+            lockForUpdate(entity.Id);
+        }
         trimText(entity);
         roundDecimals(entity);
         // System-owned fields survive a partial payload: a caller's update carries only the fields
