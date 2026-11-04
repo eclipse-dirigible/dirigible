@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.sdk.db;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -40,5 +42,20 @@ class NormalizeTest {
     @Test
     void stripping_works_on_code_points_outside_the_basic_plane() {
         assertEquals("ab", Normalize.apply("a😀b", false, "😀", null));
+    }
+
+    /** A value that only looks empty is no value (issue #8110). */
+    @Test
+    void unicode_spaces_and_zero_width_characters_are_blank() {
+        for (String blank : new String[] {"", " \t\n", " ", "   ", "​", "‌‍", "﻿", "  　"}) {
+            assertTrue(Normalize.isBlank(blank), "blank: " + blank.codePoints()
+                                                                  .boxed()
+                                                                  .toList());
+            assertEquals("", Normalize.trim(blank));
+        }
+        assertTrue(Normalize.isBlank(null));
+        assertNull(Normalize.trim(null));
+        assertFalse(Normalize.isBlank(" x​"));
+        assertEquals("a b", Normalize.trim("​  a b\t﻿"));
     }
 }
