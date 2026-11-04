@@ -1806,7 +1806,8 @@ process tasks.
   The generated controllers hold every user write to what the picker offers: a timestamp start on a
   closed weekday, outside `open`-`close` or off the `step` grid is refused 400, and a start another
   record already holds (for the same `resource`, when declared) 409 - so do not restate the window in
-  `checks:` or as a `unique:` on the start. The window is read in the server's time zone. Every record
+  `checks:` or as a `unique:` on the start. The window is read in the writer's time zone (the browser's,
+which the generated pages send; the server's for a REST call that names none). Every record
   holds its slot, a cancelled one too, until it is deleted or moved. System writes (a create-from, an
   import, a process step) are not checked.
 

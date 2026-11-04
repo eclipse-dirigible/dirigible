@@ -92,6 +92,10 @@ whose shape none of the sample candidates has (an IBAN, say) is left empty; a re
 marker, so the controller's 400 names the field. Relations an `agree` check names are picked so
 their targets agree; a composite `uniqueKeys` entry is given a relation combination no live row
 carries, and the rest and crud flows skip with the key named when every combination tried is taken.
+A slots entity's start (the manifest's `slots` window) is a random grid start inside the hours, on
+an open weekday of a far-future day, so the server's slot rules (a 400 off the window, a 409 for a
+booked slot) never refuse it; the REST requests name `UTC` as their `X-Time-Zone`, the zone it is
+computed in.
 A relation carrying `pickable` is sampled only from the rows its rule admits — the chooser offers no
 other, so a record built from one would never save — and one carrying `forbiddenTarget` only from
 rows the record's own `forbidWhen` does not refuse, which is what the REST flow needs, having no
