@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -1085,6 +1086,101 @@ class IntentParserTest {
         // And a property neither side can reach still says exactly that, rather than being read as a
         // comparison of the two bare foreign keys.
         assertCompareIssue(yaml.replace("onProperty: company,", "onProperty: supplier,"), "has no field or to-one relation [supplier]");
+    }
+
+    /**
+     * An {@code exists} check (#8338): a billable line may name a project only when its claim's
+     * employee is assigned to it - a row of a third entity, which no other check kind can test for.
+     * Each match value is a path on the record, own or one hop; a local target's properties and kinds
+     * are checked here, a cross-model target's model must be one {@code uses:} declares.
+     */
+    @Test
+    void existsChecksParseAndValidate() {
+        String yaml = """
+                name: expenses
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: ClaimStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Project
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Assignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: code, type: string }
+                    relations:
+                      - { name: project, kind: manyToOne, to: Project }
+                      - { name: employee, kind: manyToOne, to: Employee }
+                  - name: Claim
+                    checks:
+                      - { kind: exists, entity: Assignment, match: { employee: employee }, status: SUBMITTED, message: "Not assigned" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: employee, kind: manyToOne, to: Employee }
+                      - { name: Status, kind: manyToOne, to: ClaimStatus, function: EntityStatus }
+                  - name: ClaimItem
+                    checks:
+                      - { kind: exists, entity: Assignment, match: { project: project, employee: Claim.employee },
+                          when: "billable == true", verbs: [create, update], message: "Not assigned to the project" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: billable, type: boolean }
+                    relations:
+                      - { name: Claim, kind: manyToOne, to: Claim, composition: true }
+                      - { name: project, kind: manyToOne, to: Project }
+                seeds:
+                  - name: claim-statuses
+                    entity: ClaimStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SUBMITTED }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        CheckIntent line = model.getEntities()
+                                .get(5)
+                                .getChecks()
+                                .get(0);
+        assertEquals("Assignment", line.getEntity());
+        assertEquals(Map.of("project", "project", "employee", "Claim.employee"), line.getMatch());
+        assertEquals(2, model.getEntities()
+                             .get(4)
+                             .getChecks()
+                             .get(0)
+                             .getStatus(),
+                "the gate resolves to its seed id like every other check's");
+
+        // A cross-model target is the uses: owner's - its properties are read from that .model at
+        // generation.
+        IntentParser.parse(yaml.replace("entity: Assignment, match: { project", "entity: Assignment, model: projects, match: { project"));
+        assertCompareIssue(yaml.replace("entity: Assignment, match: { project", "entity: Assignment, model: hr, match: { project"),
+                "references undeclared model [hr] - add it to uses:");
+        assertCompareIssue(yaml.replace("entity: Assignment, match: { project", "entity: Assignee, match: { project"),
+                "entity [Assignee] is not a declared entity");
+        assertCompareIssue(yaml.replace("entity: Assignment, match: { project", "entity: ClaimItem, match: { project"),
+                "reads its own entity [ClaimItem]");
+        assertCompareIssue(yaml.replace("match: { project: project, employee: Claim.employee },", ""), "requires `match`");
+        assertCompareIssue(yaml.replace("project: project, employee", "project: projct, employee"),
+                "has no field or to-one relation [projct]");
+        assertCompareIssue(yaml.replace("project: project, employee", "projct: project, employee"),
+                "match [projct] is not a field or to-one relation of [Assignment]");
+        assertCompareIssue(yaml.replace("project: project, employee", "code: project, employee"),
+                "both sides must be the same kind of value");
+        assertCompareIssue(yaml.replace("when: \"billable == true\"", "when: \"billed == true\""),
+                "has no field or to-one relation [billed]");
+        assertCompareIssue(yaml.replace("when: \"billable == true\"", "when: []"), "when must not be an empty list");
+        assertCompareIssue(yaml.replace("verbs: [create, update]", "verbs: [create, update, delete]"), "names delete in `verbs`");
+        assertCompareIssue(yaml.replace(", message: \"Not assigned to the project\"", ""), "requires `message`");
+        assertCompareIssue(yaml.replace("verbs: [create, update],", "status: 2,"), "declares no `function: EntityStatus` relation");
+        assertCompareIssue(yaml.replace("verbs: [create, update],", "severity: warn,"), "cannot carry `severity: warn`");
     }
 
     /**

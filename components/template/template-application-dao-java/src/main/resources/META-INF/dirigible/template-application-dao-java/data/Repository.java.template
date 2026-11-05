@@ -1731,6 +1731,27 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
             if (${check.guardJavaExpression}) {
                 throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
             }
+#elseif($check.kind == "exists")
+            // A row of ANOTHER entity must carry the values the record names (intent `checks: exists`,
+            // #8338), gated on the status at which it must finally hold - a claim submitted on a project
+            // its employee is not assigned to. An unset match value skips it; the query binds its values.
+#foreach($load in $check.pathLoads)
+            Object ${load.local}Fk = ${load.sourceExpression};
+            ${load.entityClass} ${load.local} = ${load.local}Fk == null ? null
+                    : (${load.entityClass}) loadedHops.computeIfAbsent("${load.repositoryClass}:" + ${load.local}Fk,
+                            hopKey -> new ${load.repositoryClass}().findById(${load.local}Fk));
+#end
+#foreach($pair in $check.match)
+            Object match${foreach.count} = ${pair.expression};
+#end
+            if (#if($check.guardJavaExpression)(${check.guardJavaExpression}) && #end#foreach($pair in $check.match)match${foreach.count} != null && #{end}new ${check.targetRepositoryClass}().count(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+#foreach($pair in $check.match)
+                                                                                       .eq("${pair.property}", match${foreach.count})
+#end
+            ) == 0) {
+                throw org.eclipse.dirigible.sdk.db.CheckMessages.refusal(${check.messageArgsJava});
+            }
 #elseif($check.kind == "compare")
             // A value of the row compared with a second one (intent `checks: compare`) - another field
             // of the same row, or a literal (#7338) - gated on the status at which it must finally hold:

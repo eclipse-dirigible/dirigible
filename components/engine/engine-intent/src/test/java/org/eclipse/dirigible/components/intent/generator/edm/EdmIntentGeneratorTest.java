@@ -1823,6 +1823,78 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * An {@code exists} check (#8338) emits each match pair as the target property and the record's
+     * value expression - the hop loaded once by FK, like requiredWhen's value - and the target in a
+     * hop's coordinates, so the template layer resolves its repository as it resolves a hop's: this
+     * model's own, or the {@code uses:} owner's.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void existsChecksEmitTheMatchTheTargetAndTheLoads() {
+        String yaml = """
+                name: expenses
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: ClaimStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Assignment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: employee, kind: manyToOne, to: Employee }
+                      - { name: project, kind: manyToOne, to: Project, model: projects }
+                  - name: Claim
+                    checks:
+                      - { kind: exists, entity: Assignment, match: { employee: employee, project: project }, status: 2,
+                          message: "Not assigned" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: employee, kind: manyToOne, to: Employee }
+                      - { name: project, kind: manyToOne, to: Project, model: projects }
+                      - { name: Status, kind: manyToOne, to: ClaimStatus, function: EntityStatus }
+                  - name: ClaimItem
+                    checks:
+                      - { kind: exists, entity: EmployeeProjectAssignment, model: projects,
+                          match: { project: project, employee: Claim.employee }, when: "billable == true",
+                          message: "Not assigned to the project" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: billable, type: boolean }
+                    relations:
+                      - { name: Claim, kind: manyToOne, to: Claim, composition: true }
+                      - { name: project, kind: manyToOne, to: Project, model: projects }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "expenses");
+
+        Map<String, Object> line = ((List<Map<String, Object>>) entityByName(entities(model), "ClaimItem").get("checks")).get(0);
+        assertEquals(List.of(Map.of("property", "Project", "expression", "entity.Project"),
+                Map.of("property", "Employee", "expression", "(hop0 == null ? null : hop0.Employee)")), line.get("match"));
+        assertEquals(Map.of("entity", "EmployeeProjectAssignment", "perspective", "EmployeeProjectAssignment", "crossModel", true,
+                "targetModel", "projects"), line.get("target"), "a cross-model target is addressed in its owner's generation folder");
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) line.get("pathLoads");
+        assertEquals(1, loads.size(), "the claim is loaded once: " + loads);
+        assertEquals("entity.Claim", loads.get(0)
+                                          .get("sourceExpression"));
+        assertEquals(1, ((List<?>) line.get("when")).size());
+        assertNull(line.get("status"), "ungated: the controllers enforce it on every user write");
+
+        Map<String, Object> claim = ((List<Map<String, Object>>) entityByName(entities(model), "Claim").get("checks")).get(0);
+        assertEquals(Map.of("entity", "Assignment", "perspective", "Assignment", "crossModel", false, "targetModel", ""),
+                claim.get("target"));
+        assertEquals("2", claim.get("status"));
+        assertEquals("Status", claim.get("statusProperty"));
+        assertNull(claim.get("pathLoads"), "both values are the record's own");
+    }
+
+    /**
      * The parent side of an {@code agree} check (#7589): each record the junction links carries an
      * {@code agreeGuards} entry naming the junction, its foreign key and the agreed property, so the
      * parent's repository can refuse re-pointing that property while a junction row references it -

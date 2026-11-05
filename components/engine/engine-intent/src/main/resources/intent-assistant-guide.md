@@ -778,6 +778,21 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     `{ kind: agree, relations: [year, company], onProperty: company }`. Both sides must still end on
     the same entity: comparing a Company key with a Customer key is refused, the two nomenclatures
     making the comparison always false.
+  - `{ kind: exists, entity: EmployeeProjectAssignment, model: projects,
+      match: { Project: Project, Employee: ExpenseClaim.Employee }, when: "billable == true",
+      message: "..." }` (#8338): the write is refused (400 with the message) unless a row of ANOTHER
+    entity matches values the record names - **this is how "only an employee assigned to the project
+    may bill an expense to it" is declared** (and "a timesheet entry only by a project member", "an
+    approver from the requester's team"). `entity:` is the target - this model's own, or with
+    `model:` one a `uses:` entry owns; `match:` maps each TARGET property to a path on this record:
+    its own field or to-one, or a one-hop `Relation.field` (the line's claim's employee). Every pair
+    must hold on one row. A match value that is null skips the check (as `agree`'s `whenNull: skip`),
+    so make the relation `required` when it must be there. `when` narrows the rule (the `forbidWhen`
+    grammar); `verbs:` may only be `[create, update]` - a delete carries no values. The optional
+    `status:` gate routes it like `requiredWhen`'s: without one every user write, with one the
+    repository when the record is persisted carrying that status ("a claim is submitted only on a
+    project its employee is assigned to"). Do not write this rule as a `calculatedActionOnCreate`
+    that throws.
   - `{ kind: requiredWhen, field: vatGround, whenAnyItem: "vatRate == 0", status: ISSUED, message: "..." }`
     (#7560): a header value required when **ANY LINE** satisfies the condition - the legal ground a
     zero-rated line calls for (ЗДДС чл. 114). `whenAnyItem` uses the `when` grammar over the ITEMS
@@ -3097,7 +3112,7 @@ generates:
 - The link entity must live in the source's model, declare the composition to-one to the source and
   exactly ONE to-one to the target; with several, name it with `relation:`. A cross-model source
   (`fromUses:`) cannot carry a `link:`.
-- The ungated row checks (`compare`, `agree`, `forbidWhen`, `requiredWhen` without a `status:`) run
+- The ungated row checks (`compare`, `agree`, `exists`, `forbidWhen`, `requiredWhen` without a `status:`) run
   in the generated controller only and are not part of a repository write; express the refusal the link must honour as a roll-up capacity
   (`capacity:`) or a status-gated check.
 
@@ -5451,6 +5466,7 @@ or a seeded name.
 - "who/which was assigned / in force / valid on that date (from a register with from-to dates)" -> **resolves**
 - "X must be filled in before/when it reaches STATUS (but may be empty while it is a draft)" -> **checks** `requiredWhen` WITH the `status:` gate - a workflow's own status set is a repository write and never reaches a controller
 - "this must not be changed/added once the parent is PAID/CLOSED" -> **checks** `forbidWhen`
+- "only an employee assigned to the project / a member of the team may book it" (a row of a third entity must exist for the pair) -> **checks** `exists`
 - "nothing new may be added once the parent is PAID (but a wrong one must still be removable)" -> **checks** `forbidWhen` with `verbs: [create, update]`
 - "warn me / ask before saving when ... (but let me save anyway)" -> **checks** with `severity: warn`; "a record with the same name already exists" -> `duplicate`; "a line has price 0 / a zero-value line" -> `itemsCompare` on the document
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
