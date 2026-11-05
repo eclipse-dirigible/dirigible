@@ -50,6 +50,7 @@ class TenantAwareAuthoritiesMapperTest {
         Configuration.remove(DirigibleConfig.TENANT_RESOLUTION_STRATEGY.getKey());
         Configuration.remove(DirigibleConfig.TENANT_GROUPS_CLAIM.getKey());
         Configuration.remove(DirigibleConfig.APP_ID.getKey());
+        Configuration.remove(DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.getKey());
     }
 
     @Test
@@ -207,5 +208,47 @@ class TenantAwareAuthoritiesMapperTest {
 
     private static Set<String> roleNames(Collection<? extends GrantedAuthority> authorities) {
         return Set.copyOf(AuthoritiesUtil.toRoleNames(authorities));
+    }
+
+    @Test
+    void underTheApplicationScopeALoginGetsOnlyTheGlobalRolesNamingThisApplication() {
+        useTokenGroups();
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+
+        Collection<? extends GrantedAuthority> mapped = mapper(COGNITO_CLAIM).mapAuthorities(List.of(
+                oidcAuthority(COGNITO_CLAIM, "ADMINISTRATOR", APP_ID + ".DEVELOPER", "suite.OPERATOR", "acme." + APP_ID + ".Owner")));
+
+        assertThat(roleNames(mapped)).containsExactly("DEVELOPER");
+    }
+
+    @Test
+    void underTheApplicationScopeAnUnscopedStaffGroupGrantsNothing() {
+        useTokenGroups();
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+
+        assertThat(mapper(COGNITO_CLAIM).mapAuthorities(List.of(oidcAuthority(COGNITO_CLAIM, "ADMINISTRATOR", "DEVELOPER")))).isEmpty();
+    }
+
+    @Test
+    void underTheApplicationScopeABearerIdTokenIsMappedLikeTheLogin() {
+        useTokenGroups();
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+        List<String> groups = List.of("ADMINISTRATOR", APP_ID + ".ADMINISTRATOR", "suite.DEVELOPER", "acme." + APP_ID + ".Owner");
+
+        Set<GrantedAuthority> fromToken = mapper(COGNITO_CLAIM).authoritiesOf(jwt(COGNITO_CLAIM, groups));
+
+        assertThat(roleNames(fromToken)).containsExactly("ADMINISTRATOR");
+        assertThat(fromToken).containsExactlyInAnyOrderElementsOf(
+                mapper(COGNITO_CLAIM).mapAuthorities(List.of(oidcAuthority(COGNITO_CLAIM, groups))));
+    }
+
+    @Test
+    void theApplicationScopeDoesNotApplyUnderTheSubdomainStrategy() {
+        DirigibleConfig.TENANT_GLOBAL_ROLES_SCOPE.setStringValue("APPLICATION");
+
+        Collection<? extends GrantedAuthority> mapped =
+                mapper(COGNITO_CLAIM).mapAuthorities(List.of(oidcAuthority(COGNITO_CLAIM, "ADMINISTRATOR")));
+
+        assertThat(roleNames(mapped)).containsExactly("ADMINISTRATOR");
     }
 }
