@@ -546,6 +546,11 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void doubleClickOnElementWithText(HtmlElementType elementType, String text) {
+        getElementByAttributeAndText(elementType.getType(), text).doubleClick();
+    }
+
+    @Override
     public void clickOnElementContainingText(HtmlElementType elementType, String text) {
         clickOnElementContainingText(elementType.getType(), text);
     }
