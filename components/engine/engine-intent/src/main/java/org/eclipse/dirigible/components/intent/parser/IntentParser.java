@@ -8310,14 +8310,17 @@ public final class IntentParser {
     /**
      * The transforms a field's {@code normalize:} may list (#7726); {@code strip} takes its characters.
      */
-    private static final Set<String> NORMALIZE_TRANSFORMS = Set.of("trim", "strip", "upper", "lower");
+    private static final Set<String> NORMALIZE_TRANSFORMS = Set.of("trim", "strip", "upper", "lower", "emptyToNull");
 
     /**
      * A field's {@code normalize:} (#7726). String/text fields only - it rewrites the text the user
      * typed, and nothing else has text to rewrite. Each entry is a bare transform ({@code trim},
-     * {@code upper}, {@code lower}) or {@code strip:} with the characters it removes; a transform
-     * listed twice, both case folds, or a {@code strip} without characters is refused rather than
-     * resolved, since which one wins would be invisible to the author.
+     * {@code upper}, {@code lower}, {@code emptyToNull}) or {@code strip:} with the characters it
+     * removes; a transform listed twice, both case folds, or a {@code strip} without characters is
+     * refused rather than resolved, since which one wins would be invisible to the author.
+     * {@code emptyToNull} (#8492) always runs last, wherever it is listed; on a required field it is
+     * refused - a required field refuses a blank already (#7719), so the transform could never store
+     * the NULL it promises.
      */
     private static void validateNormalize(String subject, FieldIntent field, List<String> issues) {
         String type = field.getType() == null ? ""
@@ -8369,6 +8372,10 @@ public final class IntentParser {
         }
         if (seen.contains("upper") && seen.contains("lower")) {
             issues.add(subject + " `normalize` lists both `upper` and `lower` - declare one case fold");
+        }
+        if (seen.contains("emptyToNull") && field.isRequired()) {
+            issues.add(subject + " `normalize` lists `emptyToNull` on a required field - a blank is refused there, never stored as NULL;"
+                    + " drop `emptyToNull` or `required`");
         }
     }
 

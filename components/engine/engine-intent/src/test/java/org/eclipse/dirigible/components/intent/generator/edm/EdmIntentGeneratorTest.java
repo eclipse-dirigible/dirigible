@@ -3804,8 +3804,8 @@ class EdmIntentGeneratorTest {
     }
 
     /**
-     * A field's {@code normalize:} (#7726) becomes three scalar properties, so it survives the
-     * scalar-only .edm; a field without it carries none of them.
+     * A field's {@code normalize:} (#7726) (and #8492 emptyToNull) becomes scalar properties, so it
+     * survives the scalar-only .edm; a field without it carries none of them.
      */
     @org.junit.jupiter.api.Test
     void fieldNormalizeEmitsScalarProperties() {
@@ -3817,6 +3817,7 @@ class EdmIntentGeneratorTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
                       - { name: phone, type: string, length: 20, normalize: [strip: " -()"] }
+                      - { name: vat, type: string, length: 20, normalize: [trim, emptyToNull] }
                       - { name: label, type: string }
                     """;
         java.util.Map<String, Object> account = entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(
@@ -3829,9 +3830,11 @@ class EdmIntentGeneratorTest {
         assertNull(phone.get("normalizeTrim"));
         assertEquals(" -()", phone.get("normalizeStrip"));
         assertNull(phone.get("normalizeCase"));
+        assertNull(phone.get("normalizeEmptyToNull"));
+        assertEquals("true", propertyByName(account, "Vat").get("normalizeEmptyToNull"));
         java.util.Map<String, Object> label = propertyByName(account, "Label");
-        assertFalse(label.containsKey("normalizeTrim") || label.containsKey("normalizeStrip") || label.containsKey("normalizeCase"),
-                "a field without normalize must generate exactly as before");
+        assertFalse(label.containsKey("normalizeTrim") || label.containsKey("normalizeStrip") || label.containsKey("normalizeCase")
+                || label.containsKey("normalizeEmptyToNull"), "a field without normalize must generate exactly as before");
     }
 
     /**

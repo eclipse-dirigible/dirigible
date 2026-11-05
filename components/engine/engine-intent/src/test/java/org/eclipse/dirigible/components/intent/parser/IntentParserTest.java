@@ -3035,6 +3035,7 @@ class IntentParserTest {
                   - { name: iban, type: string, length: 34, normalize: [upper, strip: " ", trim] }
                   - { name: code, type: string, length: 10, normalize: lower }
                   - { name: age, type: integer }
+                  - { name: vat, type: string, length: 20, unique: true, normalize: [emptyToNull, trim] }
             """;
 
     /** A field's {@code normalize:} (#7726): a list of transforms, or one bare transform. */
@@ -3057,6 +3058,12 @@ class IntentParserTest {
                                     .normalizeCase());
         assertNull(fields.get(4)
                          .getNormalize());
+        // emptyToNull (#8492) may be listed anywhere - it always runs last.
+        assertTrue(fields.get(5)
+                         .normalizeEmptyToNull());
+        assertTrue(fields.get(5)
+                         .normalizeTrim());
+        assertFalse(iban.normalizeEmptyToNull());
     }
 
     @Test
@@ -3071,6 +3078,9 @@ class IntentParserTest {
         assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [capitalize]"),
                 "unknown `normalize` transform [capitalize]");
         assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: []"), "declares an empty `normalize`");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("unique: true, normalize: [emptyToNull", "required: true, normalize: [emptyToNull"),
+                "lists `emptyToNull` on a required field");
+        assertNormalizeIssue(FIELD_NORMALIZE.replace("normalize: lower", "normalize: [emptyToNull: yes]"), "takes no argument");
     }
 
     private static void assertNormalizeIssue(String yaml, String expected) {
