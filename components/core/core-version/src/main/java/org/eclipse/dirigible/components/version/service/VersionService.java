@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.version.service;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.artefact.Engine;
 import org.eclipse.dirigible.components.version.domain.Version;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -83,6 +84,11 @@ public class VersionService {
         String instanceName = Configuration.get(DIRIGIBLE_INSTANCE_NAME);
         version.setInstanceName(instanceName);
 
+        // The application the deployment runs (#8502): set by the image that packages it, absent on a
+        // plain platform. A blank value is no value.
+        version.setApplicationName(nonBlank(Configuration.get(DirigibleConfig.APPLICATION_NAME.getKey())));
+        version.setApplicationVersion(nonBlank(Configuration.get(DirigibleConfig.APPLICATION_VERSION.getKey())));
+
         String local = Configuration.get(IRepository.DIRIGIBLE_REPOSITORY_PROVIDER, "local");
         version.setRepositoryProvider(local);
         // version.setDatabaseProvider(Configuration.get(IDatabase.DIRIGIBLE_DATABASE_PROVIDER));
@@ -95,6 +101,10 @@ public class VersionService {
                .addAll(enginesNames);
 
         return version;
+    }
+
+    private static String nonBlank(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
 }
