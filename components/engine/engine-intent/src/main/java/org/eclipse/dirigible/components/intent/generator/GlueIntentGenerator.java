@@ -420,6 +420,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         }
         CrossModelSupport.TargetInfo collectionTarget =
                 collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collectionName);
+        EntityIntent collection = collectionTarget == null ? byName.get(collectionName) : null;
+        if (collectionTarget == null && collection == null) {
+            // The parser refuses a forEach entity this model does not declare and a forEach model alias
+            // it does not use, so a parsed intent never gets here; a model assembled another way is
+            // refused naming the child rather than read as an empty rule.
+            throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] forEach entity [" + collectionName
+                    + "] is neither an entity of this model nor of a uses: model, so its where: cannot be read"));
+        }
         if (collectionTarget != null) {
             requireOwnerProperties(child, collectionName, collectionTarget, own);
         }
@@ -452,13 +460,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             return;
         }
-        EntityIntent collection = byName.get(collectionName);
-        NotificationSupport.Resolver resolver = collection == null ? null
-                : NotificationSupport.resolver(collection, byName, compositionParents, crossModelLookup(model, context));
+        NotificationSupport.Resolver resolver =
+                NotificationSupport.resolver(collection, byName, compositionParents, crossModelLookup(model, context));
         for (ScheduleConditionIntent condition : child.getWhere()) {
             if (condition.getField()
                          .indexOf('.') >= 0
-                    && (resolver == null || resolver.access(condition.getField(), false) == null)) {
+                    && resolver.access(condition.getField(), false) == null) {
                 throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition ["
                         + condition.getField() + "] is not a resolvable one-hop relation.field of the forEach entity"));
             }
