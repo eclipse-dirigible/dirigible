@@ -649,7 +649,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                     out.put("api",
                             "/" + sanitizeJavaIdentifier(string(targetEdm.get("perspectiveName"))) + "/" + relation.getTo() + "Controller");
                 }
-                out.put("labelFrom", labelFieldOf(relation.getTo(), model));
+                // The label the generated picker actually renders - the relation property's
+                // widgetDropDownValue in the .model - so the runner looks for the option text the page
+                // shows (#7822); re-derived from the intent only when the .model lacks the property.
+                Map<String, Object> property = properties.get(IntentNaming.pascalCase(relation.getName()));
+                String rendered = property == null ? null : string(property.get("widgetDropDownValue"));
+                out.put("labelFrom", rendered != null && !rendered.isBlank() ? rendered : labelFieldOf(relation.getTo(), model));
                 if (relation.isLeafOnly()) {
                     for (EntityIntent target : model.getEntities()) {
                         if (relation.getTo()
@@ -666,15 +671,26 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The label property of a relation target: its {@code name} field PascalCased, else {@code Name}.
+     * The label property of a relation target, in the order the EDM generator picks the dropdown label:
+     * the stored {@code Name} of a {@code label:} expression, its {@code name} field, its
+     * {@code documentTitle} field, its first string field, else {@code Name}.
      */
     private static String labelFieldOf(String targetName, IntentModel model) {
         for (EntityIntent entity : model.getEntities()) {
             if (!targetName.equals(entity.getName())) {
                 continue;
             }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                return "Name";
+            }
             for (FieldIntent field : entity.getFields()) {
                 if ("name".equalsIgnoreCase(field.getName())) {
+                    return IntentNaming.pascalCase(field.getName());
+                }
+            }
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null && field.isDocumentTitle()) {
                     return IntentNaming.pascalCase(field.getName());
                 }
             }

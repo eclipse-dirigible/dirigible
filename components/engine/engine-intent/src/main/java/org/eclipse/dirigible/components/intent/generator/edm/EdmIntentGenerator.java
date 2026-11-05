@@ -4723,10 +4723,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The dropdown label: the target's {@code name} field (case-insensitive), else its first
-     * string-typed field, else its PK.
-     */
-    /**
      * The synthesized {@code Name} property for an entity with a {@code label:} expression: a stored
      * VARCHAR the generated repository recomputes on every write. Read-only and shown on lists so the
      * display name is first-class everywhere.
@@ -4813,6 +4809,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return names;
     }
 
+    /**
+     * The dropdown label: the stored {@code Name} of a {@code label:} expression, else the target's
+     * {@code name} field (case-insensitive), else its {@code documentTitle} field, else its first
+     * string-typed field, else its PK.
+     */
     private static String labelFieldName(EntityIntent target) {
         if (target == null) {
             return "Name";
@@ -4824,6 +4825,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         for (FieldIntent field : target.getFields()) {
             if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                return IntentNaming.pascalCase(field.getName());
+            }
+        }
+        for (FieldIntent field : target.getFields()) {
+            // No name: the field the document is titled by (its number) - what the document page's
+            // title bar shows - before whichever string field happens to come first (#7822).
+            if (field.getName() != null && field.isDocumentTitle()) {
                 return IntentNaming.pascalCase(field.getName());
             }
         }
