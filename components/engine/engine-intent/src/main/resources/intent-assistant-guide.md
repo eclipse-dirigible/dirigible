@@ -757,6 +757,17 @@ a `required` text field is refused when it is blank after that trim - spaces alo
     "a submitted request covers at least one day" without forbidding the draft still being filled
     in - the rule to reach for instead of mis-authoring it as an `itemsMin` over a child the
     approval step has not created yet. A gated compare needs the `function: EntityStatus` relation.
+  - A GATED compare's `than:` may read **another record** (#8494): a formula over the fields of ONE
+    to-one relation, local or cross-model - `{ kind: compare, field: base, op: eq, than:
+    "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED, message: "..." }` is "the base
+    this protocol stored is still what its purchase invoice says, at the Issue". The related record
+    is read when the record is written carrying the gate status, so a credit note approved after the
+    draft refuses the Issue (400) while a Cancel - another status - is never asked. The formula takes
+    numbers, `+ - * /`, parentheses, `round`/`abs`/`min`/`max`/`ceil`/`floor` and
+    `<relation>.<field>` terms, all on the same relation; the left field is a number and the result
+    is rounded to its scale; a record pointing at none is not a violation. Refused without a
+    `status:` gate (the source changes on its own, so the rule is about the move). This is the
+    declaration to reach for instead of a `TargetAgreementRule` on the record's own status.
   - `{ kind: agree, relations: [SalesInvoice, CustomerPayment], onProperty: Customer, message: "..." }`
     (#7409): the two records a JUNCTION row links must point at the same third thing - **this is how
     "a payment may only be allocated against an invoice of the same customer, in the same currency"

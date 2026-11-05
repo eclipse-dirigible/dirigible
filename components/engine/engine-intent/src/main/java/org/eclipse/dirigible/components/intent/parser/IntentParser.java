@@ -6996,7 +6996,7 @@ public final class IntentParser {
             return;
         }
         if ("compare".equals(kind)) {
-            validateCompareCheck(entity, check, subject, issues);
+            validateCompareCheck(entity, check, byName, subject, issues);
             return;
         }
         if ("agree".equals(kind)) {
@@ -7179,7 +7179,7 @@ public final class IntentParser {
         comparison.setField(check.getField());
         comparison.setOp(check.getOp());
         comparison.setValue(check.getValue());
-        validateCompareCheck(items, comparison, subject + " on items [" + items.getName() + "]", issues);
+        validateCompareCheck(items, comparison, java.util.Map.of(), subject + " on items [" + items.getName() + "]", issues);
     }
 
     /**
@@ -7325,7 +7325,8 @@ public final class IntentParser {
      * &gt; 0 before SUBMITTED" is declarable without forbidding the draft that is still being filled
      * in.
      */
-    private static void validateCompareCheck(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+    private static void validateCompareCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            String subject, List<String> issues) {
         String field = check.getField();
         String than = check.getThan();
         boolean hasThan = than != null && !than.isBlank();
@@ -7364,6 +7365,10 @@ public final class IntentParser {
             }
             return;
         }
+        if (ResolvePathSupport.isPath(than)) {
+            validateHopCompare(entity, check, left, byName, subject, issues);
+            return;
+        }
         if (field.equalsIgnoreCase(than)) {
             issues.add(subject + " compares [" + field + "] with itself - the outcome cannot depend on the record");
         }
@@ -7383,6 +7388,42 @@ public final class IntentParser {
         if (leftFamily != null && rightFamily != null && !leftFamily.equals(rightFamily)) {
             issues.add(subject + " compares a [" + left.getType() + "] with a [" + right.getType()
                     + "] - both fields must be dates, both timestamps or both numbers");
+        }
+    }
+
+    /**
+     * A {@code compare} whose {@code than} reads ANOTHER record (#8494): a formula over the fields of
+     * one to-one relation - {@code than: "PurchaseInvoice.net - PurchaseInvoice.credited"} - so "the
+     * figure this document stored is still what its source says" is declarable at the move that relies
+     * on it. The {@code status} gate is required: the related record changes on its own, so the rule is
+     * about the moment the document is written carrying that status (the transition into it), never
+     * every edit of the draft before. Numbers only, since the formula is arithmetic; a term on a
+     * cross-model record is trusted here, as every cross-model terminal is, and checked by the
+     * generator against the owner's properties.
+     */
+    private static void validateHopCompare(EntityIntent entity, CheckIntent check, FieldIntent left,
+            java.util.Map<String, EntityIntent> byName, String subject, List<String> issues) {
+        String than = check.getThan();
+        if (check.getStatus() == null) {
+            issues.add(subject + " than [" + than + "] reads another record - declare the `status` it is checked at");
+        }
+        if (!"number".equals(compareFamily(left))) {
+            issues.add(subject + " field [" + check.getField() + "] is a [" + left.getType() + "] - a formula over another record"
+                    + " compares with a number");
+        }
+        CheckSupport.HopFormula formula = CheckSupport.hopFormula(than);
+        if (formula.failure() != null) {
+            issues.add(subject + " than " + formula.failure());
+            return;
+        }
+        ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, java.util.Map.of(), null);
+        for (String term : formula.fields()) {
+            ResolvePathSupport.Path path = walker.resolve(formula.relation() + "." + term);
+            if (!path.resolved()) {
+                issues.add(subject + " than " + path.failure());
+            } else if (path.terminalType() != null && !"number".equals(CheckSupport.compareFamily(path.terminalType()))) {
+                issues.add(subject + " than [" + path.label() + "] is a [" + path.terminalType() + "] - a formula reads numbers");
+            }
         }
     }
 

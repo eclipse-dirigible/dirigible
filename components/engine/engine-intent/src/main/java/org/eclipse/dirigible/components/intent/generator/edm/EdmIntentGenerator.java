@@ -3324,6 +3324,34 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     }
                     checkMap.put("value", literal.reading());
                     checkMap.put("numeric", isNumericType(left.getType()) ? "true" : "false");
+                } else if (ResolvePathSupport.isPath(check.getThan())) {
+                    // A right-hand side read off ANOTHER record (#8494): a Calc formula over the one to-one
+                    // relation its terms walk, local or cross-model, evaluated against that record once
+                    // the repository has loaded it - so the comparison sees the source as it stands at
+                    // the move. Neutral here: the hop local, the formula and the left field's scale (the
+                    // value the column could hold); the template layer renders the Java.
+                    CheckSupport.HopFormula formula = CheckSupport.hopFormula(check.getThan());
+                    ResolvePathSupport.Walker walker = ResolvePathSupport.walker(entity, byName, compositionParents, crossModel);
+                    String owner = null;
+                    for (String term : formula.fields()) {
+                        ResolvePathSupport.Path path = walker.resolve(formula.relation() + "." + term);
+                        owner = path.resolved() ? path.owner() : null;
+                        if (owner == null) {
+                            break;
+                        }
+                    }
+                    if (owner == null || check.getStatus() == null) {
+                        continue; // the parser already reported it
+                    }
+                    checkMap.put("thanFormula", formula.formula());
+                    checkMap.put("thanOwner", owner);
+                    checkMap.put("thanScale",
+                            left.getScale() != null ? String.valueOf(left.getScale())
+                                    : CheckSupport.DECIMAL_TYPES.contains(left.getType()
+                                                                              .trim()
+                                                                              .toLowerCase(java.util.Locale.ROOT)) ? "2" : "0");
+                    checkMap.put("pathLoads", pathLoadsOf(walker));
+                    checkMap.put("numeric", "true");
                 } else {
                     Boolean numeric = isNumericCompare(entity, check);
                     if (check.getThan() == null || numeric == null) {

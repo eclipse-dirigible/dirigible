@@ -2406,6 +2406,63 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * A {@code compare} whose {@code than} reads another record (#8494) reaches the template layer as
+     * neutral data: the hop that loads the related record, the Calc formula over its properties and the
+     * left field's scale - the Java is rendered downstream, as for a literal.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void compareChecksAgainstARelatedRecordEmitTheFormulaAndItsHop() {
+        String yaml = """
+                name: vat
+                seeds:
+                  - name: protocol-statuses
+                    entity: ProtocolStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: ISSUED }
+                entities:
+                  - name: ProtocolStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: PurchaseInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: net, type: decimal }
+                      - { name: credited, type: decimal }
+                  - name: VatProtocol
+                    checks:
+                      - { kind: compare, field: base, op: eq, than: "PurchaseInvoice.net - PurchaseInvoice.credited", status: ISSUED,
+                          message: "The purchase invoice changed since this protocol was drafted" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: base, type: decimal, scale: 3 }
+                    relations:
+                      - { name: PurchaseInvoice, kind: manyToOne, to: PurchaseInvoice }
+                      - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "vat");
+        Map<String, Object> check = ((List<Map<String, Object>>) entityByName(entities(model), "VatProtocol").get("checks")).get(0);
+        assertEquals("Base", check.get("field"));
+        assertEquals("==", check.get("op"));
+        assertEquals("true", check.get("numeric"));
+        assertEquals("Net - Credited", check.get("thanFormula"));
+        assertEquals("hop0", check.get("thanOwner"));
+        assertEquals("3", check.get("thanScale"));
+        assertNull(check.get("than"), "no own field on the right-hand side");
+        List<Map<String, Object>> loads = (List<Map<String, Object>>) check.get("pathLoads");
+        assertEquals(1, loads.size(), "both terms read the one record the relation loads");
+        assertEquals("PurchaseInvoice", loads.get(0)
+                                             .get("entity"));
+        assertEquals("entity.PurchaseInvoice", loads.get(0)
+                                                    .get("sourceExpression"));
+        assertEquals("2", check.get("status"));
+        assertEquals("Status", check.get("statusProperty"));
+    }
+
+    /**
      * A document check counts the document's LINES, even when the document owns several composition
      * children - a printed {@code function: Snapshot} copy, a payment allocation, a promotion. The
      * items child used to be whichever one a {@code HashMap} iteration yielded first, so an invoice's

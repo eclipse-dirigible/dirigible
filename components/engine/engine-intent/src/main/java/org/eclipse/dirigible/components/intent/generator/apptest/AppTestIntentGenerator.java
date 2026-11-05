@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.PickableSupport;
+import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -274,8 +275,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                                     .map(IntentNaming::pascalCase)
                                     .toList());
             }
+            // A right-hand side read off another record (#8494) is gated on a status the sample record is
+            // never created in, and names no own field the runner could derive the left operand from.
             if ("compare".equals(check.getKind()) && check.getField() != null && check.getOp() != null
-                    && (check.getThan() != null || check.getValue() != null)) {
+                    && (check.getThan() != null || check.getValue() != null) && !ResolvePathSupport.isPath(check.getThan())) {
                 Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("field", IntentNaming.pascalCase(check.getField()));
                 entry.put("op", check.getOp()

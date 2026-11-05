@@ -528,6 +528,14 @@ final class ModelParameterProcessor {
                 check.put("literalJavaExpression", expression);
             }
         }
+        // A compare's right-hand side read off another record (#8494): the Calc formula over the record
+        // the hop loaded, and null while the row points at none - an absent operand, as for a field.
+        String thanFormula = str(check, "thanFormula");
+        if (thanFormula != null) {
+            String owner = str(check, "thanOwner");
+            check.put("thanJavaExpression", "(" + owner + " == null ? null : org.eclipse.dirigible.sdk.utils.Calc.eval(\""
+                    + JavaLiterals.escape(thanFormula) + "\", " + owner + ", " + str(check, "thanScale") + "))");
+        }
         List<Map<String, Object>> when = asMaps(check.get("when"));
         if (!when.isEmpty()) {
             String expression = JavaLiterals.conditionExpression(when);
