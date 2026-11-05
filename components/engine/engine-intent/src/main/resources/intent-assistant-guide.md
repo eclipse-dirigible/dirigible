@@ -396,7 +396,11 @@ a `required` text field is refused when it is blank after that trim - spaces alo
   `- { name: hours, type: decimal, defaultValue: 8 }` /
   `- { name: billable, type: boolean, defaultValue: true }` /
   `- { name: date, type: date, required: true, defaultValue: now }`.
-- `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code). On a `string`/`text`
+  field that is a login, a username or an e-mail address, write `unique: { ignoreCase: true }` (#8095):
+  a value differing from another record's only in letter case (`QALT1` vs `qalt1`) is refused with the
+  same 409 as an exact repeat, and the stored value keeps the case it was typed in. Use
+  `normalize: lower` instead only when the stored spelling may be lower-cased.
 - `label: <text>` - the field's display label, replacing the humanized field name everywhere it is
   rendered (form caption, list column header, details block) and seeding its en-US catalog entry, so
   it is translated like any other label. Author it for what humanizing cannot produce: an acronym
@@ -5396,6 +5400,7 @@ or a seeded name.
 | serviceTask `setField` value | a literal on a `string`/`text` field; exactly `"{now}"` on a `timestamp`/`date` field (the moment the step runs) - `{now}` nowhere else |
 | `setField` / `clearField` / `setRelationField` path | `<member>` of the trigger entity, or `<relation>.<member>` - one hop through a local `manyToOne`/`oneToOne` relation, written through the target's repository |
 | field `stampOn` | `{ status: <seeded name or id> }` of the entity's `function: EntityStatus` relation, on a `timestamp`/`date` field that is not `required` and has no other writer |
+| field `unique` | `true`, or `{ ignoreCase: true }` on a `string`/`text` field - a value another record holds in any letter case is refused |
 | field `single` | `true`, or `{ per: <own manyToOne/oneToOne relation>, onConflict: demote \| refuse }` (both optional), on a `boolean` field |
 | process `vars` | `[{ name: <identifier>, clearAfter: <serviceTask/userTask step> }]`; step `produces:`/`uses:` list declared var names |
 | process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
@@ -5453,6 +5458,7 @@ or a seeded name.
 - "deleting a document under approval must kill the approval / must be refused while it runs" -> **processes** (`whenDeleted: abort | refuse`; the cancelling `-deleted` listener is generated regardless)
 - "deleting a header must delete its lines / must be refused while it has lines" -> the child's **composition relation** (`whenMasterDeleted: cascade | refuse`; cascade is the default, so nothing is ever orphaned)
 - "the user picks it when creating the record and it must never move afterwards" (a timesheet's project-month, an order's customer) -> the relation's `fixedAfterCreate: true`
+- "one account per login / e-mail, whatever the letter case" (a username, an e-mail address, an `identity:` field) -> the field's `unique: { ignoreCase: true }` (not `unique: true`, which compares case-sensitively)
 - "the code is entered when the record is created and must never change afterwards" (a customer code, an external reference, a file-name key) -> the field's `fixedAfterCreate: true` (not `readOnly:`, not `immutableWhen`)
 - "once other records use it, its code / IBAN / type must not change any more" (a currency's code, a bank account's currency, a product's type) -> the field's or the to-one's `fixedWhenReferenced: true` (not `fixedAfterCreate`, which fixes it before anything uses it)
 - "a master that is still in use must not be deletable" (a category, an employee, a customer referenced by documents - in this module or another) -> nothing to write: `whenTargetDeleted: restrict` is the default on every to-one; "deleting it should clear / delete the records pointing at it" -> the referencing **to-one relation** (`whenTargetDeleted: nullify | cascade`)

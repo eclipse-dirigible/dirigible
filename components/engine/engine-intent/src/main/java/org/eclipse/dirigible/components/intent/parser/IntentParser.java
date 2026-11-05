@@ -371,7 +371,7 @@ public final class IntentParser {
         normalizeDuplicable(tree);
         normalizeSettlementOrder(tree);
         wrapScalarNormalize(tree);
-        expandSingleShorthand(tree);
+        expandFieldFlagShorthands(tree);
         normalizeOrderBy(tree);
         normalizeActionPrompts(tree);
         // A key the typed model does not declare is dropped by the Gson mapping without a sound, so it
@@ -5112,6 +5112,11 @@ public final class IntentParser {
                 if (field.getNormalize() != null) {
                     validateNormalize("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (field.isUniqueIgnoringCase() && !"string".equalsIgnoreCase(field.getType())
+                        && !"text".equalsIgnoreCase(field.getType())) {
+                    issues.add("entity [" + name + "] field [" + field.getName()
+                            + "] unique ignoreCase applies to a string/text field - got type [" + field.getType() + "]");
+                }
                 if (isNowDefault(field)) {
                     validateNowDefault("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
@@ -7800,14 +7805,14 @@ public final class IntentParser {
     }
 
     /**
-     * A field's {@code single: true} (#8101) is the empty mapping - fleet-wide, demoting - and
-     * {@code single: false} is removed, so the typed mapping and the unknown-key walk only ever see the
-     * object form, as {@link #normalizeDuplicable} does for an entity's {@code duplicable}.
+     * A field's {@code single: true} (#8101) and {@code unique: true} (#8095) are the empty mapping -
+     * fleet-wide and demoting, a plain UNIQUE column - and {@code false} removes the key, so the typed
+     * mapping and the unknown-key walk only ever see the object form, as {@link #normalizeDuplicable}
+     * does for an entity's {@code duplicable}.
      *
      * @param tree the SnakeYAML-loaded raw tree
      */
-    @SuppressWarnings("unchecked")
-    private static void expandSingleShorthand(Object tree) {
+    private static void expandFieldFlagShorthands(Object tree) {
         if (!(tree instanceof Map<?, ?> root) || !(root.get("entities") instanceof List<?> entities)) {
             return;
         }
@@ -7817,23 +7822,35 @@ public final class IntentParser {
                 continue;
             }
             for (Object fieldNode : fields) {
-                if (!(fieldNode instanceof Map<?, ?> field) || !field.containsKey("single")) {
-                    continue;
-                }
-                Object declared = field.get("single");
-                Map<Object, Object> writable = (Map<Object, Object>) field;
-                if (declared == null || Boolean.FALSE.equals(declared)) {
-                    writable.remove("single");
-                } else if (Boolean.TRUE.equals(declared)) {
-                    writable.put("single", new LinkedHashMap<>());
-                } else if (!(declared instanceof Map)) {
-                    issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] single [" + declared
-                            + "] is neither true/false nor a mapping - the object form takes per: and onConflict:");
+                if (fieldNode instanceof Map<?, ?> field) {
+                    expandFlagShorthand(entity, field, "single", "per: and onConflict:", issues);
+                    expandFlagShorthand(entity, field, "unique", "ignoreCase:", issues);
                 }
             }
         }
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * Expands one field key of {@link #expandFieldFlagShorthands}; {@code objectKeys} names its
+     * mapping's keys.
+     */
+    @SuppressWarnings("unchecked")
+    private static void expandFlagShorthand(Map<?, ?> entity, Map<?, ?> field, String key, String objectKeys, List<String> issues) {
+        if (!field.containsKey(key)) {
+            return;
+        }
+        Object declared = field.get(key);
+        Map<Object, Object> writable = (Map<Object, Object>) field;
+        if (declared == null || Boolean.FALSE.equals(declared)) {
+            writable.remove(key);
+        } else if (Boolean.TRUE.equals(declared)) {
+            writable.put(key, new LinkedHashMap<>());
+        } else if (!(declared instanceof Map)) {
+            issues.add("entity [" + entity.get("name") + "] field [" + field.get("name") + "] " + key + " [" + declared
+                    + "] is neither true/false nor a mapping - the object form takes " + objectKeys);
         }
     }
 

@@ -2383,6 +2383,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Tender, kind: manyToOne, to: Tender }
             """;
 
+    // Still the entities list. unique: { ignoreCase: true } (#8095): a login and an e-mail address are
+    // one key in any letter case, stored as typed.
+    private static final String INTENT_YAML_UNIQUE_IGNORE_CASE = """
+              - name: Login
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: username, type: string, length: 50, unique: { ignoreCase: true } }
+                  - { name: email,    type: string, length: 200, format: email, unique: { ignoreCase: true } }
+            """;
+
     // Still the entities list. A list column may show a record's child rows (#8295): a team member's
     // list shows the skills it was granted - a to-one's display text and a field's value - as the
     // texts of its TeamMemberSkill rows.
@@ -2473,6 +2483,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                   .concat(INTENT_YAML_PERIOD_POSTING)
                                                                   .concat(INTENT_YAML_STATUS_STAMPS)
                                                                   .concat(INTENT_YAML_SINGLE_FLAGS)
+                                                                  .concat(INTENT_YAML_UNIQUE_IGNORE_CASE)
                                                                   .concat(INTENT_YAML_COLLECTION_COLUMNS)
                                                                   .concat(INTENT_YAML_GLUE);
 
@@ -2683,6 +2694,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertRelationDimensionGroupsByKeyRuntime();
         assertStatusStampsRuntime();
         assertSingleFlagsRuntime();
+        assertUniqueIgnoringCaseRuntime();
         assertTimedWaitRuntime();
         assertEarlyWaitEventRuntime();
         assertCollectionColumnsRuntime();
@@ -2921,6 +2933,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("message", containsString("Another Purse is already Preferred for this Tender")));
         assertEquals(Boolean.TRUE, readRecord(purses, first).get("Preferred"), "a refused write leaves the holder alone");
         assertNotEquals(Boolean.TRUE, readRecord(purses, second).get("Preferred"), "a refused write is not written");
+    }
+
+    /**
+     * {@code unique: { ignoreCase: true }} (#8095), generated, published and running: a value that
+     * differs from another record's only in letter case is refused 409 with the field's unique message,
+     * on a create and on an update, as an exact repeat is, writing nothing; a distinct value saves, and
+     * a record may change the case of its own value.
+     */
+    private void assertUniqueIgnoringCaseRuntime() {
+        String logins = "/login/LoginController";
+        String usernameTaken = "A Login with this 'Username' already exists";
+        int first = createRecord(logins, "{\"Username\":\"qalt1\",\"Email\":\"qalt1@example.com\"}");
+
+        assertConflict(logins, null, "{\"Username\":\"QALT1\",\"Email\":\"qalt2@example.com\"}", usernameTaken);
+        assertConflict(logins, null, "{\"Username\":\"qalt2\",\"Email\":\"QALT1@EXAMPLE.COM\"}",
+                "A Login with this 'Email' already exists");
+        assertConflict(logins, null, "{\"Username\":\"qalt1\",\"Email\":\"qalt2@example.com\"}", usernameTaken);
+
+        int second = createRecord(logins, "{\"Username\":\"QAlt2\",\"Email\":\"qalt2@example.com\"}");
+        assertConflict(logins, second, "{\"Id\":" + second + ",\"Username\":\"Qalt1\",\"Email\":\"qalt2@example.com\"}", usernameTaken);
+        assertEquals("QAlt2", readRecord(logins, second).get("Username"), "a refused update must not be written");
+        updateRecord(logins, second, "{\"Id\":" + second + ",\"Username\":\"qalt2\",\"Email\":\"qalt2@example.com\"}", 200);
+        assertEquals("qalt2", readRecord(logins, second).get("Username"), "a record may change the case of its own value");
+        assertEquals("qalt1", readRecord(logins, first).get("Username"));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + logins)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("size()", equalTo(2)));
+    }
+
+    /** POSTs a record (no id) or PUTs it (an id) and expects a 409 carrying the given message. */
+    private void assertConflict(String controller, Integer id, String body, String message) {
+        restAssuredExecutor.execute(() -> {
+            io.restassured.specification.RequestSpecification request = given().contentType("application/json")
+                                                                               .body(body)
+                                                                               .when();
+            (id == null ? request.post(API + controller) : request.put(API + controller + "/" + id)).then()
+                                                                                                    .statusCode(409)
+                                                                                                    .body("message", equalTo(message));
+        });
     }
 
     /**

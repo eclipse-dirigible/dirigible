@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -24,6 +25,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.ide.template.service.model.JavaLiterals;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -80,6 +82,48 @@ class EdmIntentGeneratorTest {
 
         // The entity's navigation group flows to perspectiveNavId (the shared-shell groupId).
         assertEquals("master-data", customer.get("perspectiveNavId"));
+    }
+
+    /**
+     * {@code unique: { ignoreCase: true }} (#8095) keeps the column's UNIQUE and adds the marker the
+     * repository's case-insensitive check is generated from; {@code unique: true} is the same key
+     * without it, and the object form is refused on a field with no letter case.
+     */
+    @Test
+    void uniqueIgnoreCaseEmitsTheCaseInsensitiveMarker() {
+        String yaml = """
+                name: staff
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: username, type: string, length: 50, unique: { ignoreCase: true } }
+                      - { name: code, type: string, length: 10, unique: true }
+                      - { name: badge, type: string, length: 10, unique: false }
+                """;
+        Map<String, Object> employee =
+                entityByName(entities(EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "staff")), "Employee");
+        assertEquals("true", propertyByName(employee, "Username").get("dataUnique"));
+        assertEquals("true", propertyByName(employee, "Username").get("dataUniqueIgnoreCase"));
+        assertEquals("true", propertyByName(employee, "Code").get("dataUnique"));
+        assertNull(propertyByName(employee, "Code").get("dataUniqueIgnoreCase"));
+        assertNull(propertyByName(employee, "Badge").get("dataUnique"));
+
+        IntentValidationException onInteger = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(yaml.replace("{ name: code, type: string, length: 10, unique: true }",
+                        "{ name: code, type: integer, unique: { ignoreCase: true } }")));
+        assertTrue(onInteger.getIssues()
+                            .contains(
+                                    "entity [Employee] field [code] unique ignoreCase applies to a string/text field - got type [integer]"),
+                onInteger.getIssues()
+                         .toString());
+        IntentValidationException unknownKey = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(yaml.replace("ignoreCase: true", "caseInsensitive: true")));
+        assertTrue(unknownKey.getIssues()
+                             .stream()
+                             .anyMatch(issue -> issue.contains("unknown key [caseInsensitive]")),
+                unknownKey.getIssues()
+                          .toString());
     }
 
     @Test

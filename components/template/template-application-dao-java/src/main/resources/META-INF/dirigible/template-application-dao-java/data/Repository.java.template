@@ -12,6 +12,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #set($hasStatusStamps = $statusStamps && $statusStamps.size() > 0)
 ## The single flags (#8101): booleans at most one row holds, fleet-wide or per scope.
 #set($hasSingleFlags = $singleFlags && $singleFlags.size() > 0)
+## The case-insensitive keys (#8095): `unique: { ignoreCase: true }` fields.
+#set($hasUniqueIgnoringCase = false)
 ## A document number drawn on create (#8113): save() runs the draw and the insert as one unit of work.
 #set($numbersOnCreate = false)
 #foreach ($property in $properties)
@@ -53,6 +55,9 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
     #end
     #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "String")
         #set($haveText = "true")
+    #end
+    #if($property.dataUniqueIgnoreCase)
+        #set($hasUniqueIgnoringCase = true)
     #end
     #if(!$property.dataPrimaryKey && $property.dataTypeJavaClass == "java.math.BigDecimal" && $property.dataScale && $property.dataScale != "")
         #set($haveScaledDecimals = "true")
@@ -590,6 +595,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasUniqueIgnoringCase)
+        requireUniqueIgnoringCase(entity);
+#end
 #if($hasReferenceChecks)
         // The reference check and the insert are ONE transaction, and the check share-locks every row
         // this create names until it commits (#8252): a delete of one of them either waits for the
@@ -794,6 +802,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasUniqueIgnoringCase)
+        requireUniqueIgnoringCase(entity);
+#end
 #if($hasReferenceChecks)
 ## The stored row is already in hand when system-owned fields were preserved - no second read.
 #if($preservedOnUpdate.size() > 0)
@@ -928,6 +939,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
         enforceChecks(entity);
 #end
 #requiredCheck()
+#if($hasUniqueIgnoringCase)
+        requireUniqueIgnoringCase(entity);
+#end
 #if($hasReferenceChecks)
         ${name}Entity referencesStored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
 #end
@@ -1502,6 +1516,32 @@ public class ${name}Repository extends JavaRepository<${name}Entity>#if($hasTarg
 #end
             }
         }
+#end
+    }
+#end
+#if($hasUniqueIgnoringCase)
+
+    /**
+     * The case-insensitive keys (intent {@code unique: { ignoreCase: true }}, dirigible #8095): a value
+     * another ${name} holds in any letter case is answered 409 with the field's unique message, as the
+     * column's own UNIQUE answers an exact repeat. The value this row already stores is not refused
+     * again, so case-duplicates stored before the key was declared stay writable until one changes.
+     */
+## ponytail: read-then-act - two concurrent writers of case variants can both pass; a unique index on
+## LOWER(column) would close it, which the schema model cannot express and H2 cannot build.
+    private void requireUniqueIgnoringCase(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.dataUniqueIgnoreCase)
+        if (entity.${property.name} != null && count(org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                                          .eqNormalized("${property.name}", entity.${property.name})
+                                                                                                          .ne("${pkPropertyName}", entity.${pkPropertyName})) > 0) {
+            ${name}Entity stored = entity.${pkPropertyName} == null ? null : super.findById(entity.${pkPropertyName});
+            if (stored == null || !entity.${property.name}.equals(stored.${property.name})) {
+                throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.CONFLICT,
+                        "A ${name} with this '${property.name}' already exists");
+            }
+        }
+#end
 #end
     }
 #end

@@ -50,7 +50,11 @@ public class FieldIntent {
     private boolean required;
     private boolean primaryKey;
     private boolean generated;
-    private boolean unique;
+    /**
+     * {@code unique: true} or {@code unique: { ignoreCase: true }} (dirigible #8095), null when the
+     * field is not a key. See {@link FieldUniqueIntent}.
+     */
+    private FieldUniqueIntent unique;
     private Integer length;
     /** Override for the default DECIMAL precision (16) - the total number of digits. */
     private Integer precision;
@@ -339,11 +343,17 @@ public class FieldIntent {
     }
 
     public boolean isUnique() {
-        return unique;
+        return unique != null;
     }
 
-    public void setUnique(boolean unique) {
-        this.unique = unique;
+    /**
+     * Whether a value differing from another row's only in letter case collides with it ({@code unique:
+     * { ignoreCase: true }}, dirigible #8095).
+     *
+     * @return true for a case-insensitive key
+     */
+    public boolean isUniqueIgnoringCase() {
+        return unique != null && unique.isIgnoreCase();
     }
 
     public Integer getLength() {
