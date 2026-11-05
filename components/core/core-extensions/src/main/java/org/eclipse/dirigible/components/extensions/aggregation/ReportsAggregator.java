@@ -52,7 +52,8 @@ class ReportsAggregator {
     private static final String REPORT_EXTENSION = ".report";
 
     /** The {@code .report} keys the manifest carries as they are, when present. */
-    private static final List<String> DISPLAY_KEYS = List.of("label", "description", "dashboard", "chart", "tId", "descriptionTId");
+    private static final List<String> DISPLAY_KEYS =
+            List.of("label", "description", "dashboard", "chart", "tId", "descriptionTId", "period");
 
     private static final JsonMapper JSON = JsonMapper.builder()
                                                      .build();

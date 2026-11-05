@@ -32,7 +32,7 @@
                @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <svg role="presentation" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></svg><span x-text="$store.reports.widgetLabel(r)"></span>
+                <svg role="presentation" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></svg><span x-text="$store.reports.tileWidgetLabel(r)"></span>
               </div>
             </div>
             <div x-h-card-content>
@@ -88,7 +88,7 @@
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
                   @click="openReport(r)">
-                <svg role="presentation" x-h-lucide data-lucide="chart-column" class="size-4"></svg><span x-text="$store.reports.displayLabel(r)"></span>
+                <svg role="presentation" x-h-lucide data-lucide="chart-column" class="size-4"></svg><span x-text="$store.reports.tileLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"

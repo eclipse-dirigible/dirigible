@@ -2130,6 +2130,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                         filter: "debit > 0"
                         parameters:
                           - { name: fromDay, target: CashVoucher.bookedOn, op: ge, initial: CURRENT_DATE+P1D }
+                      # period: (#8506) - the from/to pair of the default preset's moments, plus the presets
+                      # the report page offers. The seeded vouchers (2026-02) lie outside the last 30 days on
+                      # any run date after 2026-03, so the default window is empty and an explicit one is not.
+                      - name: DebitInPeriod
+                        source: CashVoucherLine
+                        dimensions: [LedgerAccount.code]
+                        measures: ["sum(debit)"]
+                        filter: "debit > 0"
+                        orderBy: [{ field: "sum(debit)", dir: desc }]
+                        period: { target: CashVoucher.bookedOn, default: last30Days, presets: [last30Days, previousMonth, yearToDate] }
 
                     seeds:
                       - name: people
@@ -3914,6 +3924,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String debitInWindowRepository = contentOf("gen/debitinwindow/data/reports/DebitInWindowRepository.java");
         assertTrue(debitInWindowRepository.contains("value(filter, \"toDay\", \"DATE\", moment(\"START_OF_MONTH+P1M-P1D\"))"),
                 "the to-bound must resolve its moment per request: " + debitInWindowRepository);
+
+        // The period's page (#8506): a preset select beside the two dates, the presets with their
+        // moments for the page to resolve, and the window named in the title.
+        String debitInPeriodPage = contentOf("gen/debitinperiod/reports/DebitInPeriod/index.html");
+        assertTrue(debitInPeriodPage.contains("x-model=\"preset\"") && debitInPeriodPage.contains("periodText"),
+                "the period report page must offer the presets and name the window: " + debitInPeriodPage);
+        String debitInPeriodScript = contentOf("gen/debitinperiod/reports/DebitInPeriod/report.js");
+        assertTrue(debitInPeriodScript.contains("previousMonth") && debitInPeriodScript.contains("START_OF_MONTH-P1D"),
+                "the period report script must carry the presets' moments: " + debitInPeriodScript);
+        String debitInPeriodRepository = contentOf("gen/debitinperiod/data/reports/DebitInPeriodRepository.java");
+        assertTrue(debitInPeriodRepository.contains("moment(\"CURRENT_DATE-P29D\")"),
+                "the period's default window must be resolved per request: " + debitInPeriodRepository);
 
         // kind: statement (#6938): the line classification is a generated .view artifact next to the
         // .report - the selectors and labels live THERE, as data the ViewsSynchronizer provisions,
@@ -6460,6 +6482,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("size()", equalTo(0)));
+
+        // period: (#8506), end to end: the default preset's window is the moments' (the last 30 days,
+        // which hold none of the February vouchers), and the two dates the page's presets fill replace it.
+        String debitInPeriod = "/services/java/" + PROJECT + "/gen/debitinperiod/api/reports/DebitInPeriodController";
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(debitInPeriod)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("size()", equalTo(0)));
+        restAssuredExecutor.execute(() -> given().queryParam("fromDate", "2026-02-01")
+                                                 .queryParam("toDate", "2026-02-10")
+                                                 .when()
+                                                 .get(debitInPeriod)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("'Sum Debit'", contains(300.0F, 200.0F, 120.0F)));
 
         // kind: ledger, end to end (#7887): the card of the GROUP 50 over [2026-02-06, 2026-12-31].
         // Before the window the desk took +300 and the bank -120, so the card opens at 180; the five

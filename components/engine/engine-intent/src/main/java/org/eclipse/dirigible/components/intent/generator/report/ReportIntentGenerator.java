@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.OrderByIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.ReportParameterIntent;
+import org.eclipse.dirigible.components.intent.model.ReportPeriodIntent;
 import org.eclipse.dirigible.components.intent.model.StatementLineIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.slf4j.Logger;
@@ -336,7 +337,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         Map<String, Object> entry = new LinkedHashMap<>();
         entry.put("name", name);
         entry.put("label", document.get("label"));
-        for (String key : List.of("description", "dashboard", "chart", "tId", "descriptionTId")) {
+        for (String key : List.of("description", "dashboard", "chart", "tId", "descriptionTId", "period")) {
             if (document.containsKey(key)) {
                 entry.put(key, document.get(key));
             }
@@ -587,6 +588,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         document.put("query", query);
         if (!parameters.isEmpty()) {
             document.put("parameters", parameters);
+        }
+        // The movable window (#8506): its two parameters are already above; the report page reads the
+        // presets to offer them beside the inputs and to name the active window in its title. Not part
+        // of the query model, so the editor round trip is untouched (the editor keeps unknown keys).
+        Map<String, Object> period = period(report);
+        if (period != null) {
+            document.put("period", period);
         }
         // Only when the predicate round-trips: an empty `conditions` used to make the editor emit a
         // bare `WHERE`, and a partial one would have silently dropped the rest of the filter.
@@ -1546,6 +1554,36 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             return "DATE '" + ("<=".equals(operation) ? NEUTRAL_TO_DATE : NEUTRAL_FROM_DATE) + "'";
         }
         return NUMERIC_TYPES.contains(type) ? "0" : "''";
+    }
+
+    /**
+     * The {@code .report}'s {@code period} block (#8506): the names of the two parameters the period
+     * expanded into, the default preset, and each offered preset with the relative moments of its
+     * bounds - what the report page resolves when a preset is chosen. Null without a period.
+     */
+    private static Map<String, Object> period(ReportIntent report) {
+        ReportPeriodIntent period = report.getPeriod();
+        if (period == null || period.getTarget() == null || period.getTarget()
+                                                                  .isBlank()) {
+            return null;
+        }
+        List<Map<String, Object>> presets = new ArrayList<>();
+        for (String name : period.getEffectivePresets()) {
+            ReportPeriodIntent.Window window = ReportPeriodIntent.PRESETS.get(name);
+            if (window != null) {
+                Map<String, Object> preset = new LinkedHashMap<>();
+                preset.put("name", name);
+                preset.put("from", window.from());
+                preset.put("to", window.to());
+                presets.add(preset);
+            }
+        }
+        Map<String, Object> block = new LinkedHashMap<>();
+        block.put("from", period.getFromName());
+        block.put("to", period.getToName());
+        block.put("default", period.getEffectiveDefault());
+        block.put("presets", presets);
+        return block;
     }
 
     private static Map<String, Object> reportParameter(String name, String type, String initial) {
