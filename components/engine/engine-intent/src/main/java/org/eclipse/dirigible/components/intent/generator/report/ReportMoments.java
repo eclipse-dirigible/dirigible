@@ -26,10 +26,16 @@ import java.util.regex.Pattern;
  * <li>any of the above with one signed ISO-8601 date period - {@code CURRENT_DATE-P30D},
  * {@code START_OF_YEAR-P1Y} (the start of last year), {@code CURRENT_DATE+P1M2W} - the notation a
  * {@code schedules[].where} moment already uses (#6764). Years, months, weeks and days only: a
- * report filter compares dates, so a time part ({@code PT1H}) is refused rather than rounded.</li>
+ * report filter compares dates, so a time part ({@code PT1H}) is refused rather than rounded;</li>
+ * <li>a chain of such offsets, applied left to right - {@code START_OF_MONTH+P1M-P1D} is the last
+ * day of the current month, {@code START_OF_QUARTER-P1D} the last day of the previous quarter
+ * (#8506).</li>
  * </ul>
- * The {@code .report} query is a static string with no dialect to switch on, so each moment is
- * emitted as standard SQL verified on both CI databases (H2, PostgreSQL): the period start as
+ * The same moments are a date parameter's {@code initial} (#8506): there the whole value is one
+ * moment ({@link #isMoment}), carried on the {@code .report} in its {@link #canonical} spelling and
+ * resolved by the generated repository on every request - never frozen at generation. The
+ * {@code .report} query is a static string with no dialect to switch on, so each moment is emitted
+ * as standard SQL verified on both CI databases (H2, PostgreSQL): the period start as
  * {@code DATE_TRUNC('YEAR', CURRENT_DATE)}, the offset as {@code INTERVAL 'n' DAY} arithmetic (the
  * form the ageing buckets already use), the whole cast back to a {@code DATE} - {@code DATE_TRUNC}
  * answers a timestamp on PostgreSQL. A bare {@code CURRENT_DATE} is left exactly as written.
@@ -42,16 +48,20 @@ public final class ReportMoments {
             Map.of("START_OF_YEAR", "YEAR", "START_OF_QUARTER", "QUARTER", "START_OF_MONTH", "MONTH");
 
     /**
-     * A moment: the token in group 1, then optionally the sign in group 2 and the period text in group
-     * 3. A {@code START_OF_<word>} of any spelling is matched so a misspelt unit is reported rather
-     * than passed through to the database as an unknown column. The word is matched as
-     * underscore-separated alphanumeric segments, possessively: one way to match any input, so the scan
-     * stays linear however the filter is spelt (the CodeQL polynomial-regex alert on {@code \w+} after
-     * the {@code START_OF_} prefix).
+     * A moment: the token in group 1, then the chain of signed offsets in group 2 (empty when there is
+     * none - see {@link #OFFSET}). A {@code START_OF_<word>} of any spelling is matched so a misspelt
+     * unit is reported rather than passed through to the database as an unknown column. The word is
+     * matched as underscore-separated alphanumeric segments, possessively: one way to match any input,
+     * so the scan stays linear however the filter is spelt (the CodeQL polynomial-regex alert on
+     * {@code \w+} after the {@code START_OF_} prefix). The offsets are possessive for the same reason:
+     * each starts at a sign the previous one cannot consume.
      */
     private static final Pattern MOMENT = Pattern.compile(
-            "(?<![\\w.\"])(CURRENT_DATE|START_OF_[A-Za-z0-9]++(?:_[A-Za-z0-9]++)*+)(?:\\s*+([+-])\\s*+(P[A-Za-z0-9]*+))?(?![\\w.\"])",
+            "(?<![\\w.\"])(CURRENT_DATE|START_OF_[A-Za-z0-9]++(?:_[A-Za-z0-9]++)*+)((?:\\s*+[+-]\\s*+P[A-Za-z0-9]*+)*+)(?![\\w.\"])",
             Pattern.CASE_INSENSITIVE);
+
+    /** One signed offset of a moment's chain: the sign in group 1, the period text in group 2. */
+    private static final Pattern OFFSET = Pattern.compile("\\s*+([+-])\\s*+(P[A-Za-z0-9]*+)", Pattern.CASE_INSENSITIVE);
 
     /**
      * A date period: years, months, weeks, days - at least one, each a non-negative integer of at most
@@ -85,7 +95,7 @@ public final class ReportMoments {
                         + List.of("START_OF_YEAR", "START_OF_QUARTER", "START_OF_MONTH"));
                 continue;
             }
-            if (matcher.group(3) != null && interval(matcher.group(2), matcher.group(3)) == null) {
+            if (offsets(matcher.group(2)) == null) {
                 problems.add("moment [" + matcher.group()
                                                  .trim()
                         + "] has an offset that is not a date period - expected an ISO-8601 period of years, months, weeks"
@@ -110,7 +120,7 @@ public final class ReportMoments {
         StringBuilder result = new StringBuilder(filter.length());
         int last = 0;
         while (matcher.find()) {
-            String sql = sql(matcher.group(1), matcher.group(2), matcher.group(3));
+            String sql = sql(matcher.group(1), matcher.group(2));
             if (sql == null) {
                 continue;
             }
@@ -122,12 +132,42 @@ public final class ReportMoments {
                      .toString();
     }
 
+    /**
+     * Whether a value is exactly one relative moment - what a date parameter's {@code initial} holds
+     * when it is not a fixed date (#8506). Whether its offsets are date periods is {@link #problems}'
+     * to say.
+     *
+     * @param value the value, may be null
+     * @return whether the whole (trimmed) value is one moment
+     */
+    public static boolean isMoment(String value) {
+        return value != null && MOMENT.matcher(value.trim())
+                                      .matches();
+    }
+
+    /**
+     * A moment in its canonical spelling: upper case, no whitespace - {@code current_date - p30d} reads
+     * {@code CURRENT_DATE-P30D}. The generated repository and the report page both resolve this
+     * spelling.
+     *
+     * @param moment a value {@link #isMoment} accepts
+     * @return the canonical spelling
+     */
+    public static String canonical(String moment) {
+        return moment.replaceAll("\\s+", "")
+                     .toUpperCase(Locale.ROOT);
+    }
+
     /** The SQL of one moment, or null when it is left as written. */
-    private static String sql(String token, String sign, String period) {
+    private static String sql(String token, String chain) {
         String upper = token.toUpperCase(Locale.ROOT);
+        String offsets = offsets(chain);
+        if (offsets == null) {
+            return null;
+        }
         String base;
         if ("CURRENT_DATE".equals(upper)) {
-            if (period == null) {
+            if (offsets.isEmpty()) {
                 return null;
             }
             base = "CURRENT_DATE";
@@ -136,11 +176,27 @@ public final class ReportMoments {
         } else {
             return null;
         }
-        if (period == null) {
-            return "CAST(" + base + " AS DATE)";
+        return "CAST(" + base + offsets + " AS DATE)";
+    }
+
+    /**
+     * The {@code  - INTERVAL 'n' UNIT} chain of a moment's offsets, in the authored order - empty for
+     * none, null when one of them is not a date period.
+     */
+    private static String offsets(String chain) {
+        StringBuilder sql = new StringBuilder();
+        if (chain == null || chain.isBlank()) {
+            return "";
         }
-        String interval = interval(sign, period);
-        return interval == null ? null : "CAST(" + base + interval + " AS DATE)";
+        Matcher offset = OFFSET.matcher(chain);
+        while (offset.find()) {
+            String interval = interval(offset.group(1), offset.group(2));
+            if (interval == null) {
+                return null;
+            }
+            sql.append(interval);
+        }
+        return sql.toString();
     }
 
     /** The {@code  - INTERVAL 'n' UNIT} chain of a signed period, or null when it is not one. */
