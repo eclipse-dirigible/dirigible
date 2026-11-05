@@ -218,6 +218,16 @@ public class RelationIntent {
     private boolean partner;
 
     /**
+     * Marks this to-one relation as the record's OWNER on the STANDARD surface (dirigible #8499): the
+     * generated controller's list, count and search narrow to the rows whose FK is the logged-in user's
+     * mapped identity record when the caller asks for {@code ?mine=true}, and the manage list offers an
+     * All / Mine toggle. The controller, its roles and every other surface are unchanged - unlike
+     * {@link #personal}, no extra controller or Personal-shell page is generated. Valid only when the
+     * target declares {@code identity}; at most one per entity.
+     */
+    private boolean owner;
+
+    /**
      * Optional fully-qualified Java class that computes this to-one relation's FK on create - the
      * relation counterpart of {@link FieldIntent#getCalculatedActionOnCreate()}, for a default that
      * must be DERIVED rather than fixed. {@code init:} already covers the fixed case (a literal target
@@ -516,6 +526,14 @@ public class RelationIntent {
 
     public void setPartner(boolean partner) {
         this.partner = partner;
+    }
+
+    public boolean isOwner() {
+        return owner;
+    }
+
+    public void setOwner(boolean owner) {
+        this.owner = owner;
     }
 
     public String getCalculatedActionOnCreate() {

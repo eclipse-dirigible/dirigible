@@ -3536,6 +3536,54 @@ class EdmIntentGeneratorTest {
     }
 
     /**
+     * {@code owner: true} (dirigible #8499) marks the FK the standard list's Mine filter compares with
+     * the caller's identity record: the marker plus the target's identity property, and nothing of the
+     * personal surface. A target without an identity, a second owner, and a relation kind that is no
+     * to-one FK are refused at parse.
+     */
+    @Test
+    void ownerMarksTheStandardListsMineFilter() {
+        String entities = """
+                name: crm
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: Region
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Quotation
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                """;
+        Map<String, Object> owner = propertyByName(entityByName(
+                entities(EdmIntentGenerator.buildModelJsonForTest(
+                        IntentParser.parse(entities + "      - { name: SalesRep, kind: manyToOne, to: Employee, owner: true }\n"), "crm")),
+                "Quotation"), "SalesRep");
+        assertEquals("true", owner.get("relationshipOwner"));
+        assertEquals("Email", owner.get("relationshipIdentityProperty"));
+        assertNull(owner.get("relationshipPersonal"), "owner opens no personal surface");
+
+        assertOwnerRefused(entities + "      - { name: Region, kind: manyToOne, to: Region, owner: true }\n",
+                "relation [Region] declares owner but its target [Region] declares no identity");
+        assertOwnerRefused(entities + "      - { name: SalesRep, kind: manyToOne, to: Employee, owner: true }\n"
+                + "      - { name: Approver, kind: manyToOne, to: Employee, owner: true }\n", "declares 2 owner relations");
+        assertOwnerRefused(entities + "      - { name: Reps, kind: subset, to: Employee, owner: true }\n", "cannot declare [owner]");
+        assertOwnerRefused(entities + "      - { name: Reps, kind: manyToMany, to: Employee, owner: true }\n", "cannot declare [owner]");
+    }
+
+    private static void assertOwnerRefused(String yaml, String fragment) {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(issue -> issue.contains(fragment)),
+                "expected an issue containing [" + fragment + "], got: " + ex.getIssues());
+    }
+
+    /**
      * {@code personalReadOnly: true} on the composition edge a child inherits its personal scope
      * through (dirigible #7340) marks that edge see-only - the child's generated MyController refuses
      * every write and its personal pages offer none - while the master's own personal surface, whose

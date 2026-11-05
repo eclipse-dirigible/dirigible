@@ -437,7 +437,10 @@
       "thisWeek": "This week",
       "thisMonth": "This month",
       "lastMonth": "Last month",
-      "thisYear": "This year"
+      "thisYear": "This year",
+      "whose": "Whose records",
+      "all": "All",
+      "mine": "Mine"
     },
     "warnings": {
       "title": "Please confirm",

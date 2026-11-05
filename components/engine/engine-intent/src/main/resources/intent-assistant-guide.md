@@ -1303,6 +1303,16 @@ scope is what `partner:` adds (a role alone cannot tell one customer's rows from
 entity can carry BOTH `personal:` (staff owner) and `partner:` (external owner) at once. `sensitive:`
 fields are stripped from the partner surface too.
 
+**A "Mine" filter on the standard list (`owner: true`):** a business register whose rows belong to a
+person - a sales rep's quotations, leads and opportunities, a buyer's RFQs, an agent's tickets - marks
+its to-one relation to the identity entity `owner: true` (at most one per entity; the target must
+declare `identity`). The entity's own list then offers an **All / Mine** toggle (All by default), and
+its controller answers `?mine=true` on the list, the count and the search with the caller's rows only -
+an empty list for a user no identity record maps. The controller and its roles are unchanged and no
+personal surface is generated. Use it, not `personal: true`, for a business register: `personal:` is
+employee self-service in the Personal shell (own leave, timesheets, expense claims, payslips) and adds a
+second controller through which the owner writes. The two may sit on the same relation.
+
 **Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java
@@ -1545,7 +1555,7 @@ grid with a dropdown on the declaring entity's page:
 Declare the n:m on **one** side only (declaring it from both sides is refused - it is one link
 table). The target-picker attributes `where` / `show` / `major` / `size` / `leafOnly` are allowed
 and travel onto the link's target relation; `composition`, `function`, `init`, `dependsOn`,
-`calculatedActionOn*`, `personal` and `partner` are refused on a `manyToMany` - they describe a
+`calculatedActionOn*`, `personal`, `partner` and `owner` are refused on a `manyToMany` - they describe a
 hand-authored to-one.
 
 **Link with bridge data - author the entity.** When the link carries its own fields (a quantity, a
@@ -1601,7 +1611,7 @@ filter a to-one accepts), `major` (list-column visibility), `size` is accepted b
 always spans the full row, `description`.
 
 **Rejected on this kind** (each a parse error): `composition`, `init`, `function`, `dependsOn`,
-`through`, `personal`/`partner`, calculated actions, `show`, `leafOnly`, `model:`. A report
+`through`, `personal`/`partner`/`owner`, calculated actions, `show`, `leafOnly`, `model:`. A report
 dimension or filter over a subset relation is rejected too - the stored value is one column, so it
 cannot group, join or compare; and an entity-level `unique:` key cannot span it.
 
@@ -5409,6 +5419,7 @@ or a seeded name.
 | field `fixedAfterCreate` | `true` - a caller-written field (not the key, `generated`, `uuid`, `number:`, `stampOn:`, `readOnly`, derived, `aggregate`, `dependsOn`, a `timestamp`, nor a translatable string of a `multilingual` entity): editable on create, read-only on edit, a changed value in an update answered 409 |
 | field `fixedWhenReferenced` | `true` - a caller-written field (the same refusals as field `fixedAfterCreate`, and not beside it): editable while no record references the row, a changed value in an update answered 409 once one does |
 | relation `fixedWhenReferenced` | `true` - a plain `manyToOne`/`oneToOne` (the same refusals as relation `fixedAfterCreate`, and not beside it): re-pickable while no record references the row, a changed FK in an update answered 409 once one does |
+| relation `owner` | `true` - a `manyToOne`/`oneToOne` to an entity that declares `identity` (at most one per entity): the entity's own list offers All / Mine, and `?mine=true` narrows its list, count and search to the caller's rows (none when no identity record maps the caller) |
 | relation `whenTargetDeleted` | `restrict` (default - the target's delete is answered 409 while this relation still references it), `nullify` (the target is deleted and this relation cleared; not on a required relation), `cascade` (this record is deleted with the target), `keep` (the target is deleted and this relation still names it; cross-model only); plain to-one relations, same-model or cross-model |
 | process `whenDeleted` | `abort` (default - deleting the trigger row cancels the in-flight instance), `refuse` (the REST delete answers 409 while the instance runs); needs an entity trigger |
 | trigger `businessKeyStrategy` | `timestamp` |

@@ -1226,6 +1226,15 @@ final class ModelParameterProcessor {
             entity.put("personalIdentityRepositoryClass", dataPackage + relationshipEntityName + "Repository");
             entity.put("personalReadOnly", truthy(property, "relationshipPersonalReadOnly"));
         }
+        // The standard surface's owner (intent `owner: true`, #8499): the power controller narrows its
+        // list, count and search to this FK on ?mine=true, resolving the caller as the personal surface
+        // does.
+        if (truthy(property, "relationshipOwner") && truthy(property, "relationshipIdentityProperty")) {
+            entity.put("ownerProperty", property.get("name"));
+            entity.put("ownerFkJavaClass", property.get("dataTypeJavaClass"));
+            entity.put("ownerIdentityProperty", property.get("relationshipIdentityProperty"));
+            entity.put("ownerIdentityRepositoryClass", dataPackage + relationshipEntityName + "Repository");
+        }
         if (truthy(property, "relationshipPartner") && truthy(property, "relationshipPartnerIdentityProperty")) {
             entity.put("partnerProperty", property.get("name"));
             entity.put("partnerFkJavaClass", property.get("dataTypeJavaClass"));

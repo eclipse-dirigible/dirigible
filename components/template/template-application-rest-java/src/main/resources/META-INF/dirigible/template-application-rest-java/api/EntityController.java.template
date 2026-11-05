@@ -54,6 +54,9 @@ import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
+#if($ownerProperty)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -67,6 +70,9 @@ import org.eclipse.dirigible.sdk.http.QueryParam;
 #if($reportedOnCreate.size() > 0)
 import org.eclipse.dirigible.sdk.log.Logger;
 import org.eclipse.dirigible.sdk.log.Logging;
+#end
+#if($ownerProperty)
+import org.eclipse.dirigible.sdk.security.User;
 #end
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -98,8 +104,12 @@ public class ${name}Controller {
 #foreach($collectionRepository in $collectionRepositories)
     private final ${collectionRepository.className} ${collectionRepository.field};
 #end
+#if($ownerProperty)
+    /** Resolves the caller's identity record for the Mine list (intent `owner: true`, #8499). */
+    private final ${ownerIdentityRepositoryClass} ownerIdentityRepository;
+#end
 
-    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end#foreach($collectionRepository in $collectionRepositories), ${collectionRepository.className} ${collectionRepository.field}#end) {
+    public ${name}Controller(${name}Repository repository#if($masterLock), ${masterLock.repositoryClass} masterRepository#end#foreach($collectionRepository in $collectionRepositories), ${collectionRepository.className} ${collectionRepository.field}#end#if($ownerProperty), ${ownerIdentityRepositoryClass} ownerIdentityRepository#end) {
         this.repository = repository;
 #if($masterLock)
         this.masterRepository = masterRepository;
@@ -107,18 +117,40 @@ public class ${name}Controller {
 #foreach($collectionRepository in $collectionRepositories)
         this.${collectionRepository.field} = ${collectionRepository.field};
 #end
+#if($ownerProperty)
+        this.ownerIdentityRepository = ownerIdentityRepository;
+#end
     }
 
     @Get
     @Documentation("List ${name}")
     public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
                                       @QueryParam("$offset") Integer offset#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
-                                      @QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}#end) {
+                                      @QueryParam("${masterEntityId}") ${masterEntityIdJavaClass} ${masterEntityId}#end#if($ownerProperty),
+                                      @QueryParam("mine") boolean mine#end) {
 #if($needsRoles)
         checkPermissions("read");
 #end
         int actualLimit = limit != null ? limit.intValue() : 20;
         int actualOffset = offset != null ? offset.intValue() : 0;
+#if($ownerProperty)
+        if (mine) {
+            // The caller's own rows only (intent `owner: true`, #8499): the search with no condition of
+            // its own, so the page, the order and the redaction are the search's.
+            Map<String, Object> filter = new LinkedHashMap<>();
+#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
+            if (${masterEntityId} != null) {
+                filter.put("equals", Map.of("${masterEntityId}", ${masterEntityId}));
+            }
+            // a master's lines are listed whole unless a page is asked for, as below
+            filter.put("$limit", limit == null && ${masterEntityId} != null ? -1 : actualLimit);
+#else
+            filter.put("$limit", actualLimit);
+#end
+            filter.put("$offset", actualOffset);
+            return search(filter, true);
+        }
+#end
 #if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
         List<${name}Entity> result;
         if (${masterEntityId} != null) {
@@ -146,18 +178,29 @@ public class ${name}Controller {
 
     @Get("/count")
     @Documentation("Count ${name}")
-    public Map<String, Long> count() {
+    public Map<String, Long> count(#if($ownerProperty)@QueryParam("mine") boolean mine#end) {
 #if($needsRoles)
         checkPermissions("read");
+#end
+#if($ownerProperty)
+        if (mine) {
+            return countWithFilter(null, true);
+        }
 #end
         return Map.of("count", repository.count());
     }
 
     @Post("/count")
     @Documentation("Count ${name} with filter")
-    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter) {
+    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter#if($ownerProperty), @QueryParam("mine") boolean mine#end) {
 #if($needsRoles)
         checkPermissions("read");
+#end
+#if($ownerProperty)
+        if (mine) {
+            Map<String, Object> own = ownRowsOf(filter);
+            return own == null ? Map.of("count", 0L) : countWithFilter(own, false);
+        }
 #end
         // counted in the database, not by loading every matching row (dirigible #7982)
         Map<String, Object> params = new LinkedHashMap<>();
@@ -167,9 +210,15 @@ public class ${name}Controller {
 
     @Post("/search")
     @Documentation("Search ${name}")
-    public List<${name}Entity> search(@Body Map<String, Object> filter) {
+    public List<${name}Entity> search(@Body Map<String, Object> filter#if($ownerProperty), @QueryParam("mine") boolean mine#end) {
 #if($needsRoles)
         checkPermissions("read");
+#end
+#if($ownerProperty)
+        if (mine) {
+            Map<String, Object> own = ownRowsOf(filter);
+            return own == null ? List.of() : search(own, false);
+        }
 #end
         List<${name}Entity> result = runFilter(filter);
 #if($collectionColumns)
@@ -725,6 +774,42 @@ public class ${name}Controller {
         return false;
     }
 
+#if($ownerProperty)
+    /**
+     * A search body narrowed to the caller's own ${name} (intent `owner: true`, #8499): its equals terms
+     * plus ${ownerProperty} = the caller's identity record. Null when no identity record maps the
+     * caller - their own rows are then none, never all of them.
+     */
+    private Map<String, Object> ownRowsOf(Map<String, Object> filter) {
+        ${ownerFkJavaClass} me = me();
+        if (me == null) {
+            return null;
+        }
+        Map<Object, Object> equals = new LinkedHashMap<>();
+        if (filter != null && filter.get("equals") instanceof Map<?, ?> given) {
+            equals.putAll(given);
+        }
+        equals.put("${ownerProperty}", me);
+        Map<String, Object> own = filter == null ? new LinkedHashMap<>() : new LinkedHashMap<>(filter);
+        own.put("equals", equals);
+        return own;
+    }
+
+    /**
+     * The caller's identity record id: the ${ownerIdentityProperty} matched against the EFFECTIVE
+     * username, exactly as the personal surface resolves it (the acting identity under "act as").
+     * Null when no record maps.
+     */
+    private ${ownerFkJavaClass} me() {
+        String username = User.getEffectiveName();
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+        var matches = ownerIdentityRepository.findAll(Criteria.create().eq("${ownerIdentityProperty}", username));
+        return matches.isEmpty() ? null : matches.get(0).Id;
+    }
+
+#end
     private List<${name}Entity> runFilter(Map<String, Object> filter) {
         Map<String, Object> params = new LinkedHashMap<>();
         StringBuilder hql = new StringBuilder("from ${javaGenFolderName}_${name}Entity e").append(filterWhere(filter, params));

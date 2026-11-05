@@ -702,6 +702,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
+                    putOwner(fkProperty, relation, info.identityProperty(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info));
                     // Draw the FK arrow to the projection the same way a same-model relation draws it: this
@@ -732,6 +733,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putPartner(fkProperty, relation,
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
+                putOwner(fkProperty, relation,
+                        target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()), true);
                 putInheritedPersonalReadOnly(fkProperty, relation, composition);
                 // The target declares a row order (#7727), so this picker lists its options in it
                 // rather than re-sorting them by display text - the default since #7464.
@@ -2799,6 +2802,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.
         p.put("relationshipIdentityLabel",
                 (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
+    }
+
+    /**
+     * Emit the standard-surface owner attributes for a relation that declares {@code owner: true}
+     * (#8499): the generated controller narrows its list, count and search to the caller's own rows on
+     * {@code ?mine=true}, and the manage list offers the All / Mine toggle. {@code relationshipOwner}
+     * plus the {@code relationshipIdentityProperty} {@link #putPersonal} emits too - the same target's
+     * identity field, so a relation carrying both keys carries one value. A resolved cross-model target
+     * without an identity fails loudly; an unresolved one (the unit-test convention fallback) is
+     * skipped.
+     */
+    private static void putOwner(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty, boolean resolved) {
+        if (!relation.isOwner()) {
+            return;
+        }
+        if (targetIdentityProperty == null || targetIdentityProperty.isBlank()) {
+            if (resolved) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName()
+                        + "] declares owner but its target [" + relation.getTo() + "] declares no identity"));
+            }
+            return;
+        }
+        p.put("relationshipOwner", "true");
+        p.put("relationshipIdentityProperty", targetIdentityProperty);
     }
 
     /**
