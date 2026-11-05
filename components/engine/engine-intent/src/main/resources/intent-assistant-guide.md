@@ -1094,7 +1094,9 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   sets the issued status (`setRelationField` on the status), with only service tasks between them, so
   a posting sees the real number. The stamp then checks that status's gated `checks:`, its lifecycle
   edge and its capacity guards before it allocates (#7577), so a refused Issue answers 400 and spends
-  no number of the series.
+  no number of the series. A document issued by a `transitions:` button instead of a process step
+  declares `stamp: number` on that transition (see § transitions) - never `stampOn: create` for it,
+  which numbers every draft, including the ones later deleted.
 
 The removed keys `format`, `scope` and `resetOn` are REJECTED at parse time - shape lives in
 `.numbers` + settings, partitioning is `per:`, and there is no auto-reset. Prefer `number:` over a
@@ -2639,6 +2641,19 @@ second controller, `<ClassName>TransitionMy`: it resolves the caller's identity 
 entity's personal controller does (**403** with no identity mapped), answers **404** for a record that
 is not the caller's - before the `from:`/`when:` guards - and then writes exactly as the power run
 does. The power controller and pages are unchanged; without `personal: true` the owner has no button.
+
+`stamp: number` makes the transition the document's Issue: the entity's `number: { stampOn: issue }`
+is drawn and written in the SAME targeted write as `setStatus`, so a draft holds no number and a
+deleted draft leaves no gap in the series. The move is checked first (its lifecycle edge and the
+`checks:` gated on `setStatus`), so a refused Issue answers **400** and spends no number; a document
+already numbered keeps its number. Only the transition that declares it stamps - a Cancel from the
+same draft does not. Refused at parse when the entity has no `stampOn: issue` number.
+
+```yaml
+transitions:
+  - { name: IssueProtocol,  forEntity: Protocol, from: [DRAFT], setStatus: ISSUED, stamp: number }
+  - { name: CancelProtocol, forEntity: Protocol, from: [DRAFT], setStatus: CANCELLED }
+```
 
 ### generates - create one document from another (create-from)
 
@@ -4603,7 +4618,7 @@ so before binding a reaction, check what the thing you care about publishes.
 |---|---|---|
 | A person creating / editing / deleting a record (app or REST) | create / `-updated` / `-deleted` | `onCreate` / `onUpdate` / `onDelete` |
 | Fields a reviewer edited in a task form (`editable:`) | `-updated` | `onUpdate` |
-| `number: { stampOn: issue }` stamping the document number | `-updated` | `onUpdate` |
+| `number: { stampOn: issue }` stamping the document number (a process's stamp step) | `-updated` | `onUpdate` |
 | A maintained roll-up / aggregate / keyed total | `-updated` | `onUpdate` |
 | `setField` / `clearField` / `setRelationField` on a step | `-transitioned` | `postings:`, `generates` `event: { onTransition }`, `abortOn:` |
 | A `transitions:` button (void / cancel / reopen) | `-transitioned` | the same three |
@@ -5437,6 +5452,7 @@ or a seeded name.
 | rollup `op` | `count` (default), `sum`, `latest` (needs `of` + `by`) |
 | expansion `unit` | `day`, `week`, `month` |
 | transition `when` op | `==`, `!=` |
+| transition `stamp` | `number` - the entity's `stampOn: issue` number, drawn in the move's own write |
 | resolve `event` | `onCreate`, `onUpdate` (never `onDelete`); `when` is `<Field> ==\|!= <value>` |
 | resolve `between` field type | `date`, `timestamp` |
 | resolve `outcome` values | `found`, `notFound`, `ambiguous`, plus `<outcome>-notRouted` when a `setStatus` route is rejected (stamped into a `string` field) |

@@ -124,4 +124,48 @@ class GlueTransitionsTest {
         assertFalse(power.containsKey("personal"), power.toString());
         assertFalse(power.containsKey("personalFkProperty"), power.toString());
     }
+
+    /**
+     * A move declaring {@code stamp: number} (#8493) carries the coordinates of the number it issues -
+     * the series and the partition, with the partition relation's {@code init:} fallback - exactly as
+     * the NumberStamp delegate's descriptor does; a move without it carries none.
+     */
+    @Test
+    void aStampingTransitionCarriesTheNumberItIssues() {
+        IntentModel model = IntentParser.parse("""
+                name: protocols
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: ProtocolStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Protocol
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, number: { series: VAT Protocol, per: Company, stampOn: issue } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, init: 1 }
+                      - { name: Status, kind: manyToOne, to: ProtocolStatus, function: EntityStatus, init: 1 }
+                transitions:
+                  - { name: IssueProtocol, forEntity: Protocol, from: [1], setStatus: 2, stamp: number }
+                  - { name: CancelProtocol, forEntity: Protocol, from: [1], setStatus: 3 }
+                seeds:
+                  - name: companies
+                    entity: Company
+                    rows:
+                      - { id: 1, name: Acme }
+                """);
+        List<Map<String, Object>> transitions = GlueIntentGenerator.buildTransitionsForTest(model);
+
+        assertEquals(List.of(Map.of("field", "Number", "series", "VAT Protocol", "per", "Company", "perDefault", "1")), transitions.get(0)
+                                                                                                                                   .get("stampNumbers"));
+        assertFalse(transitions.get(1)
+                               .containsKey("stampNumbers"),
+                "only the move that declares the stamp issues the number");
+    }
 }
