@@ -57,6 +57,13 @@ about to do; run each step as a separate, visible tool call; surface the key res
    match, then `gh pr create --base master --title "<commit subject>" --body "<cause / change /
    verification> ... Fixes #NNNN"`.
 
-8. **Report.** The PR URL, the branch and worktree path, what was verified and what was not, and the
+7a. **Docs, when the change touches the intent DSL** (a key in `IntentParser` / an `*Intent` class, a
+   refusal or default the generated application makes, `intent-dsl-features.md`, the assistant
+   guide — whatever the issue was titled): open the spec proposal PR in `IntentFile/intent-specification`
+   (`proposals/NNNN-<slug>.md`, `Closes #<issue>`, never `versions/`), the `IntentFile/intentfile.github.io`
+   page and the `dirigible-io/dirigible-io.github.io` page, per `components/engine/engine-intent/CLAUDE.md`
+   "Documentation sync", and add their URLs to the platform PR body. A spec issue alone is not this step.
+
+8. **Report.** The PR URL, the doc PR URLs, the branch and worktree path, what was verified and what was not, and the
    cleanup to run after the merge (`git worktree remove ../wt-NNNN`, `git branch -d`,
    `rm -rf ~/.m2/repo-wt-NNNN`).

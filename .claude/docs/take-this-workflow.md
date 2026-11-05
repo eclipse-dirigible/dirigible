@@ -21,7 +21,9 @@ Then say what blocks, what you did instead, and where the branch is.
 6. commit                  plain `git commit` - identity from git config, never set by hand
 7. push                    git push -u origin issue-NNNN-<slug>
 8. PR                      gh pr create --fill-first --body "... Fixes #NNNN ..."
-9. report                  the PR URL, what was verified, what was not
+8a. docs (DSL change)      a change to the intent DSL also opens the spec PROPOSAL PR, the site PR and the
+                           dirigible.io PR (see "A DSL change carries its three doc PRs"); the platform PR body links them
+9. report                  the PR URL, the doc PR URLs, what was verified, what was not
 10. clean up               after the PR merges: git worktree remove, delete the .m2 clone
 ```
 
@@ -122,6 +124,18 @@ Never `mvn install` while an IT run is in progress in any worktree (`pgrep -fl m
   must match.
 - `gh pr create` against `master` with a body that explains the cause, the change, how it was verified,
   and ends with `Fixes #NNNN`. Report the PR URL.
+
+### A DSL change carries its three doc PRs
+
+A change is a DSL change by what it touches, not by how its issue is titled: a key added to or changed
+in `IntentParser` / an `*Intent` class, a refusal or a default the generated application now makes, an
+edit to `.claude/docs/intent-dsl-features.md` or to the assistant guide. Such a change is not done at
+the platform PR: `components/engine/engine-intent/CLAUDE.md` ("Documentation sync") names the three
+repositories, and the first of them is **proposal-first** — a `proposals/NNNN-<slug>.md` PR in
+`IntentFile/intent-specification` with `Closes #<issue>`, never an edit to `versions/`, and never only
+an issue. The chain's step 8a is where they are opened, in the same session, and the platform PR body
+lists their URLs. The 2026-11-04 audit (intent-specification #138-#166) is what a month of skipping
+this step costs.
 
 ### Cleanup
 
