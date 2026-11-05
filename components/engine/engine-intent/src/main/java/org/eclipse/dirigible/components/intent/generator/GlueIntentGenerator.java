@@ -2899,6 +2899,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardValue", guardValue);
             e.put("heldStatusValues", heldStatusValues(guardProperty, guardValue, sourceStatusProperty,
                     sourceStages.getOrDefault(LifecycleStages.LIVE, List.of())));
+            // The event decides whether to post, read off its payload (#8505) - but a source WITHDRAWN
+            // before the listener ran (its status now classified cancelled or void) is the reversal's to
+            // answer for, as the reopen sweep holds (#8243). Not for a reversal: withdrawing the source
+            // is usually its very moment.
+            List<Integer> withdrawn = new ArrayList<>(sourceStages.getOrDefault(LifecycleStages.CANCELLED, List.of()));
+            withdrawn.addAll(sourceStages.getOrDefault(LifecycleStages.VOID, List.of()));
+            boolean vetoesWithdrawn = !isReverse && sourceStatusProperty != null && !withdrawn.isEmpty();
+            e.put("sourceStatusProperty", vetoesWithdrawn ? sourceStatusProperty : "");
+            e.put("withdrawnStatusValues", vetoesWithdrawn ? String.join(",", withdrawn.stream()
+                                                                                       .map(String::valueOf)
+                                                                                       .toList())
+                    : "");
+            // The source properties the derivation reads (#8504): a derived write that moved none of them
+            // is not an edit of anything the post says, and the follower skips it.
+            e.put("derivationReads", derivationReads(guardProperty, effective.getMap(), effective.getItems(), itemsEntity));
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
@@ -3126,6 +3141,64 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
         }
         return out;
+    }
+
+    /**
+     * The source properties a posting's derivation reads (#8504): its event guard, the properties its
+     * {@code map:} copies or interpolates, and every property an {@code items:} cell or row
+     * {@code when:} names - a rule selector's {@code by:} classifier and a copied foreign key included,
+     * a plain {@code rule(<column>)} reference (a column of the rule row) not. A derived write that
+     * touched none of them cannot change what the post says, which is what lets the follower tell it
+     * from an edit. Over-inclusion only makes the follower act on a recompute it could have skipped, so
+     * a quoted literal is dropped and every other identifier of an expression is kept.
+     *
+     * @param guardProperty the event guard's property, empty when the posting has none
+     * @param map the header assignments as authored, may be null
+     * @param items the item rows as authored, may be null
+     * @param itemsEntity the items entity, which tells a copied foreign key from an expression
+     * @return the PascalCase source properties, in first-read order
+     */
+    private static List<String> derivationReads(String guardProperty, Map<String, String> map, List<Map<String, String>> items,
+            EntityIntent itemsEntity) {
+        java.util.Set<String> reads = new java.util.LinkedHashSet<>();
+        if (!guardProperty.isEmpty()) {
+            reads.add(guardProperty);
+        }
+        for (String value : map == null ? List.<String>of() : map.values()) {
+            String v = value == null ? "" : value.trim();
+            if (v.matches("\\w+") && !v.matches("\\d+")) {
+                reads.add(IntentNaming.pascalCase(v));
+            } else if (v.contains("{")) {
+                java.util.regex.Matcher placeholder = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                                             .matcher(v);
+                while (placeholder.find()) {
+                    reads.add(IntentNaming.pascalCase(placeholder.group(1)));
+                }
+            }
+        }
+        for (Map<String, String> row : items == null ? List.<Map<String, String>>of() : items) {
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                java.util.Optional<PostingRuleSelector> selector = PostingRuleSelector.parse(value);
+                if (selector.isPresent()) {
+                    reads.add(IntentNaming.pascalCase(selector.get()
+                                                              .by()));
+                } else if (value.matches("rule\\(\\w+\\)")) {
+                    continue; // a column of the rule row, not of the source
+                } else if (!"when".equals(cell.getKey()) && toOneRelation(itemsEntity, cell.getKey()) != null) {
+                    reads.add(IntentNaming.pascalCase(value));
+                } else {
+                    java.util.regex.Matcher identifier = java.util.regex.Pattern.compile("[A-Za-z_]\\w*")
+                                                                                .matcher(value.replaceAll("\"[^\"]*\"|'[^']*'", " "));
+                    while (identifier.find()) {
+                        reads.add(IntentNaming.pascalCase(identifier.group()));
+                    }
+                }
+            }
+        }
+        return new ArrayList<>(reads);
     }
 
     /**
