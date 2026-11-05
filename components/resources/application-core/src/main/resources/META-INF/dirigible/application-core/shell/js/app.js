@@ -411,9 +411,12 @@ App.listColumns = {
   },
 
   // Tooltip only while the value is actually cut; the cell (or a header's label) is what truncates.
+  // The row-actions cell holds no value, and an open menu inside a cell is measured with it: either
+  // would put the menu's items on the cell as a native title, a second menu under the real one (#8432).
   tooltip(event) {
-    const cell = event.target.closest && event.target.closest('td, th');
-    if (!cell) return;
+    if (!event.target.closest || event.target.closest('[role="menu"]')) return;
+    const cell = event.target.closest('td, th');
+    if (!cell || cell.hasAttribute('data-row-actions')) return;
     const label = cell.tagName === 'TH' ? cell.querySelector('[data-col-label], span') : null;
     const target = label || cell;
     const cut = this.isCut(target);
