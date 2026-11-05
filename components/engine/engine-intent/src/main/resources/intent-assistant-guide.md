@@ -4281,8 +4281,11 @@ the parent and its other children are still created; any other failure still rol
               onRefused: skip             # a day the allocation refuses (before the hire date, over 24 h) is left out
 ```
 
-- The hop needs a forEach entity of THIS model; a cross-model collection (`forEach.model:`) filters on
-  its own fields only. A `days` child has no row to filter and takes no `where:`.
+- A cross-model collection (`forEach: { entity, model, match }`) takes `where:` too, a hop included -
+  even into a third model (the projects model's assignment -> the employees model's employee). A
+  `days` child has no row to filter and takes no `where:`.
+- A status may be named on a collection of this model, as in `schedules[].where`; through a hop or on
+  a cross-model collection, give its numeric seed id.
 - `onRefused` is per children entry, and `skip` is its only value. A refused child takes its own
   children with it unless they declare their own `onRefused: skip`.
 - The parent's totals count only the children that were created: a roll-up or a document total never

@@ -2178,9 +2178,9 @@ public final class IntentParser {
      * The row rule of an {@code entity} child (#8491): the {@code schedules[].where} triples, checked
      * by the same validators, over a field of the collection row or ONE relation hop
      * ({@code Employee.active}) - the hop is pushed into the row query as an {@code in} over the
-     * relation's foreign key, so it needs a relation the generator can see. A cross-model collection's
-     * relations are known only to its owner model, so it takes its own fields only, and those are
-     * checked where the owner's {@code .model} is read.
+     * relation's foreign key. A cross-model collection's fields and relations, and a cross-model hop
+     * target's fields, belong to their owner models: they are checked where the owners' {@code .model}
+     * files are read, at generation.
      */
     private static void validateGenerateChildWhere(GenerateChildIntent child, String subject, EntityIntent collection,
             boolean crossModelCollection, Map<String, EntityIntent> byName, List<String> issues) {
@@ -2206,8 +2206,8 @@ public final class IntentParser {
             ScheduleConditionIntent own = condition;
             if (path.length == 2) {
                 if (crossModelCollection) {
-                    issues.add(subject + " where-condition [" + field + "] hops through a relation of a cross-model forEach entity,"
-                            + " whose relations are known only to its owner model - filter on its own fields");
+                    // Its relations - and the model their targets live in - are in its owner's .model,
+                    // read at generation; the operator check above is all that can be said here.
                     continue;
                 }
                 RelationIntent relation = collection == null ? null : toOneRelationByName(collection, path[0]);

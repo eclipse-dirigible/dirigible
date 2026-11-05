@@ -534,10 +534,35 @@ final class StatusSymbolResolver {
     private void rewriteSchedules(Map<?, ?> root) {
         for (Object node : asList(root.get("schedules"))) {
             Map<?, ?> schedule = asMap(node);
-            if (schedule == null || text(schedule, "model") != null) {
+            if (schedule == null) {
+                continue;
+            }
+            Map<?, ?> generate = asMap(schedule.get("generate"));
+            rewriteChildren(generate == null ? null : generate.get("children"), "schedule [" + text(schedule, "name") + "]");
+            if (text(schedule, "model") != null) {
                 continue;
             }
             rewriteConditions(schedule.get("where"), text(schedule, "entity"), "schedule [" + text(schedule, "name") + "] where");
+        }
+    }
+
+    /**
+     * A generation child's row rule (#8491) - the same triples on the collection row, so a status or
+     * another seeded relation is named the same way. A LOCAL collection only, for the reason the
+     * schedule's own query is: a collection another model owns has its seeds there. A hop reads its
+     * target's column, not one of the collection's relations, and is left as written.
+     */
+    private void rewriteChildren(Object children, String subject) {
+        for (Object node : asList(children)) {
+            Map<?, ?> child = asMap(node);
+            Map<?, ?> forEach = asMap(child == null ? null : child.get("forEach"));
+            if (forEach == null) {
+                continue;
+            }
+            if (text(forEach, "model") == null && text(forEach, "entity") != null) {
+                rewriteConditions(child.get("where"), text(forEach, "entity"), subject + " child [" + text(child, "to") + "] where");
+            }
+            rewriteChildren(child.get("children"), subject);
         }
     }
 

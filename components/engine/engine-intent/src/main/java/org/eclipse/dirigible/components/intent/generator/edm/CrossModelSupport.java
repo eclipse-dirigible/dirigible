@@ -354,6 +354,55 @@ public final class CrossModelSupport {
     }
 
     /**
+     * Where an entity named in a {@code uses:} model's {@code .model} really lives (dirigible #8491):
+     * that model itself, or - when it carries the entity as a PROJECTION of a third model - the model
+     * the projection names. It is what a reader of a cross-model entity's to-one needs: the projects
+     * model's {@code EmployeeProjectAssignment.Employee} points at an {@code Employee} the employees
+     * model owns, and only the owner generates its repository and knows its fields. Read from the same
+     * two sources as {@link #resolve}; without a repository (a unit test) the model itself is the
+     * answer.
+     *
+     * @param context the generation context
+     * @param uses the {@code uses:} entry naming the model that mentions the entity
+     * @param entity the entity's name in that model
+     * @return a {@code uses:} entry addressing the entity's owner - {@code uses} itself unless the
+     *         entity is a projection there
+     */
+    @SuppressWarnings("unchecked")
+    public static UsesIntent ownerOf(IntentGenerationContext context, UsesIntent uses, String entity) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return uses;
+        }
+        for (String path : new String[] {siblingModelPath(context.getProjectRoot(), uses.resolveProject(), uses.getModel()),
+                registryModelPath(uses)}) {
+            IResource resource = path == null ? null
+                    : context.getRepository()
+                             .getResource(path);
+            if (resource == null || !resource.exists()) {
+                continue;
+            }
+            Map<String, Object> body =
+                    (Map<String, Object>) GSON.fromJson(new String(resource.getContent(), StandardCharsets.UTF_8), Map.class)
+                                              .get("model");
+            List<Map<String, Object>> entities = body == null ? List.of() : (List<Map<String, Object>>) body.get("entities");
+            for (Map<String, Object> candidate : entities == null ? List.<Map<String, Object>>of() : entities) {
+                java.util.regex.Matcher owner = MODEL_PATH.matcher(str(candidate.get("projectionReferencedModel"), ""));
+                if (entity.equals(candidate.get("name")) && "PROJECTION".equals(candidate.get("type")) && owner.matches()) {
+                    UsesIntent projected = new UsesIntent();
+                    projected.setProject(owner.group(1));
+                    projected.setModel(owner.group(2));
+                    return projected;
+                }
+            }
+            return uses;
+        }
+        return uses;
+    }
+
+    /** A projection's {@code projectionReferencedModel}: {@code /<project>/<model>.model}. */
+    private static final java.util.regex.Pattern MODEL_PATH = java.util.regex.Pattern.compile("/([^/]+)/([^/]+)\\.model");
+
+    /**
      * Stamps {@code referencedModel} on every relation property whose own target is a PROJECTION of the
      * owner model - i.e. an entity of a THIRD model. Without it a consumer would resolve that column's
      * label lookup against the source's project and hit a controller that does not exist there.

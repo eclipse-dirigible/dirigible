@@ -329,11 +329,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("forEachEntity", collection);
                 entry.put("forEachCrossModel", forEachCrossModel);
                 entry.put("forEachModel", forEachCrossModel ? String.valueOf(forEachModelObj) : "");
+                UsesIntent collectionUses = forEachCrossModel ? findUses(model, String.valueOf(forEachModelObj)) : null;
                 if (forEachCrossModel) {
                     // The collection lives in another model; its perspective comes from the owner's
                     // .model (already validated resolvable in firstUnresolvableScheduleRef, so this
                     // resolve does not fail for a schedule that reached here).
-                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModelObj));
                     CrossModelSupport.TargetInfo collectionTarget =
                             collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
                     entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
@@ -349,8 +349,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 if (child.getWhere() != null && !child.getWhere()
                                                       .isEmpty()) {
-                    putChildWhere(entry, child, forEachCrossModel ? null : byName.get(collection), model, byName, compositionParents,
-                            context);
+                    putChildWhere(entry, child, collection, collectionUses, model, byName, compositionParents, context);
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
@@ -388,9 +387,18 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * The job narrows the rows to those whose foreign key is among the target rows the clauses select,
      * so the {@code schedules[].where} reading and rendering serve both halves and nothing is compared
      * in generated code.
+     *
+     * <p>
+     * A local collection's relations are read off the intent by the notify {@code Resolver}, which also
+     * resolves a target another model owns. A cross-model collection ({@code collectionUses}) is read
+     * off its owner's {@code .model}: its fields, the entity each to-one points at, and - through
+     * {@link CrossModelSupport#ownerOf} - the model that really owns that entity when the owner carries
+     * it as a projection of a third model (the projects model's assignment pointing at the employees
+     * model's employee). A field or relation that does not resolve fails the generation, naming it.
      */
-    private static void putChildWhere(Map<String, Object> entry, GenerateChildIntent child, EntityIntent collection, IntentModel model,
-            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {
+    private static void putChildWhere(Map<String, Object> entry, GenerateChildIntent child, String collectionName,
+            UsesIntent collectionUses, IntentModel model, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
+            IntentGenerationContext context) {
         List<ScheduleConditionIntent> own = new ArrayList<>();
         Map<String, List<ScheduleConditionIntent>> byRelation = new LinkedHashMap<>();
         for (ScheduleConditionIntent condition : child.getWhere()) {
@@ -410,12 +418,41 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     ignored -> new ArrayList<>())
                       .add(onTarget);
         }
+        CrossModelSupport.TargetInfo collectionTarget =
+                collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collectionName);
+        if (collectionTarget != null) {
+            requireOwnerProperties(child, collectionName, collectionTarget, own);
+        }
         entry.put("criteria", ScheduleSupport.conditions(own));
         if (byRelation.isEmpty()) {
             return;
         }
         List<Map<String, Object>> hops = new ArrayList<>();
         entry.put("hops", hops);
+        if (collectionTarget != null) {
+            for (Map.Entry<String, List<ScheduleConditionIntent>> relation : byRelation.entrySet()) {
+                String fk = IntentNaming.pascalCase(relation.getKey());
+                String targetEntity = collectionTarget.propertyRelations() == null ? null
+                        : collectionTarget.propertyRelations()
+                                          .get(fk);
+                if (targetEntity == null) {
+                    throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition ["
+                            + relation.getKey() + ".*] names no to-one relation of [" + collectionName + "] in model ["
+                            + collectionUses.getModel() + "]"));
+                }
+                UsesIntent owner = CrossModelSupport.ownerOf(context, collectionUses, targetEntity);
+                CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, owner, targetEntity);
+                requireOwnerProperties(child, targetEntity, target, relation.getValue());
+                Map<String, Object> hop = NotificationSupport.loadFields(List.of(new NotificationSupport.RelationLoad(relation.getKey(),
+                        targetEntity, target.perspectiveName(), fk, true, owner.getModel(), owner.resolveProject())))
+                                                             .get(0);
+                hop.put("targetPk", target.keyField());
+                hop.put("criteria", ScheduleSupport.conditions(relation.getValue()));
+                hops.add(hop);
+            }
+            return;
+        }
+        EntityIntent collection = byName.get(collectionName);
         NotificationSupport.Resolver resolver = collection == null ? null
                 : NotificationSupport.resolver(collection, byName, compositionParents, crossModelLookup(model, context));
         for (ScheduleConditionIntent condition : child.getWhere()) {
@@ -435,6 +472,21 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     : IntentEntities.keyFieldName(byName.get(load.targetEntity())));
             hop.put("criteria", ScheduleSupport.conditions(byRelation.get(load.local())));
             hops.add(hop);
+        }
+    }
+
+    /**
+     * A children row rule read against an entity another model owns: every field must be one of the
+     * owner's properties, or the query would name a column the generated repository does not have and
+     * fail on every tick. The owner model was not resolved (no property list) - trusted as authored.
+     */
+    private static void requireOwnerProperties(GenerateChildIntent child, String entity, CrossModelSupport.TargetInfo owner,
+            List<ScheduleConditionIntent> conditions) {
+        for (ScheduleConditionIntent condition : conditions) {
+            if (owner.propertyNames() != null && isMissing(owner.propertyNames(), condition.getField())) {
+                throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition reads ["
+                        + condition.getField() + "], which is not a property of [" + entity + "] in its owner model"));
+            }
         }
     }
 
@@ -5506,7 +5558,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             }
                             for (ScheduleConditionIntent condition : child.getWhere() == null ? List.<ScheduleConditionIntent>of()
                                     : child.getWhere()) {
-                                if (isMissing(collectionProps, condition.getField())) {
+                                // A hop is checked against its own target by putChildWhere; here only the
+                                // relation it goes through is the collection's.
+                                String head = condition.getField()
+                                                       .split("\\.")[0];
+                                if (isMissing(collectionProps, head)) {
                                     return "generate child where field [" + condition.getField() + "]";
                                 }
                             }
