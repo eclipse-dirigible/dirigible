@@ -65,6 +65,8 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.graalvm.polyglot.Context;
+import org.hamcrest.CustomMatcher;
+import org.hamcrest.Matcher;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -3341,7 +3343,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(2))
                                                  .body("Party", everyItem(equalTo(twin)))
-                                                 .body("Count", everyItem(equalTo(1.0F)))
+                                                 .body("Count", everyItem(equalTo(1)))
                                                  .body("[0].size()", equalTo(2)),
                 30);
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -3357,7 +3359,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(report + "/sum")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("sum", equalTo(2.0F)));
+                                                 .body("sum", equalTo(2)));
         // The key is no column of the rows, so it is no filter either.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"conditions\":[{\"column\":\"Party Id\",\"operator\":\"EQ\",\"value\":1}]}")
@@ -3365,6 +3367,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(report + "/search")
                                                  .then()
                                                  .statusCode(400));
+    }
+
+    /**
+     * A JSON number of the value at any scale. A report serves a number as its database answers it
+     * (#8487), and a sum of nothing but {@code ELSE 0} is 0.00 on H2 but 0 on PostgreSQL.
+     */
+    private static Matcher<Object> numberOf(String value) {
+        return new CustomMatcher<>("a number equal to " + value) {
+            @Override
+            public boolean matches(Object actual) {
+                return actual instanceof Number number && new BigDecimal(number.toString()).compareTo(new BigDecimal(value)) == 0;
+            }
+        };
     }
 
     /** POSTs a record to a generated controller and answers its generated id. */
@@ -6248,10 +6263,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Unit", equalTo("Брой"))
-                                                 // The report backend answers generic JSON, so every
-                                                 // number comes back as a float - the group is both
-                                                 // claim rows, so the join did not multiply them.
-                                                 .body("[0].Count", equalTo(2.0F)),
+                                                 // The group is both claim rows, so the join did not
+                                                 // multiply them.
+                                                 .body("[0].Count", equalTo(2)),
                 30);
         // The fallback half: no translation for the caller's language leaves the base value - which
         // is what makes the join LEFT and the column a COALESCE rather than a plain translated read.
@@ -6272,7 +6286,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get(REPORT_API + "/ClaimsByUnitController?note=mine")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("[0].Count", equalTo(1.0F)));
+                                                 .body("[0].Count", equalTo(1)));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(REPORT_API + "/ClaimsByUnitController?minTotal=1000")
                                                  .then()
@@ -6290,9 +6304,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(REPORT_API + "/ClaimsByUnitController/sum")
                                                  .then()
                                                  .statusCode(200)
-                                                 // Generic report JSON, so the number is a float here -
-                                                 // the tile formats it through the column's pattern.
-                                                 .body("sum", equalTo(2.0F)));
+                                                 .body("sum", equalTo(2)));
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(REPORT_API + "/ClaimsByUnitController/count")
                                                  .then()
@@ -6351,7 +6363,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("[0].Code", equalTo("CASH"))
                                                  .body("[0].Amount", equalTo(60.0F))
                                                  .body("[1].Code", equalTo("MISS"))
-                                                 .body("[1].Amount", equalTo(0.0F))
+                                                 .body("[1].Amount", numberOf("0"))
                                                  .body("[2].Code", equalTo("TOTAL"))
                                                  .body("[2].Amount", equalTo(60.0F)));
 
@@ -6381,7 +6393,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(60.0F))
-                                                 .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(0.0F))
+                                                 .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", numberOf("0"))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
         restAssuredExecutor.execute(() -> given().queryParam("asOf", "2026-01-10")
                                                  .when()
@@ -6390,7 +6402,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("find { it.'Account Name' == 'Vault' }.'Overdue 0-30'", equalTo(100.0F))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Not Yet Due'", equalTo(-40.0F))
-                                                 .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", equalTo(0.0F))
+                                                 .body("find { it.'Account Name' == 'Vault' }.'Overdue 90+'", numberOf("0"))
                                                  .body("find { it.'Account Name' == 'Vault' }.'Open Amount'", equalTo(60.0F)));
 
         // orderBy + relative moments, end to end (#8435). The debit turnover per account is 1050 (5030),
