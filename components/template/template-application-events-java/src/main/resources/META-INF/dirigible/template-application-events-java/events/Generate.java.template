@@ -96,13 +96,28 @@ import org.eclipse.dirigible.sdk.http.Response;
  * the other.
 #end
 #end
+#if($hasReportItems)
+ *
+ * Lines read from a report (intent `items: fromReport:` - issue #8329): the ${reportName} report is run
+ * with the ${fromEntity}'s values as its parameters, and every result row passing the row rule becomes a
+ * ${toItemEntity} line, its cells read off the row's columns - an amount as the exact decimal its field
+ * holds, refused rather than rounded. Rows sharing the counter cells other than the amounts share ONE
+ * counter line carrying the sum of their amounts. The report reads what is committed on its own
+ * connection, so it books the balances as they stand when the run starts.
+ * A second run is refused with 409 while a live ${toEntity} back-references the ${fromEntity} through
+ * ${backRefProperty}; the ${fromEntity} is locked first, so two concurrent clicks cannot both pass.
+#if($hasUndo)
+ * The undo endpoint books the ${toEntity}'s declared reversal (${undoReversalClass}) against that live
+ * document - which retires it once the reversal is posted, and frees the ${fromEntity} for another run.
+#end
+#end
  */
 #if(!$eventOnly)
 @Controller
 @Component("${javaGenFolderName}_${className}Generate")
 #end
 public class ${className}Generate {
-#if($hasRefusals)
+#if($hasRefusals || $hasReportItems)
 
     /** A declared refusal held under the original's row lock - answered with 409 and its message. */
     static final class Refused extends RuntimeException {
@@ -164,7 +179,7 @@ public class ${className}Generate {
             return "{\"error\": \"${name} ${guardStatusText} - current status is [" + currentStatus + "]\"}";
         }
 #end
-#if($hasRefusals)
+#if($hasRefusals || $hasReportItems)
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved;
         try {
             saved = create(req.id#if($hasPrompt), req.values#end);
@@ -182,6 +197,37 @@ public class ${className}Generate {
         }
         return Json.stringify(saved);
     }
+#if($hasUndo)
+
+    /**
+     * Undoes what a run generated from the ${fromEntity} (intent `undo: reverse` - issue #8329): the
+     * reversal of its live ${toEntity}, booked through the ${toEntity}'s own declared reversal. Gated as
+     * run() is - the undo writes what the run wrote.
+     */
+    @Post("/undo")
+    public String undo(@Body Request req) {
+        if (!isInAnyRole("${sourceWriteRolesJavaLiteral}") || !isInAnyRole("${targetWriteRolesJavaLiteral}")) {
+            Response.setStatus(403);
+            return "{\"error\": \"forbidden\"}";
+        }
+        if (req == null || req.id == null) {
+            Response.setStatus(400);
+            return "{\"error\": \"missing source id\"}";
+        }
+        java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> reversals;
+        try {
+            reversals = undo(req.id);
+        } catch (Refused refused) {
+            Response.setStatus(409);
+            return Json.stringify(java.util.Map.of("error", refused.getMessage()));
+        }
+        if (reversals == null) {
+            Response.setStatus(404);
+            return "{\"error\": \"source ${fromEntity} not found\"}";
+        }
+        return Json.stringify(reversals);
+    }
+#end
 
     /** Whether the caller holds ANY role of a comma-separated gate; an empty gate admits nobody. */
     private static boolean isInAnyRole(String roles) {
@@ -213,10 +259,11 @@ public class ${className}Generate {
         // database rolled back to break a deadlock is run once more instead of answering 409 (#8341).
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity result =
                 org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
-    #if($hasRefusals)
+    #if($hasRefusals || $hasReportItems)
             // The refusals below read the original, and the back-link this unit writes is what the
             // first of them reads - so the original is locked BEFORE it is read, for the length of the
             // unit. Without the lock two concurrent clicks both read it unreversed and both mint a twin.
+            // A report-sourced run (#8329) holds the lock for the same reason over its second-run guard.
             if (!new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().lockForUpdate(sourceId)) {
                 return null;
             }
@@ -304,6 +351,80 @@ public class ${className}Generate {
                 // failures to notice - it exists, it counts as the period's billing, and it is empty.
                 throw new org.eclipse.dirigible.sdk.db.ValidationException(
                         "no ${fromItemEntity} row of the ${fromEntity} qualifies for ${name}, so the ${toEntity} would have no lines");
+            }
+    #end
+    #if($hasReportItems)
+            // A second run (issue #8329): the document a run made back-references this ${fromEntity}
+            // through ${backRefProperty}, and while it stands - not cancelled, not reversed by a posted
+            // reversal - another run would book the same balances twice. Refused, never handed back:
+            // the click asked for a new document and must learn that one exists.
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository targetRepository =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository();
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : targetRepository.findAll(
+                    Criteria.create()
+                            .eq("${backRefProperty}", sourceId))) {
+                if (${liveCondition}) {
+                    throw new Refused("${name} already generated ${toEntity} [" + candidate.${toPk}
+                            + "] from this ${fromEntity} - undo it before running it again");
+                }
+            }
+            // The report is run with the ${fromEntity}'s own values. One holding none is refused: the
+            // report would read its all-time initial and book every balance there is.
+            java.util.Map<String, Object> reportFilter = new java.util.LinkedHashMap<>();
+    #foreach($p in $reportParameters)
+            if (source.${p.property} == null) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "${fromEntity} [" + sourceId + "] has no ${p.property}, which report ${reportName} is run with as ${p.name}");
+            }
+            reportFilter.put("${p.name}", source.${p.property});
+    #end
+            // Every line is built - and every cell converted - BEFORE the header is saved, so a refused
+            // cell spends no document number and leaves no history entry (#7224).
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity> reportLines = new java.util.ArrayList<>();
+            java.util.Map<java.util.List<Object>, gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity> counterLines =
+                    new java.util.LinkedHashMap<>();
+            for (java.util.Map<String, Object> row : new gen.${reportGenFolder}.data.${reportPerspective}.${reportName}Repository()
+                    .findAll(null, null, reportFilter)) {
+    #foreach($t in $reportWhere)
+                if (!holds(row.get("${t.aliasJavaLiteral}"), "${t.op}", #if($t.isNull)null#else"${t.valueJavaLiteral}"#end)) {
+                    continue;
+                }
+    #end
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity line =
+                        new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+    #foreach($c in $reportCells)
+                line.${c.targetProp} = ${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale});
+    #end
+    #foreach($a in $itemFieldAssignments)
+                line.${a.targetProp} = ${a.expr};
+    #end
+                reportLines.add(line);
+    #if(!$counterCells.isEmpty())
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity counter =
+                        new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+    #foreach($c in $counterCells)
+                counter.${c.targetProp} = ${c.kind}Cell(row, "${c.aliasJavaLiteral}", ${c.scale}, ${c.sourceScale});
+    #end
+    #foreach($a in $itemFieldAssignments)
+                counter.${a.targetProp} = ${a.expr};
+    #end
+                // One counter line per group: the rows whose counter cells other than the amounts are
+                // equal share it, and it carries the sum of their amounts.
+                gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity group = counterLines.putIfAbsent(
+                        java.util.Arrays.asList(new Object[] {#foreach($c in $counterCells)#if($c.kind != "decimal")counter.${c.targetProp}, #end#end}), counter);
+                if (group != null) {
+    #foreach($c in $counterCells)
+    #if($c.kind == "decimal")
+                    group.${c.targetProp} = sum(group.${c.targetProp}, counter.${c.targetProp});
+    #end
+    #end
+                }
+    #end
+            }
+            if (reportLines.isEmpty()) {
+                // No row qualifies: a ${toEntity} of no lines is not the document that was asked for.
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "no row of report ${reportName} qualifies for ${name}, so the ${toEntity} would have no lines");
             }
     #end
     #foreach($load in $relationLoads)
@@ -411,6 +532,20 @@ public class ${className}Generate {
                 }
             }
     #end
+    #if($hasReportItems)
+            // The report's lines, then the counter lines, onto the saved header - through the line's own
+            // repository, so its checks and the header's aggregates run as for a line typed by hand.
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository lineRepository =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository();
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity line : reportLines) {
+                line.${toFkProperty} = saved.${toPk};
+                lineRepository.save(line);
+            }
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity counter : counterLines.values()) {
+                counter.${toFkProperty} = saved.${toPk};
+                lineRepository.save(counter);
+            }
+    #end
     #if($hasItemLines)
             // Computed line-items (intent `items:` list form - issue #6555): a fixed set of synthetic lines
             // whose cells are expressions over the loaded `source` master (Calc arithmetic / {} string
@@ -471,4 +606,150 @@ public class ${className}Generate {
         });
         return result;
     }
+#if($hasUndo)
+
+    /**
+     * Reverses the live ${toEntity} a run generated from the ${fromEntity}, in ONE unit: the ${fromEntity}
+     * is locked as run() locks it, and each live document is reversed by ${undoReversalClass}, whose own
+     * refusals and back-link write hold. Returns the reversals, or null when the source is gone.
+     */
+    public java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> undo(Integer sourceId) {
+        return org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.callRetryingDeadlock(() -> {
+            if (!new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().lockForUpdate(sourceId)) {
+                return null;
+            }
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository targetRepository =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository();
+            java.util.List<gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity> reversals = new java.util.ArrayList<>();
+            for (gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity candidate : targetRepository.findAll(
+                    Criteria.create()
+                            .eq("${backRefProperty}", sourceId))) {
+                if (!(${liveCondition})) {
+                    continue;
+                }
+                if (candidate.${undoBackLinkProperty} != null) {
+                    // Reversed already: the reversal retires it once it is posted.
+                    throw new Refused("${toEntity} [" + candidate.${toPk} + "] is already reversed by [" + candidate.${undoBackLinkProperty}
+                            + "] - post that reversal");
+                }
+#if($undoStatusProperty != "")
+                int undoStatus = candidate.${undoStatusProperty} == null ? 0 : candidate.${undoStatusProperty};
+                if (!(${undoStatusExpr})) {
+                    throw new Refused("${toEntity} [" + candidate.${toPk} + "] is not in a status its reversal accepts ${undoStatuses} - current"
+                            + " status is [" + undoStatus + "]");
+                }
+#end
+#if($undoReversalRefuses)
+                try {
+                    reversals.add(new ${undoReversalClass}Generate().create(candidate.${toPk}));
+                } catch (${undoReversalClass}Generate.Refused refused) {
+                    throw new Refused(refused.getMessage());
+                }
+#else
+                reversals.add(new ${undoReversalClass}Generate().create(candidate.${toPk}));
+#end
+            }
+            if (reversals.isEmpty()) {
+                throw new Refused("${name} has generated no live ${toEntity} from this ${fromEntity} - there is nothing to undo");
+            }
+            return reversals;
+        });
+    }
+#end
+#if($hasReportItems)
+
+    /**
+     * An amount column of a report row as the exact decimal a field of {@code scale} holds - refused,
+     * never rounded, when it cannot be (issue #8329). A report row parsed before report decimals were
+     * read exactly (#8487) carries a double: it gives back the decimal it was parsed from only while
+     * that decimal has at most 15 significant digits, which for amounts of {@code sourceScale} decimals
+     * is below 10^(15 - sourceScale) - a larger one is refused.
+     */
+    private static java.math.BigDecimal decimalCell(java.util.Map<String, Object> row, String column, int scale, int sourceScale) {
+        Object value = row.get(column);
+        if (value == null) {
+            return null;
+        }
+        java.math.BigDecimal amount;
+        if (value instanceof Double || value instanceof Float) {
+            double reading = ((Number) value).doubleValue();
+            if (!(Math.abs(reading) < Math.pow(10, 15 - sourceScale))) {
+                throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                        "report column [" + column + "] holds [" + value + "], too large to be read exactly");
+            }
+            amount = java.math.BigDecimal.valueOf(reading);
+        } else {
+            amount = new java.math.BigDecimal(String.valueOf(value));
+        }
+        try {
+            return amount.setScale(scale, java.math.RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException needsRounding) {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException("report column [" + column + "] holds [" + amount.toPlainString()
+                    + "], which a field of " + scale + " decimal places cannot hold without rounding");
+        }
+    }
+
+    /** A whole-number column of a report row, refused when it is not one an Integer holds. */
+    private static Integer integerCell(java.util.Map<String, Object> row, String column, int scale, int sourceScale) {
+        Long value = longCell(row, column, scale, sourceScale);
+        if (value != null && (value < Integer.MIN_VALUE || value > Integer.MAX_VALUE)) {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException("report column [" + column + "] holds [" + value + "], too large");
+        }
+        return value == null ? null : value.intValue();
+    }
+
+    /** A whole-number column of a report row, refused when it is not a whole number. */
+    private static Long longCell(java.util.Map<String, Object> row, String column, int scale, int sourceScale) {
+        Object value = row.get(column);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return new java.math.BigDecimal(String.valueOf(value)).longValueExact();
+        } catch (NumberFormatException | ArithmeticException notWhole) {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException(
+                    "report column [" + column + "] holds [" + value + "], which is not a whole number");
+        }
+    }
+
+    /** A text column of a report row. */
+    private static String textCell(java.util.Map<String, Object> row, String column, int scale, int sourceScale) {
+        Object value = row.get(column);
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static java.math.BigDecimal sum(java.math.BigDecimal left, java.math.BigDecimal right) {
+        return left == null ? right : right == null ? left : left.add(right);
+    }
+
+    /**
+     * Whether a row's cell satisfies one condition of the row rule: against no value, whether the cell
+     * is empty ({@code eq}) or not ({@code ne}); against a number, compared as an exact decimal; against
+     * text, equal or not.
+     */
+    private static boolean holds(Object value, String op, String literal) {
+        if (literal == null) {
+            return "eq".equals(op) ? value == null : value != null;
+        }
+        if (value == null) {
+            return false;
+        }
+        int order;
+        try {
+            order = new java.math.BigDecimal(String.valueOf(value)).compareTo(new java.math.BigDecimal(literal));
+        } catch (NumberFormatException text) {
+            boolean equal = String.valueOf(value)
+                                  .equals(literal);
+            return "eq".equals(op) ? equal : "ne".equals(op) && !equal;
+        }
+        return switch (op) {
+            case "eq" -> order == 0;
+            case "ne" -> order != 0;
+            case "gt" -> order > 0;
+            case "ge" -> order >= 0;
+            case "lt" -> order < 0;
+            default -> order <= 0;
+        };
+    }
+#end
 }

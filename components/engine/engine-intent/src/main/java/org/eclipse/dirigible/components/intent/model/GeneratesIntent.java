@@ -300,6 +300,13 @@ public class GeneratesIntent {
     private GeneratesLinkIntent link;
 
     /**
+     * Optional undo of what one run generated (issue #8329), offered as a second action on the source:
+     * {@code reverse} books the target's declared {@code reversals:} entry against the live document
+     * this source back-references. Only for lines read from a report ({@code items.fromReport}).
+     */
+    private String undo;
+
+    /**
      * The {@code reversals:} entry this create-from was expanded from (issue #7886), or {@code null}
      * for an authored one. Transient: it is never read from YAML - an author cannot spell its negation,
      * refusals or back-link on a {@code generates:} - and never written back out with the model.
@@ -570,6 +577,26 @@ public class GeneratesIntent {
     public boolean hasLink() {
         return link != null && link.getEntity() != null && !link.getEntity()
                                                                 .isBlank();
+    }
+
+    public String getUndo() {
+        return undo;
+    }
+
+    public void setUndo(String undo) {
+        this.undo = undo;
+    }
+
+    /** Whether an undo action is declared (see {@link #undo}). */
+    public boolean hasUndo() {
+        return undo != null && !undo.isBlank();
+    }
+
+    /**
+     * Whether the lines are a report's result rows (see {@link GeneratesItemsIntent#getFromReport()}).
+     */
+    public boolean hasReportItems() {
+        return items != null && items.isFromReport();
     }
 
     public ReversalIntent getReversal() {

@@ -47,6 +47,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResilienceSuppor
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.CheckSupport;
 import org.eclipse.dirigible.components.intent.generator.CronSupport;
+import org.eclipse.dirigible.components.intent.generator.ReportItemsSupport;
 import org.eclipse.dirigible.components.intent.generator.ResolvePathSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
@@ -1895,6 +1896,9 @@ public final class IntentParser {
                                                                    .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
+        }
+        if (g.hasUndo()) {
+            issues.add("schedule [" + name + "] generate declares undo - an undo is a click on the record an on-demand generates ran from");
         }
         // The escalation writes its chosen level onto the target too (issue #7276), so the natural key
         // may - and must - name it, although no map / defaults entry does.
@@ -11383,7 +11387,9 @@ public final class IntentParser {
             validateMapSource(source, byName, g.getMap(), "generates [" + name + "]", "map", true, issues);
             validateMapTarget(crossModel || g.getTo() == null ? null : byName.get(g.getTo()), g.getMap(), "generates [" + name + "]", "map",
                     issues);
-            if (g.getItems() != null) {
+            // Lines read from a report (#8329) are checked by ReportItemsSupport, below.
+            if (g.getItems() != null && !g.getItems()
+                                          .isFromReport()) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
                 if (items.getFrom() == null || items.getFrom()
@@ -11422,6 +11428,7 @@ public final class IntentParser {
             validateGeneratesPrompt(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesLink(g, name, byName, crossModel, crossModelSource, issues);
             validateGeneratesReopen(g, name, source, crossModelSource, byName, crossModel, model, issues);
+            ReportItemsSupport.validate(g, source, byName, model, crossModel, issues);
         }
     }
 
