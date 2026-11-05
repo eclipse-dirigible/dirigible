@@ -321,16 +321,35 @@ public class ${className}Job implements JobHandler {
 #foreach($a in $c.fieldAssignments)
                         ${c.rowVar}.${a.targetProp} = ${a.expr};
 #end
+#if($c.onRefusedSkip)
+                        // onRefused: skip (#8491) - a day the target refuses is taken back and left out; the
+                        // row's unit goes on. Any other failure still rolls the whole source row back.
+                        try {
+                            org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.runNested(
+                                    () -> new ${c.toRepositoryClass}().save(${c.rowVar}));
+                        } catch (org.eclipse.dirigible.sdk.db.ValidationException refused) {
+                            LOG.warn("Schedule ${name}: ${c.toEntity} for [{}] of ${entity} [{}] was refused and left out: {}", day,
+                                    entity.${attachKeyProperty}, refused.getMessage());
+                        }
+#else
                         new ${c.toRepositoryClass}().save(${c.rowVar});
+#end
                     }
 #else
                     // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
                     for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
-                            org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
+                            org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression})${c.whereChain})) {
                         ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
                         child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
 #foreach($a in $c.fieldAssignments)
                         child${c.rowVar}.${a.targetProp} = ${a.expr};
+#end
+#if($c.onRefusedSkip)
+                        // onRefused: skip (#8491) - the child and everything written beneath it are a nested
+                        // unit: a refusal takes all of it back and leaves the child out, and the row's unit goes
+                        // on. Any other failure still rolls the whole source row back.
+                        try {
+                            org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.runNested(() -> {
 #end
                         var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
 #foreach($g in $c.children)
@@ -348,20 +367,47 @@ public class ${className}Job implements JobHandler {
 #foreach($a in $g.fieldAssignments)
                             ${g.rowVar}.${a.targetProp} = ${a.expr};
 #end
+#if($g.onRefusedSkip)
+                            try {
+                                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.runNested(
+                                        () -> new ${g.toRepositoryClass}().save(${g.rowVar}));
+                            } catch (org.eclipse.dirigible.sdk.db.ValidationException refused) {
+                                LOG.warn("Schedule ${name}: ${g.toEntity} for [{}] of ${entity} [{}] was refused and left out: {}", day,
+                                        entity.${attachKeyProperty}, refused.getMessage());
+                            }
+#else
                             new ${g.toRepositoryClass}().save(${g.rowVar});
+#end
                         }
 #else
                         // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
                         for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
-                                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
+                                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression})${g.whereChain})) {
                             ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
                             child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
 #foreach($a in $g.fieldAssignments)
                             child${g.rowVar}.${a.targetProp} = ${a.expr};
 #end
+#if($g.onRefusedSkip)
+                            try {
+                                org.eclipse.dirigible.components.data.store.java.repository.UnitOfWork.runNested(
+                                        () -> new ${g.toRepositoryClass}().save(child${g.rowVar}));
+                            } catch (org.eclipse.dirigible.sdk.db.ValidationException refused) {
+                                LOG.warn("Schedule ${name}: ${g.toEntity} for ${g.forEachEntity} [{}] of ${entity} [{}] was refused and left out: {}",
+                                        ${g.rowVar}.${g.forEachPk}, entity.${attachKeyProperty}, refused.getMessage());
+                            }
+#else
                             new ${g.toRepositoryClass}().save(child${g.rowVar});
+#end
                         }
 #end
+#end
+#if($c.onRefusedSkip)
+                            });
+                        } catch (org.eclipse.dirigible.sdk.db.ValidationException refused) {
+                            LOG.warn("Schedule ${name}: ${c.toEntity} for ${c.forEachEntity} [{}] of ${entity} [{}] was refused and left out: {}",
+                                    ${c.rowVar}.${c.forEachPk}, entity.${attachKeyProperty}, refused.getMessage());
+                        }
 #end
                     }
 #end

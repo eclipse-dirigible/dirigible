@@ -45,6 +45,20 @@ public class GenerateChildIntent {
     /** Nested child blocks (one more level at most). */
     private List<GenerateChildIntent> children;
 
+    /**
+     * Which rows of an {@code entity} collection become children (#8491): the {@code schedules[].where}
+     * triples, over the row's own fields or one relation hop ({@code Employee.active}). ANDed; null
+     * when every row qualifies.
+     */
+    private List<ScheduleConditionIntent> where;
+
+    /**
+     * {@code skip}: a child the target refuses (its repository's {@code ValidationException}) is logged
+     * and left out - with whatever it wrote beneath it - and the parent and its other children are
+     * still created (#8491). Null: the refusal rolls the whole source row back.
+     */
+    private String onRefused;
+
     public String getTo() {
         return to;
     }
@@ -99,5 +113,21 @@ public class GenerateChildIntent {
 
     public void setChildren(List<GenerateChildIntent> children) {
         this.children = children;
+    }
+
+    public List<ScheduleConditionIntent> getWhere() {
+        return where;
+    }
+
+    public void setWhere(List<ScheduleConditionIntent> where) {
+        this.where = where;
+    }
+
+    public String getOnRefused() {
+        return onRefused;
+    }
+
+    public void setOnRefused(String onRefused) {
+        this.onRefused = onRefused;
     }
 }

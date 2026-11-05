@@ -337,8 +337,20 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     CrossModelSupport.TargetInfo collectionTarget =
                             collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
                     entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
+                    if ("skip".equals(child.getOnRefused())) {
+                        // Names the row a refused child came from in the job's log line.
+                        entry.put("forEachPk", collectionTarget != null ? collectionTarget.keyField() : "Id");
+                    }
                 } else {
                     entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents, model));
+                    if ("skip".equals(child.getOnRefused())) {
+                        entry.put("forEachPk", IntentEntities.keyFieldName(byName.get(collection)));
+                    }
+                }
+                if (child.getWhere() != null && !child.getWhere()
+                                                      .isEmpty()) {
+                    putChildWhere(entry, child, forEachCrossModel ? null : byName.get(collection), model, byName, compositionParents,
+                            context);
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
@@ -354,6 +366,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                 relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             }
             entry.put("rowVar", rowVar);
+            if ("skip".equals(child.getOnRefused())) {
+                // Only where authored, so a job without it - and its .glue - stays byte-identical.
+                entry.put("onRefusedSkip", true);
+            }
             if (child.getChildren() != null && !child.getChildren()
                                                      .isEmpty()) {
                 entry.put("children",
@@ -362,6 +378,64 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             result.add(entry);
         }
         return result;
+    }
+
+    /**
+     * The row rule of an {@code entity} child (#8491), as the clauses the glue carries:
+     * {@code criteria} over the collection row's own fields - appended to the query that already
+     * selects the rows by their match key - and one {@code hops} entry per relation the rule reads
+     * through, with the relation's foreign key, its target's coordinates and the clauses on the target.
+     * The job narrows the rows to those whose foreign key is among the target rows the clauses select,
+     * so the {@code schedules[].where} reading and rendering serve both halves and nothing is compared
+     * in generated code.
+     */
+    private static void putChildWhere(Map<String, Object> entry, GenerateChildIntent child, EntityIntent collection, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {
+        List<ScheduleConditionIntent> own = new ArrayList<>();
+        Map<String, List<ScheduleConditionIntent>> byRelation = new LinkedHashMap<>();
+        for (ScheduleConditionIntent condition : child.getWhere()) {
+            int dot = condition.getField()
+                               .indexOf('.');
+            if (dot < 0) {
+                own.add(condition);
+                continue;
+            }
+            ScheduleConditionIntent onTarget = new ScheduleConditionIntent();
+            onTarget.setField(condition.getField()
+                                       .substring(dot + 1));
+            onTarget.setOp(condition.getOp());
+            onTarget.setValue(condition.getValue());
+            byRelation.computeIfAbsent(condition.getField()
+                                                .substring(0, dot),
+                    ignored -> new ArrayList<>())
+                      .add(onTarget);
+        }
+        entry.put("criteria", ScheduleSupport.conditions(own));
+        if (byRelation.isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> hops = new ArrayList<>();
+        entry.put("hops", hops);
+        NotificationSupport.Resolver resolver = collection == null ? null
+                : NotificationSupport.resolver(collection, byName, compositionParents, crossModelLookup(model, context));
+        for (ScheduleConditionIntent condition : child.getWhere()) {
+            if (condition.getField()
+                         .indexOf('.') >= 0
+                    && (resolver == null || resolver.access(condition.getField(), false) == null)) {
+                throw new IntentValidationException(List.of("schedule generate child [" + child.getTo() + "] where-condition ["
+                        + condition.getField() + "] is not a resolvable one-hop relation.field of the forEach entity"));
+            }
+        }
+        for (NotificationSupport.RelationLoad load : resolver.loads()) {
+            Map<String, Object> hop = NotificationSupport.loadFields(List.of(load))
+                                                         .get(0);
+            hop.put("targetPk", load.crossModel()
+                    ? CrossModelSupport.resolve(context, findUses(model, load.targetModel()), load.targetEntity())
+                                       .keyField()
+                    : IntentEntities.keyFieldName(byName.get(load.targetEntity())));
+            hop.put("criteria", ScheduleSupport.conditions(byRelation.get(load.local())));
+            hops.add(hop);
+        }
     }
 
     private static Map<String, String> toStringMap(Map<String, String> map) {
@@ -5428,6 +5502,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                          .values()) {
                                 if (isMissing(collectionProps, mapSource)) {
                                     return "generate child map source [" + mapSource + "]";
+                                }
+                            }
+                            for (ScheduleConditionIntent condition : child.getWhere() == null ? List.<ScheduleConditionIntent>of()
+                                    : child.getWhere()) {
+                                if (isMissing(collectionProps, condition.getField())) {
+                                    return "generate child where field [" + condition.getField() + "]";
                                 }
                             }
                         }

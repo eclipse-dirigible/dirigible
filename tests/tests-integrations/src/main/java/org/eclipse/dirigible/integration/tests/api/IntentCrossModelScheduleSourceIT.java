@@ -54,6 +54,11 @@ import org.springframework.test.annotation.DirtiesContext;
  * target + child rows, asserted over REST. Two loud-failure paths are covered too: the owner
  * {@code .model} absent, and a mistyped {@code where} field - both drop the schedule with a warning
  * in the generate response (never a job that cannot compile).
+ *
+ * <p>
+ * It also runs a same-model generation's {@code children} row rule and {@code onRefused: skip}
+ * (#8491), triggered directly: which collection rows become children, and what one child the target
+ * refuses costs - itself, or the whole source row.
  */
 // One Dirigible boot for the whole class: each method cleans up after itself (or is read-only), so
 // the per-method context reset inherited from IntegrationTest would only add boot time per test.
@@ -195,6 +200,147 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
                 """.formatted(recipientField);
     }
 
+    /** The module of the children row-rule case (#8491) - every entity local. */
+    private static final String KIDS = "schedkids";
+
+    /**
+     * One timesheet per assignment of a project, one day line per working day under it. The row rule
+     * leaves out an inactive employee's assignment through one relation hop; a timesheet's capacity
+     * ({@code maxHours}) refuses the day line that would exceed it, AFTER the timesheet and its first
+     * line were written - so leaving the timesheet out must take those writes back too. The three
+     * schedules select one project each and differ in where the skip is: on the timesheet, nowhere, and
+     * on the day (with a month-day child and a peer grandchild, so every place a skip is written in the
+     * job is compiled and run). Their cron (the 1st of January at 03:00) never fires inside a test run;
+     * they are triggered.
+     */
+    private static final String KIDS_INTENT =
+            """
+                    name: schedkids
+                    description: scheduled generate children - a row rule, and a refused child left out (#8491)
+
+                    entities:
+                      - name: Employee
+                        fields:
+                          - { name: id,     type: integer, primaryKey: true, generated: true }
+                          - { name: name,   type: string,  length: 100 }
+                          - { name: active, type: boolean }
+
+                      - name: Project
+                        fields:
+                          - { name: id,   type: integer, primaryKey: true, generated: true }
+                          - { name: name, type: string,  length: 100 }
+
+                      - name: Assignment
+                        fields:
+                          - { name: id,       type: integer, primaryKey: true, generated: true }
+                          - { name: maxHours, type: decimal, precision: 10, scale: 2 }
+                        relations:
+                          - { name: Project,  kind: manyToOne, to: Project }
+                          - { name: Employee, kind: manyToOne, to: Employee }
+
+                      - name: ProjectMonth
+                        fields:
+                          - { name: id,         type: integer, primaryKey: true, generated: true }
+                          - { name: timesheets, type: integer }
+                        relations:
+                          - { name: Project, kind: manyToOne, to: Project }
+
+                      - name: MonthDay
+                        fields:
+                          - { name: id,  type: integer, primaryKey: true, generated: true }
+                          - { name: day, type: date }
+                        relations:
+                          - { name: ProjectMonth, kind: manyToOne, to: ProjectMonth }
+
+                      - name: Timesheet
+                        fields:
+                          - { name: id,       type: integer, primaryKey: true, generated: true }
+                          - { name: maxHours, type: decimal, precision: 10, scale: 2 }
+                          - { name: hours,    type: decimal, precision: 10, scale: 2 }
+                        relations:
+                          - { name: ProjectMonth, kind: manyToOne, to: ProjectMonth }
+                          - { name: Employee,     kind: manyToOne, to: Employee }
+
+                      - name: DayLine
+                        fields:
+                          - { name: id,    type: integer, primaryKey: true, generated: true }
+                          - { name: day,   type: date }
+                          - { name: hours, type: decimal, precision: 10, scale: 2 }
+                        relations:
+                          - { name: Timesheet, kind: manyToOne, to: Timesheet }
+
+                      - name: Peer
+                        fields:
+                          - { name: id, type: integer, primaryKey: true, generated: true }
+                        relations:
+                          - { name: Timesheet, kind: manyToOne, to: Timesheet }
+                          - { name: Employee,  kind: manyToOne, to: Employee }
+
+                    rollups:
+                      - { name: monthTimesheets, entity: Timesheet, via: ProjectMonth, field: timesheets }
+                      - { name: timesheetHours, entity: DayLine, via: Timesheet, field: hours, op: sum, of: hours, capacity: maxHours }
+
+                    schedules:
+                      - name: monthly-skip
+                        cron: "0 0 3 1 1 ?"
+                        entity: Project
+                        where: [ { field: name, op: eq, value: Alpha } ]
+                        generate:
+                          to: ProjectMonth
+                          unique: [Project]
+                          map: { Project: id }
+                          children:
+                            - to: Timesheet
+                              parent: ProjectMonth
+                              forEach: { entity: Assignment, match: { Project: id } }
+                              where: [ { field: Employee.active, op: eq, value: true } ]
+                              map: { Employee: Employee, maxHours: maxHours }
+                              onRefused: skip
+                              children:
+                                - { to: DayLine, parent: Timesheet, forEach: { days: workingDays }, dayField: day, defaults: { hours: 8 } }
+
+                      - name: monthly-strict
+                        cron: "0 0 3 1 1 ?"
+                        entity: Project
+                        where: [ { field: name, op: eq, value: Beta } ]
+                        generate:
+                          to: ProjectMonth
+                          unique: [Project]
+                          map: { Project: id }
+                          children:
+                            - to: Timesheet
+                              parent: ProjectMonth
+                              forEach: { entity: Assignment, match: { Project: id } }
+                              where: [ { field: Employee.active, op: eq, value: true } ]
+                              map: { Employee: Employee, maxHours: maxHours }
+                              children:
+                                - { to: DayLine, parent: Timesheet, forEach: { days: workingDays }, dayField: day, defaults: { hours: 8 } }
+
+                      - name: monthly-days
+                        cron: "0 0 3 1 1 ?"
+                        entity: Project
+                        where: [ { field: name, op: eq, value: Gamma } ]
+                        generate:
+                          to: ProjectMonth
+                          unique: [Project]
+                          map: { Project: id }
+                          children:
+                            - { to: MonthDay, parent: ProjectMonth, forEach: { days: workingDays }, dayField: day, onRefused: skip }
+                            - to: Timesheet
+                              parent: ProjectMonth
+                              forEach: { entity: Assignment, match: { Project: id } }
+                              where: [ { field: Employee.active, op: eq, value: true } ]
+                              map: { Employee: Employee, maxHours: maxHours }
+                              children:
+                                - { to: DayLine, parent: Timesheet, forEach: { days: workingDays }, dayField: day, defaults: { hours: 8 }, onRefused: skip }
+                                - to: Peer
+                                  parent: Timesheet
+                                  forEach: { entity: Assignment, match: { Project: id } }
+                                  where: [ { field: Employee.active, op: eq, value: true } ]
+                                  map: { Employee: Employee }
+                                  onRefused: skip
+                    """;
+
     @Autowired
     private IRepository repository;
     @Autowired
@@ -329,6 +475,114 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
                 "expected a notify-recipient warning naming the schedule, field and owner model, got: " + warnings);
     }
 
+    @Test
+    void children_row_rule_and_a_refused_child_left_out_or_rolling_the_row_back() {
+        generateProject(KIDS, KIDS_INTENT);
+        publishProject(KIDS);
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        int ann = createKid("employee/EmployeeController", "{\"Name\":\"Ann\",\"Active\":true}");
+        int bob = createKid("employee/EmployeeController", "{\"Name\":\"Bob\",\"Active\":true}");
+        int cid = createKid("employee/EmployeeController", "{\"Name\":\"Cid\",\"Active\":false}");
+        int alpha = createKid("project/ProjectController", "{\"Name\":\"Alpha\"}");
+        int beta = createKid("project/ProjectController", "{\"Name\":\"Beta\"}");
+        int gamma = createKid("project/ProjectController", "{\"Name\":\"Gamma\"}");
+        for (int project : List.of(alpha, beta, gamma)) {
+            // Bob's 10 hours hold one 8-hour day: his second day line is refused by the capacity guard.
+            createKid("assignment/AssignmentController", assignment(project, ann, 1000));
+            createKid("assignment/AssignmentController", assignment(project, bob, 10));
+            createKid("assignment/AssignmentController", assignment(project, cid, 1000));
+        }
+
+        triggerKidsJob("MonthlySkipJob");
+        triggerKidsJob("MonthlyStrictJob");
+        triggerKidsJob("MonthlyDaysJob");
+
+        java.time.LocalDate first = java.time.LocalDate.now()
+                                                       .withDayOfMonth(1);
+        int workingDays = (int) first.datesUntil(first.plusMonths(1))
+                                     .filter(day -> day.getDayOfWeek()
+                                                       .getValue() < 6)
+                                     .count();
+        String months = "projectmonth/ProjectMonthController";
+        String timesheets = "timesheet/TimesheetController";
+        String days = "dayline/DayLineController";
+
+        // No skip: Bob's refusal rolls Beta's whole month back, as before.
+        assertKidsCount(months, "it.Project == " + beta, 0);
+        // Skip on the timesheet: Alpha's month keeps Ann's timesheet with all its days. Bob's was refused
+        // at his second day and left out with the day it had already written; Cid's assignment never
+        // qualified.
+        int alphaMonth = idOfKid(months, "it.Project == " + alpha);
+        assertKidsCount(timesheets, "it.ProjectMonth == " + alphaMonth, 1);
+        int annAlpha = idOfKid(timesheets, "it.ProjectMonth == " + alphaMonth + " && it.Employee == " + ann);
+        assertKidsCount(days, "it.Timesheet == " + annAlpha, workingDays);
+        // Skip on the day: Gamma's month keeps Bob's timesheet with the one day that fit.
+        int gammaMonth = idOfKid(months, "it.Project == " + gamma);
+        assertKidsCount(timesheets, "it.ProjectMonth == " + gammaMonth, 2);
+        int bobGamma = idOfKid(timesheets, "it.ProjectMonth == " + gammaMonth + " && it.Employee == " + bob);
+        assertKidsCount(days, "it.Timesheet == " + bobGamma, 1);
+        assertKidsCount("monthday/MonthDayController", "it.ProjectMonth == " + gammaMonth, workingDays);
+        // ...and each of its two timesheets got a peer per qualifying assignment: Ann and Bob, not Cid.
+        assertKidsCount("peer/PeerController", "true", 4);
+        // Nothing a left-out child wrote survives: Ann's two months of days and Bob's one.
+        assertKidsCount(days, "true", 2 * workingDays + 1);
+        // The parent's roll-up counts the children that were created, not the one left out.
+        assertKidsCount(months, "it.Id == " + alphaMonth + " && it.Timesheets == 1", 1);
+    }
+
+    private static String assignment(int project, int employee, int maxHours) {
+        return "{\"Project\":" + project + ",\"Employee\":" + employee + ",\"MaxHours\":" + maxHours + "}";
+    }
+
+    private int createKid(String controller, String body) {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
+                                                        .body(body)
+                                                        .when()
+                                                        .post("/services/java/" + KIDS + "/gen/" + KIDS + "/api/" + controller)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .path("Id")),
+                60);
+        return id.get();
+    }
+
+    private int idOfKid(String controller, String condition) {
+        AtomicInteger id = new AtomicInteger();
+        restAssuredExecutor.execute(() -> id.set(given().queryParam("$limit", 1000)
+                                                        .when()
+                                                        .get("/services/java/" + KIDS + "/gen/" + KIDS + "/api/" + controller)
+                                                        .then()
+                                                        .statusCode(200)
+                                                        .extract()
+                                                        .<Integer>path("find { " + condition + " }.Id")),
+                30);
+        return id.get();
+    }
+
+    /** Runs the job as the Jobs perspective's play button does - synchronously on the Java engine. */
+    private void triggerKidsJob(String job) {
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("[]")
+                                                 .when()
+                                                 .post("/services/jobs/trigger/gen.events." + KIDS + "." + job)
+                                                 .then()
+                                                 .statusCode(200),
+                60);
+    }
+
+    private void assertKidsCount(String controller, String condition, int expected) {
+        restAssuredExecutor.execute(() -> given().queryParam("$limit", 1000)
+                                                 .when()
+                                                 .get("/services/java/" + KIDS + "/gen/" + KIDS + "/api/" + controller)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { " + condition + " }.size()", equalTo(expected)),
+                30);
+    }
+
     private int createProject() {
         AtomicInteger id = new AtomicInteger();
         restAssuredExecutor.execute(() -> id.set(given().contentType("application/json")
@@ -416,7 +670,7 @@ class IntentCrossModelScheduleSourceIT extends IntegrationTest {
 
     @AfterEach
     void cleanup() {
-        for (String project : List.of(OWNER, CONSUMER)) {
+        for (String project : List.of(OWNER, CONSUMER, KIDS)) {
             restAssuredExecutor.execute(() -> given().when()
                                                      .delete("/services/ide/publisher/" + WORKSPACE + "/" + project)
                                                      .then()

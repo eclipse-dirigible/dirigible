@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -21,7 +23,10 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
@@ -32,6 +37,8 @@ import org.hibernate.SessionFactory;
 import org.hibernate.StaleObjectStateException;
 import org.hibernate.Transaction;
 import org.hibernate.exception.LockAcquisitionException;
+import org.hibernate.jdbc.ReturningWork;
+import org.hibernate.jdbc.Work;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -328,6 +335,57 @@ class JavaEntityStoreUnitOfWorkTest {
 
         assertEquals(1, attempts.get());
         verify(session).beginTransaction();
+    }
+
+    /**
+     * A nested unit that fails takes back its own writes on a savepoint and rethrows, and the enclosing
+     * unit still commits the rest (#8491). Without savepoints the failure is wrapped, so it cannot be
+     * caught as the block's own refusal while its half-done writes stay in the unit.
+     */
+    @Test
+    void aFailedNestedUnitRollsBackToItsSavepointAndTheOuterUnitCommits() throws SQLException {
+        Connection connection = mock(Connection.class);
+        DatabaseMetaData metaData = mock(DatabaseMetaData.class);
+        Savepoint savepoint = mock(Savepoint.class);
+        when(connection.getMetaData()).thenReturn(metaData);
+        when(metaData.supportsSavepoints()).thenReturn(true);
+        when(connection.setSavepoint()).thenReturn(savepoint);
+        when(session.doReturningWork(any())).thenAnswer(invocation -> invocation.<ReturningWork<?>>getArgument(0)
+                                                                                .execute(connection));
+        doAnswer(invocation -> {
+            invocation.<Work>getArgument(0)
+                      .execute(connection);
+            return null;
+        }).when(session)
+          .doWork(any());
+        RuntimeException refusal = new IllegalArgumentException("refused");
+
+        assertEquals("kept", store.inUnitOfWork(() -> {
+            assertSame(refusal, assertThrows(IllegalArgumentException.class, () -> store.inNestedUnitOfWork(() -> {
+                throw refusal;
+            })));
+            return "kept";
+        }));
+
+        InOrder order = inOrder(session, connection, transaction);
+        order.verify(session)
+             .flush();
+        order.verify(connection)
+             .setSavepoint();
+        order.verify(connection)
+             .rollback(savepoint);
+        order.verify(session)
+             .clear();
+        order.verify(transaction)
+             .commit();
+        verify(transaction, never()).rollback();
+
+        when(metaData.supportsSavepoints()).thenReturn(false);
+        IllegalStateException wrapped =
+                assertThrows(IllegalStateException.class, () -> store.inUnitOfWork(() -> store.inNestedUnitOfWork(() -> {
+                    throw refusal;
+                })));
+        assertSame(refusal, wrapped.getCause());
     }
 
     /**

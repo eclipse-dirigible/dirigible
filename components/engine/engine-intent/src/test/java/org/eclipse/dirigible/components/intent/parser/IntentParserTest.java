@@ -2810,6 +2810,45 @@ class IntentParserTest {
                       .stream()
                       .anyMatch(i -> i.contains("requires a match")),
                 "expected a match issue, got: " + ex2.getIssues());
+        // #8491: a row rule over the collection row and one relation hop, and onRefused: skip, parse.
+        String claims = head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { entity: Claim, match: { Person: id } }\n";
+        IntentParser.parse(claims //
+                + "          where:\n" //
+                + "            - { field: Person.name, op: ne, value: x }\n" //
+                + "            - { field: id, op: gt, value: 0 }\n" //
+                + "          onRefused: skip\n");
+        // A hop through no relation, a field the target lacks, an unknown onRefused, and a rule on a days
+        // child are each refused.
+        IntentValidationException ex3 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(claims //
+                + "          where:\n" //
+                + "            - { field: Owner.name, op: eq, value: x }\n" //
+                + "            - { field: Person.age, op: eq, value: 1 }\n" //
+                + "          onRefused: ignore\n"));
+        assertTrue(ex3.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("names no to-one relation [Owner]")),
+                "expected a relation issue, got: " + ex3.getIssues());
+        assertTrue(ex3.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("reads [age], which is not a field of [Person]")),
+                "expected a target-field issue, got: " + ex3.getIssues());
+        assertTrue(ex3.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("onRefused [ignore] is not supported")),
+                "expected an onRefused issue, got: " + ex3.getIssues());
+        IntentValidationException ex4 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { days: workingDays }\n" //
+                + "          dayField: day\n" //
+                + "          where: [ { field: day, op: eq, value: CURRENT_DATE } ]\n"));
+        assertTrue(ex4.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("where needs forEach entity")),
+                "expected a days-rule issue, got: " + ex4.getIssues());
     }
 
     private static final String CHAT_HEAD = """
