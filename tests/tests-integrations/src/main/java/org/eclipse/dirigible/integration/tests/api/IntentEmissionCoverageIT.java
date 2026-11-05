@@ -3466,6 +3466,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String entryListPage = contentOf("gen/emission/js/components/pages/Entry/EntryManageListPage.js");
         assertTrue(entryListPage.contains("isRowImmutable"),
                 "the browse page must gate row Edit/Delete on the baked per-row immutability check");
+        // ...and the sheet's "..." is not offered when it would open empty (#8436): on a POSTED entry
+        // Preview is the primary button and Edit/Delete are withheld, so with no task and no action
+        // that applies there is nothing left for the overflow. The generated page decides it; the
+        // trigger renders only on its answer.
+        assertEquals("draft true | posted false | posted+action true | posted+destructive true | read-only false",
+                pageSheetMenu(entryListPage, "EntryManageListPage"),
+                "the sheet's overflow must be offered exactly when it carries something");
+        String entryListView = contentOf("gen/emission/views/Entry/Entry-manage-list.html");
+        assertTrue(entryListView.contains("x-h-menu-trigger.dropdown x-show=\"menuHasAnything\""),
+                "the sheet's \"...\" trigger must render only when its menu carries something: " + entryListView);
         // Date-based immutability: the guard queries the register the intent named, and the same
         // pre-check endpoint the status lock exposes now answers for it too.
         // ...and the REPOSITORY carries the same lock (#7590): a posting, a create-from or a schedule
@@ -9397,6 +9407,36 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                     "__done ? 'posts [' + __posts.join(',') + '] lists ' + __lists"
                             + " + (page.displayState === 'no-results' ? ' no-results' : '')"
                             + " + ' | ' + page.activeFilterChips.map(c => c.text).join(',') : 'pending'")
+                          .asString();
+        }
+    }
+
+    /**
+     * Run a generated list page's sheet overflow decision (#8436): {@code menuHasAnything} for the
+     * selected record, over the shipped {@code basePage.js} with stubbed {@code customActions} and
+     * {@code processTasks} stores - no task pending, and the contributed actions each case names. The
+     * cases: a DRAFT entry (status 1), a POSTED one (status 2, read-only) with no action, with one
+     * applicable action, with one applicable destructive action, and a DRAFT entry for a caller who may
+     * only read.
+     */
+    private static String pageSheetMenu(String pageScript, String componentName) {
+        try (Context context = Context.newBuilder("js")
+                                      .option("engine.WarnInterpreterOnly", "false")
+                                      .build()) {
+            context.eval("js",
+                    "var pages = {}; var window = this; var localStorage = { getItem: () => null };"
+                            + " var document = { addEventListener: (event, callback) => callback() }; var __actions = [];"
+                            + " var __stores = { customActions: { getActions: () => __actions, isDestructive: (a) => !!a.destructive },"
+                            + "   processTasks: { getTasks: () => [] } };"
+                            + " var Alpine = { data: (name, factory) => { pages[name] = factory; }, store: (name) => __stores[name] };");
+            context.eval("js", classpathResource("/META-INF/dirigible/application-core/shell/js/components/pages/basePage.js"));
+            context.eval("js", pageScript);
+            return context.eval("js", "(() => { const page = pages['" + componentName + "'](); page.access = { read: true, write: true };"
+                    + " const answer = (label, status, actions) => { __actions = actions; page.selected = { Id: 7, Status: status };"
+                    + "   return label + ' ' + page.menuHasAnything; };" + " const out = [answer('draft', 1, []), answer('posted', 2, []),"
+                    + "   answer('posted+action', 2, [{ id: 'reverse' }]), answer('posted+destructive', 2, [{ id: 'purge', destructive: true }])];"
+                    + " page.access = { read: true, write: false }; out.push(answer('read-only', 1, []));"
+                    + " return out.join(' | '); })()")
                           .asString();
         }
     }
