@@ -1880,9 +1880,9 @@ final class ModelParameterProcessor {
             // Whether this child has role-scoped columns at all: only then does the panel ask the
             // child's own scoped controller which of them the caller in front of it may not see.
             panel.put("restrictedFields", truthy(child, "hasRestrictedFields"));
-            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, so the panel
-            // must not offer it.
-            panel.put("readOnly", readOnlyKey != null && truthy(child, readOnlyKey));
+            // A see-only child (intent personalReadOnly) refuses the panel's Add with 403, and a
+            // system-written one (#8503) with 405 on every surface, so the panel must not offer it.
+            panel.put("readOnly", (readOnlyKey != null && truthy(child, readOnlyKey)) || truthy(child, "systemWritten"));
             // A status-gated panel (intent `visibleWhen:`, #7502): the terms the scoped page reads
             // against the record it holds before showing the panel. Absent = always shown.
             if (child.get("visibleWhenTermsJs") != null) {

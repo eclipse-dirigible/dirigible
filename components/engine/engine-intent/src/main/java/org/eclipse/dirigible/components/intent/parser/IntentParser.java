@@ -5339,6 +5339,11 @@ public final class IntentParser {
                                                                    .isBlank()) {
                 validateImmutableWhen(entity, issues);
             }
+            if (entity.isSystemWritten() && entity.isDocumentItem()) {
+                issues.add("entity [" + entity.getName() + "] declares systemWritten: true and function: DocumentItem - a document's"
+                        + " line items are what its users add and edit, and nobody may write a system-written entity over REST;"
+                        + " drop one (a system-written child renders as a read-only detail panel)");
+            }
             if (entity.getPeriod() != null) {
                 validatePeriod(entity, issues);
             }

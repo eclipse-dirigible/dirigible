@@ -15,7 +15,7 @@
       <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
     </button>
 #end
-#if(!$personalReadOnly)
+#if(!$personalReadOnly && !$systemWritten)
     <button x-h-button data-variant="primary" @click="newEntity()">
       <svg role="presentation" x-h-lucide data-lucide="plus"></svg>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>

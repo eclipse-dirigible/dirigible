@@ -238,7 +238,9 @@ function detailPanel(def, masterId, master) {
     // A guard scoped by `verbs:` (#7710) arrives as { verbs, terms } and hides only the affordances of
     // its verbs - `verb` is the one asked about ('create' = Add, 'update' = row edit, 'delete' = row
     // delete); asked without one, any guard counts.
+    // A system-written child (#8503) is forbidden every verb, whatever its master holds.
     isForbidden(verb) {
+      if (this.def && this.def.systemWritten) return true;
       const guards = this.def && this.def.forbidWhen;
       if (!Array.isArray(guards) || !guards.length) return false;
       const m = this.master;
